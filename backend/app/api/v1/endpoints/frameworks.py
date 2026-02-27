@@ -2,13 +2,15 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import func, select
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 
 from app.core.database import get_db
-from app.models.framework import Framework, FrameworkControl, ControlRequirement, FrameworkStatus
+from app.models.framework import Framework, FrameworkControl, ControlCategory, ControlRequirement, FrameworkStatus
 from app.api.v1.dependencies import get_current_user, get_tenant_id
 from app.api.v1.dependencies.auth import require_roles
 from app.models.user import User, UserRole
+
+_VALID_CATEGORIES = {c.name for c in ControlCategory}
 
 router = APIRouter()
 
@@ -152,6 +154,14 @@ class ControlCreate(BaseModel):
     parent_id: str | None = None
     tags: list[str] = []
 
+    @field_validator("category", mode="before")
+    @classmethod
+    def normalize_category(cls, v: str | None) -> str | None:
+        if v is None:
+            return None
+        upper = v.upper().strip().replace(" ", "_")
+        return upper if upper in _VALID_CATEGORIES else "TECHNICAL"
+
 
 class ControlUpdate(BaseModel):
     title: str | None = None
@@ -163,7 +173,7 @@ class ControlUpdate(BaseModel):
 
 class RequirementCreate(BaseModel):
     requirement_text: str
-    requirement_level: str = "must"   # must / should / may
+    level: str = "must"   # must / should / may
 
 
 async def _get_tenant_framework(
@@ -323,7 +333,7 @@ async def add_requirement(
     req = ControlRequirement(
         control_id=control_db_id,
         requirement_text=body.requirement_text,
-        requirement_level=body.requirement_level,
+        requirement_level=body.level,
     )
     db.add(req)
     await db.flush()

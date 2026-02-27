@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import {
-  ArrowLeft, Upload, FileText, Trash2, Play, Loader2,
+  ArrowLeft, Upload, FileText, Play, Loader2,
   CheckCircle, XCircle, AlertTriangle, MinusCircle,
   ChevronDown, ChevronUp, Sparkles, Globe,
 } from "lucide-react";
@@ -185,10 +185,8 @@ function UploadTab({
 
 function ResultsTab({
   assessment,
-  onUpdate,
 }: {
   readonly assessment: AssessmentDetail;
-  readonly onUpdate: (updated: AssessmentDetail) => void;
 }) {
   const [filter, setFilter] = useState<"all" | "implemented" | "partial" | "gap">("all");
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
@@ -543,10 +541,7 @@ export default function AssessmentDetailPage() {
         />
       )}
       {activeTab === "results" && (
-        <ResultsTab
-          assessment={assessment}
-          onUpdate={setAssessment}
-        />
+        <ResultsTab assessment={assessment} />
       )}
       {activeTab === "crossfw" && (
         <CrossFrameworkTab assessment={assessment} />

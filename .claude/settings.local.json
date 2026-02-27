@@ -84,7 +84,16 @@
       "Bash(curl -s -X POST http://localhost:8000/api/v1/auth/login -H \"Content-Type: application/json\" -d \"{\"\"email\"\":\"\"admin@demo.com\"\",\"\"password\"\":\"\"demo123\"\"}\")",
       "Bash(python migrate.py)",
       "Bash(python -c \"import pypdf\")",
-      "Bash(pip install pypdf)"
+      "Bash(pip install pypdf)",
+      "Bash(python -c \"import sys; print\\(sys.executable\\)\")",
+      "Bash(pip show fastapi pypdf python-docx)",
+      "Bash(python -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\(''React:'', d[''dependencies''].get\\(''react'',''''\\)\\); print\\(''Vite:'', d.get\\(''devDependencies'',{}\\).get\\(''vite'',''''\\)\\)\")",
+      "Bash(pip install python-docx)",
+      "Bash(cmd /c \"taskkill /PID 30352 /F\")",
+      "Bash(cmd /c \"taskkill /PID 30352 /F 2>&1\")",
+      "Bash(python -c \"import subprocess; result = subprocess.run\\([''taskkill'', ''/PID'', ''30352'', ''/F''], capture_output=True, text=True\\); print\\(result.stdout\\); print\\(result.stderr\\)\")",
+      "Bash(# Kill all python processes running uvicorn python -c \"\" import subprocess, psutil for p in psutil.process_iter\\([''pid'',''name'',''cmdline'']\\): try: if p.info[''name''] and ''python'' in p.info[''name''].lower\\(\\): cmdline = '' ''.join\\(p.info[''cmdline''] or []\\) if ''uvicorn'' in cmdline: print\\(f''Killing PID {p.pid}: {cmdline[:60]}''\\) p.kill\\(\\) except: pass \"\" 2>&1 || echo \"\"psutil not available\"\" # Kill by port netstat -ano)",
+      "Bash(npm run build)"
     ]
   }
 }

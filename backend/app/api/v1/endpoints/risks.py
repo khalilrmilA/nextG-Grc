@@ -1,4 +1,5 @@
 """Risk management endpoints."""
+from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
@@ -59,8 +60,8 @@ class RiskResponse(BaseModel):
     tags: list
     linked_controls: list
     linked_assets: list
-    created_at: str
-    updated_at: str
+    created_at: datetime
+    updated_at: datetime
 
     model_config = {"from_attributes": True}
 

@@ -5,7 +5,7 @@ import {
   Loader2, CheckCircle, Save,
 } from "lucide-react";
 import { customFrameworkApi } from "@/api/endpoints";
-import type { Framework, FrameworkControl, ControlCreate, RequirementCreate } from "@/types";
+import type { Framework, FrameworkControl, RequirementCreate } from "@/types";
 
 const REGIONS = ["Global", "EU", "US", "US-Gov", "UK", "APAC", "LATAM", "MEA"];
 const INDUSTRIES = ["All", "Technology", "Finance", "Healthcare", "Government", "Retail", "Energy", "Manufacturing"];

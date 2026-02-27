@@ -5,7 +5,6 @@
 import { apiClient } from "./client";
 import type {
   AuthTokens,
-  User,
   Risk,
   RiskHeatmapData,
   PaginatedResponse,

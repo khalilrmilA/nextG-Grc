@@ -3,6 +3,7 @@ import asyncio
 import json
 import re
 import uuid
+from datetime import datetime
 from pathlib import Path
 
 import requests
@@ -50,7 +51,7 @@ class UploadedDocumentResponse(BaseModel):
     file_name: str
     file_size_bytes: int | None = None
     content_type: str | None = None
-    created_at: str
+    created_at: datetime
 
     model_config = {"from_attributes": True}
 
@@ -96,8 +97,8 @@ class AssessmentDetailResponse(BaseModel):
     status: str
     compliance_score: float | None = None
     scope_description: str | None = None
-    created_at: str
-    updated_at: str
+    created_at: datetime
+    updated_at: datetime
     uploaded_documents: list[UploadedDocumentResponse] = []
     control_assessments: list[ControlAssessmentResponse] = []
     gaps: list[GapResponse] = []
@@ -115,7 +116,7 @@ class AssessmentListItem(BaseModel):
     status: str
     compliance_score: float | None = None
     document_count: int = 0
-    created_at: str
+    created_at: datetime
 
     model_config = {"from_attributes": True}
 
@@ -353,15 +354,15 @@ async def _build_assessment_detail(
         status=assessment.status,
         compliance_score=assessment.compliance_score,
         scope_description=assessment.scope_description,
-        created_at=str(assessment.created_at),
-        updated_at=str(assessment.updated_at),
+        created_at=assessment.created_at,
+        updated_at=assessment.updated_at,
         uploaded_documents=[
             UploadedDocumentResponse(
                 id=d.id,
                 file_name=d.file_name,
                 file_size_bytes=d.file_size_bytes,
                 content_type=d.content_type,
-                created_at=str(d.created_at),
+                created_at=d.created_at,
             )
             for d in docs
         ],
@@ -451,7 +452,7 @@ async def list_assessments(
             status=a.status,
             compliance_score=a.compliance_score,
             document_count=doc_counts.get(a.id, 0),
-            created_at=str(a.created_at),
+            created_at=a.created_at,
         )
         for a in assessments
     ]
@@ -549,7 +550,7 @@ async def upload_document(
         file_name=doc.file_name,
         file_size_bytes=doc.file_size_bytes,
         content_type=doc.content_type,
-        created_at=str(doc.created_at),
+        created_at=doc.created_at,
     )
 
 

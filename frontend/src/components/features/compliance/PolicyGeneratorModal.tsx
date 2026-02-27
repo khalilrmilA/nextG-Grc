@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import { X, Sparkles, Copy, RotateCcw, Loader2, CheckCheck } from "lucide-react";
 import { aiApi } from "@/api/endpoints";
-import { makeThinkFilter, handleSseLine } from "@/lib/sse";
+import { makeThinkFilter } from "@/lib/sse";
 import type { GapDetail } from "@/types";
 
 interface PolicyGeneratorModalProps {
