@@ -81,7 +81,10 @@
       "Bash(python -c \"import sqlite3; c=sqlite3.connect\\(''grc_dev.db''\\); print\\(c.execute\\(''SELECT email, is_active, first_name FROM users''\\).fetchall\\(\\)\\); c.close\\(\\)\")",
       "Bash(taskkill //F //PID 44308)",
       "Bash(ping -n 3 127.0.0.)",
-      "Bash(curl -s -X POST http://localhost:8000/api/v1/auth/login -H \"Content-Type: application/json\" -d \"{\"\"email\"\":\"\"admin@demo.com\"\",\"\"password\"\":\"\"demo123\"\"}\")"
+      "Bash(curl -s -X POST http://localhost:8000/api/v1/auth/login -H \"Content-Type: application/json\" -d \"{\"\"email\"\":\"\"admin@demo.com\"\",\"\"password\"\":\"\"demo123\"\"}\")",
+      "Bash(python migrate.py)",
+      "Bash(python -c \"import pypdf\")",
+      "Bash(pip install pypdf)"
     ]
   }
 }

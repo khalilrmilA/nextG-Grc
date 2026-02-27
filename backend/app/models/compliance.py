@@ -1,7 +1,7 @@
 """Compliance management models."""
 import enum
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-from sqlalchemy import String, Text, Boolean, ForeignKey, Enum as SAEnum, JSON, Float
+from sqlalchemy import String, Text, Boolean, ForeignKey, Enum as SAEnum, JSON, Float, Integer
 from app.core.database import Base
 
 
@@ -76,6 +76,9 @@ class ComplianceAssessment(Base):
     gaps: Mapped[list["ComplianceGap"]] = relationship(
         "ComplianceGap", back_populates="assessment"
     )
+    uploaded_documents: Mapped[list["UploadedDocument"]] = relationship(
+        "UploadedDocument", back_populates="assessment"
+    )
 
 
 class ControlAssessment(Base):
@@ -102,6 +105,9 @@ class ControlAssessment(Base):
 
     # For "not_applicable" — justification required
     not_applicable_justification: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    # AI analysis confidence score (0.0 - 1.0)
+    ai_confidence: Mapped[float | None] = mapped_column(Float, nullable=True)
 
     # Relationships
     assessment: Mapped["ComplianceAssessment"] = relationship(
@@ -178,4 +184,28 @@ class ComplianceGap(Base):
 
     assessment: Mapped["ComplianceAssessment"] = relationship(
         "ComplianceAssessment", back_populates="gaps"
+    )
+
+
+class UploadedDocument(Base):
+    """Document uploaded by a user for compliance analysis (pre-analysis input)."""
+    __tablename__ = "uploaded_documents"
+
+    assessment_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("compliance_assessments.id"), nullable=False, index=True
+    )
+    tenant_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("tenants.id"), nullable=False, index=True
+    )
+    file_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    file_path: Mapped[str] = mapped_column(String(500), nullable=False)  # local path or S3 key
+    content_type: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    file_size_bytes: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    extracted_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+    uploaded_by_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("users.id"), nullable=True
+    )
+
+    assessment: Mapped["ComplianceAssessment"] = relationship(
+        "ComplianceAssessment", back_populates="uploaded_documents"
     )

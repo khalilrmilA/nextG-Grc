@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { Globe, BookOpen, CheckCircle, Search, ArrowRight, Lock } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+import { Globe, BookOpen, CheckCircle, Search, ArrowRight, Lock, Plus } from "lucide-react";
 
 type FwStatus = "active" | "coming_soon";
 
@@ -115,6 +116,7 @@ function FrameworkCard({ fw }: { readonly fw: Framework }) {
 }
 
 export default function FrameworksPage() {
+  const navigate = useNavigate();
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState("All");
 
@@ -141,9 +143,12 @@ export default function FrameworksPage() {
             {loadedCount} frameworks loaded · {totalAssessable.toLocaleString()} total assessable controls
           </p>
         </div>
-        <button className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors">
-          <BookOpen className="w-4 h-4" />
-          Request Framework
+        <button
+          onClick={() => navigate("/frameworks/custom/new")}
+          className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+        >
+          <Plus className="w-4 h-4" />
+          Create Custom Framework
         </button>
       </div>
 

@@ -272,6 +272,116 @@ export interface DashboardSummary {
   };
 }
 
+// ─── Compliance — Document Analysis (new) ────
+
+export interface UploadedDocument {
+  id: string;
+  assessment_id: string;
+  file_name: string;
+  file_size_bytes?: number;
+  content_type?: string;
+  created_at: string;
+}
+
+export interface ControlAssessmentDetail extends BaseEntity {
+  assessment_id: string;
+  control_id: string;
+  control_identifier: string;
+  control_title: string;
+  control_category?: string;
+  control_description?: string;
+  status: ControlStatus;
+  notes?: string;
+  implementation_notes?: string;
+  ai_confidence?: number;
+  cross_framework_coverage: CrosswalkMapping[];
+}
+
+export interface GapDetail {
+  id: string;
+  control_id: string;
+  control_identifier: string;
+  control_title: string;
+  control_description?: string;
+  gap_description: string;
+  severity: "critical" | "high" | "medium" | "low";
+  remediation_steps?: string;
+}
+
+export interface CrossFrameworkCoverage {
+  [frameworkName: string]: {
+    covered: number;
+    total_mapped: number;
+    percent: number;
+    controls: string[];
+  };
+}
+
+export interface AssessmentDetail extends BaseEntity {
+  tenant_id: string;
+  framework_id: string;
+  framework_name: string;
+  framework_short_name: string;
+  name: string;
+  description?: string;
+  status: "draft" | "in_progress" | "under_review" | "completed" | "archived";
+  compliance_score?: number;
+  scope_description?: string;
+  uploaded_documents: UploadedDocument[];
+  control_assessments: ControlAssessmentDetail[];
+  gaps: GapDetail[];
+  cross_framework_summary: CrossFrameworkCoverage;
+}
+
+export interface AssessmentListItem extends BaseEntity {
+  framework_id: string;
+  framework_name: string;
+  framework_short_name: string;
+  name: string;
+  status: string;
+  compliance_score?: number;
+  document_count: number;
+}
+
+// ─── Custom Framework Builder (new) ──────────
+
+export interface FrameworkCreate {
+  name: string;
+  short_name: string;
+  version: string;
+  description?: string;
+  issuing_body?: string;
+  applicable_regions: string[];
+  applicable_industries: string[];
+}
+
+export interface ControlCreate {
+  control_id: string;
+  title: string;
+  description?: string;
+  guidance?: string;
+  category?: string;
+  tags: string[];
+}
+
+export interface RequirementCreate {
+  requirement_text: string;
+  requirement_level: "must" | "should" | "may";
+}
+
+// ─── AI Policy Generator (new) ───────────────
+
+export interface PolicyGenerateRequest {
+  control_identifier: string;
+  control_title: string;
+  framework_short_name: string;
+  control_description?: string;
+  gap_description?: string;
+  existing_context?: string;
+  organization_context?: string;
+  model?: string;
+}
+
 // ─── Subscription ────────────────────────────
 
 export type SubscriptionTier = "starter" | "professional" | "enterprise";

@@ -1,28 +1,16 @@
-import { useState } from "react";
-import { CheckCircle, Clock, AlertCircle, XCircle, Plus, User, Calendar } from "lucide-react";
-
-const ASSESSMENTS = [
-  { id: "1", name: "ISO 27001:2022 Certification Assessment", framework: "ISO 27001", score: 72, status: "in_progress", controls: { implemented: 45, in_progress: 20, not_started: 18, not_applicable: 10 }, lead: "Alice Martin", started: "2025-10-01", due: "2026-01-31", fwColor: "bg-blue-50 text-blue-700" },
-  { id: "2", name: "SOC 2 Type II Readiness", framework: "SOC 2", score: 85, status: "completed", controls: { implemented: 52, in_progress: 5, not_started: 2, not_applicable: 5 }, lead: "Bob Chen", started: "2025-07-01", due: "2025-12-01", fwColor: "bg-purple-50 text-purple-700" },
-  { id: "3", name: "GDPR Compliance Review 2025", framework: "GDPR", score: 61, status: "in_progress", controls: { implemented: 28, in_progress: 8, not_started: 7, not_applicable: 4 }, lead: "Claire Dupont", started: "2025-09-15", due: "2026-03-01", fwColor: "bg-emerald-50 text-emerald-700" },
-  { id: "4", name: "PCI DSS 4.0 — Annual Assessment", framework: "PCI DSS", score: 48, status: "in_progress", controls: { implemented: 168, in_progress: 84, not_started: 78, not_applicable: 21 }, lead: "David Reyes", started: "2025-11-01", due: "2026-02-28", fwColor: "bg-orange-50 text-orange-700" },
-  { id: "5", name: "HIPAA Security Rule Assessment", framework: "HIPAA", score: null, status: "draft", controls: { implemented: 0, in_progress: 0, not_started: 54, not_applicable: 0 }, lead: "—", started: "—", due: "2026-06-30", fwColor: "bg-red-50 text-red-700" },
-  { id: "6", name: "NIST CSF 2.0 Gap Analysis", framework: "NIST CSF", score: 79, status: "under_review", controls: { implemented: 84, in_progress: 12, not_started: 6, not_applicable: 4 }, lead: "Emma Wilson", started: "2025-08-01", due: "2026-01-15", fwColor: "bg-indigo-50 text-indigo-700" },
-];
+import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
+import { CheckCircle, Clock, AlertCircle, XCircle, Plus, FileText, Loader2, X } from "lucide-react";
+import { complianceApi, frameworksApi } from "@/api/endpoints";
+import type { AssessmentListItem, Framework } from "@/types";
 
 const STATUS_MAP: Record<string, { label: string; icon: typeof CheckCircle; color: string }> = {
-  draft:        { label: "Draft",        icon: XCircle,    color: "text-gray-500 bg-gray-100"   },
-  in_progress:  { label: "In Progress",  icon: Clock,      color: "text-blue-600 bg-blue-50"    },
-  under_review: { label: "Under Review", icon: AlertCircle,color: "text-orange-600 bg-orange-50"},
-  completed:    { label: "Completed",    icon: CheckCircle,color: "text-green-600 bg-green-50"  },
+  draft:        { label: "Draft",        icon: XCircle,     color: "text-gray-500 bg-gray-100"    },
+  in_progress:  { label: "In Progress",  icon: Clock,       color: "text-blue-600 bg-blue-50"     },
+  under_review: { label: "Under Review", icon: AlertCircle, color: "text-orange-600 bg-orange-50" },
+  completed:    { label: "Completed",    icon: CheckCircle, color: "text-green-600 bg-green-50"   },
+  archived:     { label: "Archived",     icon: XCircle,     color: "text-gray-400 bg-gray-50"     },
 };
-
-const CONTROL_SEGMENTS = [
-  { key: "implemented" as const,   label: "Implemented", color: "bg-green-500" },
-  { key: "in_progress" as const,   label: "In Progress", color: "bg-blue-400"  },
-  { key: "not_started" as const,   label: "Not Started", color: "bg-gray-200"  },
-  { key: "not_applicable" as const,label: "N/A",         color: "bg-gray-100 border border-gray-200" },
-];
 
 function scoreColor(score: number) {
   if (score >= 80) return "text-green-700 bg-green-50";
@@ -30,8 +18,8 @@ function scoreColor(score: number) {
   return "text-red-700 bg-red-50";
 }
 
-function ScoreBadge({ score }: { readonly score: number | null }) {
-  if (score === null) return <span className="text-gray-400 text-sm italic">Not started</span>;
+function ScoreBadge({ score }: { readonly score: number | null | undefined }) {
+  if (score == null) return <span className="text-gray-400 text-sm italic">Not run</span>;
   return <span className={`text-xl font-bold px-3 py-1.5 rounded-xl ${scoreColor(score)}`}>{score}%</span>;
 }
 
@@ -45,32 +33,183 @@ function StatusBadge({ status }: { readonly status: string }) {
   );
 }
 
+// ─── New Assessment Modal ──────────────────────────────────────────────────────
+
+function NewAssessmentModal({
+  frameworks,
+  onClose,
+  onCreate,
+}: {
+  readonly frameworks: Framework[];
+  readonly onClose: () => void;
+  readonly onCreate: (id: string) => void;
+}) {
+  const [frameworkId, setFrameworkId] = useState("");
+  const [name, setName] = useState("");
+  const [scope, setScope] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!frameworkId || !name.trim()) return;
+    setLoading(true);
+    setError("");
+    try {
+      const result = await complianceApi.createAssessment({
+        framework_id: frameworkId,
+        name: name.trim(),
+        scope_description: scope.trim() || undefined,
+      });
+      onCreate(result.id);
+    } catch {
+      setError("Failed to create assessment. Please try again.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg p-6">
+        <div className="flex items-center justify-between mb-5">
+          <h2 className="text-lg font-semibold text-gray-900">New Compliance Assessment</h2>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-700">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        <form onSubmit={submit} className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Framework *</label>
+            <select
+              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              value={frameworkId}
+              onChange={(e) => setFrameworkId(e.target.value)}
+              required
+            >
+              <option value="">Select a framework…</option>
+              {frameworks.map((fw) => (
+                <option key={fw.id} value={fw.id}>
+                  {fw.name} ({fw.control_count} controls)
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Assessment name *</label>
+            <input
+              type="text"
+              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              placeholder="e.g. ISO 27001 Annual Assessment 2026"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              required
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Scope (optional)</label>
+            <textarea
+              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+              rows={2}
+              placeholder="e.g. Head office systems, cloud infrastructure, HR processes"
+              value={scope}
+              onChange={(e) => setScope(e.target.value)}
+            />
+          </div>
+
+          {error && <p className="text-sm text-red-600">{error}</p>}
+
+          <div className="flex justify-end gap-3 pt-1">
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-4 py-2 text-sm text-gray-600 hover:text-gray-900"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={loading || !frameworkId || !name.trim()}
+              className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+            >
+              {loading && <Loader2 className="w-4 h-4 animate-spin" />}
+              Create Assessment
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+// ─── Main Page ─────────────────────────────────────────────────────────────────
+
 export default function CompliancePage() {
+  const navigate = useNavigate();
+  const [assessments, setAssessments] = useState<AssessmentListItem[]>([]);
+  const [frameworks, setFrameworks] = useState<Framework[]>([]);
+  const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState("all");
+  const [showModal, setShowModal] = useState(false);
 
-  const filtered = ASSESSMENTS.filter(a =>
-    statusFilter === "all" || a.status === statusFilter
+  useEffect(() => {
+    Promise.all([
+      complianceApi.listAssessments(),
+      frameworksApi.list(),
+    ]).then(([aResp, fwList]) => {
+      setAssessments(aResp.items);
+      setFrameworks(fwList.filter((fw) => fw.control_count > 0));
+    }).finally(() => setLoading(false));
+  }, []);
+
+  const filtered = assessments.filter(
+    (a) => statusFilter === "all" || a.status === statusFilter
   );
 
-  const totalImplemented = ASSESSMENTS.reduce((s, a) => s + a.controls.implemented, 0);
-  const totalControls    = ASSESSMENTS.reduce((s, a) =>
-    s + Object.values(a.controls).reduce((x, v) => x + v, 0), 0);
-  const avgScore = Math.round(
-    ASSESSMENTS.filter(a => a.score !== null).reduce((s, a) => s + (a.score ?? 0), 0) /
-    ASSESSMENTS.filter(a => a.score !== null).length
-  );
+  const withScore = assessments.filter((a) => a.compliance_score != null);
+  const avgScore = withScore.length > 0
+    ? Math.round(withScore.reduce((s, a) => s + (a.compliance_score ?? 0), 0) / withScore.length)
+    : null;
+
+  function handleCreate(id: string) {
+    setShowModal(false);
+    navigate(`/compliance/${id}`);
+  }
+
+  if (loading) {
+    return (
+      <div className="p-8 flex items-center justify-center min-h-64">
+        <Loader2 className="w-8 h-8 animate-spin text-blue-500" />
+      </div>
+    );
+  }
 
   return (
     <div className="p-8 max-w-7xl space-y-6">
+      {showModal && (
+        <NewAssessmentModal
+          frameworks={frameworks}
+          onClose={() => setShowModal(false)}
+          onCreate={handleCreate}
+        />
+      )}
+
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Compliance Assessments</h1>
           <p className="text-gray-500 text-sm mt-1">
-            {ASSESSMENTS.length} assessments · {ASSESSMENTS.filter(a => a.status === "in_progress").length} in progress
+            {assessments.length} assessments ·{" "}
+            {assessments.filter((a) => a.status === "in_progress").length} in progress
           </p>
         </div>
-        <button className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors">
+        <button
+          onClick={() => setShowModal(true)}
+          className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+        >
           <Plus className="w-4 h-4" />
           New Assessment
         </button>
@@ -79,11 +218,11 @@ export default function CompliancePage() {
       {/* Summary KPIs */}
       <div className="grid grid-cols-4 gap-4">
         {[
-          { label: "Avg. Score",         value: `${avgScore}%`,    sub: "across active assessments" },
-          { label: "Controls Implemented",value: totalImplemented, sub: `of ${totalControls} total` },
-          { label: "Completed",          value: ASSESSMENTS.filter(a => a.status === "completed").length, sub: "assessments" },
-          { label: "Overdue",            value: 1,                 sub: "requires attention" },
-        ].map(s => (
+          { label: "Avg. Score",          value: avgScore != null ? `${avgScore}%` : "—", sub: "across active assessments" },
+          { label: "Total Assessments",   value: assessments.length,                       sub: "all frameworks" },
+          { label: "Completed",           value: assessments.filter((a) => a.status === "completed").length, sub: "assessments" },
+          { label: "In Progress",         value: assessments.filter((a) => a.status === "in_progress").length, sub: "currently active" },
+        ].map((s) => (
           <div key={s.label} className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
             <p className="text-2xl font-bold text-gray-900">{s.value}</p>
             <p className="text-sm font-medium text-gray-600 mt-0.5">{s.label}</p>
@@ -100,7 +239,7 @@ export default function CompliancePage() {
           { key: "under_review", label: "Under Review" },
           { key: "completed",    label: "Completed"    },
           { key: "draft",        label: "Draft"        },
-        ].map(t => (
+        ].map((t) => (
           <button
             key={t.key}
             onClick={() => setStatusFilter(t.key)}
@@ -117,62 +256,65 @@ export default function CompliancePage() {
 
       {/* Assessment cards */}
       <div className="space-y-4">
-        {filtered.map((a) => {
-          const total = Object.values(a.controls).reduce((s, v) => s + v, 0);
-          const implementedPct = total > 0 ? Math.round((a.controls.implemented / total) * 100) : 0;
-
-          return (
-            <div key={a.id} className="bg-white rounded-2xl border border-gray-100 p-6 shadow-sm hover:shadow-md transition-all cursor-pointer group">
-              {/* Top row */}
-              <div className="flex items-start justify-between mb-4">
-                <div className="flex-1 min-w-0">
-                  <div className="flex flex-wrap items-center gap-2 mb-2">
-                    <h3 className="text-base font-semibold text-gray-900 group-hover:text-blue-700 transition-colors">{a.name}</h3>
-                    <StatusBadge status={a.status} />
-                  </div>
-                  <div className="flex flex-wrap items-center gap-3 text-xs text-gray-500">
-                    <span className={`font-semibold px-2 py-0.5 rounded-md ${a.fwColor}`}>{a.framework}</span>
-                    <span className="flex items-center gap-1"><User className="w-3 h-3" />{a.lead}</span>
-                    <span className="flex items-center gap-1"><Calendar className="w-3 h-3" />Due {a.due}</span>
-                  </div>
+        {filtered.map((a) => (
+          <div
+            key={a.id}
+            onClick={() => navigate(`/compliance/${a.id}`)}
+            className="bg-white rounded-2xl border border-gray-100 p-6 shadow-sm hover:shadow-md hover:border-blue-200 transition-all cursor-pointer group"
+          >
+            <div className="flex items-start justify-between">
+              <div className="flex-1 min-w-0">
+                <div className="flex flex-wrap items-center gap-2 mb-2">
+                  <h3 className="text-base font-semibold text-gray-900 group-hover:text-blue-700 transition-colors">
+                    {a.name}
+                  </h3>
+                  <StatusBadge status={a.status} />
                 </div>
-                <ScoreBadge score={a.score} />
-              </div>
-
-              {/* Segmented progress bar */}
-              <div className="mb-3">
-                <div className="flex h-3 rounded-full overflow-hidden gap-px bg-gray-100">
-                  {CONTROL_SEGMENTS.map(seg =>
-                    a.controls[seg.key] > 0 ? (
-                      <div
-                        key={seg.key}
-                        className={`${seg.color} transition-all`}
-                        style={{ flex: a.controls[seg.key] }}
-                        title={`${seg.label}: ${a.controls[seg.key]}`}
-                      />
-                    ) : null
+                <div className="flex flex-wrap items-center gap-3 text-xs text-gray-500">
+                  <span className="font-semibold px-2 py-0.5 rounded-md bg-blue-50 text-blue-700">
+                    {a.framework_short_name}
+                  </span>
+                  <span>{a.framework_name}</span>
+                  {a.document_count > 0 && (
+                    <span className="flex items-center gap-1">
+                      <FileText className="w-3 h-3" />
+                      {a.document_count} doc{a.document_count !== 1 ? "s" : ""}
+                    </span>
                   )}
+                  <span className="text-gray-400">
+                    Created {new Date(a.created_at).toLocaleDateString()}
+                  </span>
                 </div>
               </div>
-
-              {/* Legend + coverage */}
-              <div className="flex flex-wrap items-center gap-5 text-xs">
-                {CONTROL_SEGMENTS.map(seg => (
-                  <div key={seg.key} className="flex items-center gap-1.5">
-                    <span className={`w-2 h-2 rounded-full flex-shrink-0 ${seg.color.split(" ")[0]}`} />
-                    <span className="text-gray-400">{seg.label}:</span>
-                    <strong className="text-gray-700">{a.controls[seg.key]}</strong>
-                  </div>
-                ))}
-                <div className="ml-auto font-semibold text-gray-700">{implementedPct}% implemented</div>
-              </div>
+              <ScoreBadge score={a.compliance_score} />
             </div>
-          );
-        })}
+
+            {a.compliance_score != null && (
+              <div className="mt-4">
+                <div className="h-2 rounded-full bg-gray-100 overflow-hidden">
+                  <div
+                    className={`h-full rounded-full transition-all ${
+                      a.compliance_score >= 80
+                        ? "bg-green-500"
+                        : a.compliance_score >= 60
+                        ? "bg-yellow-400"
+                        : "bg-red-400"
+                    }`}
+                    style={{ width: `${a.compliance_score}%` }}
+                  />
+                </div>
+              </div>
+            )}
+          </div>
+        ))}
       </div>
 
-      {filtered.length === 0 && (
-        <div className="text-center py-16 text-gray-400 text-sm">No assessments match this filter</div>
+      {filtered.length === 0 && !loading && (
+        <div className="text-center py-16 text-gray-400 text-sm">
+          {assessments.length === 0
+            ? "No assessments yet. Click \"New Assessment\" to get started."
+            : "No assessments match this filter."}
+        </div>
       )}
     </div>
   );

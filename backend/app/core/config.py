@@ -66,6 +66,15 @@ class Settings(BaseSettings):
     # Sentry
     SENTRY_DSN: str = ""
 
+    # File uploads
+    UPLOADS_DIR: str = "uploads"
+    MAX_UPLOAD_SIZE_MB: int = 10
+
+    # Ollama (local AI)
+    OLLAMA_BASE_URL: str = "http://localhost:11434"
+    OLLAMA_CHAT_MODEL: str = "deepseek-v3.1:671b-cloud"
+    OLLAMA_ANALYSIS_BATCH_SIZE: int = 25
+
     # Feature Flags
     ENABLE_AI_COPILOT: bool = False
     ENABLE_CONTINUOUS_MONITORING: bool = False

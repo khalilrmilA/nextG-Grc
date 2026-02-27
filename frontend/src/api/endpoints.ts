@@ -11,16 +11,23 @@ import type {
   PaginatedResponse,
   Framework,
   FrameworkControl,
-  ComplianceAssessment,
-  ControlAssessment,
-  Evidence,
+  ControlAssessmentDetail,
   Audit,
   AuditFinding,
   Policy,
   Vendor,
   DashboardSummary,
   Subscription,
+  AssessmentDetail,
+  AssessmentListItem,
+  UploadedDocument,
+  FrameworkCreate,
+  ControlCreate,
+  RequirementCreate,
+  PolicyGenerateRequest,
 } from "@/types";
+
+const API_BASE = import.meta.env.VITE_API_URL ?? "http://localhost:8000/api/v1";
 
 // ─── Auth ────────────────────────────────────
 
@@ -82,29 +89,94 @@ export const risksApi = {
 
 export const complianceApi = {
   listAssessments: (params?: { page?: number; page_size?: number }) =>
-    apiClient.get<PaginatedResponse<ComplianceAssessment>>("/compliance", { params }).then((r) => r.data),
+    apiClient
+      .get<PaginatedResponse<AssessmentListItem>>("/compliance/assessments", { params })
+      .then((r) => r.data),
+
+  createAssessment: (data: {
+    framework_id: string;
+    name: string;
+    description?: string;
+    scope_description?: string;
+  }) =>
+    apiClient.post<AssessmentDetail>("/compliance/assessments", data).then((r) => r.data),
 
   getAssessment: (id: string) =>
-    apiClient.get<ComplianceAssessment>(`/compliance/${id}`).then((r) => r.data),
+    apiClient.get<AssessmentDetail>(`/compliance/assessments/${id}`).then((r) => r.data),
 
-  createAssessment: (data: Partial<ComplianceAssessment>) =>
-    apiClient.post<ComplianceAssessment>("/compliance", data).then((r) => r.data),
+  getResults: (id: string) =>
+    apiClient.get<AssessmentDetail>(`/compliance/assessments/${id}/results`).then((r) => r.data),
 
-  getControlAssessments: (assessmentId: string) =>
-    apiClient.get<ControlAssessment[]>(`/compliance/${assessmentId}/controls`).then((r) => r.data),
-
-  updateControlAssessment: (assessmentId: string, controlId: string, data: Partial<ControlAssessment>) =>
-    apiClient.patch<ControlAssessment>(`/compliance/${assessmentId}/controls/${controlId}`, data).then((r) => r.data),
-
-  uploadEvidence: (controlAssessmentId: string, file: File, metadata: Partial<Evidence>) => {
+  uploadDocument: (assessmentId: string, file: File) => {
     const formData = new FormData();
     formData.append("file", file);
-    Object.entries(metadata).forEach(([k, v]) => formData.append(k, String(v)));
     return apiClient
-      .post<Evidence>(`/compliance/control-assessments/${controlAssessmentId}/evidence`, formData, {
+      .post<UploadedDocument>(`/compliance/assessments/${assessmentId}/documents`, formData, {
         headers: { "Content-Type": "multipart/form-data" },
       })
       .then((r) => r.data);
+  },
+
+  analyzeAssessment: (assessmentId: string) =>
+    apiClient
+      .post<{ status: string; compliance_score: number; controls_analyzed: number }>(
+        `/compliance/assessments/${assessmentId}/analyze`
+      )
+      .then((r) => r.data),
+
+  updateControlAssessment: (
+    controlAssessmentId: string,
+    data: Partial<ControlAssessmentDetail>
+  ) =>
+    apiClient
+      .patch<ControlAssessmentDetail>(
+        `/compliance/control-assessments/${controlAssessmentId}`,
+        data
+      )
+      .then((r) => r.data),
+};
+
+// ─── Custom Framework Builder ─────────────────
+
+export const customFrameworkApi = {
+  create: (data: FrameworkCreate) =>
+    apiClient.post<Framework>("/frameworks", data).then((r) => r.data),
+
+  addControl: (frameworkId: string, data: ControlCreate) =>
+    apiClient.post<FrameworkControl>(`/frameworks/${frameworkId}/controls`, data).then((r) => r.data),
+
+  updateControl: (frameworkId: string, controlDbId: string, data: Partial<ControlCreate>) =>
+    apiClient
+      .patch<FrameworkControl>(`/frameworks/${frameworkId}/controls/${controlDbId}`, data)
+      .then((r) => r.data),
+
+  deleteControl: (frameworkId: string, controlDbId: string) =>
+    apiClient.delete(`/frameworks/${frameworkId}/controls/${controlDbId}`),
+
+  addRequirement: (frameworkId: string, controlDbId: string, data: RequirementCreate) =>
+    apiClient
+      .post(`/frameworks/${frameworkId}/controls/${controlDbId}/requirements`, data)
+      .then((r) => r.data),
+};
+
+// ─── AI Policy Generator ──────────────────────
+
+export const aiApi = {
+  streamPolicyGeneration: async (
+    request: PolicyGenerateRequest,
+    onToken: (token: string) => void,
+    onDone: () => void,
+    signal: AbortSignal
+  ): Promise<void> => {
+    const resp = await fetch(`${API_BASE}/ai/generate-policy`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(request),
+      signal,
+    });
+    if (!resp.ok) throw new Error(`AI error: ${resp.status}`);
+    const { readSseStream } = await import("@/lib/sse");
+    await readSseStream(resp, onToken, onDone);
   },
 };
 

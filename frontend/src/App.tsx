@@ -7,7 +7,9 @@ import LandingPage from "./pages/LandingPage";
 import DashboardPage from "./pages/DashboardPage";
 import RisksPage from "./pages/RisksPage";
 import CompliancePage from "./pages/CompliancePage";
+import AssessmentDetailPage from "./pages/AssessmentDetailPage";
 import FrameworksPage from "./pages/FrameworksPage";
+import CustomFrameworkPage from "./pages/CustomFrameworkPage";
 import AuditsPage from "./pages/AuditsPage";
 import PoliciesPage from "./pages/PoliciesPage";
 import VendorsPage from "./pages/VendorsPage";
@@ -46,7 +48,9 @@ export default function App() {
         <Route path="dashboard" element={<DashboardPage />} />
         <Route path="risks" element={<RisksPage />} />
         <Route path="compliance" element={<CompliancePage />} />
+        <Route path="compliance/:assessmentId" element={<AssessmentDetailPage />} />
         <Route path="frameworks" element={<FrameworksPage />} />
+        <Route path="frameworks/custom/new" element={<CustomFrameworkPage />} />
         <Route path="audits" element={<AuditsPage />} />
         <Route path="policies" element={<PoliciesPage />} />
         <Route path="vendors" element={<VendorsPage />} />
