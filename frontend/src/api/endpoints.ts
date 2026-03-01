@@ -24,6 +24,9 @@ import type {
   ControlCreate,
   RequirementCreate,
   PolicyGenerateRequest,
+  AppNotification,
+  NotificationListResponse,
+  NotificationPreference,
 } from "@/types";
 
 const API_BASE = import.meta.env.VITE_API_URL ?? "http://localhost:8000/api/v1";
@@ -235,5 +238,32 @@ export const subscriptionsApi = {
   createCheckoutSession: (tier: string, billing_cycle: string) =>
     apiClient
       .post<{ checkout_url: string }>("/subscriptions/checkout", { tier, billing_cycle })
+      .then((r) => r.data),
+};
+
+// ─── Notifications ────────────────────────────
+
+export const notificationsApi = {
+  list: (params?: { status_filter?: "all" | "unread"; limit?: number; offset?: number }) =>
+    apiClient.get<NotificationListResponse>("/notifications", { params }).then((r) => r.data),
+
+  markRead: (id: string) =>
+    apiClient.patch<AppNotification>(`/notifications/${id}/read`).then((r) => r.data),
+
+  markAllRead: () =>
+    apiClient.patch("/notifications/read-all"),
+
+  delete: (id: string) =>
+    apiClient.delete(`/notifications/${id}`),
+
+  clearAll: () =>
+    apiClient.delete("/notifications"),
+
+  getPreferences: () =>
+    apiClient.get<NotificationPreference[]>("/notifications/preferences").then((r) => r.data),
+
+  updatePreferences: (preferences: NotificationPreference[]) =>
+    apiClient
+      .put<NotificationPreference[]>("/notifications/preferences", { preferences })
       .then((r) => r.data),
 };

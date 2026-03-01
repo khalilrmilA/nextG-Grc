@@ -86,7 +86,7 @@ class ApiClient {
             return this.client(originalRequest);
           } catch {
             this.clearTokens();
-            window.location.href = "/login";
+            // Don't force redirect — let React Router handle unauthenticated state
           }
         }
 

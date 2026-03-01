@@ -13,6 +13,10 @@ from app.models.policy import Policy, PolicyVersion, PolicyAttestation
 from app.models.vendor import Vendor, VendorAssessment, VendorRisk
 from app.models.asset import Asset
 from app.models.subscription import Subscription, SubscriptionTier
+from app.models.notification import (
+    Notification, NotificationPreference, NotificationType,
+    NotificationChannel, NotificationStatus,
+)
 
 __all__ = [
     "Tenant", "User", "UserRole",
@@ -24,4 +28,6 @@ __all__ = [
     "Vendor", "VendorAssessment", "VendorRisk",
     "Asset",
     "Subscription", "SubscriptionTier",
+    "Notification", "NotificationPreference", "NotificationType",
+    "NotificationChannel", "NotificationStatus",
 ]

@@ -62,6 +62,7 @@ class Settings(BaseSettings):
     SMTP_USER: str = ""
     SMTP_PASSWORD: str = ""
     EMAIL_FROM: str = "noreply@grcplatform.com"
+    FRONTEND_URL: str = "http://localhost:3000"
 
     # Sentry
     SENTRY_DSN: str = ""

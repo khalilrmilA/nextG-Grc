@@ -382,6 +382,42 @@ export interface PolicyGenerateRequest {
   model?: string;
 }
 
+// ─── Notifications ───────────────────────────
+
+export type NotificationType =
+  | "risk_new" | "risk_overdue" | "risk_status_changed"
+  | "audit_assigned" | "audit_due" | "audit_finding_new"
+  | "policy_review_due" | "policy_published"
+  | "vendor_alert" | "vendor_assessment_due"
+  | "compliance_score_drop" | "compliance_analysis_done"
+  | "weekly_digest" | "system";
+
+export type NotificationChannel = "email" | "in_app";
+export type NotificationStatus = "unread" | "read" | "dismissed";
+
+export interface AppNotification {
+  id: string;
+  type: NotificationType;
+  status: NotificationStatus;
+  title: string;
+  message: string;
+  data?: { link?: string; [key: string]: unknown };
+  created_at: string;
+  read_at?: string | null;
+}
+
+export interface NotificationListResponse {
+  items: AppNotification[];
+  unread_count: number;
+  total: number;
+}
+
+export interface NotificationPreference {
+  notification_type: NotificationType;
+  channel: NotificationChannel;
+  enabled: boolean;
+}
+
 // ─── Subscription ────────────────────────────
 
 export type SubscriptionTier = "starter" | "professional" | "enterprise";

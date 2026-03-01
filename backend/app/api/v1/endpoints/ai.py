@@ -1,20 +1,20 @@
 """
-AI Assistant endpoint — streams responses from Ollama.
-Provides GRC-context-aware chat and policy generation using local LLM.
+AI Assistant endpoint — streams responses from Ollama (cloud models).
+Uses Ollama's OpenAI-compatible /api/chat endpoint with streaming.
 """
 import json
 import asyncio
-import requests
+from collections.abc import AsyncGenerator
 from fastapi import APIRouter
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
+import httpx
 
 from app.core.config import settings
 
 router = APIRouter()
 
-OLLAMA_BASE_URL = settings.OLLAMA_BASE_URL
-DEFAULT_MODEL   = settings.OLLAMA_CHAT_MODEL
+DEFAULT_MODEL = settings.OLLAMA_CHAT_MODEL  # e.g. deepseek-v3.1:671b-cloud
 
 SYSTEM_PROMPT = """You are an expert GRC (Governance, Risk & Compliance) AI assistant embedded in a professional GRC SaaS platform.
 
@@ -65,9 +65,9 @@ class ChatRequest(BaseModel):
 
 
 class PolicyGenerateRequest(BaseModel):
-    control_identifier: str       # e.g., "A.8.1"
+    control_identifier: str
     control_title: str
-    framework_short_name: str     # e.g., "ISO27001"
+    framework_short_name: str
     control_description: str | None = None
     gap_description: str | None = None
     existing_context: str | None = None
@@ -75,80 +75,62 @@ class PolicyGenerateRequest(BaseModel):
     model: str = DEFAULT_MODEL
 
 
-# ─── Core streaming helpers ────────────────────────────────────────────────────
+# ─── Core streaming helper ─────────────────────────────────────────────────────
+
+_SSE_DONE = "data: [DONE]\n\n"
 
 
-def _blocking_stream(
+async def _ollama_sse_generator(
     messages: list[dict],
     model: str,
-    queue: "asyncio.Queue[str | None]",
-    loop: asyncio.AbstractEventLoop,
-    system_prompt: str | None = None,
-):
-    """Run in a thread: call Ollama and push SSE lines into the async queue."""
-    effective_system = system_prompt if system_prompt is not None else SYSTEM_PROMPT
+    system_prompt: str,
+) -> AsyncGenerator[str, None]:
+    """Async generator that yields SSE chunks from Ollama streaming API."""
+    base_url = settings.OLLAMA_BASE_URL.rstrip("/")
+    url = f"{base_url}/api/chat"
+
     payload = {
         "model": model,
-        "messages": [{"role": "system", "content": effective_system}] + messages,
         "stream": True,
-        "options": {"temperature": 0.7, "top_p": 0.9},
+        "messages": [{"role": "system", "content": system_prompt}, *messages],
     }
+
     try:
-        with requests.post(
-            f"{OLLAMA_BASE_URL}/api/chat",
-            json=payload,
-            stream=True,
-            timeout=(60, 120),
-        ) as resp:
-            if resp.status_code != 200:
-                error = resp.text
-                try:
-                    error = json.loads(resp.text).get("error", resp.text)
-                except Exception:
-                    pass
-                asyncio.run_coroutine_threadsafe(
-                    queue.put(f"data: {json.dumps({'error': error})}\n\n"), loop
-                ).result()
-                return
-            for raw_line in resp.iter_lines():
-                if not raw_line:
-                    continue
-                try:
-                    data = json.loads(raw_line)
-                    token = data.get("message", {}).get("content", "")
+        async with httpx.AsyncClient(timeout=300.0) as client:
+            async with client.stream("POST", url, json=payload) as response:
+                if response.status_code != 200:
+                    body = await response.aread()
+                    yield f"data: {json.dumps({'error': f'Ollama error {response.status_code}: {body.decode()}'})}\n\n"
+                    yield _SSE_DONE
+                    return
+
+                async for line in response.aiter_lines():
+                    if not line:
+                        continue
+                    try:
+                        chunk = json.loads(line)
+                    except json.JSONDecodeError:
+                        continue
+
+                    # Ollama streams: {"message": {"role": "assistant", "content": "..."}, "done": false}
+                    token = chunk.get("message", {}).get("content", "")
                     if token:
-                        asyncio.run_coroutine_threadsafe(
-                            queue.put(f"data: {json.dumps({'token': token})}\n\n"), loop
-                        ).result()
-                    if data.get("done"):
-                        asyncio.run_coroutine_threadsafe(
-                            queue.put("data: [DONE]\n\n"), loop
-                        ).result()
-                        return
-                except json.JSONDecodeError:
-                    continue
-    except requests.exceptions.ConnectionError:
-        asyncio.run_coroutine_threadsafe(
-            queue.put(f"data: {json.dumps({'error': 'Cannot connect to Ollama on port 11434.'})}\n\n"), loop
-        ).result()
+                        yield f"data: {json.dumps({'token': token})}\n\n"
+
+                    if chunk.get("done"):
+                        break
+
+        yield _SSE_DONE
+
+    except httpx.ConnectError:
+        yield f"data: {json.dumps({'error': f'Cannot connect to Ollama at {base_url}. Make sure Ollama is running.'})}\n\n"
+        yield _SSE_DONE
+    except asyncio.TimeoutError:
+        yield f"data: {json.dumps({'error': 'Ollama request timed out (300s). The cloud model may be loading.'})}\n\n"
+        yield _SSE_DONE
     except Exception as exc:
-        asyncio.run_coroutine_threadsafe(
-            queue.put(f"data: {json.dumps({'error': str(exc)})}\n\n"), loop
-        ).result()
-    finally:
-        asyncio.run_coroutine_threadsafe(queue.put(None), loop).result()
-
-
-async def _sse_generator(messages: list[dict], model: str, system_prompt: str | None = None):
-    """Async generator that yields SSE chunks from a background thread."""
-    loop = asyncio.get_event_loop()
-    queue: asyncio.Queue[str | None] = asyncio.Queue()
-    loop.run_in_executor(None, _blocking_stream, messages, model, queue, loop, system_prompt)
-    while True:
-        item = await queue.get()
-        if item is None:
-            break
-        yield item
+        yield f"data: {json.dumps({'error': str(exc)})}\n\n"
+        yield _SSE_DONE
 
 
 # ─── Endpoints ─────────────────────────────────────────────────────────────────
@@ -159,7 +141,7 @@ async def chat(request: ChatRequest):
     """Stream a GRC-aware AI chat response from Ollama."""
     messages = [{"role": m.role, "content": m.content} for m in request.messages]
     return StreamingResponse(
-        _sse_generator(messages, request.model),
+        _ollama_sse_generator(messages, request.model, SYSTEM_PROMPT),
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
@@ -169,7 +151,7 @@ async def chat(request: ChatRequest):
 async def generate_policy(request: PolicyGenerateRequest):
     """
     Stream a generated policy/procedure document for a specific compliance gap.
-    Uses a specialized policy-writing system prompt for higher quality output.
+    Uses Ollama with a specialized policy-writing system prompt.
     """
     user_prompt = (
         f"Generate a complete policy/procedure document to address the following compliance requirement:\n\n"
@@ -184,7 +166,7 @@ async def generate_policy(request: PolicyGenerateRequest):
     )
     messages = [{"role": "user", "content": user_prompt}]
     return StreamingResponse(
-        _sse_generator(messages, request.model, system_prompt=POLICY_SYSTEM_PROMPT),
+        _ollama_sse_generator(messages, request.model, POLICY_SYSTEM_PROMPT),
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
@@ -192,24 +174,36 @@ async def generate_policy(request: PolicyGenerateRequest):
 
 @router.get("/models")
 async def list_models():
-    """Return available Ollama models."""
-    import httpx
+    """Return available Ollama models by querying the local Ollama instance."""
+    base_url = settings.OLLAMA_BASE_URL.rstrip("/")
     try:
-        async with httpx.AsyncClient(timeout=5.0) as client:
-            resp = await client.get(f"{OLLAMA_BASE_URL}/api/tags")
-            models = [m["name"] for m in resp.json().get("models", [])]
-            return {"models": models, "default": DEFAULT_MODEL}
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.get(f"{base_url}/api/tags")
+            if resp.status_code == 200:
+                data = resp.json()
+                model_names = [m["name"] for m in data.get("models", [])]
+                return {"models": model_names, "default": DEFAULT_MODEL, "provider": "ollama"}
     except Exception:
-        return {"models": [DEFAULT_MODEL], "default": DEFAULT_MODEL}
+        pass
+    # Fallback: return the configured model
+    return {"models": [DEFAULT_MODEL], "default": DEFAULT_MODEL, "provider": "ollama"}
 
 
 @router.get("/health")
 async def ai_health():
     """Check if Ollama is reachable."""
-    import httpx
+    base_url = settings.OLLAMA_BASE_URL.rstrip("/")
+    reachable = False
     try:
-        async with httpx.AsyncClient(timeout=3.0) as client:
-            resp = await client.get(f"{OLLAMA_BASE_URL}/api/tags")
-            return {"status": "ok", "ollama": resp.status_code == 200}
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            resp = await client.get(f"{base_url}/api/tags")
+            reachable = resp.status_code == 200
     except Exception:
-        return {"status": "error", "ollama": False}
+        pass
+    return {
+        "status": "ok" if reachable else "ollama_unreachable",
+        "provider": "ollama",
+        "model": DEFAULT_MODEL,
+        "ollama_url": base_url,
+        "reachable": reachable,
+    }

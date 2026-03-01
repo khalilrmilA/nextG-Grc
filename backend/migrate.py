@@ -14,7 +14,7 @@ from sqlalchemy.ext.asyncio import create_async_engine
 # Import all models so Base.metadata is populated
 from app.core.database import Base
 from app.models import (  # noqa: F401
-    tenant, user, framework, compliance, risk, asset, audit, policy, vendor, subscription
+    tenant, user, framework, compliance, risk, asset, audit, policy, vendor, subscription, notification
 )
 
 ENGINE_URL = os.environ["DATABASE_URL"]
@@ -24,7 +24,7 @@ engine = create_async_engine(ENGINE_URL, connect_args={"check_same_thread": Fals
 async def migrate():
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
-    print("✓ All tables created / already exist")
+    print("OK: All tables created / already exist")
     await engine.dispose()
 
 

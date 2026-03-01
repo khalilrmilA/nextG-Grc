@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { Shield } from "lucide-react";
 import { authApi } from "../api/endpoints";
-import { useAuthStore } from "../store/auth";
+import { authSession } from "../store/auth";
 
 export default function RegisterPage() {
   const [form, setForm] = useState({
@@ -12,7 +12,6 @@ export default function RegisterPage() {
   });
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-  const setTokens = useAuthStore((s) => s.setTokens);
   const navigate = useNavigate();
 
   const set = (k: string) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
@@ -29,8 +28,11 @@ export default function RegisterPage() {
     setLoading(true);
     setError("");
     try {
-      const tokens = await authApi.register(form);
-      setTokens(tokens.access_token, tokens.refresh_token);
+      await authApi.register(form);
+      authSession.login({
+        email: form.email, name: `${form.first_name} ${form.last_name}`.trim(),
+        role: "ciso", plan: "free_trial", daysRemaining: 14, org: form.organization_name,
+      });
       navigate("/dashboard");
     } catch (err: any) {
       setError(err?.response?.data?.detail || "Registration failed");

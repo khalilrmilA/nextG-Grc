@@ -29,6 +29,10 @@ celery_app.conf.update(
             "task": "app.workers.tasks.notifications.send_policy_review_reminders",
             "schedule": 86400.0,  # daily
         },
+        "send-weekly-digest": {
+            "task": "app.workers.tasks.notifications.send_weekly_digest",
+            "schedule": 604800.0,  # weekly (7 days)
+        },
         "recompute-compliance-scores": {
             "task": "app.workers.tasks.compliance_scoring.recompute_all_scores",
             "schedule": 3600.0,  # hourly

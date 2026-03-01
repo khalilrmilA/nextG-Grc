@@ -14,6 +14,7 @@ from app.api.v1.endpoints import (
     dashboard,
     subscriptions,
     ai,
+    notifications,
 )
 
 api_router = APIRouter()
@@ -31,3 +32,4 @@ api_router.include_router(assets.router, prefix="/assets", tags=["Asset Manageme
 api_router.include_router(dashboard.router, prefix="/dashboard", tags=["Dashboard"])
 api_router.include_router(subscriptions.router, prefix="/subscriptions", tags=["Subscriptions"])
 api_router.include_router(ai.router, prefix="/ai", tags=["AI Assistant"])
+api_router.include_router(notifications.router, prefix="/notifications", tags=["Notifications"])

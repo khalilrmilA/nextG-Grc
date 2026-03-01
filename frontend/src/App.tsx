@@ -13,21 +13,14 @@ import CustomFrameworkPage from "./pages/CustomFrameworkPage";
 import AuditsPage from "./pages/AuditsPage";
 import PoliciesPage from "./pages/PoliciesPage";
 import VendorsPage from "./pages/VendorsPage";
+import CheatSheetPage from "./pages/CheatSheetPage";
+import SettingsPage from "./pages/SettingsPage";
+import HelpPage from "./pages/HelpPage";
 
 function PrivateRoute({ children }: { readonly children: React.ReactNode }) {
-  const token = useAuthStore((s) => s.accessToken);
-  const hydrated = useAuthStore((s) => s._hasHydrated);
+  const user = useAuthStore((u) => u);
 
-  // Wait for Zustand to rehydrate from localStorage before deciding
-  if (!hydrated) {
-    return (
-      <div className="min-h-screen bg-slate-900 flex items-center justify-center">
-        <div className="text-slate-400 text-sm">Loading...</div>
-      </div>
-    );
-  }
-
-  return token ? <>{children}</> : <Navigate to="/login" replace />;
+  return user ? <>{children}</> : <Navigate to="/login" replace />;
 }
 
 export default function App() {
@@ -54,6 +47,9 @@ export default function App() {
         <Route path="audits" element={<AuditsPage />} />
         <Route path="policies" element={<PoliciesPage />} />
         <Route path="vendors" element={<VendorsPage />} />
+        <Route path="cheat" element={<CheatSheetPage />} />
+        <Route path="settings" element={<SettingsPage />} />
+        <Route path="help" element={<HelpPage />} />
       </Route>
     </Routes>
   );

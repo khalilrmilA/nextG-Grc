@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+
+{% block content %}
+{% if badge_text %}
+<span class="badge badge-{{ badge_color | default('blue') }}">{{ badge_text }}</span>
+{% endif %}
+
+<h2>{{ title }}</h2>
+<p>{{ message }}</p>
+
+{% if details %}
+<div class="divider"></div>
+{% for key, value in details.items() %}
+<div class="meta-row">
+  <span class="meta-label">{{ key }}</span>
+  <span class="meta-value">{{ value }}</span>
+</div>
+{% endfor %}
+{% endif %}
+{% endblock %}

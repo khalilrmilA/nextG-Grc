@@ -93,7 +93,21 @@
       "Bash(cmd /c \"taskkill /PID 30352 /F 2>&1\")",
       "Bash(python -c \"import subprocess; result = subprocess.run\\([''taskkill'', ''/PID'', ''30352'', ''/F''], capture_output=True, text=True\\); print\\(result.stdout\\); print\\(result.stderr\\)\")",
       "Bash(# Kill all python processes running uvicorn python -c \"\" import subprocess, psutil for p in psutil.process_iter\\([''pid'',''name'',''cmdline'']\\): try: if p.info[''name''] and ''python'' in p.info[''name''].lower\\(\\): cmdline = '' ''.join\\(p.info[''cmdline''] or []\\) if ''uvicorn'' in cmdline: print\\(f''Killing PID {p.pid}: {cmdline[:60]}''\\) p.kill\\(\\) except: pass \"\" 2>&1 || echo \"\"psutil not available\"\" # Kill by port netstat -ano)",
-      "Bash(npm run build)"
+      "Bash(npm run build)",
+      "Bash(python seed.py)",
+      "Bash(npx tsc --noEmit)",
+      "Bash(npx vite build)",
+      "Bash(netstat -ano)",
+      "Bash(curl -s http://localhost:3000/)",
+      "Bash(curl -s \"http://localhost:3000/src/main.tsx\")",
+      "Bash(curl -s \"http://localhost:3000/src/store/auth.ts\")",
+      "Bash(pip install aiosmtplib jinja2 -q)",
+      "Bash(python -c \"from app.main import app; print\\(''Backend imports OK''\\)\")",
+      "Bash(uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload)",
+      "Bash(npm run dev)",
+      "Bash(python3 -m uvicorn --version)",
+      "Bash(python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload)",
+      "Bash(curl -s http://localhost:8000/api/v1/dashboard/summary)"
     ]
   }
 }

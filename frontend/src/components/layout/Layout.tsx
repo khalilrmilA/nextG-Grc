@@ -1,28 +1,35 @@
+import { useState, useEffect, useRef } from "react";
 import { Outlet, NavLink, useNavigate, useLocation } from "react-router-dom";
-import { useAuthStore } from "../../store/auth";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useAuthStore, authSession, PLAN_FEATURES, type PlanTier } from "../../store/auth";
 import AIAssistant from "../ai/AIAssistant";
+import { notificationsApi } from "../../api/endpoints";
+import type { AppNotification } from "../../types";
+import { useAppearance } from "../../store/appearance";
 import {
   LayoutDashboard, AlertTriangle, CheckSquare, BookOpen,
   ClipboardList, FileText, Building2, LogOut, Shield,
-  ChevronRight, Bell, Settings, HelpCircle, Zap,
+  ChevronRight, Bell, Settings, HelpCircle, Zap, Lock,
+  Crown, Briefcase, Eye, X, Trash2,
+  AlertCircle, Info, ShieldAlert, ClipboardCheck,
 } from "lucide-react";
 
 const NAV_GROUPS = [
   {
     label: "Core",
     items: [
-      { to: "/dashboard",  icon: LayoutDashboard, label: "Dashboard"     },
-      { to: "/risks",      icon: AlertTriangle,   label: "Risk Register" },
-      { to: "/compliance", icon: CheckSquare,     label: "Compliance"    },
-      { to: "/frameworks", icon: BookOpen,        label: "Frameworks"    },
+      { to: "/dashboard",  icon: LayoutDashboard, label: "Dashboard",     module: "dashboard"  },
+      { to: "/risks",      icon: AlertTriangle,   label: "Risk Register", module: "risks"      },
+      { to: "/compliance", icon: CheckSquare,     label: "Compliance",    module: "compliance" },
+      { to: "/frameworks", icon: BookOpen,        label: "Frameworks",    module: "frameworks" },
     ],
   },
   {
     label: "Operations",
     items: [
-      { to: "/audits",   icon: ClipboardList, label: "Audits"          },
-      { to: "/policies", icon: FileText,      label: "Policies"        },
-      { to: "/vendors",  icon: Building2,     label: "Vendors (TPRM)"  },
+      { to: "/audits",   icon: ClipboardList, label: "Audits",         module: "audits"   },
+      { to: "/policies", icon: FileText,      label: "Policies",       module: "policies" },
+      { to: "/vendors",  icon: Building2,     label: "Vendors (TPRM)", module: "vendors"  },
     ],
   },
 ];
@@ -35,90 +42,429 @@ const PAGE_LABELS: Record<string, string> = {
   audits:     "Audits",
   policies:   "Policies",
   vendors:    "Vendors",
+  settings:   "Settings",
+  help:       "Help & Support",
 };
 
+function roleIcon(role: string) {
+  if (role === "admin")   return { Icon: Crown,        color: "from-yellow-500 to-orange-500" };
+  if (role === "ciso")    return { Icon: Briefcase,    color: "from-blue-500 to-blue-600"     };
+  if (role === "auditor") return { Icon: ClipboardList, color: "from-purple-500 to-purple-600" };
+  return                         { Icon: Eye,           color: "from-gray-400 to-gray-500"    };
+}
+
+function planBadgeStyle(plan: PlanTier) {
+  if (plan === "enterprise")   return { bg: "from-yellow-500/10 to-orange-500/10", border: "border-yellow-500/20", text: "text-yellow-400", sub: "text-yellow-300/70" };
+  if (plan === "professional") return { bg: "from-blue-500/10 to-indigo-500/10",  border: "border-blue-500/20",   text: "text-blue-400",   sub: "text-blue-300/70"   };
+  if (plan === "starter")      return { bg: "from-purple-500/10 to-blue-500/10",  border: "border-purple-500/20", text: "text-purple-400", sub: "text-purple-300/70" };
+  return                              { bg: "from-blue-500/10 to-indigo-500/10",  border: "border-blue-500/20",   text: "text-blue-400",   sub: "text-slate-400"     };
+}
+
+// Map notification type → icon + colour
+function notifStyle(type: string) {
+  if (type.startsWith("risk"))        return { Icon: AlertTriangle,  bg: "bg-red-50",    icon: "text-red-500"    };
+  if (type.startsWith("audit"))       return { Icon: ClipboardCheck, bg: "bg-blue-50",   icon: "text-blue-500"   };
+  if (type.startsWith("policy"))      return { Icon: FileText,       bg: "bg-orange-50", icon: "text-orange-500" };
+  if (type.startsWith("vendor"))      return { Icon: Building2,      bg: "bg-purple-50", icon: "text-purple-500" };
+  if (type.startsWith("compliance"))  return { Icon: ShieldAlert,    bg: "bg-yellow-50", icon: "text-yellow-600" };
+  return                                     { Icon: Info,           bg: "bg-gray-50",   icon: "text-gray-500"   };
+}
+
+function timeAgo(iso: string) {
+  const diff = Date.now() - new Date(iso).getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1)   return "just now";
+  if (mins < 60)  return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24)   return `${hrs}h ago`;
+  return `${Math.floor(hrs / 24)}d ago`;
+}
+
+// ── Demo notifications shown when backend is unavailable ─────────────────────
+const DEMO_NOTIFICATIONS: AppNotification[] = [
+  {
+    id: "d1", type: "risk_new", status: "unread",
+    title: "New critical risk: Unpatched production servers",
+    message: "A new critical severity risk has been added to the risk register.",
+    data: { link: "/risks" }, created_at: new Date(Date.now() - 12 * 60000).toISOString(),
+  },
+  {
+    id: "d2", type: "compliance_score_drop", status: "unread",
+    title: "Compliance score dropped 7% — ISO 27001",
+    message: "Your compliance score for ISO 27001 dropped from 79% to 72%.",
+    data: { link: "/compliance" }, created_at: new Date(Date.now() - 2 * 3600000).toISOString(),
+  },
+  {
+    id: "d3", type: "policy_review_due", status: "unread",
+    title: "Policy review due: Information Security Policy",
+    message: "This policy is due for review on March 10, 2026.",
+    data: { link: "/policies" }, created_at: new Date(Date.now() - 5 * 3600000).toISOString(),
+  },
+  {
+    id: "d4", type: "audit_assigned", status: "read",
+    title: "Audit assigned: Q1 SOC 2 Audit",
+    message: "You have been assigned as lead auditor for Q1 SOC 2 Audit.",
+    data: { link: "/audits" }, created_at: new Date(Date.now() - 24 * 3600000).toISOString(),
+  },
+  {
+    id: "d5", type: "vendor_alert", status: "read",
+    title: "Vendor risk alert: CloudProvider Inc.",
+    message: "CloudProvider Inc. risk tier changed to HIGH.",
+    data: { link: "/vendors" }, created_at: new Date(Date.now() - 2 * 86400000).toISOString(),
+  },
+];
+
+// ── NotificationBell component ────────────────────────────────────────────────
+function NotificationBell() {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  const navigate = useNavigate();
+  const qc = useQueryClient();
+
+  // Try to fetch real notifications; fall back to demo data on error
+  const { data, isError } = useQuery({
+    queryKey: ["notifications"],
+    queryFn: () => notificationsApi.list({ limit: 20 }),
+    retry: false,
+    refetchInterval: 30_000, // poll every 30s for new alerts
+  });
+
+  const notifications: AppNotification[] = isError || !data ? DEMO_NOTIFICATIONS : data.items;
+  const unreadCount = isError || !data
+    ? DEMO_NOTIFICATIONS.filter(n => n.status === "unread").length
+    : data.unread_count;
+
+  const markRead = useMutation({
+    mutationFn: (id: string) => notificationsApi.markRead(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["notifications"] }),
+  });
+
+  const markAllRead = useMutation({
+    mutationFn: () => notificationsApi.markAllRead(),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["notifications"] }),
+  });
+
+  const deleteNotif = useMutation({
+    mutationFn: (id: string) => notificationsApi.delete(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["notifications"] }),
+  });
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    }
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, []);
+
+  function handleNotifClick(n: AppNotification) {
+    if (n.status === "unread" && !isError) markRead.mutate(n.id);
+    setOpen(false);
+    if (n.data?.link) navigate(n.data.link as string);
+  }
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen(v => !v)}
+        className="relative w-8 h-8 rounded-lg flex items-center justify-center text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition-colors"
+        aria-label="Notifications"
+      >
+        <Bell className="w-4 h-4" />
+        {unreadCount > 0 && (
+          <span className="absolute -top-0.5 -right-0.5 min-w-[16px] h-4 flex items-center justify-center bg-red-500 text-white text-[10px] font-bold rounded-full px-1">
+            {unreadCount > 9 ? "9+" : unreadCount}
+          </span>
+        )}
+      </button>
+
+      {open && (
+        <div className="absolute right-0 top-10 w-96 bg-white rounded-2xl shadow-2xl border border-gray-100 z-50 overflow-hidden">
+          {/* Header */}
+          <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
+            <div className="flex items-center gap-2">
+              <Bell className="w-4 h-4 text-gray-500" />
+              <h3 className="font-semibold text-gray-900 text-sm">Notifications</h3>
+              {unreadCount > 0 && (
+                <span className="text-xs font-semibold px-1.5 py-0.5 bg-red-50 text-red-600 rounded-full">
+                  {unreadCount} new
+                </span>
+              )}
+            </div>
+            <div className="flex items-center gap-1">
+              {unreadCount > 0 && !isError && (
+                <button
+                  type="button"
+                  onClick={() => markAllRead.mutate()}
+                  className="text-xs text-blue-600 hover:text-blue-700 font-medium px-2 py-1 rounded-lg hover:bg-blue-50 transition-colors"
+                >
+                  Mark all read
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => setOpen(false)}
+                className="p-1 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          </div>
+
+          {/* List */}
+          <div className="max-h-[420px] overflow-y-auto divide-y divide-gray-50">
+            {notifications.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-12 text-center">
+                <div className="w-12 h-12 rounded-full bg-gray-100 flex items-center justify-center mb-3">
+                  <Bell className="w-5 h-5 text-gray-300" />
+                </div>
+                <p className="text-sm font-medium text-gray-500">No notifications</p>
+                <p className="text-xs text-gray-400 mt-1">You're all caught up!</p>
+              </div>
+            ) : (
+              notifications.map(n => {
+                const { Icon, bg, icon } = notifStyle(n.type);
+                const isUnread = n.status === "unread";
+                return (
+                  <div
+                    key={n.id}
+                    className={`group flex items-start gap-3 px-4 py-3 cursor-pointer transition-colors ${
+                      isUnread ? "bg-blue-50/40 hover:bg-blue-50" : "hover:bg-gray-50"
+                    }`}
+                    onClick={() => handleNotifClick(n)}
+                  >
+                    <div className={`flex-shrink-0 w-8 h-8 rounded-lg ${bg} flex items-center justify-center mt-0.5`}>
+                      <Icon className={`w-4 h-4 ${icon}`} />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-start justify-between gap-2">
+                        <p className={`text-sm leading-snug ${isUnread ? "font-semibold text-gray-900" : "font-medium text-gray-700"}`}>
+                          {n.title}
+                        </p>
+                        {isUnread && (
+                          <span className="flex-shrink-0 w-2 h-2 rounded-full bg-blue-500 mt-1.5" />
+                        )}
+                      </div>
+                      <p className="text-xs text-gray-500 mt-0.5 line-clamp-2">{n.message}</p>
+                      <p className="text-xs text-gray-400 mt-1">{timeAgo(n.created_at)}</p>
+                    </div>
+                    {!isError && (
+                      <button
+                        type="button"
+                        onClick={e => { e.stopPropagation(); deleteNotif.mutate(n.id); }}
+                        className="flex-shrink-0 opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-gray-200 text-gray-400 hover:text-red-500 transition-all"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </div>
+                );
+              })
+            )}
+          </div>
+
+          {/* Footer */}
+          <div className="px-4 py-2.5 border-t border-gray-100 flex items-center justify-between">
+            {isError && (
+              <span className="text-xs text-amber-600 flex items-center gap-1">
+                <AlertCircle className="w-3 h-3" /> Demo data — backend offline
+              </span>
+            )}
+            {!isError && <span />}
+            <button
+              type="button"
+              onClick={() => { setOpen(false); navigate("/settings?tab=notifications"); }}
+              className="text-xs text-gray-500 hover:text-blue-600 font-medium transition-colors flex items-center gap-1"
+            >
+              <Settings className="w-3 h-3" /> Manage preferences
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Sidebar style helpers
+function sidebarClasses(style: string) {
+  if (style === "light")   return "bg-white border-r border-gray-200";
+  if (style === "branded") return "bg-gradient-to-b from-blue-700 to-indigo-800";
+  return "bg-slate-900"; // dark (default)
+}
+function sidebarTextClasses(style: string) {
+  if (style === "light") return {
+    logo: "text-gray-900", sub: "text-gray-500",
+    navLabel: "text-gray-400", navItem: "text-gray-600 hover:bg-gray-100 hover:text-gray-900",
+    navActive: "bg-blue-600 text-white shadow-lg shadow-blue-600/20",
+    navIcon: "text-gray-400", navIconActive: "text-white",
+    divider: "border-gray-200", bottomItem: "text-gray-600 hover:bg-gray-100 hover:text-gray-900",
+    logout: "text-gray-600 hover:bg-red-50 hover:text-red-500",
+  };
+  if (style === "branded") return {
+    logo: "text-white", sub: "text-blue-200",
+    navLabel: "text-blue-300", navItem: "text-blue-100 hover:bg-white/10 hover:text-white",
+    navActive: "bg-white/20 text-white shadow-lg shadow-black/20",
+    navIcon: "text-blue-200", navIconActive: "text-white",
+    divider: "border-white/10", bottomItem: "text-blue-100 hover:bg-white/10 hover:text-white",
+    logout: "text-blue-100 hover:bg-red-500/20 hover:text-red-200",
+  };
+  // dark default
+  return {
+    logo: "text-white", sub: "text-slate-400",
+    navLabel: "text-slate-500", navItem: "text-slate-400 hover:bg-slate-800 hover:text-white",
+    navActive: "bg-blue-600 text-white shadow-lg shadow-blue-600/20",
+    navIcon: "text-slate-400", navIconActive: "text-white",
+    divider: "border-slate-700/60", bottomItem: "text-slate-400 hover:bg-slate-800 hover:text-white",
+    logout: "text-slate-400 hover:bg-red-500/10 hover:text-red-400",
+  };
+}
+
+// ── Main Layout ───────────────────────────────────────────────────────────────
 export default function Layout() {
-  const logout   = useAuthStore((s) => s.logout);
+  const user = useAuthStore((u) => u);
   const navigate = useNavigate();
   const location = useLocation();
   const segment  = location.pathname.split("/")[1] || "dashboard";
   const pageLabel = PAGE_LABELS[segment] ?? segment;
+  const [appearance] = useAppearance();
+  const sc = sidebarTextClasses(appearance.sidebarStyle);
+
+  const plan      = user?.plan ?? "free_trial";
+  const isAdmin   = user?.role === "admin";
+  const features  = PLAN_FEATURES[plan];
+  const accessible = isAdmin ? null : features.modules;
+
+  const badge = planBadgeStyle(plan);
+  const { Icon: RoleIcon, color: roleColor } = roleIcon(user?.role ?? "viewer");
+  const initials = (user?.name ?? "U").charAt(0).toUpperCase();
+
+  const planLabel = isAdmin ? "Admin" : PLAN_FEATURES[plan].label;
+  function resolvePlanSub() {
+    if (isAdmin) return "Full platform access";
+    if (plan === "free_trial") return `${user?.daysRemaining ?? 14} days remaining`;
+    return `${features.maxFrameworks} frameworks · ${features.maxAdmins} admins`;
+  }
+  const planSub = resolvePlanSub();
 
   return (
     <div className="flex h-screen bg-gray-50">
       {/* ── Sidebar ── */}
-      <aside className="w-64 bg-slate-900 flex flex-col shadow-2xl flex-shrink-0">
+      <aside className={`w-64 flex flex-col shadow-2xl flex-shrink-0 transition-colors duration-200 ${sidebarClasses(appearance.sidebarStyle)}`}>
         {/* Logo */}
-        <div className="flex items-center gap-3 px-5 py-4 border-b border-slate-700/60">
+        <div className={`flex items-center gap-3 px-5 py-4 border-b ${sc.divider}`}>
           <div className="w-9 h-9 bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl flex items-center justify-center shadow-lg shadow-blue-500/30">
             <Shield className="w-5 h-5 text-white" />
           </div>
           <div>
-            <p className="text-white font-bold text-sm leading-none tracking-tight">GRC Platform</p>
-            <p className="text-slate-400 text-xs mt-0.5">Security & Compliance</p>
+            <p className={`font-bold text-sm leading-none tracking-tight ${sc.logo}`}>GRC Platform</p>
+            <p className={`text-xs mt-0.5 ${sc.sub}`}>Security & Compliance</p>
           </div>
         </div>
 
-        {/* Trial badge */}
-        <div className="mx-4 mt-3 px-3 py-2.5 bg-gradient-to-r from-blue-500/10 to-indigo-500/10 border border-blue-500/20 rounded-xl">
+        {/* Plan / role badge */}
+        <div className={`mx-4 mt-3 px-3 py-2.5 bg-gradient-to-r ${badge.bg} border ${badge.border} rounded-xl`}>
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-blue-400 text-xs font-semibold">Starter Trial</p>
-              <p className="text-slate-400 text-xs mt-0.5">14 days remaining</p>
+              <p className={`text-xs font-semibold ${badge.text}`}>{planLabel}</p>
+              <p className={`text-xs mt-0.5 ${badge.sub}`}>{planSub}</p>
             </div>
-            <Zap className="w-4 h-4 text-blue-400" />
+            {isAdmin && <Crown className="w-4 h-4 text-yellow-400" />}
+            {!isAdmin && plan === "free_trial" && <Zap className="w-4 h-4 text-blue-400" />}
+            {!isAdmin && plan !== "free_trial" && <Shield className="w-4 h-4 text-blue-400" />}
           </div>
-          <div className="mt-2 h-1 bg-slate-700 rounded-full overflow-hidden">
-            <div className="h-full bg-gradient-to-r from-blue-500 to-indigo-400 rounded-full" style={{ width: "53%" }} />
-          </div>
+          {plan === "free_trial" && !isAdmin && (
+            <div className="mt-2 h-1 bg-black/20 rounded-full overflow-hidden">
+              <div
+                className="h-full bg-gradient-to-r from-blue-500 to-indigo-400 rounded-full"
+                style={{ width: `${Math.round(((user?.daysRemaining ?? 14) / 14) * 100)}%` }}
+              />
+            </div>
+          )}
+          {plan !== "free_trial" && plan !== "enterprise" && !isAdmin && (
+            <button
+              type="button"
+              onClick={() => navigate("/settings")}
+              className={`mt-2 w-full text-xs font-medium ${badge.text} hover:opacity-80 text-left`}
+            >
+              Upgrade →
+            </button>
+          )}
         </div>
 
         {/* Navigation */}
         <nav className="flex-1 px-3 py-4 space-y-5 overflow-y-auto">
           {NAV_GROUPS.map(group => (
             <div key={group.label}>
-              <p className="text-slate-500 text-xs font-semibold uppercase tracking-widest px-3 mb-2">
+              <p className={`text-xs font-semibold uppercase tracking-widest px-3 mb-2 ${sc.navLabel}`}>
                 {group.label}
               </p>
               <div className="space-y-0.5">
-                {group.items.map(({ to, icon: Icon, label }) => (
-                  <NavLink
-                    key={to}
-                    to={to}
-                    className={({ isActive }) =>
-                      `flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all ${
-                        isActive
-                          ? "bg-blue-600 text-white shadow-lg shadow-blue-600/20"
-                          : "text-slate-400 hover:bg-slate-800 hover:text-white"
-                      }`
-                    }
-                  >
-                    {({ isActive }) => (
-                      <>
-                        <Icon className={`w-4 h-4 flex-shrink-0 ${isActive ? "text-white" : "text-slate-400"}`} />
-                        <span className="flex-1">{label}</span>
-                      </>
-                    )}
-                  </NavLink>
-                ))}
+                {group.items.map(({ to, icon: Icon, label, module }) => {
+                  const locked = accessible !== null && !accessible.includes(module);
+                  if (locked) {
+                    return (
+                      <button
+                        key={to}
+                        type="button"
+                        onClick={() => navigate("/settings")}
+                        title={`Upgrade to access ${label}`}
+                        className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium w-full transition-all group opacity-50 ${sc.navItem}`}
+                      >
+                        <Icon className="w-4 h-4 flex-shrink-0" />
+                        <span className="flex-1 text-left">{label}</span>
+                        <Lock className="w-3 h-3 group-hover:text-blue-400 transition-colors" />
+                      </button>
+                    );
+                  }
+                  return (
+                    <NavLink
+                      key={to}
+                      to={to}
+                      className={({ isActive }) =>
+                        `flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all ${
+                          isActive ? sc.navActive : sc.navItem
+                        }`
+                      }
+                    >
+                      {({ isActive }) => (
+                        <>
+                          <Icon className={`w-4 h-4 flex-shrink-0 ${isActive ? sc.navIconActive : sc.navIcon}`} />
+                          <span className="flex-1">{label}</span>
+                        </>
+                      )}
+                    </NavLink>
+                  );
+                })}
               </div>
             </div>
           ))}
         </nav>
 
         {/* Bottom actions */}
-        <div className="px-3 pb-4 pt-3 border-t border-slate-700/60 space-y-0.5">
-          <button className="flex items-center gap-3 px-3 py-2.5 w-full rounded-xl text-sm font-medium text-slate-400 hover:bg-slate-800 hover:text-white transition-all">
-            <Settings className="w-4 h-4" />
-            Settings
-          </button>
-          <button className="flex items-center gap-3 px-3 py-2.5 w-full rounded-xl text-sm font-medium text-slate-400 hover:bg-slate-800 hover:text-white transition-all">
-            <HelpCircle className="w-4 h-4" />
-            Help & Support
-          </button>
+        <div className={`px-3 pb-4 pt-3 border-t ${sc.divider} space-y-0.5`}>
+          {[
+            { to: "/settings", icon: Settings,   label: "Settings"       },
+            { to: "/help",     icon: HelpCircle, label: "Help & Support" },
+          ].map(({ to, icon: Icon, label }) => (
+            <NavLink
+              key={to}
+              to={to}
+              className={({ isActive }) =>
+                `flex items-center gap-3 px-3 py-2.5 w-full rounded-xl text-sm font-medium transition-all ${
+                  isActive ? sc.navActive : sc.bottomItem
+                }`
+              }
+            >
+              <Icon className="w-4 h-4" />
+              {label}
+            </NavLink>
+          ))}
           <button
-            onClick={() => { logout(); navigate("/login"); }}
-            className="flex items-center gap-3 px-3 py-2.5 w-full rounded-xl text-sm font-medium text-slate-400 hover:bg-red-500/10 hover:text-red-400 transition-all"
+            type="button"
+            onClick={() => { authSession.logout(); navigate("/login"); }}
+            className={`flex items-center gap-3 px-3 py-2.5 w-full rounded-xl text-sm font-medium transition-all ${sc.logout}`}
           >
             <LogOut className="w-4 h-4" />
             Sign Out
@@ -136,19 +482,20 @@ export default function Layout() {
             <span className="text-gray-900 font-semibold">{pageLabel}</span>
           </div>
           <div className="flex items-center gap-3">
-            {/* Notification bell */}
-            <button className="relative w-8 h-8 rounded-lg flex items-center justify-center text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition-colors">
-              <Bell className="w-4 h-4" />
-              <span className="absolute top-1.5 right-1.5 w-1.5 h-1.5 bg-red-500 rounded-full" />
-            </button>
+            {/* Live notification bell */}
+            <NotificationBell />
             {/* Avatar */}
             <div className="flex items-center gap-2.5 pl-3 border-l border-gray-100">
-              <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center text-white text-sm font-bold shadow-sm">
-                A
+              <div className={`w-8 h-8 rounded-full bg-gradient-to-br ${roleColor} flex items-center justify-center text-white shadow-sm`}>
+                {user ? (
+                  <span className="text-sm font-bold">{initials}</span>
+                ) : (
+                  <RoleIcon className="w-4 h-4" />
+                )}
               </div>
               <div className="hidden sm:block">
-                <p className="text-xs font-semibold text-gray-800 leading-none">Admin</p>
-                <p className="text-xs text-gray-400 mt-0.5">Acme Corp</p>
+                <p className="text-xs font-semibold text-gray-800 leading-none">{user?.name ?? "User"}</p>
+                <p className="text-xs text-gray-400 mt-0.5 capitalize">{user?.role ?? "viewer"} · {user?.org ?? ""}</p>
               </div>
             </div>
           </div>
