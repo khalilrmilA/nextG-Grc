@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { Shield, Crown, Briefcase, ClipboardList, Eye } from "lucide-react";
-import { authSession, DEMO_USERS, PLAN_FEATURES } from "../store/auth";
+import { authSession, DEMO_USERS, PLAN_FEATURES, type UserRole, type PlanTier } from "../store/auth";
 
 const DEMO_ACCOUNTS = [
   { email: "admin@demo.com",   icon: Crown,         color: "text-yellow-500", desc: "Admin · Enterprise · Full access"  },
@@ -18,10 +18,17 @@ export default function LoginPage() {
 
   const navigate = useNavigate();
 
-  function loginAs(accountEmail: string) {
+  async function loginAs(accountEmail: string) {
     const user = DEMO_USERS[accountEmail];
     if (!user) return;
-    authSession.login(user);
+    try {
+      const { authApi } = await import("../api/endpoints");
+      const tokenData = await authApi.login(accountEmail, "demo123");
+      authSession.login({ ...user, accessToken: tokenData.access_token, refreshToken: tokenData.refresh_token });
+    } catch {
+      // Backend offline — login without token (demo mode)
+      authSession.login(user);
+    }
     navigate("/dashboard");
   }
 
@@ -30,29 +37,36 @@ export default function LoginPage() {
     setLoading(true);
     setError("");
 
-    // Always try demo first — no backend needed
-    const demoUser = DEMO_USERS[email.trim().toLowerCase()];
-    if (demoUser && password === "demo123") {
-      authSession.login(demoUser);
-      navigate("/dashboard");
-      setLoading(false);
-      return;
-    }
-
-    // Real backend fallback
     try {
       const { authApi } = await import("../api/endpoints");
-      await authApi.login(email, password);
-      authSession.login({
-        email,
+      const tokenData = await authApi.login(email.trim().toLowerCase(), password);
+
+      // Build user profile — prefer demo profile if available, fallback to backend data
+      const demoUser = DEMO_USERS[email.trim().toLowerCase()];
+      const user = demoUser ?? {
+        email: email.trim().toLowerCase(),
         name: email.split("@")[0],
-        role: "ciso",
-        plan: "professional",
+        role: "ciso" as UserRole,
+        plan: "professional" as PlanTier,
         org: "My Organization",
+      };
+
+      // Always save the real JWT so API calls are authenticated
+      authSession.login({
+        ...user,
+        accessToken: tokenData.access_token,
+        refreshToken: tokenData.refresh_token,
       });
       navigate("/dashboard");
     } catch {
-      setError("Invalid credentials. Use demo123 with one of the demo accounts below.");
+      // Backend unreachable — allow demo accounts offline
+      const demoUser = DEMO_USERS[email.trim().toLowerCase()];
+      if (demoUser && password === "demo123") {
+        authSession.login(demoUser);
+        navigate("/dashboard");
+      } else {
+        setError("Invalid credentials. Use demo123 with one of the demo accounts below.");
+      }
     } finally {
       setLoading(false);
     }

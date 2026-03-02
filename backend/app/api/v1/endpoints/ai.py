@@ -75,9 +75,43 @@ class PolicyGenerateRequest(BaseModel):
     model: str = DEFAULT_MODEL
 
 
+class RiskAnalyzeRequest(BaseModel):
+    title: str
+    description: str | None = None
+    risk_category: str | None = None
+    model: str = DEFAULT_MODEL
+
+
+class EvidenceAnalyzeRequest(BaseModel):
+    document_text: str          # extracted text from uploaded file
+    framework_short_name: str
+    controls: list[dict]        # list of {control_id, title, description}
+    model: str = DEFAULT_MODEL
+
+
+class AuditPlanRequest(BaseModel):
+    framework_name: str
+    framework_short_name: str
+    audit_title: str
+    audit_scope: str | None = None
+    audit_objective: str | None = None
+    controls: list[dict]        # list of {control_id, title, category}
+    model: str = DEFAULT_MODEL
+
+
+class VendorRiskRequest(BaseModel):
+    vendor_name: str
+    vendor_industry: str | None = None
+    vendor_services: str | None = None
+    questionnaire_responses: dict   # {question: answer}
+    model: str = DEFAULT_MODEL
+
+
 # ─── Core streaming helper ─────────────────────────────────────────────────────
 
 _SSE_DONE = "data: [DONE]\n\n"
+_SSE_MEDIA_TYPE = "text/event-stream"
+_SSE_HEADERS = {"Cache-Control": "no-cache", "X-Accel-Buffering": "no"}
 
 
 async def _ollama_sse_generator(
@@ -142,8 +176,8 @@ async def chat(request: ChatRequest):
     messages = [{"role": m.role, "content": m.content} for m in request.messages]
     return StreamingResponse(
         _ollama_sse_generator(messages, request.model, SYSTEM_PROMPT),
-        media_type="text/event-stream",
-        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+        media_type=_SSE_MEDIA_TYPE,
+        headers=_SSE_HEADERS,
     )
 
 
@@ -167,8 +201,8 @@ async def generate_policy(request: PolicyGenerateRequest):
     messages = [{"role": "user", "content": user_prompt}]
     return StreamingResponse(
         _ollama_sse_generator(messages, request.model, POLICY_SYSTEM_PROMPT),
-        media_type="text/event-stream",
-        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+        media_type=_SSE_MEDIA_TYPE,
+        headers=_SSE_HEADERS,
     )
 
 
@@ -187,6 +221,221 @@ async def list_models():
         pass
     # Fallback: return the configured model
     return {"models": [DEFAULT_MODEL], "default": DEFAULT_MODEL, "provider": "ollama"}
+
+
+@router.post("/analyze-risk")
+async def analyze_risk(request: RiskAnalyzeRequest):
+    """Stream AI-generated risk treatment suggestions, likelihood/impact scores, and linked controls."""
+    prompt = f"""Analyze this GRC risk and provide structured guidance:
+
+Risk Title: {request.title}
+Description: {request.description or "No description provided."}
+Category: {request.risk_category or "General"}
+
+Provide your analysis in exactly this Markdown structure:
+
+## Risk Summary
+One paragraph summarizing the risk and its business impact.
+
+## Suggested Likelihood Score
+Score: X/5
+Justification: (brief reason)
+
+## Suggested Impact Score
+Score: X/5
+Justification: (brief reason)
+
+## Treatment Options
+### Option 1: Mitigate
+**Effort:** Low/Medium/High | **Effectiveness:** Low/Medium/High
+Steps:
+- Step 1
+- Step 2
+
+### Option 2: Transfer
+**Effort:** Low/Medium/High | **Effectiveness:** Low/Medium/High
+Steps:
+- Step 1
+
+### Option 3: Accept (if applicable)
+Criteria for acceptance and residual risk justification.
+
+## Recommended ISO 27001 Controls
+- A.X.X — Control name (brief explanation of relevance)
+
+## Key Risk Indicators (KRIs)
+- KRI 1: what to monitor
+- KRI 2: what to monitor
+
+Be concise and actionable. Focus on practical steps."""
+
+    messages = [{"role": "user", "content": prompt}]
+    return StreamingResponse(
+        _ollama_sse_generator(messages, request.model, SYSTEM_PROMPT),
+        media_type=_SSE_MEDIA_TYPE,
+        headers=_SSE_HEADERS,
+    )
+
+
+@router.post("/analyze-evidence")
+async def analyze_evidence(request: EvidenceAnalyzeRequest):
+    """Stream AI analysis of uploaded document against framework controls."""
+    controls_text = "\n".join(
+        f"- {c.get('control_id','?')} — {c.get('title','?')}: {c.get('description','')[:120]}"
+        for c in request.controls[:30]  # cap to avoid huge prompts
+    )
+    prompt = f"""You are a compliance analyst. Analyze the following document extract against {request.framework_short_name} controls.
+
+DOCUMENT EXTRACT:
+---
+{request.document_text[:4000]}
+---
+
+CONTROLS TO ASSESS:
+{controls_text}
+
+For each control, assess coverage and output in this exact Markdown format:
+
+## Evidence Analysis — {request.framework_short_name}
+
+### Overall Coverage
+Provide a brief (2-3 sentence) summary of how well the document covers the framework.
+
+### Control Coverage Table
+For each control listed, output one line:
+`CONTROL_ID | STATUS | CONFIDENCE | NOTES`
+
+Where:
+- STATUS: Compliant / Partial / Gap / Not Applicable
+- CONFIDENCE: High / Medium / Low
+- NOTES: one short sentence explaining the finding
+
+### Key Gaps Identified
+List the top 3-5 most critical gaps found with brief remediation suggestions.
+
+### Recommended Next Steps
+Numbered list of 3-5 actionable next steps."""
+
+    messages = [{"role": "user", "content": prompt}]
+    return StreamingResponse(
+        _ollama_sse_generator(messages, request.model, SYSTEM_PROMPT),
+        media_type=_SSE_MEDIA_TYPE,
+        headers=_SSE_HEADERS,
+    )
+
+
+@router.post("/generate-audit-plan")
+async def generate_audit_plan(request: AuditPlanRequest):
+    """Stream an AI-generated audit program with test steps and evidence requirements."""
+    controls_text = "\n".join(
+        f"- {c.get('control_id','?')} [{c.get('category','?')}] — {c.get('title','?')}"
+        for c in request.controls[:40]
+    )
+    prompt = f"""Generate a complete, professional audit program for the following engagement:
+
+Audit Title: {request.audit_title}
+Framework: {request.framework_name} ({request.framework_short_name})
+Scope: {request.audit_scope or "All systems and processes covered by the framework."}
+Objective: {request.audit_objective or f"Assess conformance with {request.framework_name} requirements."}
+
+CONTROLS IN SCOPE:
+{controls_text}
+
+Generate the audit program in this Markdown structure:
+
+## Audit Program — {request.audit_title}
+
+### Executive Summary
+Brief description of audit objectives, scope, and approach.
+
+### Audit Methodology
+How the audit will be conducted (interviews, document review, technical testing, sampling).
+
+### Audit Program
+
+For each major control area, provide:
+
+#### [Control Area Name]
+| Control ID | Test Objective | Test Procedure | Evidence Required | Sample Size |
+|-----------|---------------|----------------|-------------------|-------------|
+| A.X.X | What to test | How to test it | What to collect | N items |
+
+### Fieldwork Schedule
+| Phase | Activities | Duration | Resources |
+|-------|-----------|----------|-----------|
+| Planning | ... | Week 1 | ... |
+| Fieldwork | ... | Weeks 2-4 | ... |
+| Reporting | ... | Week 5 | ... |
+
+### Reporting & Findings Template
+Brief guidance on finding severity classification and report structure.
+
+Be practical and specific. Focus on actionable test steps that an auditor can execute immediately."""
+
+    messages = [{"role": "user", "content": prompt}]
+    return StreamingResponse(
+        _ollama_sse_generator(messages, request.model, SYSTEM_PROMPT),
+        media_type=_SSE_MEDIA_TYPE,
+        headers=_SSE_HEADERS,
+    )
+
+
+@router.post("/analyze-vendor")
+async def analyze_vendor(request: VendorRiskRequest):
+    """Stream AI vendor risk scoring from questionnaire responses."""
+    qa_text = "\n".join(
+        f"Q: {q}\nA: {a}"
+        for q, a in list(request.questionnaire_responses.items())[:30]
+    )
+    prompt = f"""Analyze the following vendor security questionnaire responses and provide a comprehensive risk assessment.
+
+Vendor: {request.vendor_name}
+Industry: {request.vendor_industry or "Technology"}
+Services Provided: {request.vendor_services or "Not specified"}
+
+QUESTIONNAIRE RESPONSES:
+---
+{qa_text}
+---
+
+Provide your assessment in this exact Markdown structure:
+
+## Vendor Risk Assessment — {request.vendor_name}
+
+### Overall Risk Score
+**Score: X/10** (where 10 = highest risk)
+**Risk Tier: Critical / High / Medium / Low**
+
+### Executive Summary
+2-3 sentences summarizing the vendor's security posture.
+
+### Domain Scores
+| Domain | Score | Status | Key Finding |
+|--------|-------|--------|-------------|
+| Access Control | X/10 | 🔴/🟡/🟢 | ... |
+| Data Protection | X/10 | 🔴/🟡/🟢 | ... |
+| Incident Response | X/10 | 🔴/🟡/🟢 | ... |
+| Business Continuity | X/10 | 🔴/🟡/🟢 | ... |
+| Compliance & Certifications | X/10 | 🔴/🟡/🟢 | ... |
+| Third-Party Management | X/10 | 🔴/🟡/🟢 | ... |
+
+### Critical Findings
+List top 3-5 critical or high-severity findings with brief remediation.
+
+### Recommended Contract Clauses
+List 3-5 specific contract/DPA clauses to add based on identified risks.
+
+### Monitoring Recommendations
+How frequently to reassess this vendor and what triggers immediate reassessment.
+
+Be direct and specific. Base scoring strictly on the responses provided."""
+
+    messages = [{"role": "user", "content": prompt}]
+    return StreamingResponse(
+        _ollama_sse_generator(messages, request.model, SYSTEM_PROMPT),
+        media_type=_SSE_MEDIA_TYPE,
+        headers=_SSE_HEADERS,
+    )
 
 
 @router.get("/health")

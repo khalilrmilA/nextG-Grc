@@ -19,12 +19,13 @@ class ApiClient {
 
   private getTokens(): { access: string | null; refresh: string | null } {
     try {
-      const raw = localStorage.getItem("grc-auth");
+      // New auth store format: grc_user_v2 = { accessToken, refreshToken, ... }
+      const raw = localStorage.getItem("grc_user_v2");
       if (!raw) return { access: null, refresh: null };
       const parsed = JSON.parse(raw);
       return {
-        access: parsed?.state?.accessToken ?? null,
-        refresh: parsed?.state?.refreshToken ?? null,
+        access: parsed?.accessToken ?? null,
+        refresh: parsed?.refreshToken ?? null,
       };
     } catch {
       return { access: null, refresh: null };
@@ -33,21 +34,17 @@ class ApiClient {
 
   private saveTokens(access: string, refresh: string): void {
     try {
-      const raw = localStorage.getItem("grc-auth");
-      const parsed = raw ? JSON.parse(raw) : { state: {}, version: 0 };
-      parsed.state.accessToken = access;
-      parsed.state.refreshToken = refresh;
-      localStorage.setItem("grc-auth", JSON.stringify(parsed));
+      const raw = localStorage.getItem("grc_user_v2");
+      const parsed = raw ? JSON.parse(raw) : {};
+      parsed.accessToken = access;
+      parsed.refreshToken = refresh;
+      localStorage.setItem("grc_user_v2", JSON.stringify(parsed));
     } catch {}
   }
 
   private clearTokens(): void {
     try {
-      const raw = localStorage.getItem("grc-auth");
-      const parsed = raw ? JSON.parse(raw) : { state: {}, version: 0 };
-      parsed.state.accessToken = null;
-      parsed.state.refreshToken = null;
-      localStorage.setItem("grc-auth", JSON.stringify(parsed));
+      localStorage.removeItem("grc_user_v2");
     } catch {}
   }
 

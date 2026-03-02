@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { Building2, Plus, Globe, AlertTriangle, Search, ShieldCheck, ShieldX, X, ChevronRight, Calendar, ExternalLink } from "lucide-react";
+import { Building2, Plus, Globe, AlertTriangle, Search, ShieldCheck, ShieldX, X, ChevronRight, Calendar, ExternalLink, Sparkles } from "lucide-react";
+import VendorAIModal from "../components/ai/VendorAIModal";
 
 const VENDORS = [
   { id: "1", name: "AWS (Amazon Web Services)", industry: "Cloud Infrastructure",   country: "US", tier: "critical", status: "active",       risk_score: 18, dpa: true,  contract_expiry: "2026-12-31", services: "Cloud hosting, storage, compute",      website: "https://aws.amazon.com",      notes: "Primary cloud provider. SOC 2, ISO 27001, PCI DSS certified." },
@@ -191,7 +192,7 @@ function AddVendorModal({ onClose, onSaved }: { readonly onClose: () => void; re
 }
 
 // ── Vendor Detail Modal ───────────────────────────────────────────────────────
-function VendorDetailModal({ vendor, onClose }: { readonly vendor: VendorEntry; readonly onClose: () => void }) {
+function VendorDetailModal({ vendor, onClose, onRunAI }: { readonly vendor: VendorEntry; readonly onClose: () => void; readonly onRunAI: () => void }) {
   const tier   = vendor.tier as Tier;
   const status = vendor.status as Status;
   return (
@@ -272,6 +273,15 @@ function VendorDetailModal({ vendor, onClose }: { readonly vendor: VendorEntry; 
               <p className="text-xs text-red-700">No Data Processing Agreement on file. A DPA is required before processing personal data under GDPR.</p>
             </div>
           )}
+
+          <button
+            type="button"
+            onClick={onRunAI}
+            className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white text-sm font-medium transition-all shadow-sm"
+          >
+            <Sparkles className="w-4 h-4" />
+            AI Risk Assessment
+          </button>
         </div>
       </div>
     </div>
@@ -282,9 +292,10 @@ function VendorDetailModal({ vendor, onClose }: { readonly vendor: VendorEntry; 
 export default function VendorsPage() {
   const [vendors, setVendors] = useState(VENDORS);
   const [search, setSearch] = useState("");
-  const [tierFilter, setTier] = useState("all");
+  const [tierFilter, setTierFilter] = useState("all");
   const [showAdd, setShowAdd] = useState(false);
   const [selected, setSelected] = useState<VendorEntry | null>(null);
+  const [aiVendor, setAiVendor] = useState<VendorEntry | null>(null);
 
   const filtered = vendors.filter(v => {
     const matchSearch = v.name.toLowerCase().includes(search.toLowerCase()) ||
@@ -347,7 +358,7 @@ export default function VendorsPage() {
             { key: "medium",   label: "Medium",   count: tierCounts.medium,    cls: "text-yellow-700 border-yellow-200 bg-yellow-50" },
             { key: "low",      label: "Low",      count: tierCounts.low,       cls: "text-green-700 border-green-200 bg-green-50" },
           ] as const).map(t => (
-            <button key={t.key} onClick={() => setTier(t.key)}
+            <button key={t.key} onClick={() => setTierFilter(t.key)}
               className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium border transition-colors ${
                 tierFilter === t.key ? "bg-blue-600 text-white border-blue-600" : "bg-white text-gray-600 border-gray-200 hover:bg-gray-50"
               }`}>
@@ -429,7 +440,21 @@ export default function VendorsPage() {
           onSaved={v => setVendors(prev => [v, ...prev])}
         />
       )}
-      {selected && <VendorDetailModal vendor={selected} onClose={() => setSelected(null)} />}
+      {selected && (
+        <VendorDetailModal
+          vendor={selected}
+          onClose={() => setSelected(null)}
+          onRunAI={() => { setAiVendor(selected); setSelected(null); }}
+        />
+      )}
+      {aiVendor && (
+        <VendorAIModal
+          vendorName={aiVendor.name}
+          vendorIndustry={aiVendor.industry}
+          vendorServices={aiVendor.services}
+          onClose={() => setAiVendor(null)}
+        />
+      )}
     </div>
   );
 }

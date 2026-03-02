@@ -8,6 +8,8 @@ export interface AuthUser {
   plan: PlanTier;
   daysRemaining?: number;
   org: string;
+  accessToken?: string;
+  refreshToken?: string;
 }
 
 export const PLAN_FEATURES: Record<PlanTier, {

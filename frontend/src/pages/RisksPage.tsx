@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, Plus, Search, X, ChevronRight } from "lucide-react";
 import { risksApi } from "../api/endpoints";
 import type { Risk, RiskSeverity } from "../types";
+import RiskAIPanel from "../components/ai/RiskAIPanel";
 
 const SEV_BADGE: Record<RiskSeverity, string> = {
   critical: "bg-red-100 text-red-700 border-red-200",
@@ -331,6 +332,12 @@ function RiskDetailModal({ risk, onClose }: { readonly risk: Risk; readonly onCl
               <p className="text-sm text-gray-600 mt-0.5">{new Date(risk.updated_at).toLocaleDateString()}</p>
             </div>
           </div>
+
+          <RiskAIPanel
+            title={risk.title}
+            description={risk.description ?? ""}
+            category={risk.risk_category ?? "General"}
+          />
         </div>
       </div>
     </div>

@@ -285,6 +285,18 @@ async def update_control(
     return ControlResponse.model_validate(control)
 
 
+@router.delete("/{framework_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_framework(
+    framework_id: str,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_roles(UserRole.TENANT_ADMIN, UserRole.CISO)),
+    tenant_id: str = Depends(get_tenant_id),
+):
+    """Delete a tenant-owned custom framework and all its controls."""
+    fw = await _get_tenant_framework(db, framework_id, tenant_id)
+    await db.delete(fw)
+
+
 @router.delete("/{framework_id}/controls/{control_db_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_control(
     framework_id: str,

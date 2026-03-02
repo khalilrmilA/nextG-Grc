@@ -59,6 +59,8 @@ export const frameworksApi = {
 
   get: (id: string) => apiClient.get<Framework>(`/frameworks/${id}`).then((r) => r.data),
 
+  delete: (id: string) => apiClient.delete(`/frameworks/${id}`),
+
   getControls: (frameworkId: string) =>
     apiClient.get<FrameworkControl[]>(`/frameworks/${frameworkId}/controls`).then((r) => r.data),
 
@@ -163,23 +165,56 @@ export const customFrameworkApi = {
 
 // ─── AI Policy Generator ──────────────────────
 
+async function _streamAi(
+  endpoint: string,
+  body: object,
+  onToken: (token: string) => void,
+  onDone: () => void,
+  signal: AbortSignal,
+): Promise<void> {
+  const stored = localStorage.getItem("grc_user_v2");
+  const token = stored ? (JSON.parse(stored)?.accessToken ?? "") : "";
+  const resp = await fetch(`${API_BASE}${endpoint}`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: JSON.stringify(body),
+    signal,
+  });
+  if (!resp.ok) throw new Error(`AI error: ${resp.status}`);
+  const { readSseStream } = await import("@/lib/sse");
+  await readSseStream(resp, onToken, onDone);
+}
+
 export const aiApi = {
-  streamPolicyGeneration: async (
+  streamPolicyGeneration: (
     request: PolicyGenerateRequest,
     onToken: (token: string) => void,
     onDone: () => void,
     signal: AbortSignal
-  ): Promise<void> => {
-    const resp = await fetch(`${API_BASE}/ai/generate-policy`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(request),
-      signal,
-    });
-    if (!resp.ok) throw new Error(`AI error: ${resp.status}`);
-    const { readSseStream } = await import("@/lib/sse");
-    await readSseStream(resp, onToken, onDone);
-  },
+  ) => _streamAi("/ai/generate-policy", request, onToken, onDone, signal),
+
+  streamRiskAnalysis: (
+    title: string, description: string, category: string,
+    onToken: (token: string) => void, onDone: () => void, signal: AbortSignal
+  ) => _streamAi("/ai/analyze-risk", { title, description, risk_category: category }, onToken, onDone, signal),
+
+  streamEvidenceAnalysis: (
+    documentText: string, frameworkShortName: string, controls: object[],
+    onToken: (token: string) => void, onDone: () => void, signal: AbortSignal
+  ) => _streamAi("/ai/analyze-evidence", { document_text: documentText, framework_short_name: frameworkShortName, controls }, onToken, onDone, signal),
+
+  streamAuditPlan: (
+    request: { framework_name: string; framework_short_name: string; audit_title: string; audit_scope?: string; audit_objective?: string; controls: object[] },
+    onToken: (token: string) => void, onDone: () => void, signal: AbortSignal
+  ) => _streamAi("/ai/generate-audit-plan", request, onToken, onDone, signal),
+
+  streamVendorAnalysis: (
+    vendorName: string, vendorIndustry: string, vendorServices: string, responses: Record<string, string>,
+    onToken: (token: string) => void, onDone: () => void, signal: AbortSignal
+  ) => _streamAi("/ai/analyze-vendor", { vendor_name: vendorName, vendor_industry: vendorIndustry, vendor_services: vendorServices, questionnaire_responses: responses }, onToken, onDone, signal),
 };
 
 // ─── Audits ──────────────────────────────────

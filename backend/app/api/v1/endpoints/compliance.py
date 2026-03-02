@@ -12,7 +12,7 @@ from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.v1.dependencies.auth import get_current_user, get_tenant_id
+from app.api.v1.dependencies.auth import get_current_user, get_tenant_id, require_roles
 from app.api.v1.dependencies.pagination import PaginationParams
 from app.core.config import settings
 from app.core.database import get_db
@@ -25,7 +25,7 @@ from app.models.compliance import (
     UploadedDocument,
 )
 from app.models.framework import Framework, FrameworkControl
-from app.models.user import User
+from app.models.user import User, UserRole
 
 router = APIRouter()
 
@@ -379,7 +379,7 @@ async def _build_assessment_detail(
 async def create_assessment(
     body: AssessmentCreate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_roles(UserRole.TENANT_ADMIN, UserRole.SUPER_ADMIN)),
     tenant_id: str = Depends(get_tenant_id),
 ) -> AssessmentDetailResponse:
     """Create a new compliance assessment."""
@@ -410,7 +410,7 @@ async def create_assessment(
 async def list_assessments(
     pagination: PaginationParams = Depends(),
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(get_current_user),
+    _: User = Depends(require_roles(UserRole.TENANT_ADMIN, UserRole.SUPER_ADMIN)),
     tenant_id: str = Depends(get_tenant_id),
 ) -> PaginatedAssessments:
     """List all compliance assessments for the tenant."""
@@ -471,7 +471,7 @@ async def list_assessments(
 async def get_assessment(
     assessment_id: str,
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(get_current_user),
+    _: User = Depends(require_roles(UserRole.TENANT_ADMIN, UserRole.SUPER_ADMIN)),
     tenant_id: str = Depends(get_tenant_id),
 ) -> AssessmentDetailResponse:
     """Get full assessment detail."""
@@ -492,7 +492,7 @@ async def upload_document(
     assessment_id: str,
     file: UploadFile = File(...),
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_roles(UserRole.TENANT_ADMIN, UserRole.SUPER_ADMIN)),
     tenant_id: str = Depends(get_tenant_id),
 ) -> UploadedDocumentResponse:
     """Upload a document to an assessment for compliance analysis."""
@@ -558,7 +558,7 @@ async def upload_document(
 async def analyze_assessment(
     assessment_id: str,
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(get_current_user),
+    _: User = Depends(require_roles(UserRole.TENANT_ADMIN, UserRole.SUPER_ADMIN)),
     tenant_id: str = Depends(get_tenant_id),
 ) -> dict:
     """
@@ -698,7 +698,7 @@ async def analyze_assessment(
 async def get_assessment_results(
     assessment_id: str,
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(get_current_user),
+    _: User = Depends(require_roles(UserRole.TENANT_ADMIN, UserRole.SUPER_ADMIN)),
     tenant_id: str = Depends(get_tenant_id),
 ) -> AssessmentDetailResponse:
     """Get assessment results (alias for GET /assessments/{id})."""
@@ -710,7 +710,7 @@ async def update_control_assessment(
     control_assessment_id: str,
     body: ControlAssessmentUpdate,
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(get_current_user),
+    _: User = Depends(require_roles(UserRole.TENANT_ADMIN, UserRole.SUPER_ADMIN)),
     tenant_id: str = Depends(get_tenant_id),
 ) -> ControlAssessmentResponse:
     """Manually override a control assessment status."""

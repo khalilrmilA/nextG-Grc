@@ -18,7 +18,7 @@ const QUICK_PROMPTS = [
   { icon: FileText,      label: "Draft policy",     text: "Draft a concise Information Security Policy for a 50-person SaaS company." },
 ];
 
-const API_BASE = "http://localhost:8000/api/v1";
+const API_BASE = import.meta.env.VITE_API_URL || "/api/v1";
 
 type StreamCallbacks = { onToken: (t: string) => void; onDone: () => void };
 
@@ -93,9 +93,14 @@ async function streamChat(
       const c = new AbortController(); c.abort();
     }
   }, 90_000);
+  const stored = localStorage.getItem("grc_user_v2");
+  const token = stored ? (JSON.parse(stored)?.accessToken ?? "") : "";
   const resp = await fetch(`${API_BASE}/ai/chat`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
     body: JSON.stringify({ messages, stream: true }),
     signal,
   });

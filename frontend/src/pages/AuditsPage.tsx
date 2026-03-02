@@ -1,5 +1,12 @@
 import { useState } from "react";
-import { ClipboardList, Plus, AlertTriangle, Calendar, Tag, X, ChevronRight } from "lucide-react";
+import { ClipboardList, Plus, AlertTriangle, Calendar, Tag, X, ChevronRight, Sparkles } from "lucide-react";
+import AuditPlanModal from "../components/ai/AuditPlanModal";
+
+const FW_SHORT: Record<string, string> = {
+  "ISO 27001": "ISO 27001", "SOC 2": "SOC 2", "PCI DSS": "PCI DSS",
+  "GDPR": "GDPR", "HIPAA": "HIPAA", "NIST CSF": "NIST CSF",
+  "NIST 800-53": "NIST 800-53", "CIS Controls": "CIS",
+};
 
 const AUDITS = [
   { id: "1", title: "ISO 27001 Internal Audit Q4 2025", type: "Internal", framework: "ISO 27001", status: "fieldwork", start: "2025-11-01", end: "2025-12-15", findings: { critical: 1, high: 3, medium: 4, low: 2, observation: 1 }, fwColor: "bg-blue-50 text-blue-700", scope: "All production IT systems, cloud workloads, and HR systems.", lead_auditor: "Sarah Chen (CISO)", objective: "Assess conformance against ISO 27001:2022 controls" },
@@ -164,7 +171,7 @@ function NewAuditModal({ onClose, onSaved }: { readonly onClose: () => void; rea
 }
 
 // ── Audit Detail Modal ────────────────────────────────────────────────────────
-function AuditDetailModal({ audit, onClose }: { readonly audit: AuditEntry; readonly onClose: () => void }) {
+function AuditDetailModal({ audit, onClose, onGeneratePlan }: { readonly audit: AuditEntry; readonly onClose: () => void; readonly onGeneratePlan: () => void }) {
   const st = STATUS_MAP[audit.status] ?? STATUS_MAP.planning;
   const totalF = Object.values(audit.findings).reduce((a, b) => a + b, 0);
   return (
@@ -245,6 +252,16 @@ function AuditDetailModal({ audit, onClose }: { readonly audit: AuditEntry; read
               </div>
             )}
           </div>
+
+          {/* AI Audit Program */}
+          <button
+            type="button"
+            onClick={onGeneratePlan}
+            className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white text-sm font-medium transition-all shadow-sm"
+          >
+            <Sparkles className="w-4 h-4" />
+            Generate AI Audit Program
+          </button>
         </div>
       </div>
     </div>
@@ -256,6 +273,7 @@ export default function AuditsPage() {
   const [audits, setAudits] = useState(AUDITS);
   const [showAdd, setShowAdd] = useState(false);
   const [selected, setSelected] = useState<AuditEntry | null>(null);
+  const [planAudit, setPlanAudit] = useState<AuditEntry | null>(null);
 
   const totalFindings = audits.reduce((s, a) => s + Object.values(a.findings).reduce((x, v) => x + v, 0), 0);
   const openFindings  = audits.filter(a => a.status !== "closed").reduce((s, a) => s + Object.values(a.findings).reduce((x, v) => x + v, 0), 0);
@@ -347,7 +365,23 @@ export default function AuditsPage() {
           onSaved={a => setAudits(prev => [a, ...prev])}
         />
       )}
-      {selected && <AuditDetailModal audit={selected} onClose={() => setSelected(null)} />}
+      {selected && (
+        <AuditDetailModal
+          audit={selected}
+          onClose={() => setSelected(null)}
+          onGeneratePlan={() => { setPlanAudit(selected); setSelected(null); }}
+        />
+      )}
+      {planAudit && (
+        <AuditPlanModal
+          auditTitle={planAudit.title}
+          frameworkName={planAudit.framework}
+          frameworkShortName={FW_SHORT[planAudit.framework] ?? planAudit.framework}
+          auditScope={planAudit.scope}
+          auditObjective={planAudit.objective}
+          onClose={() => setPlanAudit(null)}
+        />
+      )}
     </div>
   );
 }
