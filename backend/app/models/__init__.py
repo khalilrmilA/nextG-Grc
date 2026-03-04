@@ -7,7 +7,11 @@ from app.models.compliance import (
     ControlAssessment,
     Evidence,
     ComplianceGap,
+    UploadedDocument,
 )
+from app.models.mandatory_document import MandatoryDocument
+from app.models.action_item import ActionItem, ActionItemStatus, ActionItemPriority
+from app.models.auditor_assignment import AuditorAssignment
 from app.models.audit import Audit, AuditFinding, AuditEvidence
 from app.models.policy import Policy, PolicyVersion, PolicyAttestation
 from app.models.vendor import Vendor, VendorAssessment, VendorRisk
@@ -22,7 +26,10 @@ __all__ = [
     "Tenant", "User", "UserRole",
     "Framework", "FrameworkControl", "ControlRequirement",
     "Risk", "RiskAssessment", "RiskTreatment",
-    "ComplianceAssessment", "ControlAssessment", "Evidence", "ComplianceGap",
+    "ComplianceAssessment", "ControlAssessment", "Evidence", "ComplianceGap", "UploadedDocument",
+    "MandatoryDocument",
+    "ActionItem", "ActionItemStatus", "ActionItemPriority",
+    "AuditorAssignment",
     "Audit", "AuditFinding", "AuditEvidence",
     "Policy", "PolicyVersion", "PolicyAttestation",
     "Vendor", "VendorAssessment", "VendorRisk",

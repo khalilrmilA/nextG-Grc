@@ -27,11 +27,26 @@ import type {
   AppNotification,
   NotificationListResponse,
   NotificationPreference,
+  DocumentChecklistResponse,
 } from "@/types";
 
 const API_BASE = import.meta.env.VITE_API_URL ?? "http://localhost:8000/api/v1";
 
 // ─── Auth ────────────────────────────────────
+
+export interface UserProfile {
+  id: string;
+  email: string;
+  first_name: string;
+  last_name: string;
+  role: string;
+  tenant_id: string;
+  tenant_name: string;
+  primary_framework_id: string | null;
+  selected_framework_ids: string[];
+  org_size: string | null;
+  primary_assessment_id: string | null;
+}
 
 export const authApi = {
   login: (email: string, password: string) =>
@@ -46,10 +61,16 @@ export const authApi = {
     organization_slug: string;
     country?: string;
     industry?: string;
+    org_size?: string;
+    primary_framework_id?: string;
+    selected_framework_ids?: string[];
   }) => apiClient.post<AuthTokens>("/auth/register", data).then((r) => r.data),
 
   refresh: (refresh_token: string) =>
     apiClient.post<AuthTokens>("/auth/refresh", { refresh_token }).then((r) => r.data),
+
+  getProfile: () =>
+    apiClient.get<UserProfile>("/auth/me").then((r) => r.data),
 };
 
 // ─── Frameworks ──────────────────────────────
@@ -138,6 +159,28 @@ export const complianceApi = {
         data
       )
       .then((r) => r.data),
+
+  getDocumentChecklist: (assessmentId: string) =>
+    apiClient
+      .get<DocumentChecklistResponse>(`/compliance/assessments/${assessmentId}/document-checklist`)
+      .then((r) => r.data),
+
+  actOnRecommendation: (
+    assessmentId: string,
+    gapId: string,
+    data: { action: "accept" | "reject"; owner_id?: string; due_date?: string; notes?: string }
+  ) =>
+    apiClient
+      .post(`/compliance/assessments/${assessmentId}/gaps/${gapId}/recommendation`, data)
+      .then((r) => r.data),
+
+  bulkActOnRecommendations: (
+    assessmentId: string,
+    data: { action: "accept" | "reject"; gap_ids?: string[]; filter?: string }
+  ) =>
+    apiClient
+      .post(`/compliance/assessments/${assessmentId}/gaps/bulk-action`, data)
+      .then((r) => r.data),
 };
 
 // ─── Custom Framework Builder ─────────────────
@@ -215,6 +258,11 @@ export const aiApi = {
     vendorName: string, vendorIndustry: string, vendorServices: string, responses: Record<string, string>,
     onToken: (token: string) => void, onDone: () => void, signal: AbortSignal
   ) => _streamAi("/ai/analyze-vendor", { vendor_name: vendorName, vendor_industry: vendorIndustry, vendor_services: vendorServices, questionnaire_responses: responses }, onToken, onDone, signal),
+
+  streamRemediationPlan: (
+    assessmentId: string,
+    onToken: (token: string) => void, onDone: () => void, signal: AbortSignal
+  ) => _streamAi("/ai/stream-remediation-plan", { assessment_id: assessmentId }, onToken, onDone, signal),
 };
 
 // ─── Audits ──────────────────────────────────
@@ -263,6 +311,7 @@ export const vendorsApi = {
 
 export const dashboardApi = {
   getSummary: () => apiClient.get<DashboardSummary>("/dashboard/summary").then((r) => r.data),
+  getFrameworkSummary: () => apiClient.get("/dashboard/framework-summary").then((r) => r.data),
 };
 
 // ─── Subscriptions ───────────────────────────
@@ -300,5 +349,128 @@ export const notificationsApi = {
   updatePreferences: (preferences: NotificationPreference[]) =>
     apiClient
       .put<NotificationPreference[]>("/notifications/preferences", { preferences })
+      .then((r) => r.data),
+};
+
+// ─── Auditor Portal ───────────────────────────
+
+export interface AuditorAssignment {
+  assignment_id: string;
+  assessment_id: string;
+  assessment_name: string;
+  framework_name: string;
+  framework_short_name: string;
+  status: string;
+  compliance_score?: number;
+  controls_total: number;
+  controls_verified: number;
+  reference_document_ids: string[];
+}
+
+export interface AuditChecklistControl {
+  control_assessment_id: string;
+  control_identifier: string;
+  control_title: string;
+  control_category?: string;
+  control_description?: string;
+  status: string;
+  company_notes?: string;
+  implementation_notes?: string;
+  auditor_notes?: string;
+}
+
+export interface AuditChecklist {
+  assessment_id: string;
+  controls: AuditChecklistControl[];
+}
+
+export const auditorPortalApi = {
+  getMyAssignments: () =>
+    apiClient.get<AuditorAssignment[]>("/auditor-portal/my-assignments").then((r) => r.data),
+
+  getChecklist: (assessmentId: string) =>
+    apiClient
+      .get<AuditChecklist>(`/auditor-portal/assessments/${assessmentId}/checklist`)
+      .then((r) => r.data),
+
+  recordVerdict: (controlAssessmentId: string, verdict: string, notes: string) =>
+    apiClient
+      .patch(`/auditor-portal/control-assessments/${controlAssessmentId}`, {
+        verdict,
+        auditor_notes: notes,
+      })
+      .then((r) => r.data),
+
+  generateReport: (
+    assessmentId: string,
+    onToken: (token: string) => void,
+    onDone: () => void,
+    signal: AbortSignal,
+  ) =>
+    _streamAi(
+      `/auditor-portal/assessments/${assessmentId}/generate-report`,
+      {},
+      onToken,
+      onDone,
+      signal,
+    ),
+};
+
+// ─── Users ────────────────────────────────────
+
+export const usersApi = {
+  listUsers: () =>
+    apiClient
+      .get<{ id: string; name: string; email: string; role: string }[]>("/users")
+      .then((r) => r.data),
+
+  createAuditor: (data: { name: string; email: string; password: string }) =>
+    apiClient
+      .post<{ id: string; email: string; role: string }>("/users/auditors", data)
+      .then((r) => r.data),
+};
+
+// ─── Traceability Matrix ──────────────────────
+
+export interface TraceabilityRow {
+  control_id: string;
+  control_identifier: string;
+  control_title: string;
+  control_category?: string;
+  control_status: string;
+  ai_confidence?: number;
+  gap_id: string | null;
+  gap_description: string | null;
+  gap_severity: string | null;
+  recommendation_status: string | null;
+  is_certification_blocker: boolean;
+  remediation_priority: number | null;
+  action_items: {
+    id: string;
+    title: string;
+    status: string;
+    priority: string;
+    due_date?: string;
+  }[];
+}
+
+export interface TraceabilityMatrix {
+  assessment_id: string;
+  assessment_name: string;
+  rows: TraceabilityRow[];
+  summary: {
+    total_controls: number;
+    compliant: number;
+    partial: number;
+    gaps: number;
+    action_items_total: number;
+    action_items_open: number;
+  };
+}
+
+export const traceabilityApi = {
+  getMatrix: (assessmentId: string) =>
+    apiClient
+      .get<TraceabilityMatrix>(`/compliance/assessments/${assessmentId}/traceability`)
       .then((r) => r.data),
 };

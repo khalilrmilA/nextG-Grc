@@ -8,6 +8,11 @@ import DashboardPage from "./pages/DashboardPage";
 import RisksPage from "./pages/RisksPage";
 import CompliancePage from "./pages/CompliancePage";
 import AssessmentDetailPage from "./pages/AssessmentDetailPage";
+import RemediationPlannerPage from "./pages/RemediationPlannerPage";
+import AuditorPortalPage from "./pages/AuditorPortalPage";
+import AuditChecklistPage from "./pages/AuditChecklistPage";
+import AuditReportPage from "./pages/AuditReportPage";
+import TraceabilityPage from "./pages/TraceabilityPage";
 import FrameworksPage from "./pages/FrameworksPage";
 import CustomFrameworkPage from "./pages/CustomFrameworkPage";
 import AuditsPage from "./pages/AuditsPage";
@@ -42,6 +47,11 @@ export default function App() {
         <Route path="risks" element={<RisksPage />} />
         <Route path="compliance" element={<CompliancePage />} />
         <Route path="compliance/:assessmentId" element={<AssessmentDetailPage />} />
+        <Route path="compliance/assessments/:assessmentId/remediation-plan" element={<RemediationPlannerPage />} />
+        <Route path="compliance/:assessmentId/traceability" element={<TraceabilityPage />} />
+        <Route path="auditor-portal" element={<AuditorPortalPage />} />
+        <Route path="auditor-portal/:assessmentId" element={<AuditChecklistPage />} />
+        <Route path="auditor-portal/:assessmentId/report" element={<AuditReportPage />} />
         <Route path="frameworks" element={<FrameworksPage />} />
         <Route path="frameworks/custom/new" element={<CustomFrameworkPage />} />
         <Route path="audits" element={<AuditsPage />} />

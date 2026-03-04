@@ -3,11 +3,13 @@ import { useParams, useNavigate } from "react-router-dom";
 import {
   ArrowLeft, Upload, FileText, Play, Loader2,
   CheckCircle, XCircle, AlertTriangle, MinusCircle,
-  ChevronDown, ChevronUp, Sparkles, Globe,
+  ChevronDown, ChevronUp, Sparkles, Globe, GitBranch,
 } from "lucide-react";
 import { complianceApi } from "@/api/endpoints";
 import type { AssessmentDetail, GapDetail, ControlAssessmentDetail } from "@/types";
 import PolicyGeneratorModal from "@/components/features/compliance/PolicyGeneratorModal";
+import DocumentChecklistTab from "@/components/features/compliance/DocumentChecklistTab";
+import GapReportTab from "@/components/features/compliance/GapReportTab";
 
 // ─── Status helpers ────────────────────────────────────────────────────────────
 
@@ -428,12 +430,13 @@ function CrossFrameworkTab({ assessment }: { readonly assessment: AssessmentDeta
 
 // ─── Main Page ─────────────────────────────────────────────────────────────────
 
-type Tab = "upload" | "results" | "crossfw";
+type Tab = "upload" | "checklist" | "results" | "gapreport" | "crossfw";
 
 export default function AssessmentDetailPage() {
   const { assessmentId } = useParams<{ assessmentId: string }>();
   const navigate = useNavigate();
   const [assessment, setAssessment] = useState<AssessmentDetail | null>(null);
+  const [gaps, setGaps] = useState<GapDetail[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<Tab>("upload");
 
@@ -442,10 +445,17 @@ export default function AssessmentDetailPage() {
     complianceApi.getAssessment(assessmentId)
       .then((data) => {
         setAssessment(data);
+        setGaps(data.gaps);
         if (data.control_assessments.length > 0) setActiveTab("results");
       })
       .finally(() => setLoading(false));
   }, [assessmentId]);
+
+  function handleGapUpdated(gapId: string, status: "accepted" | "rejected") {
+    setGaps((prev) =>
+      prev.map((g) => g.id === gapId ? { ...g, recommendation_status: status } : g)
+    );
+  }
 
   if (loading) {
     return (
@@ -464,10 +474,15 @@ export default function AssessmentDetailPage() {
     );
   }
 
+  const hasResults = assessment.control_assessments.length > 0;
+  const gapCount = gaps.length;
+
   const tabs: { key: Tab; label: string; disabled?: boolean }[] = [
-    { key: "upload",  label: "Upload & Analyze" },
-    { key: "results", label: `Results ${assessment.control_assessments.length > 0 ? `(${assessment.control_assessments.length})` : ""}`, disabled: assessment.control_assessments.length === 0 },
-    { key: "crossfw", label: `Cross-Framework ${Object.keys(assessment.cross_framework_summary).length > 0 ? `(${Object.keys(assessment.cross_framework_summary).length})` : ""}`, disabled: assessment.control_assessments.length === 0 },
+    { key: "upload",    label: "Upload & Analyze" },
+    { key: "checklist", label: "Document Checklist" },
+    { key: "results",   label: `Results${hasResults ? ` (${assessment.control_assessments.length})` : ""}`, disabled: !hasResults },
+    { key: "gapreport", label: `Gap Report${gapCount > 0 ? ` (${gapCount})` : ""}`, disabled: gapCount === 0 },
+    { key: "crossfw",   label: `Cross-Framework${Object.keys(assessment.cross_framework_summary).length > 0 ? ` (${Object.keys(assessment.cross_framework_summary).length})` : ""}`, disabled: !hasResults },
   ];
 
   return (
@@ -497,14 +512,25 @@ export default function AssessmentDetailPage() {
               )}
             </div>
           </div>
-          {assessment.compliance_score != null && (
-            <div className="text-right">
-              <p className={`text-3xl font-bold ${scoreColor(assessment.compliance_score)}`}>
-                {assessment.compliance_score}%
-              </p>
-              <p className="text-xs text-gray-400">compliance score</p>
-            </div>
-          )}
+          <div className="flex items-center gap-3">
+            {hasResults && (
+              <button
+                onClick={() => navigate(`/compliance/${assessmentId}/traceability`)}
+                className="flex items-center gap-1.5 text-sm font-medium text-gray-600 border border-gray-200 hover:bg-gray-50 px-3 py-2 rounded-lg transition-colors"
+              >
+                <GitBranch className="w-4 h-4" />
+                Traceability Matrix
+              </button>
+            )}
+            {assessment.compliance_score != null && (
+              <div className="text-right">
+                <p className={`text-3xl font-bold ${scoreColor(assessment.compliance_score)}`}>
+                  {assessment.compliance_score}%
+                </p>
+                <p className="text-xs text-gray-400">compliance score</p>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
@@ -536,12 +562,26 @@ export default function AssessmentDetailPage() {
           assessment={assessment}
           onAnalyzed={(updated) => {
             setAssessment(updated);
+            setGaps(updated.gaps);
             setActiveTab("results");
           }}
         />
       )}
+      {activeTab === "checklist" && assessmentId && (
+        <DocumentChecklistTab
+          assessmentId={assessmentId}
+          frameworkShortName={assessment.framework_short_name}
+        />
+      )}
       {activeTab === "results" && (
         <ResultsTab assessment={assessment} />
+      )}
+      {activeTab === "gapreport" && assessmentId && (
+        <GapReportTab
+          assessmentId={assessmentId}
+          gaps={gaps}
+          onGapUpdated={handleGapUpdated}
+        />
       )}
       {activeTab === "crossfw" && (
         <CrossFrameworkTab assessment={assessment} />

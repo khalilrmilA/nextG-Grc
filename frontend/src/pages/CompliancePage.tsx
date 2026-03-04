@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
-import { CheckCircle, Clock, AlertCircle, XCircle, Plus, FileText, Loader2, X } from "lucide-react";
+import { useNavigate, Link } from "react-router-dom";
+import { CheckCircle, Clock, AlertCircle, XCircle, Plus, FileText, Loader2, X, FolderUp, Sparkles, BarChart3 } from "lucide-react";
 import { complianceApi, frameworksApi } from "@/api/endpoints";
 import type { AssessmentListItem, Framework } from "@/types";
 
@@ -309,11 +309,51 @@ export default function CompliancePage() {
         ))}
       </div>
 
-      {filtered.length === 0 && !loading && (
+      {/* How-to guide — shown when no assessments exist */}
+      {assessments.length === 0 && !loading && (
+        <div className="bg-gradient-to-br from-blue-50 to-indigo-50 border border-blue-100 rounded-2xl p-6 space-y-4">
+          <div className="flex items-center gap-2">
+            <FolderUp className="w-5 h-5 text-blue-600" />
+            <p className="font-bold text-blue-900">How to import your documents and run a compliance check</p>
+          </div>
+          <div className="grid grid-cols-3 gap-4">
+            {[
+              { num: 1, icon: Plus,       color: "bg-blue-100 text-blue-600",   title: "Create an Assessment",   desc: "Click \"New Assessment\" above. Choose a framework like ISO 27001 and give it a name." },
+              { num: 2, icon: FolderUp,   color: "bg-purple-100 text-purple-600", title: "Upload your documents", desc: "Open the assessment → \"Upload & Analyze\" tab. Drop any PDF, Word, or TXT file." },
+              { num: 3, icon: Sparkles,   color: "bg-orange-100 text-orange-600", title: "Run AI Analysis",      desc: "Click \"Run AI Analysis\". The AI maps your documents to every control and flags gaps." },
+              { num: 4, icon: BarChart3,  color: "bg-green-100 text-green-600",  title: "Review Gap Report",     desc: "\"Gap Report\" tab shows every failing control. Accept gaps to create action items." },
+              { num: 5, icon: FileText,   color: "bg-teal-100 text-teal-600",    title: "Check Doc Checklist",   desc: "\"Document Checklist\" tab lists all mandatory documents. Upload missing ones inline." },
+              { num: 6, icon: CheckCircle, color: "bg-green-100 text-green-600", title: "Track & Remediate",     desc: "Use the Traceability Matrix to see control → gap → action item chains end-to-end." },
+            ].map(({ num, icon: Icon, color, title, desc }) => (
+              <div key={num} className="bg-white rounded-xl border border-blue-100 p-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <div className={`w-7 h-7 rounded-lg flex items-center justify-center ${color}`}>
+                    <Icon className="w-3.5 h-3.5" />
+                  </div>
+                  <span className="text-xs font-bold text-gray-400">Step {num}</span>
+                </div>
+                <p className="text-sm font-semibold text-gray-900">{title}</p>
+                <p className="text-xs text-gray-500 mt-1 leading-relaxed">{desc}</p>
+              </div>
+            ))}
+          </div>
+          <div className="flex items-center gap-3 pt-1">
+            <button
+              onClick={() => setShowModal(true)}
+              className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold px-4 py-2 rounded-lg transition-colors"
+            >
+              <Plus className="w-4 h-4" /> Create my first assessment
+            </button>
+            <Link to="/help" className="text-sm text-blue-600 hover:text-blue-700 font-medium">
+              Full guide →
+            </Link>
+          </div>
+        </div>
+      )}
+
+      {filtered.length === 0 && assessments.length > 0 && !loading && (
         <div className="text-center py-16 text-gray-400 text-sm">
-          {assessments.length === 0
-            ? "No assessments yet. Click \"New Assessment\" to get started."
-            : "No assessments match this filter."}
+          No assessments match this filter.
         </div>
       )}
     </div>

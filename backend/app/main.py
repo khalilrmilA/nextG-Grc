@@ -9,8 +9,9 @@ import structlog
 import sentry_sdk
 
 from app.core.config import settings
-from app.core.database import engine, Base
+from app.core.database import engine, Base, AsyncSessionLocal
 from app.api.v1.router import api_router
+from app.core.seed_mandatory_docs import seed_mandatory_documents
 
 logger = structlog.get_logger()
 
@@ -19,6 +20,16 @@ logger = structlog.get_logger()
 async def lifespan(app: FastAPI):
     """Startup and shutdown events."""
     logger.info("Starting GRC Platform", version=settings.APP_VERSION, env=settings.ENVIRONMENT)
+
+    # Create all tables (dev / SQLite mode — no-op if already exist)
+    async with engine.begin() as conn:
+        # Import all models so metadata is populated
+        import app.models  # noqa: F401
+        await conn.run_sync(Base.metadata.create_all)
+
+    # Seed reference data
+    async with AsyncSessionLocal() as db:
+        await seed_mandatory_documents(db)
 
     if settings.SENTRY_DSN:
         sentry_sdk.init(

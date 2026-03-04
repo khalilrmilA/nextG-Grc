@@ -182,6 +182,12 @@ class ComplianceGap(Base):
     )
     is_resolved: Mapped[bool] = mapped_column(Boolean, default=False)
 
+    # Recommendation workflow
+    recommendation_status: Mapped[str] = mapped_column(String(20), default="pending")  # pending/accepted/rejected
+    is_certification_blocker: Mapped[bool] = mapped_column(Boolean, default=False)
+    remediation_priority: Mapped[int] = mapped_column(Integer, default=50)  # 1-100
+    action_item_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+
     assessment: Mapped["ComplianceAssessment"] = relationship(
         "ComplianceAssessment", back_populates="gaps"
     )
@@ -202,6 +208,12 @@ class UploadedDocument(Base):
     content_type: Mapped[str | None] = mapped_column(String(100), nullable=True)
     file_size_bytes: Mapped[int | None] = mapped_column(Integer, nullable=True)
     extracted_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    # Document intelligence fields
+    document_type_key: Mapped[str | None] = mapped_column(String(100), nullable=True)  # matches MandatoryDocument.document_type_key
+    clause_refs: Mapped[list] = mapped_column(JSON, default=list)  # e.g. ["4.3", "6.1.3"]
+    ai_analysis_summary: Mapped[str | None] = mapped_column(Text, nullable=True)
+
     uploaded_by_id: Mapped[str | None] = mapped_column(
         String(36), ForeignKey("users.id"), nullable=True
     )

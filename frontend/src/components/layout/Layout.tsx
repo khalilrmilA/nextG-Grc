@@ -34,6 +34,10 @@ const NAV_GROUPS = [
   },
 ];
 
+const AUDITOR_NAV = [
+  { to: "/auditor-portal", icon: ClipboardCheck, label: "My Assignments" },
+];
+
 const PAGE_LABELS: Record<string, string> = {
   dashboard:  "Dashboard",
   risks:      "Risk Register",
@@ -395,7 +399,37 @@ export default function Layout() {
 
         {/* Navigation */}
         <nav className="flex-1 px-3 py-4 space-y-5 overflow-y-auto">
-          {NAV_GROUPS.map(group => (
+          {/* Auditor-only section */}
+          {user?.role === "auditor" && (
+            <div>
+              <p className={`text-xs font-semibold uppercase tracking-widest px-3 mb-2 ${sc.navLabel}`}>
+                Audit Portal
+              </p>
+              <div className="space-y-0.5">
+                {AUDITOR_NAV.map(({ to, icon: Icon, label }) => (
+                  <NavLink
+                    key={to}
+                    to={to}
+                    className={({ isActive }) =>
+                      `flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all ${
+                        isActive ? sc.navActive : sc.navItem
+                      }`
+                    }
+                  >
+                    {({ isActive }) => (
+                      <>
+                        <Icon className={`w-4 h-4 flex-shrink-0 ${isActive ? sc.navIconActive : sc.navIcon}`} />
+                        <span className="flex-1">{label}</span>
+                      </>
+                    )}
+                  </NavLink>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Standard nav groups — hidden for auditor role */}
+          {user?.role !== "auditor" && NAV_GROUPS.map(group => (
             <div key={group.label}>
               <p className={`text-xs font-semibold uppercase tracking-widest px-3 mb-2 ${sc.navLabel}`}>
                 {group.label}

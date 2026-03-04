@@ -18,6 +18,10 @@ export default function LoginPage() {
 
   const navigate = useNavigate();
 
+  function redirectAfterLogin(role?: string) {
+    navigate(role === "auditor" ? "/auditor-portal" : "/dashboard");
+  }
+
   async function loginAs(accountEmail: string) {
     const user = DEMO_USERS[accountEmail];
     if (!user) return;
@@ -29,7 +33,7 @@ export default function LoginPage() {
       // Backend offline — login without token (demo mode)
       authSession.login(user);
     }
-    navigate("/dashboard");
+    redirectAfterLogin(user.role);
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -57,13 +61,31 @@ export default function LoginPage() {
         accessToken: tokenData.access_token,
         refreshToken: tokenData.refresh_token,
       });
-      navigate("/dashboard");
+
+      // Enrich with framework profile from backend
+      try {
+        const { authApi: api } = await import("../api/endpoints");
+        const profile = await api.getProfile();
+        const current = authSession.getUser();
+        if (current) {
+          authSession.login({
+            ...current,
+            tenant_id: profile.tenant_id,
+            primary_framework_id: profile.primary_framework_id,
+            selected_framework_ids: profile.selected_framework_ids,
+            org_size: profile.org_size,
+            primary_assessment_id: profile.primary_assessment_id,
+          });
+        }
+      } catch {/* best-effort */}
+
+      redirectAfterLogin(authSession.getUser()?.role);
     } catch {
       // Backend unreachable — allow demo accounts offline
       const demoUser = DEMO_USERS[email.trim().toLowerCase()];
       if (demoUser && password === "demo123") {
         authSession.login(demoUser);
-        navigate("/dashboard");
+        redirectAfterLogin(demoUser.role);
       } else {
         setError("Invalid credentials. Use demo123 with one of the demo accounts below.");
       }

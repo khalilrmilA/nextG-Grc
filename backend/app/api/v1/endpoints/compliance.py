@@ -7,7 +7,7 @@ from datetime import datetime
 from pathlib import Path
 
 import requests
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
+from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, UploadFile, status
 from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -25,6 +25,8 @@ from app.models.compliance import (
     UploadedDocument,
 )
 from app.models.framework import Framework, FrameworkControl
+from app.models.mandatory_document import MandatoryDocument
+from app.models.action_item import ActionItem, ActionItemPriority, ActionItemStatus
 from app.models.user import User, UserRole
 
 router = APIRouter()
@@ -82,6 +84,10 @@ class GapResponse(BaseModel):
     gap_description: str
     severity: str
     remediation_steps: str | None = None
+    recommendation_status: str = "pending"
+    is_certification_blocker: bool = False
+    remediation_priority: int = 50
+    action_item_id: str | None = None
 
     model_config = {"from_attributes": True}
 
@@ -242,6 +248,66 @@ async def _run_batch_analysis(doc_text: str, controls: list, model: str) -> list
     return all_results
 
 
+_CLAUSE_DETECTION_PROMPT = """\
+You are an ISO 27001:2022 expert. Given the document text below, identify which ISO 27001:2022
+clauses and Annex A controls the document covers. Return ONLY a JSON array of clause references
+(e.g. ["4.3", "5.2", "6.1.3", "A.5.1", "A.8.7"]). Return an empty array [] if none apply.
+Document text (excerpt):
+{excerpt}"""
+
+
+def _detect_clauses_sync(doc_text: str, doc_id: str, db_url: str) -> None:
+    """Synchronous worker: call Ollama to detect clauses, then update the DB record."""
+    excerpt = doc_text[:6000]
+    payload = {
+        "model": getattr(settings, "OLLAMA_CHAT_MODEL", "llama3.1:8b"),
+        "stream": False,
+        "messages": [{"role": "user", "content": _CLAUSE_DETECTION_PROMPT.format(excerpt=excerpt)}],
+    }
+    try:
+        resp = requests.post(
+            f"{settings.OLLAMA_BASE_URL}/api/chat",
+            json=payload,
+            timeout=(30, 120),
+        )
+        if resp.status_code != 200:
+            return
+        raw = resp.json().get("message", {}).get("content", "[]")
+        # Strip markdown fences
+        raw = re.sub(r"^```[a-z]*\n?", "", raw.strip(), flags=re.MULTILINE)
+        raw = re.sub(r"\n?```$", "", raw.strip())
+        clauses = json.loads(raw)
+        if not isinstance(clauses, list):
+            return
+    except Exception:  # noqa: BLE001
+        return
+
+    # Write back to DB synchronously (separate sync connection)
+    import sqlalchemy
+    from sqlalchemy.orm import Session
+
+    engine = sqlalchemy.create_engine(db_url.replace("+aiosqlite", "").replace("+asyncpg", ""))
+    with Session(engine) as session:
+        doc = session.get(UploadedDocument, doc_id)
+        if doc:
+            doc.clause_refs = clauses
+            session.commit()
+    engine.dispose()
+
+
+def _schedule_clause_detection(doc_id: str, doc_text: str) -> None:
+    """Spawn a background thread to detect clauses without blocking the response."""
+    import threading
+
+    db_url = settings.DATABASE_URL
+    t = threading.Thread(
+        target=_detect_clauses_sync,
+        args=(doc_text, doc_id, db_url),
+        daemon=True,
+    )
+    t.start()
+
+
 def _compute_cross_framework_coverage(
     control_assessments: list[ControlAssessment],
     controls_map: dict[str, FrameworkControl],
@@ -339,6 +405,10 @@ async def _build_assessment_detail(
             gap_description=gap.gap_description,
             severity=gap.severity,
             remediation_steps=gap.remediation_steps,
+            recommendation_status=gap.recommendation_status,
+            is_certification_blocker=gap.is_certification_blocker,
+            remediation_priority=gap.remediation_priority,
+            action_item_id=gap.action_item_id,
         )
         for gap in gaps
     ]
@@ -490,6 +560,7 @@ async def get_assessment(
 @router.post("/assessments/{assessment_id}/documents", status_code=status.HTTP_201_CREATED)
 async def upload_document(
     assessment_id: str,
+    background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_roles(UserRole.TENANT_ADMIN, UserRole.SUPER_ADMIN)),
@@ -544,6 +615,10 @@ async def upload_document(
     )
     db.add(doc)
     await db.flush()
+
+    # Fire-and-forget: detect which ISO 27001 clauses this document covers
+    if extracted:
+        background_tasks.add_task(_schedule_clause_detection, doc.id, extracted)
 
     return UploadedDocumentResponse(
         id=doc.id,
@@ -661,18 +736,27 @@ async def analyze_assessment(
             gap_desc = v.get("gap_description") or f"{control.title} is not adequately addressed."
             levels = req_levels.get(control.id, [])
             has_must = "must" in levels
-            if ctrl_status == ControlStatus.NOT_IMPLEMENTED and has_must:
+            is_blocker = ctrl_status == ControlStatus.NOT_IMPLEMENTED and has_must
+            if is_blocker:
                 severity = "high"
+                priority = 90
+            elif ctrl_status == ControlStatus.NOT_IMPLEMENTED:
+                severity = "medium"
+                priority = 60
             elif has_must:
                 severity = "medium"
+                priority = 50
             else:
                 severity = "low"
+                priority = 30
             db.add(ComplianceGap(
                 assessment_id=assessment_id,
                 control_id=control.id,
                 gap_description=gap_desc,
                 severity=severity,
                 remediation_steps=f"Implement {control.title} per framework guidance.",
+                is_certification_blocker=is_blocker,
+                remediation_priority=priority,
             ))
 
     total = len(controls)
@@ -765,3 +849,331 @@ async def update_control_assessment(
         ai_confidence=ca.ai_confidence,
         cross_framework_coverage=control.mapped_controls or [],
     )
+
+
+# ─── Document Checklist ────────────────────────────────────────────────────────
+
+
+@router.get("/assessments/{assessment_id}/document-checklist")
+async def get_document_checklist(
+    assessment_id: str,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_roles(UserRole.TENANT_ADMIN, UserRole.SUPER_ADMIN)),
+    tenant_id: str = Depends(get_tenant_id),
+) -> list[dict]:
+    """
+    Return mandatory documents for the assessment's framework with upload status.
+    Each entry shows clause_ref, document name, whether it's been uploaded, and the uploaded doc id.
+    """
+    result = await db.execute(
+        select(ComplianceAssessment).where(
+            ComplianceAssessment.id == assessment_id,
+            ComplianceAssessment.tenant_id == tenant_id,
+        )
+    )
+    assessment = result.scalar_one_or_none()
+    if not assessment:
+        raise HTTPException(status_code=404, detail="Assessment not found")
+
+    # Get framework short_name
+    fw_result = await db.execute(select(Framework).where(Framework.id == assessment.framework_id))
+    fw = fw_result.scalar_one_or_none()
+    fw_short = fw.short_name if fw else ""
+
+    # Normalise: "ISO 27001:2022" → "ISO27001"
+    fw_key = fw_short.upper().replace(" ", "").replace(":", "").replace("-", "")[:10]
+    if "ISO27001" in fw_key:
+        fw_key = "ISO27001"
+
+    mandatory_docs = (await db.execute(
+        select(MandatoryDocument)
+        .where(MandatoryDocument.framework_short_name == fw_key)
+        .order_by(MandatoryDocument.sort_order)
+    )).scalars().all()
+
+    # Get uploaded docs for this assessment
+    uploaded = (await db.execute(
+        select(UploadedDocument).where(UploadedDocument.assessment_id == assessment_id)
+    )).scalars().all()
+
+    # Match by document_type_key
+    uploaded_by_key: dict[str, UploadedDocument] = {
+        d.document_type_key: d for d in uploaded if d.document_type_key
+    }
+
+    checklist = []
+    for md in mandatory_docs:
+        uploaded_doc = uploaded_by_key.get(md.document_type_key)
+        checklist.append({
+            "mandatory_document_id": md.id,
+            "clause_ref": md.clause_ref,
+            "document_name": md.document_name,
+            "document_type_key": md.document_type_key,
+            "is_mandatory": md.is_mandatory,
+            "description": md.description,
+            "uploaded": uploaded_doc is not None,
+            "uploaded_document_id": uploaded_doc.id if uploaded_doc else None,
+            "uploaded_file_name": uploaded_doc.file_name if uploaded_doc else None,
+            "ai_analysis_summary": uploaded_doc.ai_analysis_summary if uploaded_doc else None,
+        })
+
+    return checklist
+
+
+# ─── Gap Recommendation ────────────────────────────────────────────────────────
+
+
+class RecommendationRequest(BaseModel):
+    action: str  # "accept" | "reject"
+    owner_id: str | None = None
+    due_date: str | None = None
+    notes: str | None = None
+
+
+class BulkRecommendationRequest(BaseModel):
+    gap_ids: list[str]
+    action: str  # "accept" | "reject"
+    owner_id: str | None = None
+    due_date: str | None = None
+
+
+@router.post("/assessments/{assessment_id}/gaps/{gap_id}/recommendation")
+async def act_on_gap_recommendation(
+    assessment_id: str,
+    gap_id: str,
+    body: RecommendationRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_roles(UserRole.TENANT_ADMIN, UserRole.SUPER_ADMIN)),
+    tenant_id: str = Depends(get_tenant_id),
+) -> dict:
+    """
+    Accept or reject a gap recommendation.
+    Accepting creates an ActionItem assigned to the given owner.
+    """
+    if body.action not in ("accept", "reject"):
+        raise HTTPException(status_code=422, detail="action must be 'accept' or 'reject'")
+
+    result = await db.execute(
+        select(ComplianceGap, ComplianceAssessment)
+        .join(ComplianceAssessment, ComplianceGap.assessment_id == ComplianceAssessment.id)
+        .where(
+            ComplianceGap.id == gap_id,
+            ComplianceAssessment.id == assessment_id,
+            ComplianceAssessment.tenant_id == tenant_id,
+        )
+    )
+    row = result.first()
+    if not row:
+        raise HTTPException(status_code=404, detail="Gap not found")
+
+    gap, _ = row
+
+    gap.recommendation_status = body.action + "ed"  # "accepted" | "rejected"
+
+    action_item_id = None
+    if body.action == "accept":
+        ctrl_result = await db.execute(
+            select(FrameworkControl).where(FrameworkControl.id == gap.control_id)
+        )
+        ctrl = ctrl_result.scalar_one_or_none()
+        ctrl_title = ctrl.title if ctrl else "Control"
+
+        priority_map = {90: ActionItemPriority.CRITICAL, 60: ActionItemPriority.HIGH,
+                        50: ActionItemPriority.MEDIUM, 30: ActionItemPriority.LOW}
+        priority = priority_map.get(gap.remediation_priority, ActionItemPriority.MEDIUM)
+
+        action_item = ActionItem(
+            tenant_id=tenant_id,
+            assessment_id=assessment_id,
+            gap_id=gap_id,
+            title=f"Remediate: {ctrl_title}",
+            description=gap.gap_description,
+            owner_id=body.owner_id or current_user.id,
+            due_date=body.due_date,
+            priority=priority,
+            status=ActionItemStatus.OPEN,
+            ai_generated=True,
+            notes=body.notes,
+        )
+        db.add(action_item)
+        await db.flush()
+        gap.action_item_id = action_item.id
+        action_item_id = action_item.id
+
+    await db.flush()
+    return {
+        "gap_id": gap_id,
+        "recommendation_status": gap.recommendation_status,
+        "action_item_id": action_item_id,
+    }
+
+
+@router.post("/assessments/{assessment_id}/gaps/bulk-action")
+async def bulk_act_on_gaps(
+    assessment_id: str,
+    body: BulkRecommendationRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_roles(UserRole.TENANT_ADMIN, UserRole.SUPER_ADMIN)),
+    tenant_id: str = Depends(get_tenant_id),
+) -> dict:
+    """Accept or reject multiple gap recommendations at once."""
+    if body.action not in ("accept", "reject"):
+        raise HTTPException(status_code=422, detail="action must be 'accept' or 'reject'")
+
+    result = await db.execute(
+        select(ComplianceGap, ComplianceAssessment)
+        .join(ComplianceAssessment, ComplianceGap.assessment_id == ComplianceAssessment.id)
+        .where(
+            ComplianceGap.id.in_(body.gap_ids),
+            ComplianceAssessment.id == assessment_id,
+            ComplianceAssessment.tenant_id == tenant_id,
+        )
+    )
+    rows = result.all()
+
+    processed = 0
+    for gap, _ in rows:
+        gap.recommendation_status = body.action + "ed"
+        if body.action == "accept":
+            ctrl_result = await db.execute(
+                select(FrameworkControl).where(FrameworkControl.id == gap.control_id)
+            )
+            ctrl = ctrl_result.scalar_one_or_none()
+            ctrl_title = ctrl.title if ctrl else "Control"
+            priority_map = {90: ActionItemPriority.CRITICAL, 60: ActionItemPriority.HIGH,
+                            50: ActionItemPriority.MEDIUM, 30: ActionItemPriority.LOW}
+            priority = priority_map.get(gap.remediation_priority, ActionItemPriority.MEDIUM)
+            action_item = ActionItem(
+                tenant_id=tenant_id,
+                assessment_id=assessment_id,
+                gap_id=gap.id,
+                title=f"Remediate: {ctrl_title}",
+                description=gap.gap_description,
+                owner_id=body.owner_id or current_user.id,
+                due_date=body.due_date,
+                priority=priority,
+                status=ActionItemStatus.OPEN,
+                ai_generated=True,
+            )
+            db.add(action_item)
+            await db.flush()
+            gap.action_item_id = action_item.id
+        processed += 1
+
+    await db.flush()
+    return {"processed": processed, "action": body.action + "ed"}
+
+
+# ─── Traceability Matrix ────────────────────────────────────────────────────────
+
+@router.get("/assessments/{assessment_id}/traceability")
+async def get_traceability_matrix(
+    assessment_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    tenant_id: str = Depends(get_tenant_id),
+) -> dict:
+    """Return control → gap → action_item traceability matrix for an assessment."""
+    asmt_result = await db.execute(
+        select(ComplianceAssessment).where(
+            ComplianceAssessment.id == assessment_id,
+            ComplianceAssessment.tenant_id == tenant_id,
+        )
+    )
+    assessment = asmt_result.scalar_one_or_none()
+    if not assessment:
+        raise HTTPException(status_code=404, detail="Assessment not found")
+
+    ca_result = await db.execute(
+        select(ControlAssessment).where(ControlAssessment.assessment_id == assessment_id)
+    )
+    cas = ca_result.scalars().all()
+
+    ctrl_ids = [ca.control_id for ca in cas]
+    ctrl_result = await db.execute(
+        select(FrameworkControl).where(FrameworkControl.id.in_(ctrl_ids))
+    )
+    ctrl_map = {c.id: c for c in ctrl_result.scalars().all()}
+
+    gap_result = await db.execute(
+        select(ComplianceGap).where(ComplianceGap.assessment_id == assessment_id)
+    )
+    gaps_by_control: dict[str, list] = {}
+    for gap in gap_result.scalars().all():
+        gaps_by_control.setdefault(gap.control_id, []).append(gap)
+
+    ai_result = await db.execute(
+        select(ActionItem).where(ActionItem.assessment_id == assessment_id)
+    )
+    ai_by_gap: dict[str, list] = {}
+    for item in ai_result.scalars().all():
+        if item.gap_id:
+            ai_by_gap.setdefault(item.gap_id, []).append(item)
+
+    rows = []
+    for ca in cas:
+        ctrl = ctrl_map.get(ca.control_id)
+        ctrl_gaps = gaps_by_control.get(ca.control_id, [])
+        if ctrl_gaps:
+            for gap in ctrl_gaps:
+                rows.append({
+                    "control_id": ca.control_id,
+                    "control_identifier": ctrl.control_id if ctrl else ca.control_id,
+                    "control_title": ctrl.title if ctrl else "",
+                    "control_category": ctrl.category if ctrl else None,
+                    "control_status": ca.status,
+                    "ai_confidence": ca.ai_confidence,
+                    "gap_id": gap.id,
+                    "gap_description": gap.gap_description,
+                    "gap_severity": gap.severity,
+                    "recommendation_status": gap.recommendation_status,
+                    "is_certification_blocker": gap.is_certification_blocker,
+                    "remediation_priority": gap.remediation_priority,
+                    "action_items": [
+                        {
+                            "id": ai.id,
+                            "title": ai.title,
+                            "status": ai.status,
+                            "priority": ai.priority,
+                            "due_date": ai.due_date,
+                        }
+                        for ai in ai_by_gap.get(gap.id, [])
+                    ],
+                })
+        else:
+            rows.append({
+                "control_id": ca.control_id,
+                "control_identifier": ctrl.control_id if ctrl else ca.control_id,
+                "control_title": ctrl.title if ctrl else "",
+                "control_category": ctrl.category if ctrl else None,
+                "control_status": ca.status,
+                "ai_confidence": ca.ai_confidence,
+                "gap_id": None,
+                "gap_description": None,
+                "gap_severity": None,
+                "recommendation_status": None,
+                "is_certification_blocker": False,
+                "remediation_priority": None,
+                "action_items": [],
+            })
+
+    total_controls = len(cas)
+    gaps_total = sum(len(v) for v in gaps_by_control.values())
+    action_items_open = sum(
+        sum(1 for ai in items if ai.status == "open")
+        for items in ai_by_gap.values()
+    )
+
+    return {
+        "assessment_id": assessment_id,
+        "assessment_name": assessment.name,
+        "rows": rows,
+        "summary": {
+            "total_controls": total_controls,
+            "compliant": sum(1 for ca in cas if ca.status == ControlStatus.IMPLEMENTED),
+            "partial": sum(1 for ca in cas if ca.status == ControlStatus.PARTIALLY_IMPLEMENTED),
+            "gaps": gaps_total,
+            "action_items_total": sum(len(v) for v in ai_by_gap.values()),
+            "action_items_open": action_items_open,
+        },
+    }

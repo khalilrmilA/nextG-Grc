@@ -8,6 +8,7 @@ from app.core.security import decode_token
 from app.models.user import User, UserRole
 
 bearer_scheme = HTTPBearer()
+bearer_scheme_optional = HTTPBearer(auto_error=False)
 
 
 async def get_current_user(
@@ -52,3 +53,29 @@ def require_roles(*roles: UserRole):
 async def get_tenant_id(current_user: User = Depends(get_current_user)) -> str:
     """Extract tenant_id from the current user."""
     return current_user.tenant_id
+
+
+async def get_current_user_optional(
+    credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme_optional),
+    db: AsyncSession = Depends(get_db),
+) -> User | None:
+    """Like get_current_user but returns None if no token is provided (public endpoints)."""
+    if not credentials:
+        return None
+    try:
+        payload = decode_token(credentials.credentials)
+        user_id: str | None = payload.get("sub")
+        if not user_id:
+            return None
+        from sqlalchemy import select
+        result = await db.execute(select(User).where(User.id == user_id))
+        return result.scalar_one_or_none()
+    except Exception:
+        return None
+
+
+def get_tenant_id_optional(
+    current_user: User | None = Depends(get_current_user_optional),
+) -> str | None:
+    """Returns tenant_id or None for public endpoints."""
+    return current_user.tenant_id if current_user else None

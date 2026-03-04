@@ -1,6 +1,7 @@
 import { useState } from "react";
-import { ClipboardList, Plus, AlertTriangle, Calendar, Tag, X, ChevronRight, Sparkles } from "lucide-react";
+import { ClipboardList, Plus, AlertTriangle, Calendar, Tag, X, ChevronRight, Sparkles, UserPlus } from "lucide-react";
 import AuditPlanModal from "../components/ai/AuditPlanModal";
+import CreateAuditorModal from "../components/features/compliance/CreateAuditorModal";
 
 const FW_SHORT: Record<string, string> = {
   "ISO 27001": "ISO 27001", "SOC 2": "SOC 2", "PCI DSS": "PCI DSS",
@@ -272,6 +273,7 @@ function AuditDetailModal({ audit, onClose, onGeneratePlan }: { readonly audit: 
 export default function AuditsPage() {
   const [audits, setAudits] = useState(AUDITS);
   const [showAdd, setShowAdd] = useState(false);
+  const [showCreateAuditor, setShowCreateAuditor] = useState(false);
   const [selected, setSelected] = useState<AuditEntry | null>(null);
   const [planAudit, setPlanAudit] = useState<AuditEntry | null>(null);
 
@@ -285,11 +287,26 @@ export default function AuditsPage() {
           <h1 className="text-2xl font-bold text-gray-900">Audit Management</h1>
           <p className="text-gray-500 text-sm mt-1">{audits.length} audits · {audits.filter(a => a.status !== "closed").length} active</p>
         </div>
-        <button onClick={() => setShowAdd(true)}
-          className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors">
-          <Plus className="w-4 h-4" /> New Audit
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setShowCreateAuditor(true)}
+            className="flex items-center gap-2 border border-gray-200 hover:bg-gray-50 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+          >
+            <UserPlus className="w-4 h-4" /> Add Auditor
+          </button>
+          <button onClick={() => setShowAdd(true)}
+            className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors">
+            <Plus className="w-4 h-4" /> New Audit
+          </button>
+        </div>
       </div>
+
+      {showCreateAuditor && (
+        <CreateAuditorModal
+          onClose={() => setShowCreateAuditor(false)}
+          onCreated={() => setShowCreateAuditor(false)}
+        />
+      )}
 
       <div className="grid grid-cols-4 gap-4">
         {[

@@ -3,10 +3,11 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import func, select
 from pydantic import BaseModel, field_validator
+from typing import Annotated
 
 from app.core.database import get_db
 from app.models.framework import Framework, FrameworkControl, ControlCategory, ControlRequirement, FrameworkStatus
-from app.api.v1.dependencies import get_current_user, get_tenant_id
+from app.api.v1.dependencies import get_current_user, get_tenant_id, get_current_user_optional, get_tenant_id_optional
 from app.api.v1.dependencies.auth import require_roles
 from app.models.user import User, UserRole
 
@@ -49,11 +50,11 @@ class ControlResponse(BaseModel):
 
 @router.get("", response_model=list[FrameworkResponse])
 async def list_frameworks(
-    db: AsyncSession = Depends(get_db),
-    _: User = Depends(get_current_user),
-    tenant_id: str = Depends(get_tenant_id),
+    db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: Annotated[User | None, Depends(get_current_user_optional)],
+    tenant_id: Annotated[str | None, Depends(get_tenant_id_optional)],
 ):
-    """List all available frameworks (built-in + tenant custom)."""
+    """List all available frameworks (built-in + tenant custom). Public for registration step."""
     result = await db.execute(
         select(Framework).where(
             (Framework.is_builtin == True) |

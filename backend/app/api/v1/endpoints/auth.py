@@ -3,12 +3,14 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from pydantic import BaseModel, EmailStr
+from typing import Annotated, Any
 
 from app.core.database import get_db
 from app.core.security import verify_password, hash_password, create_access_token, create_refresh_token, decode_token
 from app.models.user import User, UserRole
 from app.models.tenant import Tenant
 from app.models.subscription import Subscription, SubscriptionTier, SubscriptionStatus
+from app.api.v1.dependencies import get_current_user
 
 router = APIRouter()
 
@@ -27,6 +29,23 @@ class RegisterRequest(BaseModel):
     organization_slug: str
     country: str | None = None
     industry: str | None = None
+    org_size: str | None = None                          # "1-50","51-200","201-1000","1000+"
+    primary_framework_id: str | None = None
+    selected_framework_ids: list[str] = []
+
+
+class UserProfileResponse(BaseModel):
+    id: str
+    email: str
+    first_name: str
+    last_name: str
+    role: str
+    tenant_id: str
+    tenant_name: str
+    primary_framework_id: str | None = None
+    selected_framework_ids: list[Any] = []
+    org_size: str | None = None
+    primary_assessment_id: str | None = None  # auto-created assessment on registration
 
 
 class TokenResponse(BaseModel):
@@ -80,6 +99,9 @@ async def register(body: RegisterRequest, db: AsyncSession = Depends(get_db)):
         slug=body.organization_slug,
         country=body.country,
         industry=body.industry,
+        org_size=body.org_size,
+        primary_framework_id=body.primary_framework_id,
+        selected_framework_ids=body.selected_framework_ids or [],
     )
     db.add(tenant)
     await db.flush()  # Get tenant.id
@@ -108,10 +130,83 @@ async def register(body: RegisterRequest, db: AsyncSession = Depends(get_db)):
     db.add(user)
     await db.flush()
 
+    # Auto-create a draft assessment for the primary framework
+    if body.primary_framework_id:
+        from app.models.compliance import ComplianceAssessment, AssessmentStatus, ControlAssessment, ControlStatus
+        from app.models.framework import FrameworkControl
+        fw_result = await db.execute(
+            select(Framework).where(Framework.id == body.primary_framework_id)
+        )
+        fw = fw_result.scalar_one_or_none()
+        if fw:
+            assessment = ComplianceAssessment(
+                tenant_id=tenant.id,
+                framework_id=fw.id,
+                name=f"{fw.short_name} Compliance Assessment",
+                status=AssessmentStatus.DRAFT,
+            )
+            db.add(assessment)
+            await db.flush()
+
+            # Create ControlAssessment rows for every control in the framework
+            ctrl_result = await db.execute(
+                select(FrameworkControl).where(FrameworkControl.framework_id == fw.id)
+            )
+            controls = ctrl_result.scalars().all()
+            for ctrl in controls:
+                db.add(ControlAssessment(
+                    assessment_id=assessment.id,
+                    control_id=ctrl.id,
+                    status=ControlStatus.NOT_STARTED,
+                ))
+
+    await db.commit()
     token_data = {"sub": user.id, "tenant_id": user.tenant_id, "role": user.role}
     return TokenResponse(
         access_token=create_access_token(token_data),
         refresh_token=create_refresh_token(token_data),
+    )
+
+
+@router.get("/me", response_model=UserProfileResponse)
+async def get_profile(
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    """Return the current user's profile including tenant framework settings."""
+    tenant_result = await db.execute(select(Tenant).where(Tenant.id == current_user.tenant_id))
+    tenant = tenant_result.scalar_one_or_none()
+
+    # Find the primary assessment (most recent for the primary framework)
+    primary_assessment_id = None
+    if tenant and tenant.primary_framework_id:
+        from app.models.compliance import ComplianceAssessment
+        from sqlalchemy import desc
+        a_result = await db.execute(
+            select(ComplianceAssessment)
+            .where(
+                ComplianceAssessment.tenant_id == current_user.tenant_id,
+                ComplianceAssessment.framework_id == tenant.primary_framework_id,
+            )
+            .order_by(desc(ComplianceAssessment.created_at))
+            .limit(1)
+        )
+        assessment = a_result.scalar_one_or_none()
+        if assessment:
+            primary_assessment_id = assessment.id
+
+    return UserProfileResponse(
+        id=current_user.id,
+        email=current_user.email,
+        first_name=current_user.first_name,
+        last_name=current_user.last_name,
+        role=current_user.role,
+        tenant_id=current_user.tenant_id,
+        tenant_name=tenant.name if tenant else "",
+        primary_framework_id=tenant.primary_framework_id if tenant else None,
+        selected_framework_ids=tenant.selected_framework_ids if tenant else [],
+        org_size=tenant.org_size if tenant else None,
+        primary_assessment_id=primary_assessment_id,
     )
 
 

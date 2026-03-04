@@ -306,6 +306,29 @@ export interface GapDetail {
   gap_description: string;
   severity: "critical" | "high" | "medium" | "low";
   remediation_steps?: string;
+  // Phase 4 extended fields
+  recommendation_status?: "pending" | "accepted" | "rejected";
+  is_certification_blocker?: boolean;
+  remediation_priority?: number;
+  action_item_id?: string | null;
+}
+
+export interface MandatoryDocumentStatus {
+  document_type_key: string;
+  clause_ref: string;
+  document_name: string;
+  is_mandatory: boolean;
+  description?: string;
+  sort_order: number;
+  uploaded_document?: UploadedDocument | null;
+  is_uploaded: boolean;
+}
+
+export interface DocumentChecklistResponse {
+  framework_short_name: string;
+  total: number;
+  uploaded: number;
+  items: MandatoryDocumentStatus[];
 }
 
 export interface CrossFrameworkCoverage {

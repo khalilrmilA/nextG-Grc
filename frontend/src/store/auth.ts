@@ -10,6 +10,12 @@ export interface AuthUser {
   org: string;
   accessToken?: string;
   refreshToken?: string;
+  // Framework fields (populated after login via GET /auth/me)
+  tenant_id?: string;
+  primary_framework_id?: string | null;
+  selected_framework_ids?: string[];
+  org_size?: string | null;
+  primary_assessment_id?: string | null;
 }
 
 export const PLAN_FEATURES: Record<PlanTier, {

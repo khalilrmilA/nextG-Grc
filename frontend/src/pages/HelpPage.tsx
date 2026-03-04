@@ -1,9 +1,11 @@
 import { useState } from "react";
+import { Link } from "react-router-dom";
 import {
   HelpCircle, Search, BookOpen, LayoutDashboard, AlertTriangle,
   CheckSquare, ClipboardList, FileText, Building2, BookMarked,
   ChevronDown, ChevronRight, Mail, MessageCircle, Zap,
-  Shield, BarChart3, Upload, Bot,
+  Shield, BarChart3, Upload, Bot, FolderUp, MousePointerClick,
+  ArrowRight, Info,
 } from "lucide-react";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -306,31 +308,70 @@ export default function HelpPage() {
             <div className="space-y-6">
               <div>
                 <h2 className="text-base font-semibold text-gray-900">Getting Started</h2>
-                <p className="text-sm text-gray-500 mt-0.5">Follow these steps to set up your GRC platform from scratch.</p>
+                <p className="text-sm text-gray-500 mt-0.5">Follow these steps to have a working compliance assessment in minutes.</p>
               </div>
 
-              {/* Quick start steps */}
+              {/* ── HOW TO IMPORT DOCUMENTS ── highlighted box */}
+              <div className="bg-blue-50 border border-blue-200 rounded-2xl p-5">
+                <div className="flex items-center gap-2 mb-3">
+                  <FolderUp className="w-5 h-5 text-blue-600" />
+                  <p className="font-bold text-blue-900 text-sm">How to import your documents</p>
+                  <Info className="w-4 h-4 text-blue-400" />
+                </div>
+                <ol className="space-y-2.5">
+                  {[
+                    { nav: "Sidebar → Compliance", action: "Click \"Compliance\" in the left sidebar." },
+                    { nav: "New Assessment", action: "Click the \"New Assessment\" button (top-right). Choose your framework (e.g. ISO 27001) and give it a name." },
+                    { nav: "Open the assessment", action: "Click the assessment card that appears in the list." },
+                    { nav: "Upload & Analyze tab", action: "Click the \"Upload & Analyze\" tab inside the assessment." },
+                    { nav: "Drop your files", action: "Drag-and-drop or click to upload your PDFs, Word docs, or text files (up to 10 MB each). You can upload multiple files." },
+                    { nav: "Run AI Analysis", action: "Click the blue \"Run AI Analysis\" button. The AI reads all uploaded files and scores every control automatically." },
+                    { nav: "See results", action: "Switch to the \"Results\" tab to see which controls are Compliant / Partial / Gap. Open \"Gap Report\" to see what needs fixing." },
+                  ].map((s, i) => (
+                    <li key={i} className="flex gap-3 items-start">
+                      <span className="flex-shrink-0 w-5 h-5 rounded-full bg-blue-600 text-white text-xs font-bold flex items-center justify-center mt-0.5">{i + 1}</span>
+                      <div>
+                        <span className="inline-flex items-center gap-1 bg-white border border-blue-200 rounded px-1.5 py-0.5 text-xs font-mono text-blue-700 mr-1.5">
+                          <MousePointerClick className="w-3 h-3" /> {s.nav}
+                        </span>
+                        <span className="text-sm text-blue-900">{s.action}</span>
+                      </div>
+                    </li>
+                  ))}
+                </ol>
+                <Link
+                  to="/compliance"
+                  className="mt-4 inline-flex items-center gap-1.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold px-4 py-2 rounded-lg transition-colors"
+                >
+                  Go to Compliance <ArrowRight className="w-4 h-4" />
+                </Link>
+              </div>
+
+              {/* Full setup steps */}
               <div className="space-y-3">
                 {[
-                  { icon: Shield,      color: "bg-blue-100 text-blue-600",   step: 1, title: "Configure your organization",   desc: "Go to Settings → Organization and fill in your company name, industry, country, and size. This context is used by the AI assistant for tailored recommendations." },
-                  { icon: BookOpen,    color: "bg-indigo-100 text-indigo-600", step: 2, title: "Select your frameworks",        desc: "Navigate to Frameworks and browse the 8 built-in standards. Click any framework to see its controls. If you have internal standards, create a Custom Framework." },
-                  { icon: AlertTriangle, color: "bg-orange-100 text-orange-600", step: 3, title: "Build your risk register",    desc: "Go to Risk Register → Add Risk. Capture all known organizational risks with their likelihood and impact scores. The heat map will populate automatically." },
-                  { icon: Upload,      color: "bg-green-100 text-green-600",  step: 4, title: "Run your first compliance assessment", desc: "Go to Compliance → New Assessment. Select a framework, upload your existing policy documents, and click Run AI Analysis. The AI will map your documents to framework controls." },
-                  { icon: FileText,    color: "bg-teal-100 text-teal-600",    step: 5, title: "Add your policies",             desc: "Go to Policies → New Policy. Document your security policies with version tracking. Assign owners and review cycles. Track employee attestation." },
-                  { icon: Building2,   color: "bg-rose-100 text-rose-600",    step: 6, title: "Onboard your vendors",          desc: "Go to Vendors → Add Vendor. Start with your critical vendors (cloud, payment, identity). Check that DPAs are signed for all data processors." },
-                  { icon: Bot,         color: "bg-purple-100 text-purple-600", step: 7, title: "Use the AI assistant",        desc: "Click the ⚡ blue button (bottom-right) to open the AI assistant. Ask it to draft policies, explain regulations, or analyze a specific risk scenario." },
-                  { icon: BarChart3,   color: "bg-slate-100 text-slate-600",  step: 8, title: "Monitor your dashboard",       desc: "The Dashboard gives you a live GRC posture overview. Check it weekly to track compliance score trends, overdue audits, and high-severity risks." },
-                ].map(({ icon: Icon, color, step, title, desc }) => (
-                  <div key={step} className="flex gap-4 p-4 bg-white border border-gray-200 rounded-xl">
+                  { icon: Shield,        color: "bg-blue-100 text-blue-600",    step: 1, title: "Create a Compliance Assessment",  where: "Sidebar → Compliance → New Assessment", desc: "Select a framework (ISO 27001, SOC 2, NIST CSF, etc.) and name your assessment. This is your working space for all documents and controls." },
+                  { icon: FolderUp,      color: "bg-purple-100 text-purple-600", step: 2, title: "Upload your documents",           where: "Assessment → Upload & Analyze tab", desc: "Upload any PDFs, Word documents, or TXT files (policies, procedures, evidence). Multiple files allowed." },
+                  { icon: Bot,           color: "bg-orange-100 text-orange-600", step: 3, title: "Run AI Analysis",                 where: "Upload & Analyze tab → Run AI Analysis button", desc: "The AI reads your files and automatically maps them to framework controls, flagging gaps." },
+                  { icon: BarChart3,     color: "bg-green-100 text-green-600",   step: 4, title: "Review Gap Report",               where: "Assessment → Gap Report tab", desc: "See every failing control with severity (Critical/High/Medium). Accept gaps to create action items." },
+                  { icon: BookMarked,    color: "bg-teal-100 text-teal-600",     step: 5, title: "Check Document Checklist",        where: "Assessment → Document Checklist tab", desc: "See all mandatory documents for your framework (ISO 27001 needs ~40). Upload missing ones inline per row." },
+                  { icon: AlertTriangle, color: "bg-red-100 text-red-600",       step: 6, title: "Add Risks",                       where: "Sidebar → Risk Register → Add Risk", desc: "Log your identified risks with likelihood (1–5) and impact (1–5). The heat map populates automatically." },
+                  { icon: FileText,      color: "bg-indigo-100 text-indigo-600", step: 7, title: "Add Policies",                    where: "Sidebar → Policies → New Policy", desc: "Document your security policies. Track versions, review dates, and employee attestation." },
+                  { icon: Building2,     color: "bg-rose-100 text-rose-600",     step: 8, title: "Add Vendors",                     where: "Sidebar → Vendors → Add Vendor", desc: "Track third-party risk. Flag vendors without signed DPAs (required for GDPR/ISO 27001)." },
+                ].map(({ icon: Icon, color, step, title, where, desc }) => (
+                  <div key={step} className="flex gap-4 p-4 bg-white border border-gray-200 rounded-xl hover:border-gray-300 transition-colors">
                     <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${color}`}>
                       <Icon className="w-5 h-5" />
                     </div>
-                    <div>
-                      <div className="flex items-center gap-2">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
                         <span className="text-xs font-bold text-gray-400">Step {step}</span>
+                        <span className="inline-flex items-center gap-1 bg-gray-100 rounded px-1.5 py-0.5 text-xs font-mono text-gray-600">
+                          <MousePointerClick className="w-3 h-3" /> {where}
+                        </span>
                       </div>
                       <p className="text-sm font-semibold text-gray-900 mt-0.5">{title}</p>
-                      <p className="text-sm text-gray-600 mt-1 leading-relaxed">{desc}</p>
+                      <p className="text-sm text-gray-600 mt-0.5 leading-relaxed">{desc}</p>
                     </div>
                   </div>
                 ))}

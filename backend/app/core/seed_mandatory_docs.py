@@ -1,0 +1,395 @@
+"""
+Seed ISO 27001:2022 mandatory documents into the database.
+Called once at application startup if the table is empty.
+"""
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, func
+from app.models.mandatory_document import MandatoryDocument
+
+ISO27001_MANDATORY_DOCS = [
+    # ── Clause 4: Context of the Organization ─────────────────────────────────
+    {
+        "clause_ref": "4.1",
+        "document_name": "Internal and External Issue Register",
+        "document_type_key": "iso27001_4_1_issue_register",
+        "is_mandatory": True,
+        "description": "Documents internal and external issues relevant to the ISMS purpose and strategic direction.",
+        "sort_order": 10,
+    },
+    {
+        "clause_ref": "4.2",
+        "document_name": "Interested Parties Register",
+        "document_type_key": "iso27001_4_2_interested_parties",
+        "is_mandatory": True,
+        "description": "Lists interested parties and their requirements relevant to information security.",
+        "sort_order": 20,
+    },
+    {
+        "clause_ref": "4.3",
+        "document_name": "ISMS Scope Document",
+        "document_type_key": "iso27001_4_3_isms_scope",
+        "is_mandatory": True,
+        "description": "Defines the boundaries and applicability of the ISMS.",
+        "sort_order": 30,
+    },
+    # ── Clause 5: Leadership ───────────────────────────────────────────────────
+    {
+        "clause_ref": "5.2",
+        "document_name": "Information Security Policy",
+        "document_type_key": "iso27001_5_2_infosec_policy",
+        "is_mandatory": True,
+        "description": "Top-level policy document signed by top management defining security objectives and commitments.",
+        "sort_order": 40,
+    },
+    {
+        "clause_ref": "5.3",
+        "document_name": "Roles and Responsibilities Document",
+        "document_type_key": "iso27001_5_3_roles_responsibilities",
+        "is_mandatory": True,
+        "description": "Documents information security roles, responsibilities, and authorities.",
+        "sort_order": 50,
+    },
+    # ── Clause 6: Planning ─────────────────────────────────────────────────────
+    {
+        "clause_ref": "6.1.2",
+        "document_name": "Information Security Risk Assessment Process",
+        "document_type_key": "iso27001_6_1_2_risk_assessment_process",
+        "is_mandatory": True,
+        "description": "Documented process for identifying, analysing and evaluating information security risks.",
+        "sort_order": 60,
+    },
+    {
+        "clause_ref": "6.1.2",
+        "document_name": "Information Security Risk Assessment Report",
+        "document_type_key": "iso27001_6_1_2_risk_assessment_report",
+        "is_mandatory": True,
+        "description": "Results of the risk assessment showing identified risks with likelihood and impact ratings.",
+        "sort_order": 70,
+    },
+    {
+        "clause_ref": "6.1.3",
+        "document_name": "Statement of Applicability (SoA)",
+        "document_type_key": "iso27001_6_1_3_soa",
+        "is_mandatory": True,
+        "description": "Lists all Annex A controls with inclusion/exclusion justification and implementation status.",
+        "sort_order": 80,
+    },
+    {
+        "clause_ref": "6.1.3",
+        "document_name": "Risk Treatment Plan",
+        "document_type_key": "iso27001_6_1_3_risk_treatment_plan",
+        "is_mandatory": True,
+        "description": "Documented plan for treating identified risks, including chosen treatment options and owners.",
+        "sort_order": 90,
+    },
+    {
+        "clause_ref": "6.2",
+        "document_name": "Information Security Objectives",
+        "document_type_key": "iso27001_6_2_infosec_objectives",
+        "is_mandatory": True,
+        "description": "Documented information security objectives aligned with the security policy.",
+        "sort_order": 100,
+    },
+    # ── Clause 7: Support ──────────────────────────────────────────────────────
+    {
+        "clause_ref": "7.2",
+        "document_name": "Competence Records / Training Records",
+        "document_type_key": "iso27001_7_2_competence_records",
+        "is_mandatory": True,
+        "description": "Evidence of competence: training records, certifications, and qualifications of relevant personnel.",
+        "sort_order": 110,
+    },
+    {
+        "clause_ref": "7.4",
+        "document_name": "Internal and External Communication Plan",
+        "document_type_key": "iso27001_7_4_communication_plan",
+        "is_mandatory": False,
+        "description": "Defines what, when, with whom, and how to communicate about the ISMS.",
+        "sort_order": 120,
+    },
+    {
+        "clause_ref": "7.5",
+        "document_name": "ISMS Document Control Procedure",
+        "document_type_key": "iso27001_7_5_document_control",
+        "is_mandatory": True,
+        "description": "Procedure for creating, updating, and controlling documented information.",
+        "sort_order": 130,
+    },
+    # ── Clause 8: Operation ────────────────────────────────────────────────────
+    {
+        "clause_ref": "8.2",
+        "document_name": "Information Security Risk Assessment Results",
+        "document_type_key": "iso27001_8_2_risk_assessment_results",
+        "is_mandatory": True,
+        "description": "Records of periodic risk assessments conducted as part of ISMS operation.",
+        "sort_order": 140,
+    },
+    {
+        "clause_ref": "8.3",
+        "document_name": "Risk Treatment Implementation Records",
+        "document_type_key": "iso27001_8_3_risk_treatment_records",
+        "is_mandatory": True,
+        "description": "Evidence that risk treatment plan actions have been implemented.",
+        "sort_order": 150,
+    },
+    # ── Clause 9: Performance Evaluation ──────────────────────────────────────
+    {
+        "clause_ref": "9.1",
+        "document_name": "Monitoring and Measurement Results",
+        "document_type_key": "iso27001_9_1_monitoring_results",
+        "is_mandatory": True,
+        "description": "Records of monitoring, measurement, analysis, and evaluation activities.",
+        "sort_order": 160,
+    },
+    {
+        "clause_ref": "9.2",
+        "document_name": "Internal Audit Programme",
+        "document_type_key": "iso27001_9_2_audit_programme",
+        "is_mandatory": True,
+        "description": "Annual internal audit schedule covering all ISMS areas.",
+        "sort_order": 170,
+    },
+    {
+        "clause_ref": "9.2",
+        "document_name": "Internal Audit Procedure",
+        "document_type_key": "iso27001_9_2_audit_procedure",
+        "is_mandatory": True,
+        "description": "Documented procedure for planning and conducting internal ISMS audits.",
+        "sort_order": 180,
+    },
+    {
+        "clause_ref": "9.2",
+        "document_name": "Internal Audit Reports",
+        "document_type_key": "iso27001_9_2_audit_reports",
+        "is_mandatory": True,
+        "description": "Results and findings from internal audits of the ISMS.",
+        "sort_order": 190,
+    },
+    {
+        "clause_ref": "9.3",
+        "document_name": "Management Review Records",
+        "document_type_key": "iso27001_9_3_management_review",
+        "is_mandatory": True,
+        "description": "Minutes and outputs from management review meetings of the ISMS.",
+        "sort_order": 200,
+    },
+    # ── Clause 10: Improvement ─────────────────────────────────────────────────
+    {
+        "clause_ref": "10.1",
+        "document_name": "Nonconformity and Corrective Action Records",
+        "document_type_key": "iso27001_10_1_corrective_actions",
+        "is_mandatory": True,
+        "description": "Records of nonconformities identified and corrective actions taken.",
+        "sort_order": 210,
+    },
+    {
+        "clause_ref": "10.2",
+        "document_name": "Continual Improvement Records",
+        "document_type_key": "iso27001_10_2_improvement_records",
+        "is_mandatory": False,
+        "description": "Evidence of continual improvement activities for the ISMS.",
+        "sort_order": 220,
+    },
+    # ── Annex A Controls (key mandatory documents) ────────────────────────────
+    {
+        "clause_ref": "A.5.1",
+        "document_name": "Information Security Policies (Set)",
+        "document_type_key": "iso27001_a5_1_policy_set",
+        "is_mandatory": True,
+        "description": "Complete set of information security policies covering all relevant areas.",
+        "sort_order": 300,
+    },
+    {
+        "clause_ref": "A.5.2",
+        "document_name": "Information Security Roles and Responsibilities",
+        "document_type_key": "iso27001_a5_2_roles",
+        "is_mandatory": True,
+        "description": "Defined information security roles and responsibilities across the organization.",
+        "sort_order": 310,
+    },
+    {
+        "clause_ref": "A.5.10",
+        "document_name": "Acceptable Use Policy",
+        "document_type_key": "iso27001_a5_10_acceptable_use",
+        "is_mandatory": True,
+        "description": "Policy defining acceptable use of information and associated assets.",
+        "sort_order": 320,
+    },
+    {
+        "clause_ref": "A.5.13",
+        "document_name": "Information Classification Policy",
+        "document_type_key": "iso27001_a5_13_classification_policy",
+        "is_mandatory": True,
+        "description": "Policy for classifying information based on confidentiality, integrity, and availability requirements.",
+        "sort_order": 330,
+    },
+    {
+        "clause_ref": "A.5.20",
+        "document_name": "Supplier Relationships Policy / ICT Supply Chain Policy",
+        "document_type_key": "iso27001_a5_20_supplier_policy",
+        "is_mandatory": True,
+        "description": "Policy addressing information security in supplier relationships.",
+        "sort_order": 340,
+    },
+    {
+        "clause_ref": "A.5.29",
+        "document_name": "Business Continuity / Information Security During Disruption",
+        "document_type_key": "iso27001_a5_29_bcp_infosec",
+        "is_mandatory": True,
+        "description": "Plans for maintaining information security during business disruption.",
+        "sort_order": 350,
+    },
+    {
+        "clause_ref": "A.5.30",
+        "document_name": "ICT Readiness Plan for Business Continuity",
+        "document_type_key": "iso27001_a5_30_ict_readiness",
+        "is_mandatory": True,
+        "description": "ICT readiness documentation supporting business continuity objectives.",
+        "sort_order": 360,
+    },
+    {
+        "clause_ref": "A.5.31",
+        "document_name": "Legal, Statutory, Regulatory and Contractual Requirements Register",
+        "document_type_key": "iso27001_a5_31_legal_register",
+        "is_mandatory": True,
+        "description": "Register of applicable legal, regulatory, and contractual requirements.",
+        "sort_order": 370,
+    },
+    {
+        "clause_ref": "A.6.1",
+        "document_name": "Screening Policy / Background Check Procedure",
+        "document_type_key": "iso27001_a6_1_screening",
+        "is_mandatory": False,
+        "description": "Procedure for background verification checks for employment candidates.",
+        "sort_order": 380,
+    },
+    {
+        "clause_ref": "A.6.2",
+        "document_name": "Terms and Conditions of Employment (Security Clauses)",
+        "document_type_key": "iso27001_a6_2_employment_terms",
+        "is_mandatory": True,
+        "description": "Employment agreements containing information security responsibilities.",
+        "sort_order": 390,
+    },
+    {
+        "clause_ref": "A.6.3",
+        "document_name": "Information Security Awareness and Training Programme",
+        "document_type_key": "iso27001_a6_3_awareness_training",
+        "is_mandatory": True,
+        "description": "Programme for information security awareness, education, and training.",
+        "sort_order": 400,
+    },
+    {
+        "clause_ref": "A.7.1",
+        "document_name": "Physical Security Perimeters / Site Security Procedure",
+        "document_type_key": "iso27001_a7_1_physical_security",
+        "is_mandatory": False,
+        "description": "Documentation of physical security controls for secure areas.",
+        "sort_order": 410,
+    },
+    {
+        "clause_ref": "A.7.9",
+        "document_name": "Clear Desk and Clear Screen Policy",
+        "document_type_key": "iso27001_a7_9_clear_desk",
+        "is_mandatory": False,
+        "description": "Policy requiring clear desks and locked screens to protect sensitive information.",
+        "sort_order": 420,
+    },
+    {
+        "clause_ref": "A.8.1",
+        "document_name": "User Endpoint Devices Policy",
+        "document_type_key": "iso27001_a8_1_endpoint_policy",
+        "is_mandatory": True,
+        "description": "Policy covering management and security of user endpoint devices.",
+        "sort_order": 430,
+    },
+    {
+        "clause_ref": "A.8.2",
+        "document_name": "Privileged Access Management Policy",
+        "document_type_key": "iso27001_a8_2_privileged_access",
+        "is_mandatory": True,
+        "description": "Policy and procedures for managing privileged access rights.",
+        "sort_order": 440,
+    },
+    {
+        "clause_ref": "A.8.5",
+        "document_name": "Secure Authentication Policy",
+        "document_type_key": "iso27001_a8_5_authentication",
+        "is_mandatory": True,
+        "description": "Policy defining secure authentication requirements and methods.",
+        "sort_order": 450,
+    },
+    {
+        "clause_ref": "A.8.8",
+        "document_name": "Vulnerability Management Procedure",
+        "document_type_key": "iso27001_a8_8_vulnerability_mgmt",
+        "is_mandatory": True,
+        "description": "Procedure for identifying, assessing, and remediating technical vulnerabilities.",
+        "sort_order": 460,
+    },
+    {
+        "clause_ref": "A.8.13",
+        "document_name": "Information Backup Policy",
+        "document_type_key": "iso27001_a8_13_backup_policy",
+        "is_mandatory": True,
+        "description": "Policy for backup of information, software, and systems.",
+        "sort_order": 470,
+    },
+    {
+        "clause_ref": "A.8.15",
+        "document_name": "Logging Policy / Audit Logging Procedure",
+        "document_type_key": "iso27001_a8_15_logging",
+        "is_mandatory": True,
+        "description": "Policy and procedures for logging of security-relevant events.",
+        "sort_order": 480,
+    },
+    {
+        "clause_ref": "A.8.16",
+        "document_name": "Network Monitoring Procedure",
+        "document_type_key": "iso27001_a8_16_network_monitoring",
+        "is_mandatory": False,
+        "description": "Procedure for monitoring networks to detect anomalous behavior.",
+        "sort_order": 490,
+    },
+    {
+        "clause_ref": "A.8.24",
+        "document_name": "Cryptography Policy / Encryption Standard",
+        "document_type_key": "iso27001_a8_24_cryptography",
+        "is_mandatory": True,
+        "description": "Policy on the use of cryptographic controls including key management.",
+        "sort_order": 500,
+    },
+    {
+        "clause_ref": "A.8.28",
+        "document_name": "Secure Coding Standard / Secure Development Policy",
+        "document_type_key": "iso27001_a8_28_secure_coding",
+        "is_mandatory": False,
+        "description": "Standards for secure software development practices.",
+        "sort_order": 510,
+    },
+    {
+        "clause_ref": "A.8.34",
+        "document_name": "Audit Test Plan / Protected Systems Access Procedure",
+        "document_type_key": "iso27001_a8_34_audit_access",
+        "is_mandatory": False,
+        "description": "Procedure for protecting audit tools and controlling access during audits.",
+        "sort_order": 520,
+    },
+]
+
+
+async def seed_mandatory_documents(db: AsyncSession) -> None:
+    """Seed mandatory documents if the table is empty."""
+    result = await db.execute(select(func.count()).select_from(MandatoryDocument))
+    count = result.scalar()
+    if count and count > 0:
+        return
+
+    for item in ISO27001_MANDATORY_DOCS:
+        doc = MandatoryDocument(
+            framework_short_name="ISO27001",
+            **item,
+        )
+        db.add(doc)
+
+    await db.commit()

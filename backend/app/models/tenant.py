@@ -17,6 +17,11 @@ class Tenant(Base):
     industry: Mapped[str | None] = mapped_column(String(100), nullable=True)
     country: Mapped[str | None] = mapped_column(String(10), nullable=True)  # ISO 3166-1
 
+    # Framework selection (set during registration)
+    primary_framework_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    selected_framework_ids: Mapped[list] = mapped_column(JSON, default=list)
+    org_size: Mapped[str | None] = mapped_column(String(20), nullable=True)  # "1-50","51-200","201-1000","1000+"
+
     # Feature flags per tenant (from subscription tier)
     features: Mapped[dict] = mapped_column(JSON, default=dict)
 

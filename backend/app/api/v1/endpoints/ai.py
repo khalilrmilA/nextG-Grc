@@ -438,6 +438,107 @@ Be direct and specific. Base scoring strictly on the responses provided."""
     )
 
 
+class RemediationPlanRequest(BaseModel):
+    assessment_id: str
+    framework_short_name: str
+    gaps: list[dict]    # list of {control_identifier, control_title, severity, gap_description, is_certification_blocker}
+    model: str = DEFAULT_MODEL
+
+
+@router.post("/stream-remediation-plan")
+async def stream_remediation_plan(request: RemediationPlanRequest):
+    """
+    Stream a prioritized 90-day remediation plan based on open compliance gaps.
+    Gaps are sorted by severity/blocker status and organized into monthly phases.
+    """
+    blockers = [g for g in request.gaps if g.get("is_certification_blocker")]
+    high = [g for g in request.gaps if not g.get("is_certification_blocker") and g.get("severity") in ("critical", "high")]
+    others = [g for g in request.gaps if not g.get("is_certification_blocker") and g.get("severity") not in ("critical", "high")]
+
+    def fmt_gap(g: dict) -> str:
+        return f"- [{g.get('control_identifier','')}] {g.get('control_title','')}: {g.get('gap_description','')[:150]}"
+
+    blockers_text = "\n".join(fmt_gap(g) for g in blockers[:10]) or "None"
+    high_text = "\n".join(fmt_gap(g) for g in high[:10]) or "None"
+    others_text = "\n".join(fmt_gap(g) for g in others[:15]) or "None"
+
+    prompt = f"""Create a detailed, actionable 90-day remediation plan to achieve {request.framework_short_name} certification readiness.
+
+CERTIFICATION BLOCKERS (must fix first):
+{blockers_text}
+
+HIGH PRIORITY GAPS:
+{high_text}
+
+MEDIUM/LOW PRIORITY GAPS:
+{others_text}
+
+Generate the plan in this exact Markdown structure:
+
+# 90-Day {request.framework_short_name} Remediation Plan
+
+## Executive Summary
+2-3 sentences on the overall remediation strategy and certification timeline.
+
+## Month 1 (Days 1–30): Critical Foundations
+Focus on all certification blockers and critical gaps.
+
+### Week 1-2
+| Control | Action | Owner Role | Deliverable |
+|---------|--------|-----------|-------------|
+| ...     | ...    | CISO/IT   | ...         |
+
+### Week 3-4
+| Control | Action | Owner Role | Deliverable |
+|---------|--------|-----------|-------------|
+
+## Month 2 (Days 31–60): Core Controls
+Address high-priority gaps and begin documentation.
+
+### Week 5-6
+| Control | Action | Owner Role | Deliverable |
+|---------|--------|-----------|-------------|
+
+### Week 7-8
+| Control | Action | Owner Role | Deliverable |
+|---------|--------|-----------|-------------|
+
+## Month 3 (Days 61–90): Finalization & Readiness
+Complete remaining gaps, internal audit, management review.
+
+### Week 9-10
+| Control | Action | Owner Role | Deliverable |
+|---------|--------|-----------|-------------|
+
+### Week 11-12
+| Control | Action | Owner Role | Deliverable |
+|---------|--------|-----------|-------------|
+
+## Key Milestones
+| Date | Milestone | Success Criteria |
+|------|-----------|-----------------|
+| Day 30 | ... | ... |
+| Day 60 | ... | ... |
+| Day 90 | ... | ... |
+
+## Resource Requirements
+- Personnel: roles needed
+- Tools: any tooling recommendations
+- Budget estimate: rough ranges
+
+## Risk to Plan
+Top 2-3 risks that could delay the plan and mitigations.
+
+Be specific, practical, and directly tied to the gaps listed above."""
+
+    messages = [{"role": "user", "content": prompt}]
+    return StreamingResponse(
+        _ollama_sse_generator(messages, request.model, SYSTEM_PROMPT),
+        media_type=_SSE_MEDIA_TYPE,
+        headers=_SSE_HEADERS,
+    )
+
+
 @router.get("/health")
 async def ai_health():
     """Check if Ollama is reachable."""
