@@ -2,9 +2,11 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter } from "react-router-dom";
+import { I18nextProvider } from "react-i18next";
 import App from "./App";
 import "./index.css";
 import "./store/appearance"; // side-effect: applies saved theme/density to <html> immediately
+import i18n from "./i18n";   // side-effect: initialises i18next + applies RTL direction
 
 // Clear stale Zustand auth (had accessToken: null, caused 401 redirect loops)
 // Also clear old sessionStorage key from previous auth implementation
@@ -56,11 +58,13 @@ class ErrorBoundary extends React.Component<
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
     <ErrorBoundary>
-      <QueryClientProvider client={queryClient}>
-        <BrowserRouter>
-          <App />
-        </BrowserRouter>
-      </QueryClientProvider>
+      <I18nextProvider i18n={i18n}>
+        <QueryClientProvider client={queryClient}>
+          <BrowserRouter>
+            <App />
+          </BrowserRouter>
+        </QueryClientProvider>
+      </I18nextProvider>
     </ErrorBoundary>
   </React.StrictMode>
 );

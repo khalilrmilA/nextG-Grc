@@ -1,10 +1,12 @@
 import { useState, useEffect } from "react";
 import { useNavigate, Link } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import { Shield, ChevronRight, ChevronLeft, Check, Eye, EyeOff } from "lucide-react";
 import { authApi } from "../api/endpoints";
 import { frameworksApi } from "../api/endpoints";
 import { authSession } from "../store/auth";
 import FrameworkSelectionCard from "../components/features/compliance/FrameworkSelectionCard";
+import LanguageSwitcher from "../components/LanguageSwitcher";
 import type { Framework } from "@/types";
 
 const COUNTRIES = [
@@ -50,6 +52,7 @@ function passwordStrength(pw: string): { score: number; label: string; color: st
 
 export default function RegisterPage() {
   const navigate = useNavigate();
+  const { t } = useTranslation();
   const [step, setStep] = useState(1);
   const [showPw, setShowPw] = useState(false);
   const [error, setError] = useState("");
@@ -155,8 +158,9 @@ export default function RegisterPage() {
           <div className="w-14 h-14 bg-blue-500 rounded-2xl flex items-center justify-center mb-3 shadow-lg">
             <Shield className="w-8 h-8 text-white" />
           </div>
-          <h1 className="text-3xl font-bold text-white">Create your GRC workspace</h1>
+          <h1 className="text-3xl font-bold text-white">{t("auth.sign_up_subtitle").split(".")[0]}</h1>
           <p className="text-slate-400 mt-1 text-sm">14-day free trial · No credit card required</p>
+          <div className="mt-3"><LanguageSwitcher /></div>
         </div>
 
         {/* Step indicator */}
@@ -410,8 +414,8 @@ export default function RegisterPage() {
           )}
 
           <p className="text-center text-sm text-gray-500 mt-4">
-            Already have an account?{" "}
-            <Link to="/login" className="text-blue-600 font-medium hover:underline">Sign in</Link>
+            {t("auth.have_account")}{" "}
+            <Link to="/login" className="text-blue-600 font-medium hover:underline">{t("auth.sign_in")}</Link>
           </p>
         </div>
       </div>

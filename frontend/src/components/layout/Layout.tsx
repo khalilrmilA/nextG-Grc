@@ -1,8 +1,10 @@
 import { useState, useEffect, useRef } from "react";
 import { Outlet, NavLink, useNavigate, useLocation } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useTranslation } from "react-i18next";
 import { useAuthStore, authSession, PLAN_FEATURES, type PlanTier } from "../../store/auth";
 import AIAssistant from "../ai/AIAssistant";
+import LanguageSwitcher from "../LanguageSwitcher";
 import { notificationsApi } from "../../api/endpoints";
 import type { AppNotification } from "../../types";
 import { useAppearance } from "../../store/appearance";
@@ -123,6 +125,7 @@ function NotificationBell() {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
+  const { t } = useTranslation();
   const qc = useQueryClient();
 
   // Try to fetch real notifications; fall back to demo data on error
@@ -190,7 +193,7 @@ function NotificationBell() {
           <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
             <div className="flex items-center gap-2">
               <Bell className="w-4 h-4 text-gray-500" />
-              <h3 className="font-semibold text-gray-900 text-sm">Notifications</h3>
+              <h3 className="font-semibold text-gray-900 text-sm">{t("nav.notifications")}</h3>
               {unreadCount > 0 && (
                 <span className="text-xs font-semibold px-1.5 py-0.5 bg-red-50 text-red-600 rounded-full">
                   {unreadCount} new
@@ -204,7 +207,7 @@ function NotificationBell() {
                   onClick={() => markAllRead.mutate()}
                   className="text-xs text-blue-600 hover:text-blue-700 font-medium px-2 py-1 rounded-lg hover:bg-blue-50 transition-colors"
                 >
-                  Mark all read
+                  {t("nav.mark_all_read")}
                 </button>
               )}
               <button
@@ -224,8 +227,8 @@ function NotificationBell() {
                 <div className="w-12 h-12 rounded-full bg-gray-100 flex items-center justify-center mb-3">
                   <Bell className="w-5 h-5 text-gray-300" />
                 </div>
-                <p className="text-sm font-medium text-gray-500">No notifications</p>
-                <p className="text-xs text-gray-400 mt-1">You're all caught up!</p>
+                <p className="text-sm font-medium text-gray-500">{t("nav.no_notifications")}</p>
+                <p className="text-xs text-gray-400 mt-1">{t("nav.all_caught_up")}</p>
               </div>
             ) : (
               notifications.map(n => {
@@ -273,7 +276,7 @@ function NotificationBell() {
           <div className="px-4 py-2.5 border-t border-gray-100 flex items-center justify-between">
             {isError && (
               <span className="text-xs text-amber-600 flex items-center gap-1">
-                <AlertCircle className="w-3 h-3" /> Demo data — backend offline
+                <AlertCircle className="w-3 h-3" /> {t("nav.demo_data")}
               </span>
             )}
             {!isError && <span />}
@@ -282,7 +285,7 @@ function NotificationBell() {
               onClick={() => { setOpen(false); navigate("/settings?tab=notifications"); }}
               className="text-xs text-gray-500 hover:text-blue-600 font-medium transition-colors flex items-center gap-1"
             >
-              <Settings className="w-3 h-3" /> Manage preferences
+              <Settings className="w-3 h-3" /> {t("nav.manage_preferences")}
             </button>
           </div>
         </div>
@@ -330,8 +333,9 @@ export default function Layout() {
   const user = useAuthStore((u) => u);
   const navigate = useNavigate();
   const location = useLocation();
+  const { t } = useTranslation();
   const segment  = location.pathname.split("/")[1] || "dashboard";
-  const pageLabel = PAGE_LABELS[segment] ?? segment;
+  const pageLabel = t(`nav.${segment}` as never, PAGE_LABELS[segment] ?? segment);
   const [appearance] = useAppearance();
   const sc = sidebarTextClasses(appearance.sidebarStyle);
 
@@ -363,7 +367,7 @@ export default function Layout() {
           </div>
           <div>
             <p className={`font-bold text-sm leading-none tracking-tight ${sc.logo}`}>GRC Platform</p>
-            <p className={`text-xs mt-0.5 ${sc.sub}`}>Security & Compliance</p>
+            <p className={`text-xs mt-0.5 ${sc.sub}`}>{t("auth.sign_in_subtitle").split(" ").slice(0, 2).join(" ")} &amp; Compliance</p>
           </div>
         </div>
 
@@ -403,7 +407,7 @@ export default function Layout() {
           {user?.role === "auditor" && (
             <div>
               <p className={`text-xs font-semibold uppercase tracking-widest px-3 mb-2 ${sc.navLabel}`}>
-                Audit Portal
+                {t("nav.audit_portal")}
               </p>
               <div className="space-y-0.5">
                 {AUDITOR_NAV.map(({ to, icon: Icon, label }) => (
@@ -432,7 +436,7 @@ export default function Layout() {
           {user?.role !== "auditor" && NAV_GROUPS.map(group => (
             <div key={group.label}>
               <p className={`text-xs font-semibold uppercase tracking-widest px-3 mb-2 ${sc.navLabel}`}>
-                {group.label}
+                {t(`nav.${group.label.toLowerCase()}` as never, group.label)}
               </p>
               <div className="space-y-0.5">
                 {group.items.map(({ to, icon: Icon, label, module }) => {
@@ -447,7 +451,7 @@ export default function Layout() {
                         className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium w-full transition-all group opacity-50 ${sc.navItem}`}
                       >
                         <Icon className="w-4 h-4 flex-shrink-0" />
-                        <span className="flex-1 text-left">{label}</span>
+                        <span className="flex-1 text-left">{t(`nav.${module}` as never, label)}</span>
                         <Lock className="w-3 h-3 group-hover:text-blue-400 transition-colors" />
                       </button>
                     );
@@ -465,7 +469,7 @@ export default function Layout() {
                       {({ isActive }) => (
                         <>
                           <Icon className={`w-4 h-4 flex-shrink-0 ${isActive ? sc.navIconActive : sc.navIcon}`} />
-                          <span className="flex-1">{label}</span>
+                          <span className="flex-1">{t(`nav.${module}` as never, label)}</span>
                         </>
                       )}
                     </NavLink>
@@ -479,8 +483,8 @@ export default function Layout() {
         {/* Bottom actions */}
         <div className={`px-3 pb-4 pt-3 border-t ${sc.divider} space-y-0.5`}>
           {[
-            { to: "/settings", icon: Settings,   label: "Settings"       },
-            { to: "/help",     icon: HelpCircle, label: "Help & Support" },
+            { to: "/settings", icon: Settings,   label: t("nav.settings") },
+            { to: "/help",     icon: HelpCircle, label: t("nav.help")     },
           ].map(({ to, icon: Icon, label }) => (
             <NavLink
               key={to}
@@ -501,7 +505,7 @@ export default function Layout() {
             className={`flex items-center gap-3 px-3 py-2.5 w-full rounded-xl text-sm font-medium transition-all ${sc.logout}`}
           >
             <LogOut className="w-4 h-4" />
-            Sign Out
+            {t("nav.sign_out")}
           </button>
         </div>
       </aside>
@@ -516,6 +520,8 @@ export default function Layout() {
             <span className="text-gray-900 font-semibold">{pageLabel}</span>
           </div>
           <div className="flex items-center gap-3">
+            {/* Language switcher */}
+            <LanguageSwitcher />
             {/* Live notification bell */}
             <NotificationBell />
             {/* Avatar */}

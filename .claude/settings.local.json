@@ -168,7 +168,17 @@
       "Bash(do)",
       "Bash(done)",
       "Bash(python seed_frameworks.py)",
-      "Bash(python -c \"import sys,json; data=json.load\\(sys.stdin\\); [print\\(f[''short_name''], f.get\\(''control_count'',''?''\\), ''controls |'', f[''name'']\\) for f in data]\")"
+      "Bash(python -c \"import sys,json; data=json.load\\(sys.stdin\\); [print\\(f[''short_name''], f.get\\(''control_count'',''?''\\), ''controls |'', f[''name'']\\) for f in data]\")",
+      "WebFetch(domain:intuitem.gitbook.io)",
+      "WebFetch(domain:api.github.com)",
+      "Bash(curl -s \"https://api.github.com/repos/intuitem/ciso-assistant-community/contents/backend/library/libraries?per_page=300\")",
+      "Bash(python3 -c \"import json,sys; data=json.load\\(sys.stdin\\); [print\\(f''{i+1}. {item[\"\"name\"\"]}''\\) for i,item in enumerate\\(data\\)]\")",
+      "Bash(npm install i18next react-i18next)",
+      "Bash(python -c \"import sys,json; data=json.load\\(sys.stdin\\); print\\(f''{len\\(data\\)} frameworks''\\); [print\\(f''  {f[\"\"short_name\"\"]:20} {f.get\\(\"\"control_count\"\",\"\"?\"\"\\)} controls''\\) for f in data]\")",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:4000/)",
+      "Bash(python seed_frameworks_extra1.py)",
+      "Bash(python seed_frameworks_extra2.py)",
+      "Bash(python seed_frameworks_extra3.py)"
     ]
   }
 }
