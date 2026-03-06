@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useSearchParams } from "react-router-dom";
 import {
   Settings, User, Bell, Shield, Key, Globe, Palette,
   Building2, Save, Eye, EyeOff, Check, AlertTriangle,
@@ -10,10 +11,11 @@ import { useAuthStore, PLAN_FEATURES, type PlanTier } from "../store/auth";
 import { notificationsApi } from "../api/endpoints";
 import type { NotificationPreference, NotificationType, NotificationChannel } from "../types";
 import { useAppearance, appearanceStore, type ThemeMode, type Density, type AccentColor, type FontSize, type SidebarStyle } from "../store/appearance";
+import { useFramework } from "../context/FrameworkContext";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-type Tab = "profile" | "organization" | "notifications" | "security" | "api" | "appearance" | "admin";
+type Tab = "profile" | "organization" | "framework" | "notifications" | "security" | "api" | "appearance" | "admin";
 
 // ── Reusable primitives ───────────────────────────────────────────────────────
 
@@ -102,6 +104,167 @@ function LockedOverlay({ requiredPlan }: { requiredPlan: string }) {
       >
         Upgrade plan
       </button>
+    </div>
+  );
+}
+
+// ── Tab: Framework ────────────────────────────────────────────────────────────
+
+function FrameworkTab() {
+  const { primaryFramework, selectedFrameworks, allFrameworks, loading, saveFrameworks } = useFramework();
+
+  const [primaryId, setPrimaryId] = useState<string>(() => primaryFramework?.id ?? "");
+  const [secondaryIds, setSecondaryIds] = useState<string[]>(
+    () => selectedFrameworks.filter(f => f.id !== primaryFramework?.id).map(f => f.id)
+  );
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [search, setSearch] = useState("");
+
+  // Sync when context loads
+  useEffect(() => {
+    if (primaryFramework && !primaryId) setPrimaryId(primaryFramework.id);
+    setSecondaryIds(selectedFrameworks.filter(f => f.id !== primaryFramework?.id).map(f => f.id));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [primaryFramework, selectedFrameworks]);
+
+  function toggleSecondary(id: string) {
+    if (id === primaryId) return;
+    setSecondaryIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
+  }
+
+  async function handleSave() {
+    if (!primaryId) return;
+    setSaving(true);
+    try {
+      await saveFrameworks(primaryId, [primaryId, ...secondaryIds.filter(x => x !== primaryId)]);
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2500);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const filtered = allFrameworks.filter(fw =>
+    !search || fw.name.toLowerCase().includes(search.toLowerCase()) || fw.short_name.toLowerCase().includes(search.toLowerCase())
+  );
+
+  const primaryFw = allFrameworks.find(f => f.id === primaryId);
+
+  return (
+    <div className="space-y-5">
+      <div>
+        <h2 className="text-base font-semibold text-gray-900">Workspace Frameworks</h2>
+        <p className="text-sm text-gray-500 mt-0.5">
+          Select your <strong>primary framework</strong> (radio) — the dashboard and controls are built around it.
+          Add <strong>secondary frameworks</strong> (checkboxes) for cross-framework tracking.
+        </p>
+      </div>
+
+      {/* Summary */}
+      {primaryFw && (
+        <div className="p-3 bg-blue-50 border border-blue-100 rounded-xl text-sm text-blue-800">
+          <strong>Primary:</strong> {primaryFw.name} ({primaryFw.control_count} controls)
+          {secondaryIds.length > 0 && (
+            <span className="ml-2 text-blue-600">
+              +{secondaryIds.length} secondary framework{secondaryIds.length > 1 ? "s" : ""}
+            </span>
+          )}
+        </div>
+      )}
+
+      {/* Search */}
+      <input
+        type="text"
+        value={search}
+        onChange={e => setSearch(e.target.value)}
+        placeholder="Search frameworks…"
+        className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+      />
+
+      {/* Framework list */}
+      {loading ? (
+        <div className="grid grid-cols-2 gap-3">
+          {[1,2,3,4].map(i => <div key={i} className="h-20 bg-gray-100 rounded-xl animate-pulse" />)}
+        </div>
+      ) : (
+        <div className="grid grid-cols-2 gap-3 max-h-[420px] overflow-y-auto pr-1">
+          {filtered.map(fw => {
+            const isPrimary = fw.id === primaryId;
+            const isSecondary = secondaryIds.includes(fw.id);
+            return (
+              <div
+                key={fw.id}
+                className={`relative rounded-xl border-2 p-3 transition-all ${
+                  isPrimary ? "border-blue-500 bg-blue-50 shadow-sm"
+                  : isSecondary ? "border-slate-400 bg-slate-50"
+                  : "border-gray-200 bg-white hover:border-gray-300"
+                }`}
+              >
+                <div className="flex items-start justify-between gap-2">
+                  {/* Radio — set primary */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPrimaryId(fw.id);
+                      setSecondaryIds(prev => prev.filter(x => x !== fw.id));
+                    }}
+                    className="flex items-center gap-2 flex-1 text-left"
+                  >
+                    <div className={`w-4 h-4 rounded-full border-2 flex-shrink-0 flex items-center justify-center ${
+                      isPrimary ? "border-blue-500 bg-blue-500" : "border-gray-300"
+                    }`}>
+                      {isPrimary && <div className="w-1.5 h-1.5 rounded-full bg-white" />}
+                    </div>
+                    <span className="text-sm font-semibold text-gray-900 leading-tight">{fw.short_name}</span>
+                  </button>
+
+                  {/* Checkbox — add as secondary */}
+                  {!isPrimary && (
+                    <button
+                      type="button"
+                      onClick={() => toggleSecondary(fw.id)}
+                      className={`w-5 h-5 rounded border-2 flex-shrink-0 flex items-center justify-center transition-colors ${
+                        isSecondary ? "bg-slate-600 border-slate-600" : "border-gray-300 hover:border-slate-400"
+                      }`}
+                    >
+                      {isSecondary && <Check className="w-3 h-3 text-white" />}
+                    </button>
+                  )}
+                </div>
+
+                <p className="text-xs text-gray-400 mt-1 ml-6">{fw.control_count} controls</p>
+
+                {isPrimary && (
+                  <span className="ml-6 mt-1 inline-block text-xs font-medium text-blue-700 bg-blue-100 px-2 py-0.5 rounded-full">
+                    Primary
+                  </span>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      <div className="flex items-center justify-between pt-4 border-t border-gray-100">
+        <p className="text-xs text-gray-400">Existing assessments are not affected when you switch frameworks.</p>
+        <div className="flex items-center gap-3">
+          {saved && (
+            <span className="flex items-center gap-1.5 text-sm text-green-600">
+              <Check className="w-4 h-4" /> Saved
+            </span>
+          )}
+          <button
+            type="button"
+            onClick={handleSave}
+            disabled={saving || !primaryId}
+            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          >
+            {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+            {saving ? "Saving…" : "Save Frameworks"}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
@@ -1076,11 +1239,24 @@ export default function SettingsPage() {
   const isAdmin = user?.role === "admin";
   const plan    = user?.plan ?? "free_trial";
 
-  const [activeTab, setActiveTab] = useState<Tab>("profile");
+  const [searchParams] = useSearchParams();
+  const [activeTab, setActiveTab] = useState<Tab>(() => {
+    const t = searchParams.get("tab");
+    const valid: Tab[] = ["profile","organization","framework","notifications","security","api","appearance","admin"];
+    return valid.includes(t as Tab) ? (t as Tab) : "profile";
+  });
+
+  // Sync if URL changes
+  useEffect(() => {
+    const t = searchParams.get("tab");
+    const valid: Tab[] = ["profile","organization","framework","notifications","security","api","appearance","admin"];
+    if (t && valid.includes(t as Tab)) setActiveTab(t as Tab);
+  }, [searchParams]);
 
   const ALL_TABS: { id: Tab; icon: React.ElementType; label: string; adminOnly?: boolean }[] = [
     { id: "profile",       icon: User,      label: "Profile"            },
     { id: "organization",  icon: Building2, label: "Organization"       },
+    { id: "framework",     icon: Shield,    label: "Framework"          },
     { id: "notifications", icon: Bell,      label: "Notifications"      },
     { id: "security",      icon: Shield,    label: "Security"           },
     { id: "api",           icon: Key,       label: "API & Integrations" },
@@ -1099,6 +1275,7 @@ export default function SettingsPage() {
     }
     if (tab === "profile")       return <ProfileTab />;
     if (tab === "organization")  return <OrganizationTab />;
+    if (tab === "framework")     return <FrameworkTab />;
     if (tab === "notifications") return <NotificationsTab />;
     if (tab === "security")      return <SecurityTab />;
     if (tab === "api")           return <ApiTab />;

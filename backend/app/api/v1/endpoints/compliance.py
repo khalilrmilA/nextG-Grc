@@ -470,9 +470,11 @@ async def create_assessment(
         scope_description=body.scope_description,
         status=AssessmentStatus.DRAFT,
         lead_assessor_id=current_user.id,
+        in_scope_assets=[],
     )
     db.add(assessment)
-    await db.flush()
+    await db.commit()
+    await db.refresh(assessment)
     return await _build_assessment_detail(db, assessment)
 
 
@@ -860,10 +862,10 @@ async def get_document_checklist(
     db: AsyncSession = Depends(get_db),
     _: User = Depends(require_roles(UserRole.TENANT_ADMIN, UserRole.SUPER_ADMIN)),
     tenant_id: str = Depends(get_tenant_id),
-) -> list[dict]:
+) -> dict:
     """
     Return mandatory documents for the assessment's framework with upload status.
-    Each entry shows clause_ref, document name, whether it's been uploaded, and the uploaded doc id.
+    Returns {total, uploaded, items: [...]} shape expected by the frontend.
     """
     result = await db.execute(
         select(ComplianceAssessment).where(
@@ -901,23 +903,30 @@ async def get_document_checklist(
         d.document_type_key: d for d in uploaded if d.document_type_key
     }
 
-    checklist = []
+    items = []
     for md in mandatory_docs:
         uploaded_doc = uploaded_by_key.get(md.document_type_key)
-        checklist.append({
+        items.append({
             "mandatory_document_id": md.id,
             "clause_ref": md.clause_ref,
             "document_name": md.document_name,
             "document_type_key": md.document_type_key,
             "is_mandatory": md.is_mandatory,
             "description": md.description,
-            "uploaded": uploaded_doc is not None,
-            "uploaded_document_id": uploaded_doc.id if uploaded_doc else None,
-            "uploaded_file_name": uploaded_doc.file_name if uploaded_doc else None,
-            "ai_analysis_summary": uploaded_doc.ai_analysis_summary if uploaded_doc else None,
+            "is_uploaded": uploaded_doc is not None,
+            "uploaded_document": {
+                "id": uploaded_doc.id,
+                "file_name": uploaded_doc.file_name,
+                "ai_analysis_summary": uploaded_doc.ai_analysis_summary,
+            } if uploaded_doc else None,
         })
 
-    return checklist
+    uploaded_count = sum(1 for i in items if i["is_uploaded"])
+    return {
+        "total": len(items),
+        "uploaded": uploaded_count,
+        "items": items,
+    }
 
 
 # ─── Gap Recommendation ────────────────────────────────────────────────────────

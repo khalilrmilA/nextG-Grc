@@ -5,9 +5,11 @@ import { useTranslation } from "react-i18next";
 import { useAuthStore, authSession, PLAN_FEATURES, type PlanTier } from "../../store/auth";
 import AIAssistant from "../ai/AIAssistant";
 import LanguageSwitcher from "../LanguageSwitcher";
+import OnboardingTour from "../onboarding/OnboardingTour";
 import { notificationsApi } from "../../api/endpoints";
 import type { AppNotification } from "../../types";
 import { useAppearance } from "../../store/appearance";
+import { useFramework } from "../../context/FrameworkContext";
 import {
   LayoutDashboard, AlertTriangle, CheckSquare, BookOpen,
   ClipboardList, FileText, Building2, LogOut, Shield,
@@ -339,6 +341,7 @@ export default function Layout() {
   const [appearance] = useAppearance();
   const sc = sidebarTextClasses(appearance.sidebarStyle);
 
+  const { primaryFramework } = useFramework();
   const plan      = user?.plan ?? "free_trial";
   const isAdmin   = user?.role === "admin";
   const features  = PLAN_FEATURES[plan];
@@ -514,10 +517,18 @@ export default function Layout() {
       <main className="flex-1 flex flex-col overflow-hidden">
         {/* Top bar */}
         <header className="bg-white border-b border-gray-100 px-8 py-3.5 flex items-center justify-between flex-shrink-0">
-          <div className="flex items-center gap-2 text-sm">
-            <span className="text-gray-400">GRC Platform</span>
-            <ChevronRight className="w-3.5 h-3.5 text-gray-300" />
-            <span className="text-gray-900 font-semibold">{pageLabel}</span>
+          <div className="flex items-center gap-3 text-sm">
+            <div className="flex items-center gap-2">
+              <span className="text-gray-400">GRC Platform</span>
+              <ChevronRight className="w-3.5 h-3.5 text-gray-300" />
+              <span className="text-gray-900 font-semibold">{pageLabel}</span>
+            </div>
+            {primaryFramework && (
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-blue-50 border border-blue-100 text-xs font-semibold text-blue-700">
+                <Shield className="w-3 h-3" />
+                {primaryFramework.short_name}
+              </span>
+            )}
           </div>
           <div className="flex items-center gap-3">
             {/* Language switcher */}
@@ -549,6 +560,9 @@ export default function Layout() {
 
       {/* AI Assistant floating button */}
       <AIAssistant />
+
+      {/* Onboarding tour — shown for first 3 visits */}
+      <OnboardingTour />
     </div>
   );
 }

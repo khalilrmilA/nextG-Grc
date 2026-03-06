@@ -5,8 +5,12 @@ Uses Ollama's OpenAI-compatible /api/chat endpoint with streaming.
 import json
 import asyncio
 from collections.abc import AsyncGenerator
-from fastapi import APIRouter
+from typing import Annotated
+from fastapi import APIRouter, Depends
 from fastapi.responses import StreamingResponse
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.core.database import get_db
 from pydantic import BaseModel
 import httpx
 
@@ -440,20 +444,63 @@ Be direct and specific. Base scoring strictly on the responses provided."""
 
 class RemediationPlanRequest(BaseModel):
     assessment_id: str
-    framework_short_name: str
-    gaps: list[dict]    # list of {control_identifier, control_title, severity, gap_description, is_certification_blocker}
+    framework_short_name: str | None = None
+    gaps: list[dict] = []    # optional — if empty, fetched from DB
     model: str = DEFAULT_MODEL
 
 
 @router.post("/stream-remediation-plan")
-async def stream_remediation_plan(request: RemediationPlanRequest):
+async def stream_remediation_plan(request: RemediationPlanRequest, db: Annotated[AsyncSession, Depends(get_db)]):
     """
     Stream a prioritized 90-day remediation plan based on open compliance gaps.
     Gaps are sorted by severity/blocker status and organized into monthly phases.
+    If gaps not provided, fetches them from the database for the given assessment.
     """
-    blockers = [g for g in request.gaps if g.get("is_certification_blocker")]
-    high = [g for g in request.gaps if not g.get("is_certification_blocker") and g.get("severity") in ("critical", "high")]
-    others = [g for g in request.gaps if not g.get("is_certification_blocker") and g.get("severity") not in ("critical", "high")]
+    from sqlalchemy import select as sa_select
+    from app.models.compliance import ComplianceAssessment, ComplianceGap, ControlAssessment
+    from app.models.framework import Framework, FrameworkControl
+
+    gaps = list(request.gaps)
+    framework_short_name = request.framework_short_name or ""
+
+    # If no gaps or framework provided, load from DB
+    if not gaps or not framework_short_name:
+        assessment = (await db.execute(
+            sa_select(ComplianceAssessment).where(ComplianceAssessment.id == request.assessment_id)
+        )).scalar_one_or_none()
+        if assessment:
+            if not framework_short_name:
+                fw = (await db.execute(
+                    sa_select(Framework).where(Framework.id == assessment.framework_id)
+                )).scalar_one_or_none()
+                framework_short_name = fw.short_name if fw else ""
+
+            if not gaps:
+                db_gaps = (await db.execute(
+                    sa_select(ComplianceGap).where(
+                        ComplianceGap.assessment_id == request.assessment_id,
+                        ComplianceGap.is_resolved == False,  # noqa: E712
+                    )
+                )).scalars().all()
+
+                controls = (await db.execute(
+                    sa_select(FrameworkControl).where(FrameworkControl.framework_id == assessment.framework_id)
+                )).scalars().all()
+                ctrl_map = {c.id: c for c in controls}
+
+                for g in db_gaps:
+                    ctrl = ctrl_map.get(g.control_id)
+                    gaps.append({
+                        "control_identifier": ctrl.control_id if ctrl else g.control_id,
+                        "control_title": ctrl.title if ctrl else "",
+                        "severity": g.severity,
+                        "gap_description": g.gap_description,
+                        "is_certification_blocker": bool(g.is_certification_blocker),
+                    })
+
+    blockers = [g for g in gaps if g.get("is_certification_blocker")]
+    high = [g for g in gaps if not g.get("is_certification_blocker") and g.get("severity") in ("critical", "high")]
+    others = [g for g in gaps if not g.get("is_certification_blocker") and g.get("severity") not in ("critical", "high")]
 
     def fmt_gap(g: dict) -> str:
         return f"- [{g.get('control_identifier','')}] {g.get('control_title','')}: {g.get('gap_description','')[:150]}"
@@ -462,7 +509,7 @@ async def stream_remediation_plan(request: RemediationPlanRequest):
     high_text = "\n".join(fmt_gap(g) for g in high[:10]) or "None"
     others_text = "\n".join(fmt_gap(g) for g in others[:15]) or "None"
 
-    prompt = f"""Create a detailed, actionable 90-day remediation plan to achieve {request.framework_short_name} certification readiness.
+    prompt = f"""Create a detailed, actionable 90-day remediation plan to achieve {framework_short_name} certification readiness.
 
 CERTIFICATION BLOCKERS (must fix first):
 {blockers_text}
@@ -475,7 +522,7 @@ MEDIUM/LOW PRIORITY GAPS:
 
 Generate the plan in this exact Markdown structure:
 
-# 90-Day {request.framework_short_name} Remediation Plan
+# 90-Day {framework_short_name} Remediation Plan
 
 ## Executive Summary
 2-3 sentences on the overall remediation strategy and certification timeline.

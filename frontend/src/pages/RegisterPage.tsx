@@ -104,13 +104,35 @@ export default function RegisterPage() {
     setLoading(true);
     setError("");
     try {
-      const tokens = await authApi.register({
-        ...form,
-        primary_framework_id: primaryFwId || undefined,
-        selected_framework_ids: primaryFwId
-          ? [primaryFwId, ...secondaryFwIds.filter((x) => x !== primaryFwId)]
-          : secondaryFwIds,
-      });
+      // If slug is already taken the backend returns 400. Auto-suffix to make it unique.
+      let slug = form.organization_slug;
+      let tokens;
+      try {
+        tokens = await authApi.register({
+          ...form,
+          organization_slug: slug,
+          primary_framework_id: primaryFwId || undefined,
+          selected_framework_ids: primaryFwId
+            ? [primaryFwId, ...secondaryFwIds.filter((x) => x !== primaryFwId)]
+            : secondaryFwIds,
+        });
+      } catch (firstErr: any) {
+        const detail: string = firstErr?.response?.data?.detail ?? "";
+        if (detail.toLowerCase().includes("slug")) {
+          // Append a 4-char random suffix and retry once
+          slug = `${slug}-${Math.random().toString(36).slice(2, 6)}`;
+          tokens = await authApi.register({
+            ...form,
+            organization_slug: slug,
+            primary_framework_id: primaryFwId || undefined,
+            selected_framework_ids: primaryFwId
+              ? [primaryFwId, ...secondaryFwIds.filter((x) => x !== primaryFwId)]
+              : secondaryFwIds,
+          });
+        } else {
+          throw firstErr;
+        }
+      }
 
       // Store tokens
       authSession.login({
@@ -142,7 +164,14 @@ export default function RegisterPage() {
 
       navigate("/dashboard");
     } catch (err: any) {
-      setError(err?.response?.data?.detail || "Registration failed. Please try again.");
+      const detail: string = err?.response?.data?.detail ?? "";
+      if (detail.toLowerCase().includes("email")) {
+        setError("An account with this email already exists. Please sign in.");
+      } else if (detail) {
+        setError(detail);
+      } else {
+        setError("Registration failed. Please check your details and try again.");
+      }
     } finally {
       setLoading(false);
     }
@@ -317,7 +346,10 @@ export default function RegisterPage() {
                         setPrimaryFwId(fw.id);
                         setSecondaryFwIds((prev) => prev.filter((x) => x !== fw.id));
                       }}
-                      onToggleSecondary={() => toggleSecondary(fw.id)}
+                      onToggleSecondary={() => {
+                        if (fw.id === primaryFwId) return; // cannot add primary as secondary
+                        toggleSecondary(fw.id);
+                      }}
                       userIndustry={form.industry}
                       userCountry={form.country}
                     />

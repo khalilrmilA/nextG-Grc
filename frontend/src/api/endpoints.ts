@@ -71,6 +71,12 @@ export const authApi = {
 
   getProfile: () =>
     apiClient.get<UserProfile>("/auth/me").then((r) => r.data),
+
+  updatePrimaryFramework: (primary_framework_id: string) =>
+    apiClient.patch<UserProfile>("/auth/me/framework", { primary_framework_id }).then((r) => r.data),
+
+  updateSelectedFrameworks: (primary_framework_id: string, selected_framework_ids: string[]) =>
+    apiClient.patch<UserProfile>("/auth/me/frameworks", { primary_framework_id, selected_framework_ids }).then((r) => r.data),
 };
 
 // ─── Frameworks ──────────────────────────────

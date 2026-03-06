@@ -133,7 +133,7 @@ async def register(body: RegisterRequest, db: AsyncSession = Depends(get_db)):
     # Auto-create a draft assessment for the primary framework
     if body.primary_framework_id:
         from app.models.compliance import ComplianceAssessment, AssessmentStatus, ControlAssessment, ControlStatus
-        from app.models.framework import FrameworkControl
+        from app.models.framework import FrameworkControl, Framework
         fw_result = await db.execute(
             select(Framework).where(Framework.id == body.primary_framework_id)
         )
@@ -144,6 +144,7 @@ async def register(body: RegisterRequest, db: AsyncSession = Depends(get_db)):
                 framework_id=fw.id,
                 name=f"{fw.short_name} Compliance Assessment",
                 status=AssessmentStatus.DRAFT,
+                in_scope_assets=[],
             )
             db.add(assessment)
             await db.flush()
@@ -206,6 +207,128 @@ async def get_profile(
         primary_framework_id=tenant.primary_framework_id if tenant else None,
         selected_framework_ids=tenant.selected_framework_ids if tenant else [],
         org_size=tenant.org_size if tenant else None,
+        primary_assessment_id=primary_assessment_id,
+    )
+
+
+class UpdateFrameworkRequest(BaseModel):
+    primary_framework_id: str
+
+
+class UpdateSelectedFrameworksRequest(BaseModel):
+    primary_framework_id: str
+    selected_framework_ids: list[str] = []
+
+
+@router.patch("/me/framework", response_model=UserProfileResponse)
+async def update_primary_framework(
+    body: UpdateFrameworkRequest,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    """Update the workspace primary framework for the current tenant."""
+    from app.models.framework import Framework
+    # Verify the framework exists
+    fw_result = await db.execute(select(Framework).where(Framework.id == body.primary_framework_id))
+    fw = fw_result.scalar_one_or_none()
+    if not fw:
+        raise HTTPException(status_code=404, detail="Framework not found")
+
+    # Update tenant
+    tenant_result = await db.execute(select(Tenant).where(Tenant.id == current_user.tenant_id))
+    tenant = tenant_result.scalar_one_or_none()
+    if not tenant:
+        raise HTTPException(status_code=404, detail="Tenant not found")
+
+    tenant.primary_framework_id = body.primary_framework_id
+    # Add to selected_framework_ids if not already there
+    existing = list(tenant.selected_framework_ids or [])
+    if body.primary_framework_id not in existing:
+        existing.append(body.primary_framework_id)
+        tenant.selected_framework_ids = existing
+
+    await db.commit()
+    await db.refresh(tenant)
+
+    # Find primary assessment
+    from app.models.compliance import ComplianceAssessment
+    from sqlalchemy import desc
+    a_result = await db.execute(
+        select(ComplianceAssessment)
+        .where(
+            ComplianceAssessment.tenant_id == current_user.tenant_id,
+            ComplianceAssessment.framework_id == body.primary_framework_id,
+        )
+        .order_by(desc(ComplianceAssessment.created_at))
+        .limit(1)
+    )
+    assessment = a_result.scalar_one_or_none()
+
+    return UserProfileResponse(
+        id=current_user.id,
+        email=current_user.email,
+        first_name=current_user.first_name,
+        last_name=current_user.last_name,
+        role=current_user.role,
+        tenant_id=current_user.tenant_id,
+        tenant_name=tenant.name,
+        primary_framework_id=tenant.primary_framework_id,
+        selected_framework_ids=tenant.selected_framework_ids or [],
+        org_size=tenant.org_size,
+        primary_assessment_id=assessment.id if assessment else None,
+    )
+
+
+@router.patch("/me/frameworks", response_model=UserProfileResponse)
+async def update_selected_frameworks(
+    body: UpdateSelectedFrameworksRequest,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    """Update the primary framework and full list of selected frameworks."""
+    tenant_result = await db.execute(select(Tenant).where(Tenant.id == current_user.tenant_id))
+    tenant = tenant_result.scalar_one_or_none()
+    if not tenant:
+        raise HTTPException(status_code=404, detail="Tenant not found")
+
+    # Ensure primary is always in selected list
+    selected = list(body.selected_framework_ids)
+    if body.primary_framework_id and body.primary_framework_id not in selected:
+        selected.insert(0, body.primary_framework_id)
+
+    tenant.primary_framework_id = body.primary_framework_id or None
+    tenant.selected_framework_ids = selected
+    await db.commit()
+    await db.refresh(tenant)
+
+    from app.models.compliance import ComplianceAssessment
+    from sqlalchemy import desc
+    primary_assessment_id = None
+    if tenant.primary_framework_id:
+        a_result = await db.execute(
+            select(ComplianceAssessment)
+            .where(
+                ComplianceAssessment.tenant_id == current_user.tenant_id,
+                ComplianceAssessment.framework_id == tenant.primary_framework_id,
+            )
+            .order_by(desc(ComplianceAssessment.created_at))
+            .limit(1)
+        )
+        a = a_result.scalar_one_or_none()
+        if a:
+            primary_assessment_id = a.id
+
+    return UserProfileResponse(
+        id=current_user.id,
+        email=current_user.email,
+        first_name=current_user.first_name,
+        last_name=current_user.last_name,
+        role=current_user.role,
+        tenant_id=current_user.tenant_id,
+        tenant_name=tenant.name,
+        primary_framework_id=tenant.primary_framework_id,
+        selected_framework_ids=tenant.selected_framework_ids or [],
+        org_size=tenant.org_size,
         primary_assessment_id=primary_assessment_id,
     )
 

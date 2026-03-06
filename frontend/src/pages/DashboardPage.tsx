@@ -1,15 +1,14 @@
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate, Link } from "react-router-dom";
 import {
-  AreaChart, Area, XAxis, YAxis, CartesianGrid,
-  Tooltip, ResponsiveContainer, BarChart, Bar, Cell,
+  XAxis, YAxis, CartesianGrid,
+  Tooltip, ResponsiveContainer, BarChart, Bar,
 } from "recharts";
 import {
   AlertTriangle, ClipboardList, Building2, FileText, Activity,
   Shield, TrendingUp, TrendingDown, ChevronRight, Plus,
-  ArrowUpRight, Sparkles, Upload, CheckCircle2, XCircle,
-  AlertCircle, LayoutDashboard, BookOpen, FolderUp, Search,
-  GitBranch, UserPlus, BarChart3, CheckCheck,
+  Sparkles, Upload, CheckCircle2, XCircle,
+  AlertCircle, LayoutDashboard, BookOpen,
 } from "lucide-react";
 import { dashboardApi } from "../api/endpoints";
 import { useAuthStore } from "../store/auth";
@@ -81,50 +80,6 @@ function SeverityBadge({ severity }: { severity: string }) {
     <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${map[severity] ?? "bg-gray-100 text-gray-600"}`}>
       {severity}
     </span>
-  );
-}
-
-// ── Certification Meter component ─────────────────────────────────────────────
-
-function CertificationMeter({ readiness }: { readiness: number }) {
-  const milestones = [
-    { pct: 0, label: "Start" },
-    { pct: 25, label: "Initial" },
-    { pct: 50, label: "Defined" },
-    { pct: 75, label: "Managed" },
-    { pct: 100, label: "Certified" },
-  ];
-
-  return (
-    <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
-      <div className="flex items-center justify-between mb-4">
-        <div>
-          <h3 className="font-semibold text-gray-900">Certification Readiness</h3>
-          <p className="text-xs text-gray-400 mt-0.5">Compliance × 0.5 + Docs × 0.3 + Blockers × 0.2</p>
-        </div>
-        <span className={`text-2xl font-bold ${pctColor(readiness)}`}>{readiness}%</span>
-      </div>
-
-      {/* Track */}
-      <div className="relative h-4 bg-gray-100 rounded-full overflow-hidden mb-3">
-        <div
-          className={`h-full rounded-full transition-all ${pctBg(readiness)}`}
-          style={{ width: `${readiness}%` }}
-        />
-      </div>
-
-      {/* Milestones */}
-      <div className="flex justify-between mt-1">
-        {milestones.map((m) => (
-          <div key={m.pct} className="flex flex-col items-center gap-0.5">
-            <div className={`w-0.5 h-2 ${readiness >= m.pct ? pctBg(readiness) : "bg-gray-200"}`} />
-            <span className={`text-xs ${readiness >= m.pct ? "font-semibold text-gray-700" : "text-gray-400"}`}>
-              {m.label}
-            </span>
-          </div>
-        ))}
-      </div>
-    </div>
   );
 }
 
@@ -556,160 +511,58 @@ export default function DashboardPage() {
     );
   }
 
-  // No primary framework set — show Getting Started guide
+  // No primary framework set — show welcome card + generic dashboard
   return (
     <div className="p-8 max-w-5xl space-y-6">
-      <GettingStartedGuide />
+      <WelcomeCard />
       <GenericDashboard d={d} isDemo={isDemo} />
     </div>
   );
 }
 
-// ── Getting Started Guide ──────────────────────────────────────────────────────
+// ── Welcome card (shown when no framework set) ────────────────────────────────
 
-const STEPS = [
-  {
-    num: 1,
-    icon: BookOpen,
-    color: "bg-blue-100 text-blue-600",
-    title: "Create a Compliance Assessment",
-    desc: "Go to Compliance → click 'New Assessment'. Choose your framework (e.g. ISO 27001), give it a name, and save.",
-    action: "Go to Compliance",
-    href: "/compliance",
-  },
-  {
-    num: 2,
-    icon: FolderUp,
-    color: "bg-purple-100 text-purple-600",
-    title: "Upload your documents",
-    desc: "Open the assessment → \"Upload & Analyze\" tab → drag-and-drop your policies, procedures, or any PDF/Word/TXT files.",
-    action: "Go to Compliance",
-    href: "/compliance",
-  },
-  {
-    num: 3,
-    icon: Search,
-    color: "bg-orange-100 text-orange-600",
-    title: "Run AI Analysis",
-    desc: "Click \"Run AI Analysis\" — the AI reads your documents and automatically scores every control against your framework.",
-    action: "Go to Compliance",
-    href: "/compliance",
-  },
-  {
-    num: 4,
-    icon: BarChart3,
-    color: "bg-green-100 text-green-600",
-    title: "Review your Gap Report",
-    desc: "Open the \"Gap Report\" tab to see which controls are failing. Accept gaps to create action items, or reject if not applicable.",
-    action: "Go to Compliance",
-    href: "/compliance",
-  },
-  {
-    num: 5,
-    icon: CheckCheck,
-    color: "bg-teal-100 text-teal-600",
-    title: "Review the Document Checklist",
-    desc: "The \"Document Checklist\" tab shows all mandatory documents for your framework (e.g. ISO 27001 requires 40 docs). Upload missing ones inline.",
-    action: "Go to Compliance",
-    href: "/compliance",
-  },
-  {
-    num: 6,
-    icon: GitBranch,
-    color: "bg-indigo-100 text-indigo-600",
-    title: "View Traceability Matrix",
-    desc: "See how each control links to gaps and action items in one scrollable table. Use it to prove compliance coverage.",
-    action: "Go to Compliance",
-    href: "/compliance",
-  },
-  {
-    num: 7,
-    icon: UserPlus,
-    color: "bg-pink-100 text-pink-600",
-    title: "Invite an External Auditor (optional)",
-    desc: "Go to Audits → \"Add Auditor\" to create an auditor account. They get a restricted portal to verify controls and generate a formal audit report.",
-    action: "Go to Audits",
-    href: "/audits",
-  },
-];
-
-function GettingStartedGuide() {
+function WelcomeCard() {
   return (
-    <div className="space-y-5">
-      {/* Hero banner */}
-      <div className="bg-gradient-to-br from-blue-600 to-indigo-700 rounded-2xl p-7 text-white">
-        <div className="flex items-start gap-4">
-          <div className="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center flex-shrink-0">
-            <Shield className="w-6 h-6 text-white" />
-          </div>
-          <div className="flex-1">
-            <h1 className="text-2xl font-bold mb-1">Welcome to your GRC Platform</h1>
-            <p className="text-blue-100 text-sm leading-relaxed max-w-2xl">
-              This platform helps you manage compliance (ISO 27001, SOC 2, etc.), track risks, run audits, and generate reports — all in one place.
-              Follow the steps below to get your first compliance assessment running in minutes.
-            </p>
-          </div>
-          <Link
-            to="/help"
-            className="flex-shrink-0 bg-white/20 hover:bg-white/30 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors"
-          >
-            Full Guide →
-          </Link>
+    <div className="bg-gradient-to-br from-blue-600 to-indigo-700 rounded-2xl p-7 text-white">
+      <div className="flex items-start gap-4">
+        <div className="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center flex-shrink-0">
+          <Shield className="w-6 h-6 text-white" />
         </div>
+        <div className="flex-1">
+          <h1 className="text-2xl font-bold mb-1">Welcome to your GRC Platform</h1>
+          <p className="text-blue-100 text-sm leading-relaxed max-w-2xl">
+            Manage compliance, track risks, run audits, and generate reports — all in one place.
+            Start by creating your first compliance assessment below, or use the guided tour that
+            appeared when you logged in.
+          </p>
+        </div>
+        <Link
+          to="/help"
+          className="flex-shrink-0 bg-white/20 hover:bg-white/30 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors"
+        >
+          Full Guide →
+        </Link>
       </div>
 
-      {/* Steps */}
-      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-        <div className="px-6 pt-5 pb-3 border-b border-gray-50">
-          <h2 className="font-bold text-gray-900">How to get started — 7 steps</h2>
-          <p className="text-xs text-gray-400 mt-0.5">Complete these steps to have a fully working compliance assessment</p>
-        </div>
-        <div className="divide-y divide-gray-50">
-          {STEPS.map((step) => (
-            <div key={step.num} className="flex items-start gap-4 px-6 py-4 hover:bg-gray-50/50 transition-colors">
-              <div className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 ${step.color}`}>
-                <step.icon className="w-4.5 h-4.5" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2">
-                  <span className="text-xs font-bold text-gray-300">STEP {step.num}</span>
-                </div>
-                <p className="font-semibold text-gray-900 text-sm mt-0.5">{step.title}</p>
-                <p className="text-xs text-gray-500 mt-0.5 leading-relaxed">{step.desc}</p>
-              </div>
-              <Link
-                to={step.href}
-                className="flex-shrink-0 text-xs font-semibold text-blue-600 hover:text-blue-700 bg-blue-50 hover:bg-blue-100 px-3 py-1.5 rounded-lg transition-colors whitespace-nowrap"
-              >
-                {step.action} →
-              </Link>
-            </div>
-          ))}
-        </div>
-
-        {/* Quick links row */}
-        <div className="px-6 py-4 bg-gray-50/50 border-t border-gray-100">
-          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">Quick navigation</p>
-          <div className="flex flex-wrap gap-2">
-            {[
-              { label: "New Assessment", href: "/compliance", icon: Plus },
-              { label: "Upload Documents", href: "/compliance", icon: Upload },
-              { label: "Risk Register", href: "/risks", icon: AlertTriangle },
-              { label: "Frameworks", href: "/frameworks", icon: BookOpen },
-              { label: "Audits", href: "/audits", icon: ClipboardList },
-              { label: "Policies", href: "/policies", icon: FileText },
-            ].map(({ label, href, icon: Icon }) => (
-              <Link
-                key={label}
-                to={href}
-                className="flex items-center gap-1.5 text-xs font-medium text-gray-600 bg-white border border-gray-200 hover:border-blue-300 hover:text-blue-700 px-3 py-1.5 rounded-lg transition-colors"
-              >
-                <Icon className="w-3.5 h-3.5" />
-                {label}
-              </Link>
-            ))}
-          </div>
-        </div>
+      {/* Quick links */}
+      <div className="mt-5 flex flex-wrap gap-2">
+        {[
+          { label: "New Assessment", href: "/compliance", icon: Plus },
+          { label: "Risk Register",  href: "/risks",      icon: AlertTriangle },
+          { label: "Frameworks",     href: "/frameworks",  icon: BookOpen },
+          { label: "Audits",         href: "/audits",      icon: ClipboardList },
+          { label: "Policies",       href: "/policies",    icon: FileText },
+        ].map(({ label, href, icon: Icon }) => (
+          <Link
+            key={label}
+            to={href}
+            className="flex items-center gap-1.5 text-xs font-semibold bg-white/15 hover:bg-white/25 text-white px-3 py-1.5 rounded-lg transition-colors"
+          >
+            <Icon className="w-3.5 h-3.5" />
+            {label}
+          </Link>
+        ))}
       </div>
     </div>
   );
