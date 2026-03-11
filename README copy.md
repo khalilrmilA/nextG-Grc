@@ -1,3 +1,4 @@
+python -m uvicorn app.main:app --reload --port 8000
 GRC Platform — Framework-First Transformation (Full Rebuild)
 Context
 Major platform transformation: make the entire product framework-driven from first registration.

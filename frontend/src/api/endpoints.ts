@@ -447,10 +447,19 @@ export const usersApi = {
       .get<{ id: string; name: string; email: string; role: string }[]>("/users")
       .then((r) => r.data),
 
-  createAuditor: (data: { name: string; email: string; password: string }) =>
-    apiClient
-      .post<{ id: string; email: string; role: string }>("/users/auditors", data)
-      .then((r) => r.data),
+  createAuditor: (data: { name: string; email: string; password: string }) => {
+    const parts = data.name.trim().split(" ");
+    const first_name = parts[0];
+    const last_name = parts.slice(1).join(" ") || "-";
+    return apiClient
+      .post<{ id: string; email: string; role: string }>("/users/auditors", {
+        first_name,
+        last_name,
+        email: data.email,
+        temporary_password: data.password,
+      })
+      .then((r) => r.data);
+  },
 };
 
 // ─── Traceability Matrix ──────────────────────
