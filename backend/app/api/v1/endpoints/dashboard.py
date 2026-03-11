@@ -175,16 +175,134 @@ def _cert_readiness(compliance_score: float, docs_uploaded: int, docs_required: 
     return round(compliance_score * 0.5 + doc_pct * 0.3 + blocker_pct * 0.2, 1)
 
 
-@router.get("/framework-summary")
-async def get_framework_summary(
+@router.get("/frameworks-overview")
+async def get_frameworks_overview(
     tenant_id: Annotated[str, Depends(get_tenant_id)],
     db: Annotated[AsyncSession, Depends(get_db)],
     _: Annotated[User, Depends(get_current_user)],
 ):
     """
+    Returns a lightweight overview of ALL selected frameworks for the overview dashboard.
+    Each entry has compliance score, open gaps, cert readiness, and assessment_id.
+    """
+    tenant_result = await db.execute(select(Tenant).where(Tenant.id == tenant_id))
+    tenant = tenant_result.scalar_one_or_none()
+    if not tenant or not tenant.primary_framework_id:
+        return {"frameworks": [], "has_framework": False}
+
+    all_fw_ids = list({tenant.primary_framework_id, *(tenant.selected_framework_ids or [])} - {None})
+
+    fws_result = await db.execute(select(Framework).where(Framework.id.in_(all_fw_ids)))
+    fws = {fw.id: fw for fw in fws_result.scalars().all()}
+
+    cards = []
+    for fw_id in all_fw_ids:
+        fw = fws.get(fw_id)
+        if not fw:
+            continue
+
+        # Most recent assessment for this framework
+        a_result = await db.execute(
+            select(ComplianceAssessment)
+            .where(ComplianceAssessment.tenant_id == tenant_id, ComplianceAssessment.framework_id == fw_id)
+            .order_by(ComplianceAssessment.updated_at.desc())
+            .limit(1)
+        )
+        assessment = a_result.scalar_one_or_none()
+
+        if not assessment:
+            cards.append({
+                "framework_id": fw_id,
+                "framework_name": fw.name,
+                "framework_short_name": fw.short_name,
+                "is_primary": fw_id == tenant.primary_framework_id,
+                "has_assessment": False,
+                "assessment_id": None,
+                "compliance_score": None,
+                "open_gaps": 0,
+                "cert_readiness": None,
+                "controls_total": 0,
+                "controls_implemented": 0,
+                "status": assessment.status.value if assessment else "draft",
+            })
+            continue
+
+        cas = (await db.execute(
+            select(ControlAssessment).where(ControlAssessment.assessment_id == assessment.id)
+        )).scalars().all()
+
+        total = len(cas)
+        implemented = sum(1 for c in cas if c.status == ControlStatus.IMPLEMENTED)
+        partial = sum(1 for c in cas if c.status == ControlStatus.PARTIALLY_IMPLEMENTED)
+        compliance_score = round((implemented + partial * 0.5) / total * 100, 1) if total else 0.0
+
+        gaps_result = await db.execute(
+            select(ComplianceGap).where(
+                ComplianceGap.assessment_id == assessment.id,
+                ComplianceGap.recommendation_status != "accepted",
+            )
+        )
+        open_gaps = len(gaps_result.scalars().all())
+
+        blockers_result = await db.execute(
+            select(ComplianceGap).where(
+                ComplianceGap.assessment_id == assessment.id,
+                ComplianceGap.is_certification_blocker == True,  # noqa: E712
+                ComplianceGap.recommendation_status != "accepted",
+            )
+        )
+        open_blockers = len(blockers_result.scalars().all())
+
+        docs_uploaded = (await db.execute(
+            select(func.count(UploadedDocument.id))
+            .where(UploadedDocument.assessment_id == assessment.id)
+        )).scalar_one() or 0
+        docs_required = (await db.execute(
+            select(func.count(MandatoryDocument.id))
+            .where(MandatoryDocument.framework_short_name == fw.short_name, MandatoryDocument.is_mandatory == True)  # noqa: E712
+        )).scalar_one() or 0
+
+        total_blockers_result = await db.execute(
+            select(ComplianceGap).where(
+                ComplianceGap.assessment_id == assessment.id,
+                ComplianceGap.is_certification_blocker == True,  # noqa: E712
+            )
+        )
+        total_blockers = len(total_blockers_result.scalars().all())
+        cert_readiness = _cert_readiness(compliance_score, docs_uploaded, docs_required, open_blockers, total_blockers)
+
+        cards.append({
+            "framework_id": fw_id,
+            "framework_name": fw.name,
+            "framework_short_name": fw.short_name,
+            "is_primary": fw_id == tenant.primary_framework_id,
+            "has_assessment": True,
+            "assessment_id": assessment.id,
+            "compliance_score": compliance_score,
+            "open_gaps": open_gaps,
+            "open_blockers": open_blockers,
+            "cert_readiness": cert_readiness,
+            "controls_total": total,
+            "controls_implemented": implemented,
+            "status": assessment.status.value,
+        })
+
+    # Put primary first, then sort by name
+    cards.sort(key=lambda c: (not c["is_primary"], c["framework_name"]))
+    return {"frameworks": cards, "has_framework": True}
+
+
+@router.get("/framework-summary")
+async def get_framework_summary(
+    tenant_id: Annotated[str, Depends(get_tenant_id)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+    _: Annotated[User, Depends(get_current_user)],
+    framework_id: str | None = None,
+):
+    """
     Framework-specific compliance dashboard data.
     Returns section pivot table, certification readiness score, doc progress, and top gaps.
-    Scoped to the tenant's primary framework and most recent assessment.
+    Pass ?framework_id= to switch between selected frameworks; defaults to primary framework.
     """
     tenant_result = await db.execute(select(Tenant).where(Tenant.id == tenant_id))
     tenant = tenant_result.scalar_one_or_none()
@@ -192,7 +310,21 @@ async def get_framework_summary(
     if not tenant or not tenant.primary_framework_id:
         return {"has_framework": False}
 
-    fw_result = await db.execute(select(Framework).where(Framework.id == tenant.primary_framework_id))
+    # Resolve which framework to show
+    target_fw_id = framework_id or tenant.primary_framework_id
+
+    # Build list of all selected frameworks for the switcher
+    all_selected_ids = list({tenant.primary_framework_id, *(tenant.selected_framework_ids or [])} - {None})
+    selected_fws_result = await db.execute(
+        select(Framework).where(Framework.id.in_(all_selected_ids))
+    )
+    selected_fws = selected_fws_result.scalars().all()
+    selected_fws_info = [
+        {"id": f.id, "name": f.name, "short_name": f.short_name, "is_primary": f.id == tenant.primary_framework_id}
+        for f in selected_fws
+    ]
+
+    fw_result = await db.execute(select(Framework).where(Framework.id == target_fw_id))
     fw = fw_result.scalar_one_or_none()
     if not fw:
         return {"has_framework": False}
@@ -210,7 +342,8 @@ async def get_framework_summary(
 
     if not assessment:
         return {"has_framework": True, "framework_name": fw.name,
-                "framework_short_name": fw.short_name, "has_assessment": False}
+                "framework_short_name": fw.short_name, "has_assessment": False,
+                "selected_frameworks": selected_fws_info}
 
     cas = (await db.execute(
         select(ControlAssessment).where(ControlAssessment.assessment_id == assessment.id)
@@ -291,4 +424,6 @@ async def get_framework_summary(
             "missing_names": missing_doc_names,
         },
         "certification_readiness": cert_readiness,
+        "selected_frameworks": selected_fws_info,
+        "active_framework_id": fw.id,
     }

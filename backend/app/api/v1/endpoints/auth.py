@@ -130,15 +130,16 @@ async def register(body: RegisterRequest, db: AsyncSession = Depends(get_db)):
     db.add(user)
     await db.flush()
 
-    # Auto-create a draft assessment for the primary framework
-    if body.primary_framework_id:
+    # Auto-create a draft assessment for every selected framework
+    all_fw_ids = list({body.primary_framework_id, *(body.selected_framework_ids or [])} - {None})
+    if all_fw_ids:
         from app.models.compliance import ComplianceAssessment, AssessmentStatus, ControlAssessment, ControlStatus
         from app.models.framework import FrameworkControl, Framework
         fw_result = await db.execute(
-            select(Framework).where(Framework.id == body.primary_framework_id)
+            select(Framework).where(Framework.id.in_(all_fw_ids))
         )
-        fw = fw_result.scalar_one_or_none()
-        if fw:
+        frameworks = fw_result.scalars().all()
+        for fw in frameworks:
             assessment = ComplianceAssessment(
                 tenant_id=tenant.id,
                 framework_id=fw.id,

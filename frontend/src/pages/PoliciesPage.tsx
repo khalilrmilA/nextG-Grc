@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { FileText, Plus, CheckCircle, Clock, AlertCircle, User, Calendar, Link2, X, ChevronRight } from "lucide-react";
+import { Link } from "react-router-dom";
+import { FileText, Plus, CheckCircle, Clock, AlertCircle, User, Calendar, Link2, X, ChevronRight, Wand2 } from "lucide-react";
 
 const POLICIES = [
   { id: "1", title: "Information Security Policy",        category: "Security",        version: 3, status: "published", owner: "CISO",         attestation_rate: 94,   linked_controls: 12, next_review: "2026-06-01", description: "Defines the organization's overall approach to information security, including objectives, scope, and management commitment." },
@@ -145,10 +146,22 @@ function NewPolicyModal({ onClose, onSaved }: { readonly onClose: () => void; re
   );
 }
 
+// ── Workflow transition map ───────────────────────────────────────────────────
+const WORKFLOW_ACTIONS: Record<string, { label: string; next: string; color: string } | undefined> = {
+  draft:     { label: "Submit for Review", next: "in_review", color: "bg-orange-500 hover:bg-orange-600 text-white" },
+  in_review: { label: "Approve",           next: "approved",  color: "bg-blue-600 hover:bg-blue-700 text-white"    },
+  approved:  { label: "Publish",           next: "published", color: "bg-green-600 hover:bg-green-700 text-white"  },
+};
+
 // ── Policy Detail Modal ───────────────────────────────────────────────────────
-function PolicyDetailModal({ policy, onClose }: { readonly policy: PolicyEntry; readonly onClose: () => void }) {
+function PolicyDetailModal({ policy, onClose, onStatusChange }: {
+  readonly policy: PolicyEntry;
+  readonly onClose: () => void;
+  readonly onStatusChange: (id: string, next: string) => void;
+}) {
   const s = STATUS_MAP[policy.status] ?? STATUS_MAP.draft;
   const StatusIcon = s.icon;
+  const action = WORKFLOW_ACTIONS[policy.status];
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-xl max-h-[90vh] overflow-y-auto">
@@ -229,6 +242,48 @@ function PolicyDetailModal({ policy, onClose }: { readonly policy: PolicyEntry; 
             <p className="text-xs text-gray-400 flex items-center gap-1 mb-1"><Link2 className="w-3 h-3" />Linked Controls</p>
             <p className="text-sm text-gray-600">{policy.linked_controls} control{policy.linked_controls === 1 ? "" : "s"} mapped</p>
           </div>
+
+          {/* Approval workflow */}
+          <div className="pt-3 border-t border-gray-100">
+            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">Approval Workflow</p>
+            <div className="flex items-center gap-2 mb-4">
+              {(["draft", "in_review", "approved", "published"] as const).map((step, i) => {
+                const steps = ["draft", "in_review", "approved", "published"];
+                const currentIdx = steps.indexOf(policy.status);
+                const stepIdx = i;
+                const done = stepIdx < currentIdx;
+                const current = stepIdx === currentIdx;
+                const cfg = STATUS_MAP[step];
+                const StepIcon = cfg.icon;
+                return (
+                  <div key={step} className="flex items-center gap-1 flex-1">
+                    <div className={`flex items-center gap-1.5 flex-1 justify-center py-1.5 px-2 rounded-lg text-xs font-medium border ${
+                      current ? cfg.color + " border-transparent" :
+                      done ? "bg-green-50 text-green-700 border-green-100" :
+                      "bg-gray-50 text-gray-400 border-gray-100"
+                    }`}>
+                      <StepIcon className="w-3 h-3" />
+                      <span className="hidden sm:inline">{cfg.label}</span>
+                    </div>
+                    {i < 3 && <div className={`w-3 h-0.5 flex-shrink-0 ${done ? "bg-green-300" : "bg-gray-200"}`} />}
+                  </div>
+                );
+              })}
+            </div>
+            {action && (
+              <button
+                onClick={() => { onStatusChange(policy.id, action.next); onClose(); }}
+                className={`w-full py-2.5 rounded-lg text-sm font-medium transition-colors ${action.color}`}
+              >
+                {action.label} →
+              </button>
+            )}
+            {policy.status === "published" && (
+              <p className="text-center text-xs text-green-600 font-medium py-2">
+                ✓ Policy is live and active
+              </p>
+            )}
+          </div>
         </div>
       </div>
     </div>
@@ -241,6 +296,14 @@ export default function PoliciesPage() {
   const [statusFilter, setStatusFilter] = useState("all");
   const [showAdd, setShowAdd] = useState(false);
   const [selected, setSelected] = useState<PolicyEntry | null>(null);
+
+  function handleStatusChange(id: string, next: string) {
+    setPolicies((prev) => prev.map((p) =>
+      p.id === id
+        ? { ...p, status: next, version: next === "published" ? p.version + 1 : p.version }
+        : p
+    ));
+  }
 
   const filtered  = policies.filter(p => statusFilter === "all" || p.status === statusFilter);
   const published = policies.filter(p => p.status === "published");
@@ -263,6 +326,29 @@ export default function PoliciesPage() {
           <Plus className="w-4 h-4" /> New Policy
         </button>
       </div>
+
+      {/* Doc Generator banner */}
+      {policies.filter(p => p.status === "published").length < 3 && (
+        <div className="flex items-center justify-between gap-4 bg-gradient-to-r from-purple-600 to-indigo-600 rounded-2xl p-5 text-white">
+          <div className="flex items-center gap-4">
+            <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center flex-shrink-0">
+              <Wand2 className="w-5 h-5" />
+            </div>
+            <div>
+              <p className="font-semibold text-sm">Starting from scratch?</p>
+              <p className="text-xs text-white/80 mt-0.5">
+                Generate your complete GRC document library with AI — Information Security Policy, ISMS Scope, Incident Response Plan and 24 more, tailored to your company.
+              </p>
+            </div>
+          </div>
+          <Link
+            to="/policy-generator"
+            className="flex-shrink-0 flex items-center gap-2 bg-white text-purple-700 font-semibold text-sm px-4 py-2.5 rounded-xl hover:bg-purple-50 transition-colors"
+          >
+            <Wand2 className="w-4 h-4" /> Open Generator
+          </Link>
+        </div>
+      )}
 
       <div className="grid grid-cols-4 gap-4">
         {[
@@ -381,7 +467,7 @@ export default function PoliciesPage() {
           onSaved={p => setPolicies(prev => [p, ...prev])}
         />
       )}
-      {selected && <PolicyDetailModal policy={selected} onClose={() => setSelected(null)} />}
+      {selected && <PolicyDetailModal policy={selected} onClose={() => setSelected(null)} onStatusChange={handleStatusChange} />}
     </div>
   );
 }

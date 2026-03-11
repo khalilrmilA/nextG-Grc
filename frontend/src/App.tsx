@@ -21,6 +21,7 @@ import VendorsPage from "./pages/VendorsPage";
 import CheatSheetPage from "./pages/CheatSheetPage";
 import SettingsPage from "./pages/SettingsPage";
 import HelpPage from "./pages/HelpPage";
+import PolicyGeneratorPage from "./pages/PolicyGeneratorPage";
 
 function PrivateRoute({ children }: { readonly children: React.ReactNode }) {
   const user = useAuthStore((u) => u);
@@ -56,6 +57,7 @@ export default function App() {
         <Route path="frameworks/custom/new" element={<CustomFrameworkPage />} />
         <Route path="audits" element={<AuditsPage />} />
         <Route path="policies" element={<PoliciesPage />} />
+        <Route path="policy-generator" element={<PolicyGeneratorPage />} />
         <Route path="vendors" element={<VendorsPage />} />
         <Route path="cheat" element={<CheatSheetPage />} />
         <Route path="settings" element={<SettingsPage />} />

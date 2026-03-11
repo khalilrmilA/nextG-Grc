@@ -1,0 +1,607 @@
+import { useState, useRef, useEffect, useCallback } from "react";
+import {
+  Wand2, ChevronRight, Loader2, Copy, CheckCheck,
+  Download, Save, RotateCcw, FileText, BookOpen,
+  ClipboardList, Shield, Sparkles, X, Pencil, Eye,
+  CheckCircle,
+} from "lucide-react";
+import { aiApi } from "@/api/endpoints";
+import { makeThinkFilter } from "@/lib/sse";
+import { useAuthStore } from "@/store/auth";
+
+// ── Document catalogue ─────────────────────────────────────────────────────────
+
+const DOCUMENT_CATEGORIES = [
+  {
+    id: "foundation",
+    label: "Foundation Documents",
+    icon: Shield,
+    color: "text-blue-600 bg-blue-50",
+    description: "Core ISMS governance documents — start here",
+    docs: [
+      "Information Security Policy",
+      "ISMS Scope Statement",
+      "Statement of Applicability (SoA) Template",
+      "Information Security Objectives",
+      "Management Review Agenda & Minutes Template",
+    ],
+  },
+  {
+    id: "policies",
+    label: "Security Policies",
+    icon: BookOpen,
+    color: "text-purple-600 bg-purple-50",
+    description: "Control-area specific policy documents",
+    docs: [
+      "Access Control Policy",
+      "Acceptable Use Policy",
+      "Data Classification & Handling Policy",
+      "Cryptography & Encryption Policy",
+      "Clear Desk & Clear Screen Policy",
+      "Remote Work & Teleworking Policy",
+      "Password & Authentication Policy",
+      "Physical & Environmental Security Policy",
+      "Third-Party & Supplier Security Policy",
+      "Bring Your Own Device (BYOD) Policy",
+    ],
+  },
+  {
+    id: "procedures",
+    label: "Procedures & Standards",
+    icon: ClipboardList,
+    color: "text-green-600 bg-green-50",
+    description: "Operational how-to documents",
+    docs: [
+      "User Access Management Procedure",
+      "Incident Response Procedure",
+      "Change Management Procedure",
+      "Backup & Recovery Procedure",
+      "Vulnerability Management Procedure",
+      "Security Awareness Training Procedure",
+      "Asset Inventory & Management Procedure",
+      "Log Management & Monitoring Procedure",
+    ],
+  },
+  {
+    id: "plans",
+    label: "Plans",
+    icon: FileText,
+    color: "text-orange-600 bg-orange-50",
+    description: "Event-driven and continuity plans",
+    docs: [
+      "Business Continuity Plan (BCP)",
+      "Disaster Recovery Plan (DRP)",
+      "Incident Response Plan (IRP)",
+      "Risk Assessment & Treatment Plan",
+    ],
+  },
+] as const;
+
+const INDUSTRIES = [
+  "Technology / SaaS", "Financial Services", "Healthcare", "Retail & E-commerce",
+  "Manufacturing", "Professional Services", "Government", "Education",
+  "Energy & Utilities", "Telecommunications", "Other",
+];
+
+const SIZES = [
+  { value: "startup",   label: "Startup",    sub: "1–50 employees" },
+  { value: "smb",       label: "SMB",         sub: "51–500 employees" },
+  { value: "midmarket", label: "Mid-Market",  sub: "501–5,000 employees" },
+  { value: "enterprise",label: "Enterprise",  sub: "5,000+ employees" },
+];
+
+const FRAMEWORKS = ["ISO 27001:2022", "SOC 2", "NIST CSF 2.0", "GDPR", "HIPAA", "PCI DSS 4.0", "NIST 800-53"];
+
+// ── Helpers ────────────────────────────────────────────────────────────────────
+
+function slugify(s: string) {
+  return s.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "");
+}
+
+// ── Render markdown-like output ────────────────────────────────────────────────
+
+function renderMarkdown(text: string) {
+  const lines = text.split("\n");
+  return lines.map((line, i) => {
+    if (line.startsWith("# "))  return <h1 key={i} className="text-xl font-bold text-gray-900 mt-6 mb-2">{line.slice(2)}</h1>;
+    if (line.startsWith("## ")) return <h2 key={i} className="text-base font-bold text-blue-800 mt-5 mb-2 border-b border-blue-100 pb-1">{line.slice(3)}</h2>;
+    if (line.startsWith("### ")) return <h3 key={i} className="text-sm font-bold text-gray-700 mt-4 mb-1">{line.slice(4)}</h3>;
+    if (line.startsWith("#### ")) return <h4 key={i} className="text-sm font-semibold text-gray-600 mt-3 mb-1">{line.slice(5)}</h4>;
+    if (line.startsWith("- ") || line.startsWith("* ")) return <li key={i} className="text-sm text-gray-700 ml-5 mb-0.5 list-disc">{line.slice(2)}</li>;
+    if (/^\d+\. /.test(line)) return <li key={i} className="text-sm text-gray-700 ml-5 mb-0.5 list-decimal">{line.replace(/^\d+\. /, "")}</li>;
+    if (line.startsWith("| ")) return <div key={i} className="font-mono text-xs text-gray-600 leading-5">{line}</div>;
+    if (line.startsWith("---") || line.startsWith("===")) return <hr key={i} className="my-3 border-gray-200" />;
+    if (line.startsWith("**") && line.endsWith("**") && line.length > 4) {
+      return <p key={i} className="text-sm font-semibold text-gray-800 mt-3 mb-0.5">{line.slice(2, -2)}</p>;
+    }
+    if (line.trim() === "") return <div key={i} className="h-2" />;
+    return <p key={i} className="text-sm text-gray-700 leading-relaxed mb-0.5">{line}</p>;
+  });
+}
+
+// ── Main page ──────────────────────────────────────────────────────────────────
+
+export default function PolicyGeneratorPage() {
+  const user = useAuthStore((u) => u);
+  const orgName = user?.org ?? "";
+
+  const [activeCategory, setActiveCategory] = useState<string>("foundation");
+  const [selectedDoc, setSelectedDoc] = useState<string | null>(null);
+
+  // Org context form
+  const [form, setForm] = useState({
+    org_name: orgName,
+    industry: "",
+    size: "smb",
+    country: "US",
+    frameworks: [] as string[],
+    specific_requirements: "",
+  });
+
+  // Generation state
+  const [output, setOutput] = useState("");
+  const [streaming, setStreaming] = useState(false);
+  const [done, setDone] = useState(false);
+  const [error, setError] = useState("");
+  const [copied, setCopied] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [editContent, setEditContent] = useState("");
+  const [approved, setApproved] = useState(false);
+
+  const abortRef = useRef<AbortController | null>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  // Auto-scroll while streaming
+  useEffect(() => {
+    if (streaming && scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    }
+  }, [output, streaming]);
+
+  const generate = useCallback(async () => {
+    if (!selectedDoc || !form.org_name || !form.industry) return;
+
+    abortRef.current?.abort();
+    const ctrl = new AbortController();
+    abortRef.current = ctrl;
+
+    setOutput("");
+    setDone(false);
+    setError("");
+    setSaved(false);
+    setEditing(false);
+    setEditContent("");
+    setApproved(false);
+    setStreaming(true);
+
+    const filter = makeThinkFilter();
+
+    try {
+      await aiApi.streamDocumentGeneration(
+        {
+          document_type: selectedDoc,
+          org_name: form.org_name,
+          industry: form.industry,
+          size: form.size,
+          country: form.country,
+          frameworks: form.frameworks.length > 0 ? form.frameworks.join(", ") : undefined,
+          specific_requirements: form.specific_requirements || undefined,
+        },
+        (token) => {
+          const filtered = filter(token);
+          if (filtered) setOutput((prev) => prev + filtered);
+        },
+        () => { setStreaming(false); setDone(true); },
+        ctrl.signal,
+      );
+    } catch (err: unknown) {
+      if (err instanceof Error && err.name !== "AbortError") {
+        setError("Generation failed. Make sure Ollama is running.");
+      }
+      setStreaming(false);
+    }
+  }, [selectedDoc, form]);
+
+  // The authoritative content — original AI output, or user-edited version
+  const currentContent = editing ? editContent : (editContent || output);
+
+  function handleEnterEdit() {
+    setEditContent(output);
+    setEditing(true);
+  }
+
+  function handleExitEdit() {
+    // Keep edits in editContent so they persist when switching back
+    setEditing(false);
+  }
+
+  function handleCopy() {
+    navigator.clipboard.writeText(currentContent);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  }
+
+  function handleDownload() {
+    if (!selectedDoc || !currentContent) return;
+    const blob = new Blob([currentContent], { type: "text/plain;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${slugify(selectedDoc)}.txt`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+
+  function handleSaveToPolicies() {
+    setSaved(true);
+    // Keep saved state visible until they do something else
+  }
+
+  function handleApprove() {
+    setApproved(true);
+    setSaved(true);
+  }
+
+  const canGenerate = !!selectedDoc && !!form.org_name.trim() && !!form.industry && !streaming;
+  const currentCat = DOCUMENT_CATEGORIES.find((c) => c.id === activeCategory);
+
+  return (
+    <div className="flex h-[calc(100vh-64px)] overflow-hidden">
+
+      {/* ── LEFT PANEL ────────────────────────────────────────────────────── */}
+      <div className="w-96 flex-shrink-0 border-r border-gray-100 bg-gray-50 flex flex-col overflow-hidden">
+
+        {/* Header */}
+        <div className="px-5 py-4 border-b border-gray-100 bg-white">
+          <div className="flex items-center gap-2 mb-0.5">
+            <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-purple-500 to-indigo-600 flex items-center justify-center">
+              <Wand2 className="w-4 h-4 text-white" />
+            </div>
+            <h1 className="text-base font-bold text-gray-900">Document Generator</h1>
+          </div>
+          <p className="text-xs text-gray-400 ml-9">AI-powered GRC documents tailored to your organization</p>
+        </div>
+
+        {/* Category tabs */}
+        <div className="px-3 pt-3 flex gap-1 flex-wrap">
+          {DOCUMENT_CATEGORIES.map((cat) => {
+            const Icon = cat.icon;
+            const active = activeCategory === cat.id;
+            return (
+              <button
+                key={cat.id}
+                onClick={() => setActiveCategory(cat.id)}
+                className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                  active ? "bg-white shadow-sm border border-gray-200 text-gray-800" : "text-gray-500 hover:text-gray-700 hover:bg-white/60"
+                }`}
+              >
+                <Icon className="w-3.5 h-3.5" />
+                {cat.label.split(" ")[0]}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Document list */}
+        <div className="flex-1 overflow-y-auto px-3 py-2">
+          {currentCat && (
+            <>
+              <p className="text-[11px] text-gray-400 px-1 py-1.5">{currentCat.description}</p>
+              <div className="space-y-0.5">
+                {(currentCat.docs as readonly string[]).map((doc) => {
+                  const isSelected = selectedDoc === doc;
+                  return (
+                    <button
+                      key={doc}
+                      onClick={() => { setSelectedDoc(doc); setOutput(""); setDone(false); setError(""); }}
+                      className={`w-full flex items-center justify-between gap-2 px-3 py-2.5 rounded-xl text-left text-sm transition-colors ${
+                        isSelected
+                          ? "bg-blue-600 text-white"
+                          : "text-gray-700 hover:bg-white hover:shadow-sm"
+                      }`}
+                    >
+                      <span className="truncate font-medium">{doc}</span>
+                      <ChevronRight className={`w-3.5 h-3.5 flex-shrink-0 ${isSelected ? "text-white/70" : "text-gray-300"}`} />
+                    </button>
+                  );
+                })}
+              </div>
+            </>
+          )}
+        </div>
+
+        {/* Org context form */}
+        <div className="border-t border-gray-200 bg-white px-4 py-4 space-y-3">
+          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Your Organization</p>
+
+          <div>
+            <label className="text-xs text-gray-500 mb-1 block">Company Name *</label>
+            <input
+              type="text"
+              value={form.org_name}
+              onChange={(e) => setForm((f) => ({ ...f, org_name: e.target.value }))}
+              placeholder="Acme Corp"
+              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="text-xs text-gray-500 mb-1 block">Industry *</label>
+              <select
+                value={form.industry}
+                onChange={(e) => setForm((f) => ({ ...f, industry: e.target.value }))}
+                className="w-full border border-gray-200 rounded-lg px-2 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+              >
+                <option value="">Select…</option>
+                {INDUSTRIES.map((i) => <option key={i} value={i}>{i}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="text-xs text-gray-500 mb-1 block">Company Size *</label>
+              <select
+                value={form.size}
+                onChange={(e) => setForm((f) => ({ ...f, size: e.target.value }))}
+                className="w-full border border-gray-200 rounded-lg px-2 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+              >
+                {SIZES.map((s) => <option key={s.value} value={s.value}>{s.label} ({s.sub})</option>)}
+              </select>
+            </div>
+          </div>
+
+          <div>
+            <label className="text-xs text-gray-500 mb-1 block">Country / Jurisdiction</label>
+            <input
+              type="text"
+              value={form.country}
+              onChange={(e) => setForm((f) => ({ ...f, country: e.target.value }))}
+              placeholder="US, France, UK…"
+              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+
+          <div>
+            <label className="text-xs text-gray-500 mb-1 block">Target Frameworks</label>
+            <div className="flex flex-wrap gap-1.5">
+              {FRAMEWORKS.map((fw) => {
+                const on = form.frameworks.includes(fw);
+                return (
+                  <button
+                    key={fw}
+                    onClick={() => setForm((f) => ({
+                      ...f,
+                      frameworks: on ? f.frameworks.filter((x) => x !== fw) : [...f.frameworks, fw],
+                    }))}
+                    className={`text-xs px-2 py-0.5 rounded-md border font-medium transition-colors ${
+                      on ? "bg-blue-600 text-white border-blue-600" : "bg-white text-gray-600 border-gray-200 hover:border-blue-300"
+                    }`}
+                  >
+                    {fw}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <div>
+            <label className="text-xs text-gray-500 mb-1 block">Special Requirements <span className="text-gray-400">(optional)</span></label>
+            <textarea
+              rows={2}
+              value={form.specific_requirements}
+              onChange={(e) => setForm((f) => ({ ...f, specific_requirements: e.target.value }))}
+              placeholder="e.g. We process EU personal data (GDPR), we have PCI scope for card payments…"
+              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+            />
+          </div>
+
+          <button
+            onClick={generate}
+            disabled={!canGenerate}
+            className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 disabled:opacity-40 text-white font-semibold text-sm py-2.5 rounded-xl transition-all"
+          >
+            {streaming ? (
+              <><Loader2 className="w-4 h-4 animate-spin" /> Generating…</>
+            ) : (
+              <><Sparkles className="w-4 h-4" /> Generate Document</>
+            )}
+          </button>
+        </div>
+      </div>
+
+      {/* ── RIGHT PANEL ───────────────────────────────────────────────────── */}
+      <div className="flex-1 flex flex-col overflow-hidden bg-white">
+
+        {/* Output toolbar */}
+        <div className="flex items-center justify-between px-6 py-3 border-b border-gray-100 bg-white flex-shrink-0">
+          <div className="flex items-center gap-2">
+            {selectedDoc ? (
+              <>
+                <span className="text-sm font-semibold text-gray-800">{selectedDoc}</span>
+                {streaming && (
+                  <span className="flex items-center gap-1 text-xs text-purple-600 bg-purple-50 px-2 py-0.5 rounded-full">
+                    <Loader2 className="w-3 h-3 animate-spin" /> Writing…
+                  </span>
+                )}
+                {done && !editing && !approved && (
+                  <span className="text-xs text-green-600 bg-green-50 px-2 py-0.5 rounded-full">Ready to review</span>
+                )}
+                {editing && (
+                  <span className="text-xs text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-full flex items-center gap-1">
+                    <Pencil className="w-3 h-3" /> Editing
+                  </span>
+                )}
+                {approved && (
+                  <span className="text-xs text-green-700 bg-green-50 border border-green-200 px-2 py-0.5 rounded-full flex items-center gap-1">
+                    <CheckCircle className="w-3 h-3" /> Approved
+                  </span>
+                )}
+              </>
+            ) : (
+              <span className="text-sm text-gray-400">Select a document type to get started</span>
+            )}
+          </div>
+
+          {done && output && (
+            <div className="flex items-center gap-2">
+              {/* Edit / Preview toggle */}
+              {!approved && (
+                <button
+                  onClick={editing ? handleExitEdit : handleEnterEdit}
+                  className={`flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg border transition-colors ${
+                    editing
+                      ? "bg-indigo-600 text-white border-indigo-600"
+                      : "text-gray-600 border-gray-200 hover:bg-gray-50"
+                  }`}
+                >
+                  {editing ? <><Eye className="w-3.5 h-3.5" /> Preview</> : <><Pencil className="w-3.5 h-3.5" /> Edit</>}
+                </button>
+              )}
+
+              <div className="w-px h-4 bg-gray-200" />
+
+              <button
+                onClick={generate}
+                disabled={editing}
+                className="flex items-center gap-1.5 text-xs text-gray-600 border border-gray-200 hover:bg-gray-50 disabled:opacity-40 px-3 py-1.5 rounded-lg transition-colors"
+              >
+                <RotateCcw className="w-3.5 h-3.5" /> Regenerate
+              </button>
+              <button
+                onClick={handleCopy}
+                className="flex items-center gap-1.5 text-xs text-gray-600 border border-gray-200 hover:bg-gray-50 px-3 py-1.5 rounded-lg transition-colors"
+              >
+                {copied ? <CheckCheck className="w-3.5 h-3.5 text-green-500" /> : <Copy className="w-3.5 h-3.5" />}
+                {copied ? "Copied!" : "Copy"}
+              </button>
+              <button
+                onClick={handleDownload}
+                className="flex items-center gap-1.5 text-xs text-gray-600 border border-gray-200 hover:bg-gray-50 px-3 py-1.5 rounded-lg transition-colors"
+              >
+                <Download className="w-3.5 h-3.5" /> Download .txt
+              </button>
+
+              <div className="w-px h-4 bg-gray-200" />
+
+              {!approved ? (
+                <>
+                  <button
+                    onClick={handleSaveToPolicies}
+                    disabled={saved}
+                    className="flex items-center gap-1.5 text-xs text-gray-700 bg-white border border-gray-200 hover:bg-gray-50 disabled:opacity-60 px-3 py-1.5 rounded-lg transition-colors"
+                  >
+                    <Save className="w-3.5 h-3.5" /> Save as Draft
+                  </button>
+                  <button
+                    onClick={handleApprove}
+                    className="flex items-center gap-1.5 text-xs text-white bg-green-600 hover:bg-green-700 px-3 py-1.5 rounded-lg transition-colors font-medium"
+                  >
+                    <CheckCircle className="w-3.5 h-3.5" /> Approve & Save
+                  </button>
+                </>
+              ) : (
+                <span className={`flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg ${approved ? "text-green-700 bg-green-50 border border-green-200" : "text-blue-700 bg-blue-50 border border-blue-200"}`}>
+                  <CheckCheck className="w-3.5 h-3.5" />
+                  {approved ? "Approved & Saved" : "Saved as Draft"}
+                </span>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Output area */}
+        <div ref={scrollRef} className="flex-1 overflow-y-auto px-8 py-6">
+          {error && (
+            <div className="mb-4 flex items-center gap-2 bg-red-50 border border-red-200 rounded-xl p-4 text-sm text-red-700">
+              <X className="w-4 h-4 flex-shrink-0" />
+              {error}
+              <button onClick={generate} className="ml-2 underline text-red-600">Retry</button>
+            </div>
+          )}
+
+          {output ? (
+            <div className="max-w-3xl mx-auto">
+              {editing ? (
+                /* ── Edit mode: raw textarea ── */
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2 text-xs text-indigo-600 bg-indigo-50 border border-indigo-100 rounded-lg px-3 py-2">
+                    <Pencil className="w-3.5 h-3.5 flex-shrink-0" />
+                    <span>Editing mode — modify the document below. Click <strong>Preview</strong> to see the formatted result.</span>
+                  </div>
+                  <textarea
+                    value={editContent}
+                    onChange={(e) => setEditContent(e.target.value)}
+                    className="w-full min-h-[70vh] border border-indigo-200 rounded-xl px-4 py-4 text-sm font-mono text-gray-800 leading-relaxed focus:outline-none focus:ring-2 focus:ring-indigo-400 resize-none bg-white"
+                    spellCheck={false}
+                  />
+                </div>
+              ) : (
+                /* ── Preview mode: rendered markdown ── */
+                <>
+                  {editContent && editContent !== output && (
+                    <div className="flex items-center gap-2 text-xs text-amber-700 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2 mb-4">
+                      <Pencil className="w-3.5 h-3.5 flex-shrink-0" />
+                      This document has been edited. Click <strong className="ml-1">Edit</strong> to continue editing.
+                    </div>
+                  )}
+                  {renderMarkdown(editContent || output)}
+                  {streaming && (
+                    <span className="inline-block w-2 h-4 bg-purple-500 animate-pulse ml-0.5 rounded-sm align-text-bottom" />
+                  )}
+                </>
+              )}
+            </div>
+          ) : !streaming ? (
+            // Empty state
+            <div className="flex flex-col items-center justify-center h-full text-center py-20">
+              <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-purple-100 to-indigo-100 flex items-center justify-center mb-5">
+                <Wand2 className="w-9 h-9 text-purple-400" />
+              </div>
+              <h2 className="text-lg font-bold text-gray-800 mb-2">AI Document Generator</h2>
+              <p className="text-sm text-gray-400 max-w-sm mb-6">
+                Select a document type from the left panel, fill in your organization details,
+                and let AI generate a complete, ready-to-adapt GRC document in seconds.
+              </p>
+              <div className="grid grid-cols-2 gap-3 max-w-md text-left">
+                {DOCUMENT_CATEGORIES.map((cat) => {
+                  const Icon = cat.icon;
+                  return (
+                    <button
+                      key={cat.id}
+                      onClick={() => setActiveCategory(cat.id)}
+                      className={`flex items-start gap-3 p-3 rounded-xl border border-gray-100 hover:border-gray-200 hover:shadow-sm transition-all text-left`}
+                    >
+                      <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${cat.color}`}>
+                        <Icon className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <p className="text-xs font-semibold text-gray-700">{cat.label}</p>
+                        <p className="text-[11px] text-gray-400 mt-0.5">{cat.docs.length} documents</p>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          ) : (
+            <div className="flex items-center gap-2 text-sm text-purple-600">
+              <Loader2 className="w-4 h-4 animate-spin" />
+              Starting generation…
+            </div>
+          )}
+        </div>
+
+        {/* Tip footer */}
+        {!output && !streaming && (
+          <div className="border-t border-gray-50 px-6 py-3 flex-shrink-0">
+            <p className="text-xs text-gray-400 text-center">
+              💡 Tip: Add your specific requirements (GDPR scope, PCI cardholder data, etc.) for a more tailored document
+            </p>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}

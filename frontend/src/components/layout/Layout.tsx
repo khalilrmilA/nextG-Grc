@@ -14,7 +14,7 @@ import {
   LayoutDashboard, AlertTriangle, CheckSquare, BookOpen,
   ClipboardList, FileText, Building2, LogOut, Shield,
   ChevronRight, Bell, Settings, HelpCircle, Zap, Lock,
-  Crown, Briefcase, Eye, X, Trash2,
+  Crown, Briefcase, Eye, X, Trash2, Wand2,
   AlertCircle, Info, ShieldAlert, ClipboardCheck,
 } from "lucide-react";
 
@@ -33,6 +33,7 @@ const NAV_GROUPS = [
     items: [
       { to: "/audits",   icon: ClipboardList, label: "Audits",         module: "audits"   },
       { to: "/policies", icon: FileText,      label: "Policies",       module: "policies" },
+      { to: "/policy-generator", icon: Wand2, label: "Doc Generator",  module: "policy-generator" },
       { to: "/vendors",  icon: Building2,     label: "Vendors (TPRM)", module: "vendors"  },
     ],
   },
@@ -48,8 +49,9 @@ const PAGE_LABELS: Record<string, string> = {
   compliance: "Compliance",
   frameworks: "Frameworks",
   audits:     "Audits",
-  policies:   "Policies",
-  vendors:    "Vendors",
+  policies:          "Policies",
+  "policy-generator": "Doc Generator",
+  vendors:           "Vendors",
   settings:   "Settings",
   help:       "Help & Support",
 };

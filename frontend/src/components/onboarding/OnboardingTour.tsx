@@ -5,21 +5,24 @@ import {
   LayoutDashboard, AlertTriangle, CheckSquare, BookOpen,
   ClipboardList, FileText, Building2, Sparkles, Shield,
 } from "lucide-react";
+import { useAuthStore } from "@/store/auth";
 
 // ── Visit-count gate ──────────────────────────────────────────────────────────
-const VISIT_KEY  = "grc_tour_visits";
 const MAX_VISITS = 3;
 
-function getVisitCount(): number {
-  return parseInt(localStorage.getItem(VISIT_KEY) ?? "0", 10);
+function tourKey(userId: string | undefined): string {
+  return userId ? `grc_tour_visits_${userId}` : "grc_tour_visits";
 }
-function incrementVisitCount(): number {
-  const next = getVisitCount() + 1;
-  localStorage.setItem(VISIT_KEY, String(next));
+function getVisitCount(userId: string | undefined): number {
+  return parseInt(localStorage.getItem(tourKey(userId)) ?? "0", 10);
+}
+function incrementVisitCount(userId: string | undefined): number {
+  const next = getVisitCount(userId) + 1;
+  localStorage.setItem(tourKey(userId), String(next));
   return next;
 }
-export function resetTour() {
-  localStorage.removeItem(VISIT_KEY);
+export function resetTour(userId?: string) {
+  localStorage.removeItem(tourKey(userId));
 }
 
 // ── Tour step definitions ─────────────────────────────────────────────────────
@@ -188,15 +191,17 @@ function tooltipStyle(rect: Rect, placement: TourStep["placement"], vw: number, 
 // ── Main component ────────────────────────────────────────────────────────────
 export default function OnboardingTour() {
   const navigate = useNavigate();
+  const userId = useAuthStore((u) => u?.email);
   const [visible, setVisible] = useState(false);
   const [stepIdx, setStepIdx] = useState(0);
   const [rect, setRect] = useState<Rect>(NONE);
   const [animIn, setAnimIn] = useState(false);
   const rafRef = useRef<number | null>(null);
 
-  // ── Mount: check visit count ────────────────────────────────────────────────
+  // ── Mount: check visit count (per user) ─────────────────────────────────────
   useEffect(() => {
-    const visits = incrementVisitCount();
+    if (!userId) return; // wait until user is loaded
+    const visits = incrementVisitCount(userId);
     if (visits <= MAX_VISITS) {
       // small delay so the page renders first
       const t = setTimeout(() => {
@@ -205,7 +210,7 @@ export default function OnboardingTour() {
       }, 800);
       return () => clearTimeout(t);
     }
-  }, []);
+  }, [userId]);
 
   // ── Navigate + measure target when step changes ─────────────────────────────
   const step = TOUR_STEPS[stepIdx];

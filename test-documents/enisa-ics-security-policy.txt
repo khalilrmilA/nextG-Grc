@@ -1,0 +1,640 @@
+ICS/OT CYBERSECURITY POLICY AND CONTROLS FRAMEWORK
+Organization: Acme Industrial Systems GmbH
+Facility: Manufacturing Plant — Frankfurt Operations
+Document Type: Industrial Control System Security Policy
+Version: 3.2
+Effective Date: January 1, 2026
+Last Reviewed: February 15, 2026
+Owner: Head of OT Security / CISO
+Classification: Internal — Restricted
+
+==============================================================
+EXECUTIVE SUMMARY
+==============================================================
+
+This document defines Acme Industrial Systems' cybersecurity policy for
+Industrial Control Systems (ICS) and Operational Technology (OT) environments,
+aligned with the ENISA Guidelines for Cybersecurity in the ICS/SCADA sector,
+IEC 62443 series, and NIST SP 800-82 Rev 3.
+
+Our manufacturing operations include SCADA systems, Distributed Control Systems
+(DCS), Programmable Logic Controllers (PLCs), Human Machine Interfaces (HMIs),
+Historian servers, and industrial networking infrastructure spanning 3 production
+floors and 2 substations.
+
+Risk to production continuity, personnel safety, environmental compliance, and
+product quality are the primary drivers of this security program.
+
+==============================================================
+1. ICS SECURITY GOVERNANCE
+==============================================================
+
+1.1 ICS Security Organization
+Acme Industrial Systems maintains a dedicated OT Security team separate from the
+IT security function. Responsibilities are defined as follows:
+
+- Head of OT Security: Owns this policy, chairs the ICS Security Committee,
+  approves exceptions, and reports to the CISO and Plant Director.
+- OT Security Engineers (x3): Implement and monitor technical controls across
+  all ICS zones. On-call rotation for 24/7 incident coverage.
+- Control System Engineers: Responsible for safe configuration of PLCs, DCS,
+  and SCADA systems in coordination with OT Security.
+- IT/OT Integration Lead: Manages the demilitarized zone (DMZ) between IT and
+  OT networks.
+- Safety Instrumented System (SIS) Manager: Ensures SIS independence from
+  control network and cybersecurity requirements do not compromise functional
+  safety (IEC 61511).
+
+1.2 ICS Security Committee
+The ICS Security Steering Committee meets monthly and includes:
+- Head of OT Security (Chair)
+- Plant Director
+- Head of Production Engineering
+- IT Security Manager
+- Health, Safety & Environment (HSE) Manager
+- Quality Assurance Manager
+
+The committee reviews risk assessments, approves major changes to ICS
+infrastructure, and monitors the OT security program effectiveness.
+
+1.3 Policy Scope
+This policy applies to all ICS/OT assets including:
+- SCADA systems and historian servers
+- Distributed Control Systems (DCS)
+- Programmable Logic Controllers (PLCs) and Remote Terminal Units (RTUs)
+- Human Machine Interfaces (HMIs) — engineering workstations and operator panels
+- Industrial networking equipment (switches, routers, firewalls)
+- Safety Instrumented Systems (SIS) — read-only monitoring interfaces only
+- Industrial IoT (IIoT) sensors and edge computing devices
+- Engineering laptops and portable devices used in the OT environment
+- Vendor remote access systems
+
+==============================================================
+2. ICS RISK MANAGEMENT
+==============================================================
+
+2.1 OT-Specific Risk Assessment Methodology
+Acme conducts ICS risk assessments using a methodology aligned with
+ENISA ICS Security Guidelines and IEC 62443-3-2 (Security Risk Assessment).
+Risk assessments consider:
+
+- Safety impact: Risk to human life and personnel safety
+- Environmental impact: Risk of environmental damage or regulatory violation
+- Production impact: Loss of production continuity, quality, or revenue
+- Confidentiality impact: Theft of process IP, formulas, or production data
+
+Risk assessments are conducted:
+- Annually for the full ICS environment
+- When new ICS components are introduced
+- Following any security incident
+- When significant process changes occur
+
+2.2 Threat Landscape
+Documented threats specific to our ICS environment include:
+- Nation-state actors targeting industrial infrastructure
+- Criminal ransomware affecting operational continuity
+- Insider threats from employees and contractors with physical access
+- Supply chain compromise of ICS vendor components and software
+- Targeted attacks exploiting OT-specific protocols (Modbus, DNP3, OPC-UA)
+- Physical intrusion leading to direct manipulation of field devices
+- Engineering workstation compromise via USB or internet connectivity
+
+2.3 Asset Inventory and Classification
+All ICS assets are documented in the OT Asset Register, maintained in the
+ICS Security Management Platform (Claroty). Asset records include:
+- Asset type, manufacturer, model, firmware version
+- Communication protocols and network connectivity
+- Assigned security zone (per Purdue Model levels 0-5)
+- Criticality classification (Critical / High / Medium / Low)
+- Last patching date and patch status
+- Responsible engineer
+
+Critical assets (Level 0/1 field devices in safety-critical processes) are
+reviewed quarterly. All assets are reviewed annually.
+
+2.4 Consequence Analysis
+For high-criticality assets, consequence analysis documents:
+- Maximum impact scenario (MIS) if asset is compromised
+- Safety Integrity Level (SIL) requirements where applicable
+- Recovery Time Objective (RTO) and Recovery Point Objective (RPO)
+- Manual override and fallback procedures
+- Notification requirements (regulatory, customer, insurance)
+
+==============================================================
+3. NETWORK ARCHITECTURE AND SEGMENTATION
+==============================================================
+
+3.1 Defense-in-Depth Architecture
+Acme's ICS network is designed using a defense-in-depth approach based on
+the Purdue Enterprise Reference Architecture (PERA) and IEC 62443-3-3:
+
+Level 5: Enterprise Network (Corporate IT)
+Level 4: Business Logistics Systems (ERP integration)
+- DMZ: Industrial DMZ (IDMZ) with dual firewalls, data diodes where required
+Level 3: Site Operations (SCADA, Historian, Batch Management)
+Level 2: Area Control (DCS controllers, SCADA HMIs)
+Level 1: Basic Control (PLCs, drives, safety systems)
+Level 0: Field Devices (sensors, actuators, instruments)
+
+3.2 Network Segmentation Controls
+- The IDMZ enforces strict unidirectional data flow from OT to IT using
+  hardware data diodes for historian replication to business systems.
+- Each production zone (Zone A: Mixing, Zone B: Processing, Zone C: Packaging)
+  is a separate network segment with zone-to-zone firewall rules.
+- All inter-zone communication is explicitly permitted via allowlist rules.
+  Default-deny policy applies at all zone boundaries.
+- OT network traffic is monitored by Claroty industrial NDR with deep packet
+  inspection for OT protocols (Modbus TCP, EtherNet/IP, OPC-UA, PROFINET).
+- Safety Instrumented Systems (SIS) are on a completely isolated network with
+  no data connections to control or corporate networks.
+
+3.3 Wireless Controls
+Industrial wireless (ISA100.11a) is used only in Zone B for mobile operator
+panels. Controls include:
+- WPA3-Enterprise authentication with device certificates
+- Separate wireless VLAN with firewall isolation from wired OT network
+- Rogue access point detection via wireless IDS
+- Wireless usage restricted to approved devices via MAC allowlist
+
+3.4 Remote Connectivity
+- All remote access to OT systems is via the approved vendor remote access
+  platform (Claroty xDome) with session recording and MFA.
+- Direct internet connectivity from OT network is prohibited.
+- All remote sessions require prior approval via the change management system.
+- Remote sessions are limited to 4 hours; automatic disconnect enforced.
+- Vendor remote access accounts are provisioned per-engagement and revoked
+  immediately upon completion.
+
+==============================================================
+4. ACCESS CONTROL AND IDENTITY MANAGEMENT
+==============================================================
+
+4.1 OT Access Control Policy
+Access to ICS systems follows the principle of least privilege.
+Role-based access control (RBAC) is implemented across all SCADA and DCS
+systems with the following roles:
+
+- Operator: Read access + approved control actions (setpoint changes within
+  defined limits). Cannot modify configurations.
+- Senior Operator: All operator permissions + emergency shutdown authorization.
+- Control Engineer: Full engineering access to assigned production zone.
+  Cannot access SIS configuration.
+- OT Security Engineer: Security configuration access across all zones.
+  Cannot modify process logic.
+- Vendor/Contractor: Temporary, scoped access per work order. Supervised
+  by Acme engineer for all activities.
+
+4.2 Account Management
+- All OT system accounts are managed in the OT Identity Management System,
+  separate from corporate Active Directory.
+- Shared/generic accounts are prohibited on all ICS systems.
+- Operator accounts are reviewed quarterly; engineering accounts monthly.
+- Accounts for employees who change roles or leave are disabled within 2 hours
+  of HR notification.
+- Privileged accounts (engineering level) require dual approval from
+  OT Security and production management.
+
+4.3 Authentication Requirements
+- All workstations and HMIs require individual login; auto-login is prohibited.
+- Engineering workstations require smart card + PIN authentication.
+- Remote access requires MFA (hardware token mandatory for vendor access).
+- Session timeout: 10 minutes inactivity on HMIs, 15 minutes on workstations.
+- Failed login attempts: Account locked after 5 failures; OT Security alerted.
+
+4.4 Physical Access Control
+Physical access to the control room, server room, and substation control
+panels is controlled by:
+- Biometric + card access for the main control room
+- Key-card access with audit log for server room and substations
+- All physical access events are logged and reviewed weekly
+- Visitor access requires escort by authorized personnel at all times
+- Tailgating detection cameras at all controlled entry points
+
+==============================================================
+5. PATCH AND VULNERABILITY MANAGEMENT
+==============================================================
+
+5.1 OT Patch Management Process
+Patching in ICS environments requires careful change management due to
+availability and safety requirements. Acme's OT patch process:
+
+Step 1: Vendor Notification — Monitor ICS-CERT, vendor advisories, and
+ENISA advisories for vulnerabilities affecting our assets.
+
+Step 2: Impact Assessment — For each vulnerability, the OT Security team
+assesses exploitability in our specific environment, potential impact,
+and available mitigating controls.
+
+Step 3: Patching Priority:
+- Critical (CVSS 9.0+, exploited in wild): Patch within 30 days or apply
+  compensating controls immediately.
+- High (CVSS 7.0-8.9): Patch within 90 days or next scheduled maintenance.
+- Medium (CVSS 4.0-6.9): Patch during next planned maintenance window.
+- Low (CVSS <4.0): Patch during annual maintenance shutdown.
+
+Step 4: Testing — All patches are tested in the ICS test environment (replica
+of production Zone B) before production deployment.
+
+Step 5: Change Approval — Patches to production systems require CAB approval
+including Safety review for SIL-rated systems.
+
+Step 6: Deployment — Patches deployed during planned maintenance windows to
+avoid production impact. Production team on standby during deployment.
+
+5.2 Legacy System Management
+Several Level 0/1 field devices run legacy operating systems (Windows XP/2003)
+that cannot be patched. Compensating controls for legacy systems include:
+- Network isolation in dedicated VLAN with strict firewall rules
+- Application whitelisting on legacy Windows HMIs (McAfee Application Control)
+- Enhanced monitoring with alerts for any anomalous communications
+- Physical security controls to prevent direct access
+- Documented in the Risk Register with accepted residual risk (signed by CISO)
+
+5.3 Vulnerability Scanning
+- Passive network monitoring (Claroty) continuously detects new devices and
+  protocol anomalies — no active scanning on Level 0/1 networks.
+- Active vulnerability scanning is performed on Level 3+ systems during
+  maintenance windows only.
+- Annual penetration test of the IDMZ and remote access infrastructure by
+  certified ICS security firm.
+
+==============================================================
+6. CHANGE MANAGEMENT
+==============================================================
+
+6.1 ICS Change Management Process
+All changes to ICS hardware, software, configurations, and network connectivity
+follow the ICS Change Management Procedure:
+
+- Standard Changes: Pre-approved routine changes (e.g., operator account
+  creation). Logged but no CAB required.
+- Normal Changes: Require OT Security review, production engineering approval,
+  and CAB authorization. Minimum 5 business days notice.
+- Emergency Changes: Require OT Security lead and Plant Director approval.
+  Retrospective CAB review within 48 hours.
+
+6.2 Pre-Change Requirements
+Before any change to production ICS systems:
+- Configuration backup taken and verified
+- Rollback procedure documented and tested where feasible
+- Safety review completed for changes near SIS or SIL-rated equipment
+- Production team notified of maintenance window
+- Change communicated to shift operators
+
+6.3 Configuration Management
+- Golden configuration baselines are maintained for all ICS devices in the
+  Configuration Management Database (Tripwire Industrial).
+- Any unauthorized configuration change triggers an automatic alert to OT Security.
+- Configuration audits are performed quarterly, comparing live configurations
+  against approved baselines.
+- Configuration backups are stored offline (encrypted) and tested annually.
+
+==============================================================
+7. REMOVABLE MEDIA AND PORTABLE DEVICES
+==============================================================
+
+7.1 Removable Media Controls
+The use of USB drives and removable media in the OT environment is tightly
+controlled due to the primary attack vector they represent:
+
+- USB ports are disabled by policy on all OT workstations and HMIs via
+  Group Policy and physical USB port blockers.
+- Approved USB transfers use dedicated scanning kiosks (Honeywell Secure Media
+  Exchange) to scan all media for malware before introduction to OT network.
+- All media scans are logged; any detection triggers immediate OT Security alert.
+- Approved USB devices are registered with unique identifiers and only these
+  devices can be used after scanning.
+- Personal USB drives are strictly prohibited in the OT environment.
+
+7.2 Engineering Laptops
+Engineering laptops used in the OT environment:
+- Are dedicated OT laptops — never connected to the corporate or internet networks.
+- Run hardened OS builds with application whitelisting.
+- Cannot connect to OT network without prior approval and registration.
+- Are scanned at the media kiosk when returning from vendor sites.
+- Are inventoried and audited quarterly.
+
+==============================================================
+8. SECURITY MONITORING AND DETECTION
+==============================================================
+
+8.1 OT Security Monitoring Architecture
+Acme operates a dedicated OT Security Operations capability:
+
+- Claroty Enterprise: Passive industrial network monitoring across all OT
+  zones. Detects anomalous behavior, new devices, and OT protocol violations.
+- OT SIEM (IBM QRadar with ICS use cases): Aggregates logs from firewalls,
+  historian, SCADA, and Claroty. Correlates events to detect attack patterns.
+- Physical security system: CCTV integrated with access control events
+  in security monitoring platform.
+
+8.2 Monitoring Coverage
+The following events are monitored and generate alerts:
+- New device appearing on OT network
+- Unauthorized network scan or port sweep
+- OT protocol command outside normal operational parameters
+- Failed authentication attempts (>3 in 5 minutes)
+- Unauthorized configuration changes (Tripwire alert)
+- USB media insertion on OT workstation
+- Remote access session outside approved hours
+- Communication from OT network to internet addresses
+- SCADA alarm floods (indicator of manipulation)
+- Safety system communication anomalies
+
+8.3 Alert Response Times
+- Critical alerts (potential active attack): Investigated within 15 minutes,
+  24/7 coverage via on-call OT Security engineer.
+- High alerts: Investigated within 1 hour during business hours, 2 hours
+  off-hours.
+- Medium alerts: Investigated within 4 business hours.
+- Daily alert review meeting at 08:00 each working day.
+
+8.4 Baseline Behavior Profiling
+Normal operational baselines are documented and maintained for:
+- Network traffic patterns (volume, protocols, endpoints) per production zone
+- SCADA polling cycles and historian data rates
+- PLC program execution patterns
+- Operator interaction patterns on HMIs
+- Remote access frequency and duration
+
+Deviations from baseline exceeding defined thresholds trigger anomaly alerts.
+
+==============================================================
+9. INCIDENT RESPONSE
+==============================================================
+
+9.1 ICS Incident Response Plan
+Acme maintains a dedicated ICS Incident Response Plan (IRP), separate from
+the corporate IT IRP, accounting for safety and production considerations.
+The plan is reviewed annually and tested via tabletop exercise.
+
+9.2 Incident Classification
+- Safety Emergency: Immediate threat to personnel safety or environmental
+  release. HSE emergency response takes priority over cyber response.
+- Level 1 (Critical): Active cyberattack with confirmed OT impact or
+  imminent safety risk. Declare production emergency.
+- Level 2 (High): Confirmed compromise of OT system without immediate
+  safety impact. Potential for escalation.
+- Level 3 (Medium): Suspicious activity, policy violation with OT impact.
+- Level 4 (Low): Security anomaly requiring investigation.
+
+9.3 Incident Response Procedures
+
+DETECTION AND TRIAGE (0-15 minutes for Level 1/2):
+- OT Security engineer validates alert and determines scope
+- Notifies Head of OT Security and Plant Director
+- Initiates incident log and assigns incident ID
+
+CONTAINMENT (15-60 minutes):
+- Isolate affected systems while maintaining safety-critical functions
+- Activate fallback/manual control procedures if required
+- Preserve forensic evidence (memory captures, network logs, PLC ladder logic)
+- Do NOT power off PLCs or safety systems without safety engineering approval
+
+ERADICATION AND RECOVERY:
+- Root cause analysis with support from ICS security specialist (retained vendor)
+- Restore from verified clean backups
+- Safety functional test before returning to production
+- Change all credentials in affected systems
+
+9.4 External Notifications
+- HSE Regulator: Within 4 hours if safety system affected
+- ENISA/National CERT: Within 24 hours for significant ICS incidents
+  (per NIS2 Directive requirements)
+- Customers: Per contractual obligations and materiality assessment
+- Cyber insurance carrier: Within 48 hours
+- Law enforcement: As appropriate for criminal activity
+
+9.5 Forensic Preservation
+Forensic evidence is preserved in accordance with chain-of-custody procedures:
+- Network packet captures from Claroty and SIEM
+- PLC event logs and program change history
+- HMI operator logs and alarm history
+- Physical access logs
+- System memory images where safely obtainable
+Evidence is preserved for minimum 2 years or duration of any legal proceeding.
+
+==============================================================
+10. SUPPLY CHAIN AND VENDOR SECURITY
+==============================================================
+
+10.1 ICS Vendor Assessment
+All ICS vendors, system integrators, and component suppliers are assessed
+before engagement and annually for active vendors. Assessment covers:
+- Secure software development lifecycle (SDL) practices
+- Vulnerability disclosure program
+- Security certifications (IEC 62443-4-1 for products, ISO 27001 for vendors)
+- Patch and support lifecycle commitments
+- Incident notification obligations
+
+10.2 Vendor Access Management
+- Vendor remote access is provided via the Claroty xDome platform with
+  session recording, MFA, and time-limited access windows.
+- All vendor sessions are approved in advance via change management system.
+- Vendors may not transfer files to/from OT systems without OT Security scan.
+- Vendor access accounts are unique per vendor — no shared credentials.
+- All vendor activities in OT environment are supervised by Acme engineer.
+
+10.3 Component Integrity
+- PLC programs and firmware received from vendors are hash-verified before
+  installation.
+- ICS software installations are verified against vendor-provided checksums.
+- Hardware received for OT use is inspected for tampering before deployment.
+- Supply chain risk is documented in the risk register for critical vendors.
+
+10.4 Integration and Maintenance Contracts
+All ICS vendor contracts include:
+- Cybersecurity requirements schedule aligned with IEC 62443
+- Right to audit vendor cybersecurity practices
+- Mandatory breach notification within 24 hours
+- Software bill of materials (SBOM) for supplied software
+- Patch support commitments (minimum 10 years for critical components)
+
+==============================================================
+11. BACKUP AND RECOVERY
+==============================================================
+
+11.1 ICS Backup Strategy
+Critical ICS data and configurations are backed up as follows:
+
+SCADA/HMI Systems:
+- Full system image: Weekly, retained 12 months
+- SCADA database (historical data): Daily incremental, retained 3 years
+- Configuration backup: After every approved change
+
+PLC/DCS Controllers:
+- Program backup: After every approved change + weekly scheduled
+- Backed up to offline storage (encrypted USB kept in physical safe)
+- Tested for restore integrity quarterly
+
+Historian Server:
+- Continuous replication to DR historian (Level 3 site, geographically separate)
+- Daily backup to offline storage
+
+11.2 Recovery Procedures
+- All recovery procedures are documented in the ICS Recovery Runbook
+- Recovery procedures are tested annually during planned maintenance shutdown
+- Recovery time targets: Critical SCADA — 4 hours; Full production — 8 hours
+- Manual operation procedures exist for all critical processes to bridge
+  the recovery window
+
+11.3 Offline Backup Security
+- All backups are encrypted (AES-256)
+- Backup encryption keys are stored in a separate key management system
+- Offline backup media is stored in a fireproof safe in the control room
+- Backup restore access requires two-person authorization (OT Security + Engineering)
+
+==============================================================
+12. SECURITY AWARENESS AND TRAINING
+==============================================================
+
+12.1 OT-Specific Training Program
+All personnel with access to the OT environment receive security training
+tailored to ICS/OT threats:
+
+Required Training:
+- OT Security Awareness (all OT-connected personnel): Annual, 2 hours
+  Topics: Phishing in OT context, USB threats, social engineering, incident reporting
+- ICS Security for Engineers (control system engineers): Annual, 8 hours
+  Topics: Secure PLC programming, HMI security, network segmentation
+- OT Incident Response (OT security team): Annual, full-day exercise
+  Topics: Attack simulation, forensic preservation, safe containment
+
+12.2 Security Drills
+- Annual tabletop exercise simulating ICS cyberattack (ransomware scenario)
+- Quarterly fire drill integration with OT incident response procedures
+- Annual red team exercise of IDMZ and remote access (external firm)
+
+12.3 Contractor and Visitor Briefing
+All contractors and visitors in OT areas receive:
+- 30-minute OT security briefing before first access
+- Physical security rules and reporting obligations
+- Acknowledgment signature retained on file
+
+==============================================================
+13. COMPLIANCE AND AUDIT
+==============================================================
+
+13.1 Regulatory Compliance
+Acme's ICS security program is designed to comply with:
+- NIS2 Directive (EU) — critical infrastructure operator obligations
+- ENISA ICS/SCADA Security Guidelines
+- IEC 62443 series (industrial cybersecurity standard)
+- German BSI IT-Grundschutz (IT baseline protection)
+- GDPR (for process data containing personal information)
+- Machinery Directive and Functional Safety (IEC 61511/61508)
+
+13.2 Internal Audit
+ICS security controls are audited annually by the internal audit function,
+with a qualified ICS security specialist engaged for technical testing.
+Audit findings are tracked and reported to the ICS Security Committee.
+
+13.3 External Assessment
+- Annual ICS security assessment by accredited ICS security firm
+- Penetration testing of IDMZ and remote access infrastructure annually
+- IEC 62443 gap assessment every 3 years
+- NIS2 compliance review annually with external legal counsel
+
+13.4 Key Performance Indicators
+The ICS security program tracks monthly KPIs including:
+- % of critical vulnerabilities patched within SLA
+- Mean time to detect (MTTD) security events
+- Mean time to respond (MTTR) to security incidents
+- % of OT accounts reviewed on schedule
+- % of ICS assets in inventory with current baseline
+- % of staff completing annual OT security training
+- Number of unauthorized configuration changes detected
+
+==============================================================
+14. BUSINESS CONTINUITY AND RESILIENCE
+==============================================================
+
+14.1 ICS Business Continuity Plan
+The ICS BCP addresses:
+- Loss of SCADA visibility (run on last known good setpoints)
+- Loss of historian (manual data logging procedures)
+- Ransomware affecting Level 3+ systems (isolate, maintain Level 0-2 operation)
+- Physical destruction of control room (backup control room activation)
+- Extended loss of OT network (manual local control procedures at field panels)
+
+14.2 Resilience Design Principles
+- Critical PLCs and DCS controllers are redundant (hot standby)
+- Safety Instrumented System operates independently of all cybersecurity incidents
+- Operator manual control procedures are documented, posted in control room,
+  and practiced annually
+- Critical sensor data has local indicators independent of SCADA network
+- UPS and generator backup for all critical control room and server room equipment
+
+==============================================================
+15. DOCUMENT CONTROL AND REVIEW
+==============================================================
+
+This policy is reviewed annually by the Head of OT Security and approved
+by the ICS Security Committee. Emergency updates may be issued by the
+Head of OT Security with retrospective Committee approval.
+
+All personnel with OT access acknowledge this policy annually via the
+security awareness training platform. Non-compliance is reported to HR
+and may result in access revocation and disciplinary action.
+
+Version  | Date       | Author            | Changes
+---------|------------|-------------------|------------------------------------
+1.0      | Jan 2022   | OT Security Lead  | Initial release
+2.0      | Jan 2023   | Head of OT Sec    | Added IEC 62443 alignment
+2.5      | Jul 2023   | Head of OT Sec    | Remote access controls enhanced
+3.0      | Jan 2024   | Head of OT Sec    | NIS2 alignment, supply chain additions
+3.1      | Aug 2024   | Head of OT Sec    | Claroty NDR deployment updates
+3.2      | Jan 2026   | Head of OT Sec    | Annual review, ENISA 2025 guidelines
+
+Approved by: Plant Director & CISO
+Approval Date: January 20, 2026
+Next Review: January 2027
+
+==============================================================
+APPENDIX A: ICS ASSET CRITICALITY CLASSIFICATION
+==============================================================
+
+CRITICAL (immediate safety/production impact if compromised):
+- Safety Instrumented System (SIS) monitoring interfaces
+- Emergency Shutdown System (ESD) HMI
+- Primary DCS controller (Zone A Mixing — exothermic reaction process)
+- Primary SCADA server
+
+HIGH (significant production impact, no immediate safety risk):
+- Zone B and Zone C DCS controllers
+- Engineering workstations (all zones)
+- Historian server
+- IDMZ firewall cluster
+
+MEDIUM (limited production impact, recoverable):
+- Operator HMIs (read-only operator panels)
+- Remote I/O modules
+- Industrial switches
+
+LOW (minimal impact, easily restored):
+- Ancillary monitoring systems
+- Environmental monitoring sensors
+- Administrative ICS workstations
+
+==============================================================
+APPENDIX B: APPROVED ICS COMMUNICATION PROTOCOLS
+==============================================================
+
+OT Network (Levels 0-2):
+- Modbus TCP (read-only polling from Level 2 to Level 1)
+- EtherNet/IP (Zone B automated guided vehicles)
+- PROFINET (Zone C packaging line)
+- IEC 61850 (substation automation)
+- Foundation Fieldbus H1 (Zone A process instruments)
+
+IDMZ Approved Flows:
+- OPC-UA (Level 3 Historian ← Level 2 DCS, unidirectional via data diode)
+- HTTPS (remote access via Claroty xDome, MFA required)
+- Syslog/TLS (OT SIEM log collection, outbound only)
+
+Prohibited Protocols (blocked at all zone firewalls):
+- SMB/CIFS (file sharing — prohibited between all zones)
+- RDP (remote desktop — only permitted via approved jump server)
+- FTP (replaced by SFTP with key-based auth for approved transfers)
+- Telnet/rsh (replaced by SSH for all management access)
+- SNMP v1/v2 (replaced by SNMPv3 with authentication and encryption)

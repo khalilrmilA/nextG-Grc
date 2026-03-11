@@ -4,12 +4,14 @@ import {
   ArrowLeft, Upload, FileText, Play, Loader2,
   CheckCircle, XCircle, AlertTriangle, MinusCircle,
   ChevronDown, ChevronUp, Sparkles, Globe, GitBranch,
+  Download, Table2,
 } from "lucide-react";
 import { complianceApi } from "@/api/endpoints";
 import type { AssessmentDetail, GapDetail, ControlAssessmentDetail } from "@/types";
 import PolicyGeneratorModal from "@/components/features/compliance/PolicyGeneratorModal";
 import DocumentChecklistTab from "@/components/features/compliance/DocumentChecklistTab";
 import GapReportTab from "@/components/features/compliance/GapReportTab";
+import { exportComplianceCSV, exportComplianceReport } from "@/utils/exportUtils";
 
 // ─── Status helpers ────────────────────────────────────────────────────────────
 
@@ -193,20 +195,46 @@ function ResultsTab({
   const [filter, setFilter] = useState<"all" | "implemented" | "partial" | "gap">("all");
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [policyGap, setPolicyGap] = useState<GapDetail | null>(null);
+  const [overrides, setOverrides] = useState<Record<string, string>>({});
+  const [history, setHistory] = useState<Record<string, { status: string; by: string; at: string }[]>>({});
+  const [saving, setSaving] = useState<string | null>(null);
+
+  async function handleStatusOverride(caId: string, currentStatus: string, newStatus: string) {
+    if (newStatus === currentStatus) return;
+    setSaving(caId);
+    try {
+      await complianceApi.updateControlAssessment(caId, { status: newStatus as import("@/types").ControlStatus });
+      setOverrides((prev) => ({ ...prev, [caId]: newStatus }));
+      setHistory((prev) => ({
+        ...prev,
+        [caId]: [
+          ...(prev[caId] ?? [{ status: currentStatus, by: "AI Analysis", at: new Date(assessment.updated_at).toLocaleDateString() }]),
+          { status: newStatus, by: "Manual override", at: new Date().toLocaleDateString() },
+        ],
+      }));
+    } catch {/* silent */} finally {
+      setSaving(null);
+    }
+  }
 
   const cas = assessment.control_assessments;
+  function effectiveStatus(ca: ControlAssessmentDetail) {
+    return overrides[ca.id] ?? ca.status;
+  }
+
   const filtered = cas.filter((ca) => {
-    if (filter === "implemented") return ca.status === "implemented";
-    if (filter === "partial") return ca.status === "partially_implemented";
-    if (filter === "gap") return ca.status === "not_implemented";
+    const st = effectiveStatus(ca);
+    if (filter === "implemented") return st === "implemented";
+    if (filter === "partial") return st === "partially_implemented";
+    if (filter === "gap") return st === "not_implemented";
     return true;
   });
 
   const counts = {
     all: cas.length,
-    implemented: cas.filter((c) => c.status === "implemented").length,
-    partial: cas.filter((c) => c.status === "partially_implemented").length,
-    gap: cas.filter((c) => c.status === "not_implemented").length,
+    implemented: cas.filter((c) => effectiveStatus(c) === "implemented").length,
+    partial: cas.filter((c) => effectiveStatus(c) === "partially_implemented").length,
+    gap: cas.filter((c) => effectiveStatus(c) === "not_implemented").length,
   };
 
   function findGap(ca: ControlAssessmentDetail): GapDetail | undefined {
@@ -251,6 +279,64 @@ function ResultsTab({
               <p className="text-xs text-gray-500">{s.label}</p>
             </div>
           ))}
+        </div>
+        <div className="flex flex-col gap-2 shrink-0">
+          <button
+            onClick={() => exportComplianceCSV(
+              cas.map((c) => ({
+                control_identifier: c.control_identifier,
+                control_title: c.control_title,
+                control_category: c.control_category,
+                status: c.status,
+                notes: c.notes,
+                implementation_notes: c.implementation_notes,
+              })),
+              assessment.name,
+              assessment.framework_name ?? assessment.framework_short_name ?? ""
+            )}
+            className="flex items-center gap-1.5 text-xs font-medium border border-gray-200 hover:bg-gray-50 text-gray-600 px-3 py-1.5 rounded-lg transition-colors"
+          >
+            <Table2 className="w-3.5 h-3.5" />
+            Export CSV
+          </button>
+          <button
+            onClick={() => exportComplianceReport({
+              assessmentName: assessment.name,
+              frameworkName: assessment.framework_name ?? "",
+              frameworkShortName: assessment.framework_short_name ?? "",
+              complianceScore: assessment.compliance_score ?? null,
+              generatedAt: new Date().toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }),
+              org: "",
+              statusCounts: {
+                implemented: counts.implemented,
+                partially_implemented: counts.partial,
+                not_implemented: counts.gap,
+                not_applicable: cas.filter((c) => c.status === "not_applicable").length,
+                total: cas.length,
+              },
+              gaps: assessment.gaps.map((g) => ({
+                control_identifier: g.control_identifier,
+                control_title: g.control_title,
+                severity: g.severity,
+                gap_description: g.gap_description,
+                remediation_steps: g.remediation_steps,
+                is_certification_blocker: g.is_certification_blocker,
+                recommendation_status: g.recommendation_status ?? "pending",
+              })),
+              controls: cas.map((c) => ({
+                control_identifier: c.control_identifier,
+                control_title: c.control_title,
+                control_category: c.control_category,
+                status: c.status,
+                notes: c.notes,
+                implementation_notes: c.implementation_notes,
+              })),
+            })}
+            className="flex items-center gap-1.5 text-xs font-medium border border-gray-200 hover:bg-gray-50 text-gray-600 px-3 py-1.5 rounded-lg transition-colors"
+          >
+            <Download className="w-3.5 h-3.5" />
+            Full Report
+          </button>
         </div>
       </div>
 
@@ -313,7 +399,7 @@ function ResultsTab({
                   {ca.ai_confidence != null && (
                     <span className="text-xs text-gray-400">{Math.round(ca.ai_confidence * 100)}%</span>
                   )}
-                  <ControlStatusBadge status={ca.status} />
+                  <ControlStatusBadge status={effectiveStatus(ca)} />
                   {gap && (
                     <button
                       onClick={() => setPolicyGap(gap)}
@@ -359,6 +445,45 @@ function ResultsTab({
                           <span key={i} className="text-xs bg-indigo-50 text-indigo-700 px-1.5 py-0.5 rounded">
                             {m.framework} {m.control}
                           </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Manual override */}
+                  <div className="flex items-center gap-2 pt-1">
+                    <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide shrink-0">Override status:</p>
+                    <select
+                      value={effectiveStatus(ca)}
+                      onChange={(e) => handleStatusOverride(ca.id, effectiveStatus(ca), e.target.value)}
+                      disabled={saving === ca.id}
+                      className="text-xs border border-gray-200 rounded-lg px-2 py-1 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                    >
+                      <option value="implemented">Compliant</option>
+                      <option value="partially_implemented">Partial</option>
+                      <option value="not_implemented">Gap</option>
+                      <option value="not_applicable">N/A</option>
+                    </select>
+                    {saving === ca.id && <Loader2 className="w-3.5 h-3.5 animate-spin text-gray-400" />}
+                    {overrides[ca.id] && (
+                      <span className="text-xs text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded">manually overridden</span>
+                    )}
+                  </div>
+
+                  {/* Status change history */}
+                  {history[ca.id] && history[ca.id].length > 0 && (
+                    <div>
+                      <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Status History</p>
+                      <div className="space-y-1">
+                        {history[ca.id].map((h, i) => (
+                          <div key={i} className="flex items-center gap-2 text-xs text-gray-500">
+                            <span className="w-1.5 h-1.5 rounded-full bg-gray-300 shrink-0" />
+                            <span className="font-medium text-gray-700">{STATUS_CONFIG[h.status as keyof typeof STATUS_CONFIG]?.label ?? h.status}</span>
+                            <span>·</span>
+                            <span>{h.by}</span>
+                            <span>·</span>
+                            <span className="text-gray-400">{h.at}</span>
+                          </div>
                         ))}
                       </div>
                     </div>
@@ -579,6 +704,9 @@ export default function AssessmentDetailPage() {
       {activeTab === "gapreport" && assessmentId && (
         <GapReportTab
           assessmentId={assessmentId}
+          assessmentName={assessment?.name}
+          frameworkName={assessment?.framework_name}
+          frameworkShortName={assessment?.framework_short_name}
           gaps={gaps}
           onGapUpdated={handleGapUpdated}
         />

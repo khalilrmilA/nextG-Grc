@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate, Link } from "react-router-dom";
 import {
@@ -325,7 +326,7 @@ function FrameworkDashboard({ data }: { data: any }) {
               { label: "Run Analysis", desc: "AI gap assessment", icon: Sparkles, color: "bg-purple-50 hover:bg-purple-100 text-purple-700 border-purple-200", to: `/compliance/${data.assessment_id}` },
               { label: "View Gap Report", desc: "All open gaps", icon: AlertTriangle, color: "bg-orange-50 hover:bg-orange-100 text-orange-700 border-orange-200", to: `/compliance/${data.assessment_id}` },
               { label: "Upload Documents", desc: "Mandatory docs", icon: Upload, color: "bg-blue-50 hover:bg-blue-100 text-blue-700 border-blue-200", to: `/compliance/${data.assessment_id}` },
-              { label: "Traceability Matrix", desc: "Control → gap → action", icon: ClipboardList, color: "bg-green-50 hover:bg-green-100 text-green-700 border-green-200", to: `/compliance/${data.assessment_id}/traceability` },
+              { label: "Generate Policies", desc: "AI document builder", icon: BookOpen, color: "bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border-indigo-200", to: "/policy-generator" },
             ].map((action) => (
               <Link key={action.label} to={action.to}
                 className={`flex flex-col gap-1.5 p-4 rounded-xl border transition-colors ${action.color}`}>
@@ -344,27 +345,6 @@ function FrameworkDashboard({ data }: { data: any }) {
 }
 
 // ── No-framework onboarding card ──────────────────────────────────────────────
-
-function NoFrameworkCard() {
-  const navigate = useNavigate();
-  return (
-    <div className="flex flex-col items-center justify-center py-20 text-center">
-      <div className="w-16 h-16 bg-blue-100 rounded-2xl flex items-center justify-center mb-4">
-        <Shield className="w-8 h-8 text-blue-500" />
-      </div>
-      <h2 className="text-xl font-bold text-gray-900 mb-2">Select your compliance framework</h2>
-      <p className="text-gray-500 text-sm max-w-md mb-6">
-        Your dashboard, document checklist, and gap report are all framework-driven.
-        Pick your primary framework to get started.
-      </p>
-      <button
-        onClick={() => navigate("/compliance")}
-        className="bg-blue-600 hover:bg-blue-700 text-white font-semibold px-6 py-3 rounded-xl flex items-center gap-2">
-        <Plus className="w-4 h-4" /> Start Compliance Assessment
-      </button>
-    </div>
-  );
-}
 
 // ── Generic fallback dashboard ────────────────────────────────────────────────
 
@@ -434,39 +414,258 @@ function GenericDashboard({ d, isDemo }: { d: DashboardSummary; isDemo: boolean 
   );
 }
 
+// ── Framework Overview Card ────────────────────────────────────────────────────
+
+function FrameworkOverviewCard({ fw, onSelect }: { fw: any; onSelect: () => void }) {
+  const score = fw.compliance_score ?? null;
+  const readiness = fw.cert_readiness ?? null;
+
+  function scoreColor(v: number | null) {
+    if (v == null) return "text-gray-400";
+    if (v >= 75) return "text-green-600";
+    if (v >= 50) return "text-yellow-600";
+    return "text-red-500";
+  }
+  function scoreBg(v: number | null) {
+    if (v == null) return "bg-gray-100";
+    if (v >= 75) return "bg-green-500";
+    if (v >= 50) return "bg-yellow-400";
+    return "bg-red-400";
+  }
+
+  return (
+    <button
+      onClick={onSelect}
+      className="group bg-white rounded-2xl border border-gray-100 shadow-sm hover:shadow-lg hover:border-blue-200 transition-all p-6 text-left flex flex-col gap-4 w-full"
+    >
+      {/* Header */}
+      <div className="flex items-start justify-between">
+        <div>
+          <div className="flex items-center gap-2 mb-1">
+            <span className="text-xs font-bold px-2 py-0.5 rounded-md bg-blue-50 text-blue-700 font-mono">
+              {fw.framework_short_name}
+            </span>
+            {fw.is_primary && (
+              <span className="text-xs font-medium px-2 py-0.5 rounded-md bg-purple-50 text-purple-600">
+                Primary
+              </span>
+            )}
+          </div>
+          <p className="text-sm font-semibold text-gray-800 leading-snug">{fw.framework_name}</p>
+        </div>
+        <ChevronRight className="w-4 h-4 text-gray-300 group-hover:text-blue-500 transition-colors mt-1 flex-shrink-0" />
+      </div>
+
+      {/* Score ring + bar */}
+      {fw.has_assessment ? (
+        <>
+          <div className="flex items-center gap-4">
+            {/* Big score */}
+            <div className="text-center">
+              <p className={`text-3xl font-bold ${scoreColor(score)}`}>
+                {score != null ? `${score}%` : "—"}
+              </p>
+              <p className="text-xs text-gray-400 mt-0.5">Compliance</p>
+            </div>
+            {/* Mini stats */}
+            <div className="flex-1 space-y-2">
+              <div>
+                <div className="flex justify-between text-xs text-gray-500 mb-0.5">
+                  <span>Controls</span>
+                  <span className="font-medium">{fw.controls_implemented}/{fw.controls_total}</span>
+                </div>
+                <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                  <div
+                    className={`h-full rounded-full ${scoreBg(score)}`}
+                    style={{ width: `${score ?? 0}%` }}
+                  />
+                </div>
+              </div>
+              <div>
+                <div className="flex justify-between text-xs text-gray-500 mb-0.5">
+                  <span>Cert Readiness</span>
+                  <span className="font-medium">{readiness != null ? `${readiness}%` : "—"}</span>
+                </div>
+                <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                  <div
+                    className={`h-full rounded-full ${scoreBg(readiness)}`}
+                    style={{ width: `${readiness ?? 0}%` }}
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Footer chips */}
+          <div className="flex items-center gap-2 flex-wrap pt-1 border-t border-gray-50">
+            {fw.open_gaps > 0 && (
+              <span className="text-xs bg-orange-50 text-orange-600 border border-orange-100 px-2 py-0.5 rounded-lg font-medium">
+                {fw.open_gaps} open gaps
+              </span>
+            )}
+            {fw.open_blockers > 0 && (
+              <span className="text-xs bg-red-50 text-red-600 border border-red-100 px-2 py-0.5 rounded-lg font-medium">
+                🔴 {fw.open_blockers} blockers
+              </span>
+            )}
+            {fw.open_gaps === 0 && (
+              <span className="text-xs bg-green-50 text-green-600 border border-green-100 px-2 py-0.5 rounded-lg font-medium">
+                ✓ No open gaps
+              </span>
+            )}
+          </div>
+        </>
+      ) : (
+        <div className="flex-1 flex flex-col items-center justify-center py-4 text-center">
+          <Shield className="w-8 h-8 text-gray-200 mb-2" />
+          <p className="text-sm text-gray-400">No assessment yet</p>
+          <p className="text-xs text-blue-500 mt-1 group-hover:underline">Click to start →</p>
+        </div>
+      )}
+    </button>
+  );
+}
+
+// ── Overview dashboard (Stage 1) ──────────────────────────────────────────────
+
+function OverviewDashboard({
+  overviewData,
+  genericData,
+  isDemo,
+  onSelectFramework,
+}: {
+  overviewData: any;
+  genericData: any;
+  isDemo: boolean;
+  onSelectFramework: (fwId: string) => void;
+}) {
+  const d = genericData ?? DEMO_DATA;
+  const frameworks: any[] = overviewData?.frameworks ?? [];
+
+  return (
+    <div className="space-y-8">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">GRC Overview</h1>
+          <p className="text-gray-500 text-sm mt-0.5">
+            {frameworks.length} framework{frameworks.length !== 1 ? "s" : ""} · Select one to drill in
+          </p>
+        </div>
+        {isDemo && (
+          <span className="flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 bg-amber-50 border border-amber-200 rounded-lg text-amber-700">
+            <Activity className="w-3.5 h-3.5" /> Demo data
+          </span>
+        )}
+      </div>
+
+      {/* Framework cards */}
+      <div>
+        <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">
+          Your Frameworks
+        </h2>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {frameworks.map((fw: any) => (
+            <FrameworkOverviewCard
+              key={fw.framework_id}
+              fw={fw}
+              onSelect={() => onSelectFramework(fw.framework_id)}
+            />
+          ))}
+          {/* Add framework card */}
+          <Link
+            to="/compliance"
+            className="flex flex-col items-center justify-center gap-2 bg-gray-50 border-2 border-dashed border-gray-200 rounded-2xl p-6 text-gray-400 hover:border-blue-300 hover:text-blue-500 hover:bg-blue-50 transition-all min-h-[180px]"
+          >
+            <Plus className="w-6 h-6" />
+            <span className="text-sm font-medium">Add Framework</span>
+          </Link>
+        </div>
+      </div>
+
+      {/* Cross-module KPIs */}
+      <div>
+        <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">
+          Platform Overview
+        </h2>
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          <KpiCard title="Open Risks" value={d.risk.total_open}
+            subtitle={`${d.risk.critical} critical · ${d.risk.high} high`}
+            icon={AlertTriangle} iconBg="bg-red-500" />
+          <KpiCard title="Avg Compliance" value={`${d.compliance.average_score}%`}
+            subtitle={`${d.compliance.total_assessments} assessments`}
+            icon={Shield} iconBg="bg-blue-500" />
+          <KpiCard title="Open Audit Findings" value={d.audit.open_findings}
+            icon={ClipboardList} iconBg="bg-orange-500" />
+          <KpiCard title="Policy Attestation" value={`${d.policy.attestation_rate_percent}%`}
+            subtitle={`${d.policy.total_attestations} attestations`}
+            icon={BookOpen} iconBg="bg-indigo-500" />
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Main dashboard page ───────────────────────────────────────────────────────
 
 export default function DashboardPage() {
   const primaryFrameworkId = useAuthStore((u) => u?.primary_framework_id);
+  // null = overview, string = drilled into a specific framework
+  const [selectedFwId, setSelectedFwId] = useState<string | null>(null);
 
-  // Framework-specific summary (only when primary framework is set)
-  const { data: fwData, isLoading: fwLoading } = useQuery({
-    queryKey: ["dashboard", "framework-summary"],
-    queryFn: dashboardApi.getFrameworkSummary,
+  const { data: overviewData, isLoading: overviewLoading } = useQuery({
+    queryKey: ["dashboard", "frameworks-overview"],
+    queryFn: dashboardApi.getFrameworksOverview,
     retry: false,
     enabled: !!primaryFrameworkId,
   });
 
-  // Generic summary (always fetched as fallback)
+  const { data: fwData, isLoading: fwLoading } = useQuery({
+    queryKey: ["dashboard", "framework-summary", selectedFwId],
+    queryFn: () => dashboardApi.getFrameworkSummary(selectedFwId ?? undefined),
+    retry: false,
+    enabled: !!selectedFwId,
+  });
+
   const { data: genericData, isError: genericError } = useQuery({
     queryKey: ["dashboard", "summary"],
     queryFn: dashboardApi.getSummary,
     retry: false,
   });
 
-  const d = genericData ?? DEMO_DATA;
   const isDemo = genericError || !genericData;
 
-  // Show framework dashboard if we have a primary framework + data
-  if (primaryFrameworkId) {
+  // No framework set at all → onboarding
+  if (!primaryFrameworkId) {
+    return (
+      <div className="p-8 max-w-5xl space-y-6">
+        <WelcomeCard />
+        <GenericDashboard d={genericData ?? DEMO_DATA} isDemo={isDemo} />
+      </div>
+    );
+  }
+
+  // Loading overview
+  if (overviewLoading) {
+    return (
+      <div className="p-8 max-w-7xl">
+        <div className="h-8 w-64 bg-gray-200 rounded animate-pulse mb-6" />
+        <div className="grid grid-cols-3 gap-4">
+          {[1, 2, 3].map((i) => <div key={i} className="h-52 bg-gray-200 rounded-2xl animate-pulse" />)}
+        </div>
+      </div>
+    );
+  }
+
+  // Drilled into a framework
+  if (selectedFwId) {
     if (fwLoading) {
       return (
         <div className="p-8 max-w-7xl">
-          <div className="h-8 w-64 bg-gray-200 rounded animate-pulse mb-4" />
+          <div className="h-6 w-48 bg-gray-200 rounded animate-pulse mb-6" />
           <div className="grid grid-cols-5 gap-4 mb-6">
             {[1,2,3,4,5].map((i) => <div key={i} className="h-24 bg-gray-200 rounded-2xl animate-pulse" />)}
           </div>
-          <div className="h-20 bg-gray-200 rounded-2xl animate-pulse mb-4" />
           <div className="grid grid-cols-3 gap-4">
             <div className="col-span-2 h-64 bg-gray-200 rounded-2xl animate-pulse" />
             <div className="h-64 bg-gray-200 rounded-2xl animate-pulse" />
@@ -475,47 +674,48 @@ export default function DashboardPage() {
       );
     }
 
-    if (!fwData || fwData.has_framework === false) {
-      return (
-        <div className="p-8 max-w-7xl">
-          <NoFrameworkCard />
-        </div>
-      );
-    }
+    // Find framework info from overview for the back button label
+    const fwInfo = overviewData?.frameworks?.find((f: any) => f.framework_id === selectedFwId);
 
-    if (fwData.has_assessment === false) {
-      return (
-        <div className="p-8 max-w-7xl">
-          <div className="flex items-center justify-between mb-6">
-            <h1 className="text-2xl font-bold text-gray-900">{fwData.framework_name} Dashboard</h1>
-          </div>
-          <div className="bg-blue-50 border border-blue-200 rounded-2xl p-8 text-center">
+    return (
+      <div className="p-8 max-w-7xl space-y-5">
+        {/* Back to overview breadcrumb */}
+        <button
+          onClick={() => setSelectedFwId(null)}
+          className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-800 transition-colors"
+        >
+          <LayoutDashboard className="w-4 h-4" />
+          Overview
+          <span className="text-gray-300 mx-1">/</span>
+          <span className="font-medium text-gray-800">{fwInfo?.framework_short_name ?? "Framework"}</span>
+        </button>
+
+        {fwData && fwData.has_assessment !== false ? (
+          <FrameworkDashboard data={fwData} />
+        ) : (
+          <div className="bg-blue-50 border border-blue-200 rounded-2xl p-10 text-center">
             <Shield className="w-10 h-10 text-blue-400 mx-auto mb-3" />
-            <h2 className="font-semibold text-blue-900 mb-1">Framework selected — create your assessment</h2>
-            <p className="text-blue-700 text-sm mb-4">
-              Your {fwData.framework_short_name} compliance assessment will be created automatically.
-            </p>
+            <h2 className="font-semibold text-blue-900 mb-1">No assessment yet for {fwInfo?.framework_name}</h2>
+            <p className="text-blue-700 text-sm mb-4">Create an assessment to start tracking compliance for this framework.</p>
             <Link to="/compliance"
               className="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold px-5 py-2.5 rounded-xl">
               <Plus className="w-4 h-4" /> Start Assessment
             </Link>
           </div>
-        </div>
-      );
-    }
-
-    return (
-      <div className="p-8 max-w-7xl">
-        <FrameworkDashboard data={fwData} />
+        )}
       </div>
     );
   }
 
-  // No primary framework set — show welcome card + generic dashboard
+  // Stage 1 — Overview
   return (
-    <div className="p-8 max-w-5xl space-y-6">
-      <WelcomeCard />
-      <GenericDashboard d={d} isDemo={isDemo} />
+    <div className="p-8 max-w-7xl">
+      <OverviewDashboard
+        overviewData={overviewData}
+        genericData={genericData}
+        isDemo={isDemo}
+        onSelectFramework={(fwId) => setSelectedFwId(fwId)}
+      />
     </div>
   );
 }

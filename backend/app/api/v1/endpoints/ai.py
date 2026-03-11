@@ -586,6 +586,75 @@ Be specific, practical, and directly tied to the gaps listed above."""
     )
 
 
+DOCUMENT_GENERATION_SYSTEM_PROMPT = """You are a senior GRC consultant with 20+ years of experience writing complete, professional, audit-ready security governance documents for organizations of all sizes.
+
+Rules you MUST follow:
+- Output ONLY the document itself in clean Markdown. No preamble, no meta-commentary, no "here is your document".
+- Start directly with the document title as an H1 heading.
+- Use "shall" and "must" for mandatory requirements. Never use "should consider" or "may want to".
+- Include a document header block after the title: Version (1.0), Classification (Internal — Confidential), Owner (appropriate role), Review Cycle (Annual), Effective Date (current month/year).
+- Every section must have concrete, implementable content specific to the organization described. Zero generic filler.
+- Calibrate depth and formality precisely to the organization size:
+  - Startup (1-50): 2-4 pages, combine roles, pragmatic and lean, CEO/CTO owns security.
+  - SMB (51-500): 4-8 pages, defined ownership per department, small IT team.
+  - Mid-Market (501-5000): 8-15 pages, full departmental structure, formal approval chains, likely a CISO.
+  - Enterprise (5000+): 15-25 pages, governance committees, legal/regulatory depth, dedicated security org.
+- Where a framework is specified, cite the relevant controls in parentheses inline (e.g., ISO 27001:2022 A.5.1, NIST CSF PR.AC-1, SOC 2 CC6.1).
+- Use real, concrete examples relevant to the organization's industry.
+- End with a Revision History table: Version | Date | Author | Change Summary — one initial row."""
+
+_SIZE_DETAIL = {
+    "startup": "1-50 employees — no dedicated security team, the CEO or CTO owns security and compliance",
+    "smb": "51-500 employees — small IT team, likely no dedicated CISO, compliance managed by IT manager or operations",
+    "midmarket": "501-5000 employees — IT and security teams exist, likely a CISO or vCISO, formal procurement and HR processes",
+    "enterprise": "5000+ employees — dedicated security organization, legal/compliance teams, board-level oversight",
+}
+
+
+class DocumentGenerateRequest(BaseModel):
+    document_type: str
+    org_name: str
+    industry: str
+    size: str = "smb"
+    country: str = "US"
+    frameworks: str | None = None
+    specific_requirements: str | None = None
+    model: str = DEFAULT_MODEL
+
+
+@router.post("/generate-document")
+async def generate_document(request: DocumentGenerateRequest):
+    """
+    Stream a complete GRC document (policy, procedure, plan) tailored to the
+    organization's context, size, industry, and target compliance framework(s).
+    """
+    size_detail = _SIZE_DETAIL.get(request.size, _SIZE_DETAIL["smb"])
+    framework_instruction = (
+        f"Target Compliance Framework(s): {request.frameworks} — cite relevant controls inline."
+        if request.frameworks
+        else "No specific framework required — write framework-agnostic best-practice content."
+    )
+
+    user_prompt = f"""Generate a complete, ready-to-adopt {request.document_type} for the following organization.
+
+ORGANIZATION PROFILE
+- Company Name: {request.org_name}
+- Industry: {request.industry}
+- Size: {size_detail}
+- Country / Jurisdiction: {request.country}
+- {framework_instruction}
+{f"- Specific Requirements: {request.specific_requirements}" if request.specific_requirements else ""}
+
+Generate the complete {request.document_type} now. Start directly with the document title as an H1."""
+
+    messages = [{"role": "user", "content": user_prompt}]
+    return StreamingResponse(
+        _ollama_sse_generator(messages, request.model, DOCUMENT_GENERATION_SYSTEM_PROMPT),
+        media_type=_SSE_MEDIA_TYPE,
+        headers=_SSE_HEADERS,
+    )
+
+
 @router.get("/health")
 async def ai_health():
     """Check if Ollama is reachable."""

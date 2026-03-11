@@ -1,9 +1,10 @@
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { AlertTriangle, Plus, Search, X, ChevronRight } from "lucide-react";
+import { AlertTriangle, Plus, Search, X, ChevronRight, Download } from "lucide-react";
 import { risksApi } from "../api/endpoints";
 import type { Risk, RiskSeverity } from "../types";
 import RiskAIPanel from "../components/ai/RiskAIPanel";
+import { exportRisksCSV } from "../utils/exportUtils";
 
 const SEV_BADGE: Record<RiskSeverity, string> = {
   critical: "bg-red-100 text-red-700 border-red-200",
@@ -284,17 +285,40 @@ function RiskDetailModal({ risk, onClose }: { readonly risk: Risk; readonly onCl
         </div>
 
         <div className="p-6 space-y-5">
-          <div className="grid grid-cols-3 gap-3">
-            {[
-              { label: "Likelihood", value: risk.likelihood ?? "—" },
-              { label: "Impact",     value: risk.impact ?? "—" },
-              { label: "Risk Score", value: score || "—" },
-            ].map(({ label, value }) => (
-              <div key={label} className="bg-gray-50 rounded-xl p-3 text-center">
-                <p className="text-xl font-bold text-gray-900">{value}</p>
-                <p className="text-xs text-gray-400 mt-0.5">{label}</p>
-              </div>
-            ))}
+          <div className="grid grid-cols-2 gap-3">
+            <div className="bg-gray-50 rounded-xl p-3 text-center">
+              <p className="text-xl font-bold text-gray-900">{risk.likelihood ?? "—"}</p>
+              <p className="text-xs text-gray-400 mt-0.5">Likelihood</p>
+            </div>
+            <div className="bg-gray-50 rounded-xl p-3 text-center">
+              <p className="text-xl font-bold text-gray-900">{risk.impact ?? "—"}</p>
+              <p className="text-xs text-gray-400 mt-0.5">Impact</p>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="bg-orange-50 rounded-xl p-3 text-center border border-orange-100">
+              <p className="text-xl font-bold text-orange-700">{score || "—"}</p>
+              <p className="text-xs text-orange-500 mt-0.5">Inherent Risk Score</p>
+            </div>
+            <div className={`rounded-xl p-3 text-center border ${
+              risk.residual_risk_score == null
+                ? "bg-gray-50 border-gray-100"
+                : risk.residual_risk_score <= 6
+                  ? "bg-green-50 border-green-100"
+                  : risk.residual_risk_score <= 12
+                    ? "bg-yellow-50 border-yellow-100"
+                    : "bg-red-50 border-red-100"
+            }`}>
+              <p className={`text-xl font-bold ${
+                risk.residual_risk_score == null ? "text-gray-400"
+                  : risk.residual_risk_score <= 6 ? "text-green-700"
+                  : risk.residual_risk_score <= 12 ? "text-yellow-700"
+                  : "text-red-700"
+              }`}>
+                {risk.residual_risk_score ?? "—"}
+              </p>
+              <p className="text-xs text-gray-400 mt-0.5">Residual Risk Score</p>
+            </div>
           </div>
 
           {risk.description && (
@@ -378,10 +402,18 @@ export default function RisksPage() {
           <h1 className="text-2xl font-bold text-gray-900">Risk Register</h1>
           <p className="text-gray-500 text-sm mt-1">{risks.length} risks tracked</p>
         </div>
-        <button onClick={() => setShowAddModal(true)}
-          className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2.5 rounded-lg text-sm font-medium transition-colors">
-          <Plus className="w-4 h-4" /> Add Risk
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => exportRisksCSV(risks)}
+            className="flex items-center gap-2 border border-gray-200 hover:bg-gray-50 text-gray-600 px-4 py-2.5 rounded-lg text-sm font-medium transition-colors"
+          >
+            <Download className="w-4 h-4" /> Export CSV
+          </button>
+          <button onClick={() => setShowAddModal(true)}
+            className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2.5 rounded-lg text-sm font-medium transition-colors">
+            <Plus className="w-4 h-4" /> Add Risk
+          </button>
+        </div>
       </div>
 
       <div className="grid grid-cols-4 gap-4">

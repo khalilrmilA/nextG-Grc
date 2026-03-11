@@ -204,7 +204,10 @@
       "Bash(wmic process where \"ProcessId=3396\" get ProcessId,CommandLine)",
       "Bash(taskkill //F //PID 33612)",
       "Bash(taskkill //F //PID 3396)",
-      "Bash(taskkill //F //PID 23768 //PID 25320 //PID 6296 //PID 40584 //PID 36496 //PID 23700 //PID 18928 //PID 39236 //PID 34128 //PID 26380)"
+      "Bash(taskkill //F //PID 23768 //PID 25320 //PID 6296 //PID 40584 //PID 36496 //PID 23700 //PID 18928 //PID 39236 //PID 34128 //PID 26380)",
+      "Bash(grep -l \"version\\\\|audit\" /d/GRC/frontend/src/pages/*.tsx)",
+      "Bash(grep -r \"export\\\\|report\\\\|PDF\\\\|xlsx\\\\|download\" /d/GRC/frontend/src/pages/*.tsx)",
+      "Bash(xargs grep -l \"audit\\\\|log\\\\|history\\\\|action\")"
     ]
   }
 }

@@ -1,15 +1,19 @@
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   CheckCircle, XCircle, AlertTriangle, Download,
-  Sparkles, Loader2, Filter,
+  Sparkles, Loader2, Filter, FileText, Table2, ChevronDown,
 } from "lucide-react";
 import { complianceApi } from "@/api/endpoints";
 import type { GapDetail } from "@/types";
 import GapConfirmModal from "./GapConfirmModal";
+import { exportGapsCSV, exportComplianceReport } from "@/utils/exportUtils";
 
 interface Props {
   readonly assessmentId: string;
+  readonly assessmentName?: string;
+  readonly frameworkName?: string;
+  readonly frameworkShortName?: string;
   readonly gaps: GapDetail[];
   readonly onGapUpdated: (gapId: string, status: "accepted" | "rejected") => void;
 }
@@ -27,12 +31,24 @@ const REC_COLOR: Record<string, string> = {
   pending:  "text-yellow-700 bg-yellow-50 border border-yellow-200",
 };
 
-export default function GapReportTab({ assessmentId, gaps, onGapUpdated }: Props) {
+export default function GapReportTab({ assessmentId, assessmentName = "Assessment", frameworkName = "", frameworkShortName = "", gaps, onGapUpdated }: Props) {
   const navigate = useNavigate();
   const [confirmGap, setConfirmGap] = useState<GapDetail | null>(null);
   const [rejectingId, setRejectingId] = useState<string | null>(null);
   const [bulkAccepting, setBulkAccepting] = useState(false);
   const [filter, setFilter] = useState<"all" | "pending" | "accepted" | "rejected" | "blockers">("all");
+  const [exportOpen, setExportOpen] = useState(false);
+  const exportRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (exportRef.current && !exportRef.current.contains(e.target as Node)) {
+        setExportOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
 
   const sorted = [...gaps].sort((a, b) => {
     const sOrd = (SEVERITY_ORDER[a.severity] ?? 3) - (SEVERITY_ORDER[b.severity] ?? 3);
@@ -64,6 +80,41 @@ export default function GapReportTab({ assessmentId, gaps, onGapUpdated }: Props
     } catch {/* silent */} finally {
       setRejectingId(null);
     }
+  }
+
+  function handleExportCSV() {
+    exportGapsCSV(gaps, assessmentName);
+    setExportOpen(false);
+  }
+
+  function handleExportReport() {
+    const statusCounts = {
+      implemented: 0,
+      partially_implemented: 0,
+      not_implemented: gaps.length,
+      not_applicable: 0,
+      total: gaps.length,
+    };
+    exportComplianceReport({
+      assessmentName,
+      frameworkName,
+      frameworkShortName,
+      complianceScore: null,
+      generatedAt: new Date().toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }),
+      org: "",
+      statusCounts,
+      gaps: gaps.map((g) => ({
+        control_identifier: g.control_identifier,
+        control_title: g.control_title,
+        severity: g.severity,
+        gap_description: g.gap_description,
+        remediation_steps: g.remediation_steps,
+        is_certification_blocker: g.is_certification_blocker,
+        recommendation_status: g.recommendation_status ?? "pending",
+      })),
+      controls: [],
+    });
+    setExportOpen(false);
   }
 
   async function handleBulkAcceptCritical() {
@@ -118,10 +169,34 @@ export default function GapReportTab({ assessmentId, gaps, onGapUpdated }: Props
               <Sparkles className="w-3.5 h-3.5" />
               Generate 90-day Plan
             </button>
-            <button className="flex items-center gap-1.5 text-xs font-medium border border-gray-200 hover:bg-gray-50 text-gray-600 px-3 py-1.5 rounded-lg transition-colors">
-              <Download className="w-3.5 h-3.5" />
-              Export
-            </button>
+            <div ref={exportRef} className="relative">
+              <button
+                onClick={() => setExportOpen((o) => !o)}
+                className="flex items-center gap-1.5 text-xs font-medium border border-gray-200 hover:bg-gray-50 text-gray-600 px-3 py-1.5 rounded-lg transition-colors"
+              >
+                <Download className="w-3.5 h-3.5" />
+                Export
+                <ChevronDown className="w-3 h-3 opacity-60" />
+              </button>
+              {exportOpen && (
+                <div className="absolute right-0 mt-1 w-52 bg-white border border-gray-200 rounded-xl shadow-lg z-10 py-1 text-xs">
+                  <button
+                    onClick={handleExportCSV}
+                    className="flex items-center gap-2 w-full px-3 py-2 hover:bg-gray-50 text-gray-700"
+                  >
+                    <Table2 className="w-3.5 h-3.5 text-gray-400" />
+                    Export Gaps CSV
+                  </button>
+                  <button
+                    onClick={handleExportReport}
+                    className="flex items-center gap-2 w-full px-3 py-2 hover:bg-gray-50 text-gray-700"
+                  >
+                    <FileText className="w-3.5 h-3.5 text-gray-400" />
+                    Full Report (HTML/PDF)
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </div>

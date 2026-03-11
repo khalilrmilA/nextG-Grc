@@ -245,6 +245,21 @@ export const aiApi = {
     signal: AbortSignal
   ) => _streamAi("/ai/generate-policy", request, onToken, onDone, signal),
 
+  streamDocumentGeneration: (
+    request: {
+      document_type: string;
+      org_name: string;
+      industry: string;
+      size: string;
+      country: string;
+      frameworks?: string;
+      specific_requirements?: string;
+    },
+    onToken: (token: string) => void,
+    onDone: () => void,
+    signal: AbortSignal
+  ) => _streamAi("/ai/generate-document", request, onToken, onDone, signal),
+
   streamRiskAnalysis: (
     title: string, description: string, category: string,
     onToken: (token: string) => void, onDone: () => void, signal: AbortSignal
@@ -317,7 +332,9 @@ export const vendorsApi = {
 
 export const dashboardApi = {
   getSummary: () => apiClient.get<DashboardSummary>("/dashboard/summary").then((r) => r.data),
-  getFrameworkSummary: () => apiClient.get("/dashboard/framework-summary").then((r) => r.data),
+  getFrameworksOverview: () => apiClient.get("/dashboard/frameworks-overview").then((r) => r.data),
+  getFrameworkSummary: (frameworkId?: string) =>
+    apiClient.get("/dashboard/framework-summary", { params: frameworkId ? { framework_id: frameworkId } : {} }).then((r) => r.data),
 };
 
 // ─── Subscriptions ───────────────────────────
