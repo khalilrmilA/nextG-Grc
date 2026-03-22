@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate, Link } from "react-router-dom";
 import {
@@ -87,22 +88,23 @@ function SeverityBadge({ severity }: { severity: string }) {
 // ── Section Pivot Table ───────────────────────────────────────────────────────
 
 function ComplianceSectionTable({ rows }: { rows: any[] }) {
+  const { t } = useTranslation();
   return (
     <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
       <div className="flex items-center justify-between mb-4">
-        <h3 className="font-semibold text-gray-900">Compliance by Section</h3>
-        <span className="text-xs text-gray-400">{rows.length} sections</span>
+        <h3 className="font-semibold text-gray-900">{t("dashboard.compliance_sections")}</h3>
+        <span className="text-xs text-gray-400">{rows.length} {t("dashboard.sections_count")}</span>
       </div>
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
             <tr className="text-xs text-gray-400 border-b border-gray-100">
-              <th className="text-left pb-2 font-medium">Section</th>
-              <th className="text-center pb-2 font-medium w-12">Full</th>
-              <th className="text-center pb-2 font-medium w-14">Partial</th>
-              <th className="text-center pb-2 font-medium w-10">Gap</th>
-              <th className="text-center pb-2 font-medium w-10">N/A</th>
-              <th className="text-right pb-2 font-medium w-16">Score</th>
+              <th className="text-left pb-2 font-medium">{t("dashboard.section")}</th>
+              <th className="text-center pb-2 font-medium w-12">{t("dashboard.full")}</th>
+              <th className="text-center pb-2 font-medium w-14">{t("dashboard.partial")}</th>
+              <th className="text-center pb-2 font-medium w-10">{t("dashboard.gap")}</th>
+              <th className="text-center pb-2 font-medium w-10">{t("dashboard.na")}</th>
+              <th className="text-right pb-2 font-medium w-16">{t("compliance.score")}</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-50">
@@ -130,11 +132,12 @@ function ComplianceSectionTable({ rows }: { rows: any[] }) {
 function DocumentProgressCard({ uploaded, required, missingNames, assessmentId }: {
   uploaded: number; required: number; missingNames: string[]; assessmentId: string;
 }) {
+  const { t } = useTranslation();
   const pct = required > 0 ? Math.round(uploaded / required * 100) : 0;
   return (
     <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 flex flex-col">
       <div className="flex items-center justify-between mb-3">
-        <h3 className="font-semibold text-gray-900">Mandatory Documents</h3>
+        <h3 className="font-semibold text-gray-900">{t("compliance.doc_checklist_title")}</h3>
         <span className={`text-lg font-bold ${pctColor(pct)}`}>{uploaded}/{required}</span>
       </div>
 
@@ -142,12 +145,12 @@ function DocumentProgressCard({ uploaded, required, missingNames, assessmentId }
       <div className="h-2.5 bg-gray-100 rounded-full overflow-hidden mb-3">
         <div className={`h-full rounded-full ${pctBg(pct)}`} style={{ width: `${pct}%` }} />
       </div>
-      <p className="text-xs text-gray-400 mb-4">{pct}% of required documents uploaded</p>
+      <p className="text-xs text-gray-400 mb-4">{t("dashboard.docs_uploaded_pct", { pct })}</p>
 
       {/* Missing docs */}
       {missingNames.length > 0 && (
         <div className="flex-1 space-y-1.5 mb-4">
-          <p className="text-xs font-medium text-gray-600">Missing:</p>
+          <p className="text-xs font-medium text-gray-600">{t("dashboard.missing")}:</p>
           {missingNames.map((name) => (
             <div key={name} className="flex items-center gap-2 text-xs text-gray-500">
               <XCircle className="w-3.5 h-3.5 text-red-400 flex-shrink-0" />
@@ -161,7 +164,7 @@ function DocumentProgressCard({ uploaded, required, missingNames, assessmentId }
         to={`/compliance/${assessmentId}`}
         className="mt-auto flex items-center justify-center gap-2 w-full bg-blue-50 hover:bg-blue-100 text-blue-700 font-medium text-sm py-2.5 rounded-xl transition-colors"
       >
-        <Upload className="w-4 h-4" /> Upload Documents
+        <Upload className="w-4 h-4" /> {t("dashboard.upload_documents")}
       </Link>
     </div>
   );
@@ -170,20 +173,21 @@ function DocumentProgressCard({ uploaded, required, missingNames, assessmentId }
 // ── Top Gaps Card ─────────────────────────────────────────────────────────────
 
 function TopGapsCard({ gaps, assessmentId }: { gaps: any[]; assessmentId: string }) {
+  const { t } = useTranslation();
   return (
     <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
       <div className="flex items-center justify-between mb-4">
-        <h3 className="font-semibold text-gray-900">Top Priority Gaps</h3>
+        <h3 className="font-semibold text-gray-900">{t("dashboard.top_gaps")}</h3>
         <Link to={`/compliance/${assessmentId}`}
           className="text-xs text-blue-600 hover:text-blue-700 flex items-center gap-1 font-medium">
-          View all <ChevronRight className="w-3 h-3" />
+          {t("common.view")} <ChevronRight className="w-3 h-3" />
         </Link>
       </div>
 
       {gaps.length === 0 ? (
         <div className="text-center py-6 text-gray-400">
           <CheckCircle2 className="w-8 h-8 mx-auto mb-2 text-green-400" />
-          <p className="text-sm">No open gaps — great work!</p>
+          <p className="text-sm">{t("dashboard.no_open_gaps")}</p>
         </div>
       ) : (
         <div className="space-y-3">
@@ -194,7 +198,7 @@ function TopGapsCard({ gaps, assessmentId }: { gaps: any[]; assessmentId: string
                 <div className="flex items-center gap-2 flex-wrap">
                   <span className="text-xs font-mono text-gray-500">{g.control_identifier}</span>
                   {g.is_certification_blocker && (
-                    <span className="text-xs bg-red-100 text-red-700 px-1.5 py-0.5 rounded font-semibold">Blocker</span>
+                    <span className="text-xs bg-red-100 text-red-700 px-1.5 py-0.5 rounded font-semibold">{t("compliance.blocker")}</span>
                   )}
                   <SeverityBadge severity={g.severity} />
                 </div>
@@ -212,7 +216,7 @@ function TopGapsCard({ gaps, assessmentId }: { gaps: any[]; assessmentId: string
         to={`/compliance/${assessmentId}`}
         className="mt-4 flex items-center justify-center gap-2 w-full border border-purple-200 hover:bg-purple-50 text-purple-700 font-medium text-sm py-2.5 rounded-xl transition-colors"
       >
-        <Sparkles className="w-4 h-4" /> AI Remediate All
+        <Sparkles className="w-4 h-4" /> {t("dashboard.ai_remediate")}
       </Link>
     </div>
   );
@@ -221,6 +225,7 @@ function TopGapsCard({ gaps, assessmentId }: { gaps: any[]; assessmentId: string
 // ── Framework Dashboard (primary) ─────────────────────────────────────────────
 
 function FrameworkDashboard({ data }: { data: any }) {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const kpi = data.kpi;
 
@@ -233,7 +238,7 @@ function FrameworkDashboard({ data }: { data: any }) {
           <p className="text-gray-500 text-sm mt-0.5">
             {data.assessment_name}
             {data.last_analyzed && (
-              <span className="ml-2 text-gray-400">· Last analyzed {new Date(data.last_analyzed).toLocaleDateString()}</span>
+              <span className="ml-2 text-gray-400">· {t("dashboard.last_analyzed")} {new Date(data.last_analyzed).toLocaleDateString()}</span>
             )}
           </p>
         </div>
@@ -242,32 +247,32 @@ function FrameworkDashboard({ data }: { data: any }) {
             onClick={() => navigate(`/compliance/${data.assessment_id}`)}
             className="flex items-center gap-2 text-sm font-medium text-gray-600 border border-gray-200 hover:bg-gray-50 px-3 py-2 rounded-lg"
           >
-            <LayoutDashboard className="w-4 h-4" /> Assessment
+            <LayoutDashboard className="w-4 h-4" /> {t("compliance.assessments")}
           </button>
           <button
             onClick={() => navigate(`/compliance`)}
             className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
           >
-            <Plus className="w-4 h-4" /> New Assessment
+            <Plus className="w-4 h-4" /> {t("compliance.new_assessment")}
           </button>
         </div>
       </div>
 
       {/* 5 KPI Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
-        <KpiCard title="Overall Score" value={`${kpi.compliance_score ?? 0}%`}
+        <KpiCard title={t("dashboard.overall_score")} value={`${kpi.compliance_score ?? 0}%`}
           icon={Shield} iconBg="bg-blue-500" />
-        <KpiCard title="Controls"
+        <KpiCard title={t("dashboard.controls_covered")}
           value={`${kpi.controls_implemented}/${kpi.controls_total}`}
-          subtitle={`${kpi.controls_partial} partial`}
+          subtitle={`${kpi.controls_partial} ${t("dashboard.partial")}`}
           icon={CheckCircle2} iconBg="bg-green-500" />
-        <KpiCard title="Open Gaps" value={kpi.open_gaps}
-          subtitle={`${kpi.certification_blockers} blockers`}
+        <KpiCard title={t("dashboard.open_gaps")} value={kpi.open_gaps}
+          subtitle={`${kpi.certification_blockers} ${t("dashboard.blockers")}`}
           icon={AlertCircle} iconBg="bg-orange-500" />
-        <KpiCard title="Documents"
+        <KpiCard title={t("dashboard.missing_docs")}
           value={`${kpi.docs_uploaded}/${kpi.docs_required}`}
           icon={FileText} iconBg="bg-indigo-500" />
-        <KpiCard title="Cert Readiness" value={`${kpi.cert_readiness}%`}
+        <KpiCard title={t("dashboard.cert_readiness")} value={`${kpi.cert_readiness}%`}
           icon={TrendingUp} iconBg={kpi.cert_readiness >= 75 ? "bg-emerald-500" : "bg-amber-500"} />
       </div>
 
@@ -296,11 +301,11 @@ function FrameworkDashboard({ data }: { data: any }) {
             : (
               <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 text-center text-gray-400">
                 <Shield className="w-8 h-8 mx-auto mb-2 opacity-30" />
-                <p className="text-sm">Run AI analysis to see section breakdown</p>
+                <p className="text-sm">{t("dashboard.run_analysis_hint")}</p>
                 <button
                   onClick={() => navigate(`/compliance/${data.assessment_id}`)}
                   className="mt-3 text-xs text-blue-600 hover:underline">
-                  Go to Assessment →
+                  {t("dashboard.go_to_assessment")} →
                 </button>
               </div>
             )
@@ -320,13 +325,13 @@ function FrameworkDashboard({ data }: { data: any }) {
 
         {/* Quick Actions */}
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
-          <h3 className="font-semibold text-gray-900 mb-4">Quick Actions</h3>
+          <h3 className="font-semibold text-gray-900 mb-4">{t("dashboard.quick_actions")}</h3>
           <div className="grid grid-cols-2 gap-3">
             {[
-              { label: "Run Analysis", desc: "AI gap assessment", icon: Sparkles, color: "bg-purple-50 hover:bg-purple-100 text-purple-700 border-purple-200", to: `/compliance/${data.assessment_id}` },
-              { label: "View Gap Report", desc: "All open gaps", icon: AlertTriangle, color: "bg-orange-50 hover:bg-orange-100 text-orange-700 border-orange-200", to: `/compliance/${data.assessment_id}` },
-              { label: "Upload Documents", desc: "Mandatory docs", icon: Upload, color: "bg-blue-50 hover:bg-blue-100 text-blue-700 border-blue-200", to: `/compliance/${data.assessment_id}` },
-              { label: "Generate Policies", desc: "AI document builder", icon: BookOpen, color: "bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border-indigo-200", to: "/policy-generator" },
+              { label: t("dashboard.run_analysis"), desc: t("dashboard.run_analysis_desc"), icon: Sparkles, color: "bg-purple-50 hover:bg-purple-100 text-purple-700 border-purple-200", to: `/compliance/${data.assessment_id}` },
+              { label: t("dashboard.view_gap_report"), desc: t("dashboard.all_open_gaps"), icon: AlertTriangle, color: "bg-orange-50 hover:bg-orange-100 text-orange-700 border-orange-200", to: `/compliance/${data.assessment_id}` },
+              { label: t("dashboard.upload_documents"), desc: t("dashboard.mandatory_docs"), icon: Upload, color: "bg-blue-50 hover:bg-blue-100 text-blue-700 border-blue-200", to: `/compliance/${data.assessment_id}` },
+              { label: t("dashboard.generate_policies"), desc: t("dashboard.ai_doc_builder"), icon: BookOpen, color: "bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border-indigo-200", to: "/policy-generator" },
             ].map((action) => (
               <Link key={action.label} to={action.to}
                 className={`flex flex-col gap-1.5 p-4 rounded-xl border transition-colors ${action.color}`}>
@@ -349,12 +354,13 @@ function FrameworkDashboard({ data }: { data: any }) {
 // ── Generic fallback dashboard ────────────────────────────────────────────────
 
 function GenericDashboard({ d, isDemo }: { d: DashboardSummary; isDemo: boolean }) {
+  const { t } = useTranslation();
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Security Dashboard</h1>
-          <p className="text-gray-500 text-sm mt-1">Executive overview</p>
+          <h1 className="text-2xl font-bold text-gray-900">{t("dashboard.security_dashboard")}</h1>
+          <p className="text-gray-500 text-sm mt-1">{t("dashboard.executive_overview")}</p>
         </div>
         {isDemo && (
           <span className="flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 bg-amber-50 border border-amber-200 rounded-lg text-amber-700">
@@ -364,22 +370,22 @@ function GenericDashboard({ d, isDemo }: { d: DashboardSummary; isDemo: boolean 
       </div>
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-5">
-        <KpiCard title="Open Risks" value={d.risk.total_open}
-          subtitle={`${d.risk.critical} critical · ${d.risk.high} high`}
+        <KpiCard title={t("dashboard.open_risks")} value={d.risk.total_open}
+          subtitle={`${d.risk.critical} ${t("compliance.severities.critical")} · ${d.risk.high} ${t("compliance.severities.high")}`}
           icon={AlertTriangle} iconBg="bg-red-500" change="-12%" changePositive />
-        <KpiCard title="Compliance Score" value={`${d.compliance.average_score}%`}
-          subtitle={`${d.compliance.total_assessments} assessments`}
+        <KpiCard title={t("dashboard.compliance_score")} value={`${d.compliance.average_score}%`}
+          subtitle={`${d.compliance.total_assessments} ${t("compliance.assessments")}`}
           icon={Shield} iconBg="bg-blue-500" change="+4.2%" changePositive />
-        <KpiCard title="Open Audit Findings" value={d.audit.open_findings}
-          subtitle="Requires remediation"
+        <KpiCard title={t("dashboard.open_audit_findings")} value={d.audit.open_findings}
+          subtitle={t("dashboard.requires_remediation")}
           icon={ClipboardList} iconBg="bg-orange-500" />
-        <KpiCard title="Vendors" value={d.vendor.total_vendors}
+        <KpiCard title={t("nav.vendors")} value={d.vendor.total_vendors}
           icon={Building2} iconBg="bg-indigo-500" />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
-          <h3 className="font-semibold text-gray-900 mb-4">Risk Trend</h3>
+          <h3 className="font-semibold text-gray-900 mb-4">{t("dashboard.risk_trend")}</h3>
           <ResponsiveContainer width="100%" height={180}>
             <BarChart data={RISK_TREND} barSize={20}>
               <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" vertical={false} />
@@ -394,15 +400,15 @@ function GenericDashboard({ d, isDemo }: { d: DashboardSummary; isDemo: boolean 
 
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="font-semibold text-gray-900">Policy Attestation</h3>
+            <h3 className="font-semibold text-gray-900">{t("dashboard.policy_attestation")}</h3>
             <span className="text-2xl font-bold text-blue-600">{d.policy.attestation_rate_percent}%</span>
           </div>
           <div className="h-3 bg-gray-100 rounded-full overflow-hidden mb-3">
             <div className="h-full bg-blue-500 rounded-full" style={{ width: `${d.policy.attestation_rate_percent}%` }} />
           </div>
-          <p className="text-xs text-gray-400">{d.policy.total_attestations} total attestations</p>
+          <p className="text-xs text-gray-400">{d.policy.total_attestations} {t("dashboard.total_attestations")}</p>
           <div className="mt-4 pt-4 border-t border-gray-100 flex items-center justify-between text-sm">
-            <span className="text-gray-500">Compliance coverage</span>
+            <span className="text-gray-500">{t("dashboard.compliance_coverage")}</span>
             <span className="font-bold text-gray-800">{d.compliance.control_coverage_percent}%</span>
           </div>
           <div className="mt-2 h-2 bg-gray-100 rounded-full overflow-hidden">
@@ -417,6 +423,7 @@ function GenericDashboard({ d, isDemo }: { d: DashboardSummary; isDemo: boolean 
 // ── Framework Overview Card ────────────────────────────────────────────────────
 
 function FrameworkOverviewCard({ fw, onSelect }: { fw: any; onSelect: () => void }) {
+  const { t } = useTranslation();
   const score = fw.compliance_score ?? null;
   const readiness = fw.cert_readiness ?? null;
 
@@ -447,7 +454,7 @@ function FrameworkOverviewCard({ fw, onSelect }: { fw: any; onSelect: () => void
             </span>
             {fw.is_primary && (
               <span className="text-xs font-medium px-2 py-0.5 rounded-md bg-purple-50 text-purple-600">
-                Primary
+                {t("dashboard.primary")}
               </span>
             )}
           </div>
@@ -471,7 +478,7 @@ function FrameworkOverviewCard({ fw, onSelect }: { fw: any; onSelect: () => void
             <div className="flex-1 space-y-2">
               <div>
                 <div className="flex justify-between text-xs text-gray-500 mb-0.5">
-                  <span>Controls</span>
+                  <span>{t("compliance.controls")}</span>
                   <span className="font-medium">{fw.controls_implemented}/{fw.controls_total}</span>
                 </div>
                 <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
@@ -483,7 +490,7 @@ function FrameworkOverviewCard({ fw, onSelect }: { fw: any; onSelect: () => void
               </div>
               <div>
                 <div className="flex justify-between text-xs text-gray-500 mb-0.5">
-                  <span>Cert Readiness</span>
+                  <span>{t("dashboard.cert_readiness")}</span>
                   <span className="font-medium">{readiness != null ? `${readiness}%` : "—"}</span>
                 </div>
                 <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
@@ -500,17 +507,17 @@ function FrameworkOverviewCard({ fw, onSelect }: { fw: any; onSelect: () => void
           <div className="flex items-center gap-2 flex-wrap pt-1 border-t border-gray-50">
             {fw.open_gaps > 0 && (
               <span className="text-xs bg-orange-50 text-orange-600 border border-orange-100 px-2 py-0.5 rounded-lg font-medium">
-                {fw.open_gaps} open gaps
+                {t("dashboard.open_gaps_count", { count: fw.open_gaps })}
               </span>
             )}
             {fw.open_blockers > 0 && (
               <span className="text-xs bg-red-50 text-red-600 border border-red-100 px-2 py-0.5 rounded-lg font-medium">
-                🔴 {fw.open_blockers} blockers
+                🔴 {t("dashboard.blockers_count", { count: fw.open_blockers })}
               </span>
             )}
             {fw.open_gaps === 0 && (
               <span className="text-xs bg-green-50 text-green-600 border border-green-100 px-2 py-0.5 rounded-lg font-medium">
-                ✓ No open gaps
+                ✓ {t("dashboard.no_open_gaps")}
               </span>
             )}
           </div>
@@ -518,8 +525,8 @@ function FrameworkOverviewCard({ fw, onSelect }: { fw: any; onSelect: () => void
       ) : (
         <div className="flex-1 flex flex-col items-center justify-center py-4 text-center">
           <Shield className="w-8 h-8 text-gray-200 mb-2" />
-          <p className="text-sm text-gray-400">No assessment yet</p>
-          <p className="text-xs text-blue-500 mt-1 group-hover:underline">Click to start →</p>
+          <p className="text-sm text-gray-400">{t("dashboard.no_assessment_yet")}</p>
+          <p className="text-xs text-blue-500 mt-1 group-hover:underline">{t("dashboard.click_to_start")} →</p>
         </div>
       )}
     </button>
@@ -539,6 +546,7 @@ function OverviewDashboard({
   isDemo: boolean;
   onSelectFramework: (fwId: string) => void;
 }) {
+  const { t } = useTranslation();
   const d = genericData ?? DEMO_DATA;
   const frameworks: any[] = overviewData?.frameworks ?? [];
 
@@ -547,9 +555,9 @@ function OverviewDashboard({
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">GRC Overview</h1>
+          <h1 className="text-2xl font-bold text-gray-900">{t("dashboard.grc_overview")}</h1>
           <p className="text-gray-500 text-sm mt-0.5">
-            {frameworks.length} framework{frameworks.length !== 1 ? "s" : ""} · Select one to drill in
+            {t("dashboard.frameworks_count", { count: frameworks.length })} · {t("dashboard.select_to_drill")}
           </p>
         </div>
         {isDemo && (
@@ -562,7 +570,7 @@ function OverviewDashboard({
       {/* Framework cards */}
       <div>
         <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">
-          Your Frameworks
+          {t("dashboard.your_frameworks")}
         </h2>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {frameworks.map((fw: any) => (
@@ -578,7 +586,7 @@ function OverviewDashboard({
             className="flex flex-col items-center justify-center gap-2 bg-gray-50 border-2 border-dashed border-gray-200 rounded-2xl p-6 text-gray-400 hover:border-blue-300 hover:text-blue-500 hover:bg-blue-50 transition-all min-h-[180px]"
           >
             <Plus className="w-6 h-6" />
-            <span className="text-sm font-medium">Add Framework</span>
+            <span className="text-sm font-medium">{t("dashboard.add_framework")}</span>
           </Link>
         </div>
       </div>
@@ -586,19 +594,19 @@ function OverviewDashboard({
       {/* Cross-module KPIs */}
       <div>
         <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">
-          Platform Overview
+          {t("dashboard.platform_overview")}
         </h2>
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          <KpiCard title="Open Risks" value={d.risk.total_open}
-            subtitle={`${d.risk.critical} critical · ${d.risk.high} high`}
+          <KpiCard title={t("dashboard.open_risks")} value={d.risk.total_open}
+            subtitle={`${d.risk.critical} ${t("compliance.severities.critical")} · ${d.risk.high} ${t("compliance.severities.high")}`}
             icon={AlertTriangle} iconBg="bg-red-500" />
-          <KpiCard title="Avg Compliance" value={`${d.compliance.average_score}%`}
-            subtitle={`${d.compliance.total_assessments} assessments`}
+          <KpiCard title={t("dashboard.avg_compliance")} value={`${d.compliance.average_score}%`}
+            subtitle={`${d.compliance.total_assessments} ${t("compliance.assessments")}`}
             icon={Shield} iconBg="bg-blue-500" />
-          <KpiCard title="Open Audit Findings" value={d.audit.open_findings}
+          <KpiCard title={t("dashboard.open_audit_findings")} value={d.audit.open_findings}
             icon={ClipboardList} iconBg="bg-orange-500" />
-          <KpiCard title="Policy Attestation" value={`${d.policy.attestation_rate_percent}%`}
-            subtitle={`${d.policy.total_attestations} attestations`}
+          <KpiCard title={t("dashboard.policy_attestation")} value={`${d.policy.attestation_rate_percent}%`}
+            subtitle={`${d.policy.total_attestations} ${t("dashboard.attestations")}`}
             icon={BookOpen} iconBg="bg-indigo-500" />
         </div>
       </div>
@@ -609,6 +617,7 @@ function OverviewDashboard({
 // ── Main dashboard page ───────────────────────────────────────────────────────
 
 export default function DashboardPage() {
+  const { t } = useTranslation();
   const primaryFrameworkId = useAuthStore((u) => u?.primary_framework_id);
   // null = overview, string = drilled into a specific framework
   const [selectedFwId, setSelectedFwId] = useState<string | null>(null);
@@ -685,7 +694,7 @@ export default function DashboardPage() {
           className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-800 transition-colors"
         >
           <LayoutDashboard className="w-4 h-4" />
-          Overview
+          {t("dashboard.overview")}
           <span className="text-gray-300 mx-1">/</span>
           <span className="font-medium text-gray-800">{fwInfo?.framework_short_name ?? "Framework"}</span>
         </button>
@@ -695,11 +704,11 @@ export default function DashboardPage() {
         ) : (
           <div className="bg-blue-50 border border-blue-200 rounded-2xl p-10 text-center">
             <Shield className="w-10 h-10 text-blue-400 mx-auto mb-3" />
-            <h2 className="font-semibold text-blue-900 mb-1">No assessment yet for {fwInfo?.framework_name}</h2>
-            <p className="text-blue-700 text-sm mb-4">Create an assessment to start tracking compliance for this framework.</p>
+            <h2 className="font-semibold text-blue-900 mb-1">{t("dashboard.no_assessment_for_fw", { name: fwInfo?.framework_name })}</h2>
+            <p className="text-blue-700 text-sm mb-4">{t("dashboard.create_assessment_desc")}</p>
             <Link to="/compliance"
               className="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold px-5 py-2.5 rounded-xl">
-              <Plus className="w-4 h-4" /> Start Assessment
+              <Plus className="w-4 h-4" /> {t("dashboard.start_assessment")}
             </Link>
           </div>
         )}
@@ -723,6 +732,7 @@ export default function DashboardPage() {
 // ── Welcome card (shown when no framework set) ────────────────────────────────
 
 function WelcomeCard() {
+  const { t } = useTranslation();
   return (
     <div className="bg-gradient-to-br from-blue-600 to-indigo-700 rounded-2xl p-7 text-white">
       <div className="flex items-start gap-4">
@@ -730,29 +740,27 @@ function WelcomeCard() {
           <Shield className="w-6 h-6 text-white" />
         </div>
         <div className="flex-1">
-          <h1 className="text-2xl font-bold mb-1">Welcome to your GRC Platform</h1>
+          <h1 className="text-2xl font-bold mb-1">{t("dashboard.welcome_title")}</h1>
           <p className="text-blue-100 text-sm leading-relaxed max-w-2xl">
-            Manage compliance, track risks, run audits, and generate reports — all in one place.
-            Start by creating your first compliance assessment below, or use the guided tour that
-            appeared when you logged in.
+            {t("dashboard.welcome_desc")}
           </p>
         </div>
         <Link
           to="/help"
           className="flex-shrink-0 bg-white/20 hover:bg-white/30 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors"
         >
-          Full Guide →
+          {t("dashboard.full_guide")} →
         </Link>
       </div>
 
       {/* Quick links */}
       <div className="mt-5 flex flex-wrap gap-2">
         {[
-          { label: "New Assessment", href: "/compliance", icon: Plus },
-          { label: "Risk Register",  href: "/risks",      icon: AlertTriangle },
-          { label: "Frameworks",     href: "/frameworks",  icon: BookOpen },
-          { label: "Audits",         href: "/audits",      icon: ClipboardList },
-          { label: "Policies",       href: "/policies",    icon: FileText },
+          { label: t("compliance.new_assessment"), href: "/compliance", icon: Plus },
+          { label: t("nav.risks"),  href: "/risks",      icon: AlertTriangle },
+          { label: t("nav.frameworks"),     href: "/frameworks",  icon: BookOpen },
+          { label: t("nav.audits"),         href: "/audits",      icon: ClipboardList },
+          { label: t("nav.policies"),       href: "/policies",    icon: FileText },
         ].map(({ label, href, icon: Icon }) => (
           <Link
             key={label}

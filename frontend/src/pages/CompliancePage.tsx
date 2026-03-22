@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useTranslation } from "react-i18next";
 import { useNavigate, Link } from "react-router-dom";
 import { CheckCircle, Clock, AlertCircle, XCircle, Plus, FileText, Loader2, X, FolderUp, Sparkles, BarChart3 } from "lucide-react";
 import { complianceApi, frameworksApi } from "@/api/endpoints";
@@ -19,7 +20,8 @@ function scoreColor(score: number) {
 }
 
 function ScoreBadge({ score }: { readonly score: number | null | undefined }) {
-  if (score == null) return <span className="text-gray-400 text-sm italic">Not run</span>;
+  const { t } = useTranslation();
+  if (score == null) return <span className="text-gray-400 text-sm italic">{t("compliance.score_not_run", "Not run")}</span>;
   return <span className={`text-xl font-bold px-3 py-1.5 rounded-xl ${scoreColor(score)}`}>{score}%</span>;
 }
 
@@ -44,6 +46,7 @@ function NewAssessmentModal({
   readonly onClose: () => void;
   readonly onCreate: (id: string) => void;
 }) {
+  const { t } = useTranslation();
   const [frameworkId, setFrameworkId] = useState("");
   const [name, setName] = useState("");
   const [scope, setScope] = useState("");
@@ -73,7 +76,7 @@ function NewAssessmentModal({
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg p-6">
         <div className="flex items-center justify-between mb-5">
-          <h2 className="text-lg font-semibold text-gray-900">New Compliance Assessment</h2>
+          <h2 className="text-lg font-semibold text-gray-900">{t("compliance.modal_title")}</h2>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-700">
             <X className="w-5 h-5" />
           </button>
@@ -81,28 +84,28 @@ function NewAssessmentModal({
 
         <form onSubmit={submit} className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Framework *</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">{t("compliance.framework")} *</label>
             <select
               className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
               value={frameworkId}
               onChange={(e) => setFrameworkId(e.target.value)}
               required
             >
-              <option value="">Select a framework…</option>
+              <option value="">{t("compliance.select_framework_placeholder")}</option>
               {frameworks.map((fw) => (
                 <option key={fw.id} value={fw.id}>
-                  {fw.name} ({fw.control_count} controls)
+                  {fw.name} ({t("compliance.controls_count", { count: fw.control_count })})
                 </option>
               ))}
             </select>
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Assessment name *</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">{t("compliance.assessment_name")} *</label>
             <input
               type="text"
               className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-              placeholder="e.g. ISO 27001 Annual Assessment 2026"
+              placeholder={t("compliance.assessment_name_placeholder")}
               value={name}
               onChange={(e) => setName(e.target.value)}
               required
@@ -110,11 +113,11 @@ function NewAssessmentModal({
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Scope (optional)</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">{t("compliance.scope")} ({t("common.optional")})</label>
             <textarea
               className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
               rows={2}
-              placeholder="e.g. Head office systems, cloud infrastructure, HR processes"
+              placeholder={t("compliance.scope_optional_placeholder")}
               value={scope}
               onChange={(e) => setScope(e.target.value)}
             />
@@ -128,7 +131,7 @@ function NewAssessmentModal({
               onClick={onClose}
               className="px-4 py-2 text-sm text-gray-600 hover:text-gray-900"
             >
-              Cancel
+              {t("common.cancel")}
             </button>
             <button
               type="submit"
@@ -136,7 +139,7 @@ function NewAssessmentModal({
               className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
             >
               {loading && <Loader2 className="w-4 h-4 animate-spin" />}
-              Create Assessment
+              {t("compliance.create_assessment")}
             </button>
           </div>
         </form>
@@ -148,6 +151,7 @@ function NewAssessmentModal({
 // ─── Main Page ─────────────────────────────────────────────────────────────────
 
 export default function CompliancePage() {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const [assessments, setAssessments] = useState<AssessmentListItem[]>([]);
   const [frameworks, setFrameworks] = useState<Framework[]>([]);
@@ -200,10 +204,9 @@ export default function CompliancePage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Compliance Assessments</h1>
+          <h1 className="text-2xl font-bold text-gray-900">{t("compliance.title")}</h1>
           <p className="text-gray-500 text-sm mt-1">
-            {assessments.length} assessments ·{" "}
-            {assessments.filter((a) => a.status === "in_progress").length} in progress
+            {t("compliance.assessments_subtitle", { count: assessments.length, active: assessments.filter((a) => a.status === "in_progress").length })}
           </p>
         </div>
         <button
@@ -211,17 +214,17 @@ export default function CompliancePage() {
           className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
         >
           <Plus className="w-4 h-4" />
-          New Assessment
+          {t("compliance.new_assessment")}
         </button>
       </div>
 
       {/* Summary KPIs */}
       <div className="grid grid-cols-4 gap-4">
         {[
-          { label: "Avg. Score",          value: avgScore != null ? `${avgScore}%` : "—", sub: "across active assessments" },
-          { label: "Total Assessments",   value: assessments.length,                       sub: "all frameworks" },
-          { label: "Completed",           value: assessments.filter((a) => a.status === "completed").length, sub: "assessments" },
-          { label: "In Progress",         value: assessments.filter((a) => a.status === "in_progress").length, sub: "currently active" },
+          { label: t("compliance.kpi_avg_score"),    value: avgScore != null ? `${avgScore}%` : "—", sub: t("compliance.kpi_avg_score_sub") },
+          { label: t("compliance.kpi_total"),        value: assessments.length,                       sub: t("compliance.kpi_total_sub") },
+          { label: t("compliance.kpi_completed"),    value: assessments.filter((a) => a.status === "completed").length, sub: t("compliance.kpi_completed_sub") },
+          { label: t("compliance.kpi_in_progress"),  value: assessments.filter((a) => a.status === "in_progress").length, sub: t("compliance.kpi_in_progress_sub") },
         ].map((s) => (
           <div key={s.label} className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
             <p className="text-2xl font-bold text-gray-900">{s.value}</p>
@@ -234,22 +237,22 @@ export default function CompliancePage() {
       {/* Filter tabs */}
       <div className="flex gap-2">
         {[
-          { key: "all",          label: "All"          },
-          { key: "in_progress",  label: "In Progress"  },
-          { key: "under_review", label: "Under Review" },
-          { key: "completed",    label: "Completed"    },
-          { key: "draft",        label: "Draft"        },
-        ].map((t) => (
+          { key: "all",          label: t("common.all")                      },
+          { key: "in_progress",  label: t("compliance.filter_in_progress")   },
+          { key: "under_review", label: t("compliance.filter_under_review")  },
+          { key: "completed",    label: t("compliance.filter_completed")     },
+          { key: "draft",        label: t("compliance.filter_draft")         },
+        ].map((tab) => (
           <button
             key={t.key}
-            onClick={() => setStatusFilter(t.key)}
+            onClick={() => setStatusFilter(tab.key)}
             className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
-              statusFilter === t.key
+              statusFilter === tab.key
                 ? "bg-blue-600 text-white border-blue-600"
                 : "bg-white text-gray-600 border-gray-200 hover:bg-gray-50"
             }`}
           >
-            {t.label}
+            {tab.label}
           </button>
         ))}
       </div>
@@ -282,7 +285,7 @@ export default function CompliancePage() {
                     </span>
                   )}
                   <span className="text-gray-400">
-                    Created {new Date(a.created_at).toLocaleDateString()}
+                    {t("common.created_at")} {new Date(a.created_at).toLocaleDateString()}
                   </span>
                 </div>
               </div>
@@ -314,23 +317,23 @@ export default function CompliancePage() {
         <div className="bg-gradient-to-br from-blue-50 to-indigo-50 border border-blue-100 rounded-2xl p-6 space-y-4">
           <div className="flex items-center gap-2">
             <FolderUp className="w-5 h-5 text-blue-600" />
-            <p className="font-bold text-blue-900">How to import your documents and run a compliance check</p>
+            <p className="font-bold text-blue-900">{t("compliance.how_to_title")}</p>
           </div>
           <div className="grid grid-cols-3 gap-4">
             {[
-              { num: 1, icon: Plus,       color: "bg-blue-100 text-blue-600",   title: "Create an Assessment",   desc: "Click \"New Assessment\" above. Choose a framework like ISO 27001 and give it a name." },
-              { num: 2, icon: FolderUp,   color: "bg-purple-100 text-purple-600", title: "Upload your documents", desc: "Open the assessment → \"Upload & Analyze\" tab. Drop any PDF, Word, or TXT file." },
-              { num: 3, icon: Sparkles,   color: "bg-orange-100 text-orange-600", title: "Run AI Analysis",      desc: "Click \"Run AI Analysis\". The AI maps your documents to every control and flags gaps." },
-              { num: 4, icon: BarChart3,  color: "bg-green-100 text-green-600",  title: "Review Gap Report",     desc: "\"Gap Report\" tab shows every failing control. Accept gaps to create action items." },
-              { num: 5, icon: FileText,   color: "bg-teal-100 text-teal-600",    title: "Check Doc Checklist",   desc: "\"Document Checklist\" tab lists all mandatory documents. Upload missing ones inline." },
-              { num: 6, icon: CheckCircle, color: "bg-green-100 text-green-600", title: "Track & Remediate",     desc: "Use the Traceability Matrix to see control → gap → action item chains end-to-end." },
+              { num: 1, icon: Plus,        color: "bg-blue-100 text-blue-600",    title: t("compliance.how_to_step1_title"), desc: t("compliance.how_to_step1_desc") },
+              { num: 2, icon: FolderUp,    color: "bg-purple-100 text-purple-600", title: t("compliance.how_to_step2_title"), desc: t("compliance.how_to_step2_desc") },
+              { num: 3, icon: Sparkles,    color: "bg-orange-100 text-orange-600", title: t("compliance.how_to_step3_title"), desc: t("compliance.how_to_step3_desc") },
+              { num: 4, icon: BarChart3,   color: "bg-green-100 text-green-600",  title: t("compliance.how_to_step4_title"), desc: t("compliance.how_to_step4_desc") },
+              { num: 5, icon: FileText,    color: "bg-teal-100 text-teal-600",    title: t("compliance.how_to_step5_title"), desc: t("compliance.how_to_step5_desc") },
+              { num: 6, icon: CheckCircle, color: "bg-green-100 text-green-600",  title: t("compliance.how_to_step6_title"), desc: t("compliance.how_to_step6_desc") },
             ].map(({ num, icon: Icon, color, title, desc }) => (
               <div key={num} className="bg-white rounded-xl border border-blue-100 p-4">
                 <div className="flex items-center gap-2 mb-2">
                   <div className={`w-7 h-7 rounded-lg flex items-center justify-center ${color}`}>
                     <Icon className="w-3.5 h-3.5" />
                   </div>
-                  <span className="text-xs font-bold text-gray-400">Step {num}</span>
+                  <span className="text-xs font-bold text-gray-400">{t("compliance.step_label", { num })}</span>
                 </div>
                 <p className="text-sm font-semibold text-gray-900">{title}</p>
                 <p className="text-xs text-gray-500 mt-1 leading-relaxed">{desc}</p>
@@ -342,10 +345,10 @@ export default function CompliancePage() {
               onClick={() => setShowModal(true)}
               className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold px-4 py-2 rounded-lg transition-colors"
             >
-              <Plus className="w-4 h-4" /> Create my first assessment
+              <Plus className="w-4 h-4" /> {t("compliance.create_first_assessment")}
             </button>
             <Link to="/help" className="text-sm text-blue-600 hover:text-blue-700 font-medium">
-              Full guide →
+              {t("compliance.full_guide")}
             </Link>
           </div>
         </div>
@@ -353,7 +356,7 @@ export default function CompliancePage() {
 
       {filtered.length === 0 && assessments.length > 0 && !loading && (
         <div className="text-center py-16 text-gray-400 text-sm">
-          No assessments match this filter.
+          {t("compliance.no_filter_match")}
         </div>
       )}
     </div>

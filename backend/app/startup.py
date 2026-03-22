@@ -80,6 +80,41 @@ async def seed_demo_data():
         print("  Users: admin@demo.com / demo123")
         print("        ciso@demo.com / demo123")
 
+    # Seed super admin (platform owner) — separate from any tenant
+    async with AsyncSessionLocal() as db:
+        existing = await db.execute(select(User).where(User.email == "superadmin@platform.com"))
+        if existing.scalar_one_or_none():
+            print("[startup] Super admin already exists, skipping.")
+            return
+
+        # Super admin needs a tenant_id (FK constraint) — use/create a platform tenant
+        result = await db.execute(select(Tenant).where(Tenant.slug == "platform"))
+        platform_tenant = result.scalar_one_or_none()
+        if not platform_tenant:
+            platform_tenant = Tenant(
+                name="Platform Owner",
+                slug="platform",
+                industry="saas",
+                country="US",
+                is_active=True,
+            )
+            db.add(platform_tenant)
+            await db.flush()
+
+        super_admin = User(
+            tenant_id=platform_tenant.id,
+            email="superadmin@platform.com",
+            hashed_password=hash_password("super123"),
+            first_name="Super",
+            last_name="Admin",
+            role=UserRole.SUPER_ADMIN,
+            is_active=True,
+            is_verified=True,
+        )
+        db.add(super_admin)
+        await db.commit()
+        print("[startup] Super admin seeded: superadmin@platform.com / super123")
+
 
 async def run():
     await create_tables()

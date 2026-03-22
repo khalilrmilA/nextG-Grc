@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Link } from "react-router-dom";
 import {
   HelpCircle, Search, BookOpen, LayoutDashboard, AlertTriangle,
@@ -241,6 +242,7 @@ function ModuleCard({ mod }: { mod: typeof MODULES[0] }) {
 // ── Main Page ─────────────────────────────────────────────────────────────────
 
 export default function HelpPage() {
+  const { t } = useTranslation();
   const [activeSection, setActiveSection] = useState<Section>("getting-started");
   const [searchQuery, setSearchQuery]     = useState("");
 
@@ -251,10 +253,10 @@ export default function HelpPage() {
   );
 
   const SECTIONS: { id: Section; icon: React.ElementType; label: string }[] = [
-    { id: "getting-started", icon: Zap,         label: "Getting Started"  },
-    { id: "modules",         icon: BookMarked,  label: "Module Guides"    },
-    { id: "faq",             icon: HelpCircle,  label: "FAQ"              },
-    { id: "contact",         icon: Mail,        label: "Contact Support"  },
+    { id: "getting-started", icon: Zap,         label: t("help.getting_started")  },
+    { id: "modules",         icon: BookMarked,  label: t("help.module_guides")    },
+    { id: "faq",             icon: HelpCircle,  label: t("help.faq")              },
+    { id: "contact",         icon: Mail,        label: t("help.contact")          },
   ];
 
   return (
@@ -265,8 +267,8 @@ export default function HelpPage() {
           <HelpCircle className="w-5 h-5 text-blue-600" />
         </div>
         <div>
-          <h1 className="text-xl font-bold text-gray-900">Help & Support</h1>
-          <p className="text-sm text-gray-500">Everything you need to get the most out of your GRC platform</p>
+          <h1 className="text-xl font-bold text-gray-900">{t("help.title")}</h1>
+          <p className="text-sm text-gray-500">{t("help.subtitle")}</p>
         </div>
       </div>
 
@@ -277,7 +279,7 @@ export default function HelpPage() {
           type="text"
           value={searchQuery}
           onChange={e => { setSearchQuery(e.target.value); if (e.target.value) setActiveSection("faq"); }}
-          placeholder="Search help articles and FAQs..."
+          placeholder={t("help.search_placeholder")}
           className="w-full pl-11 pr-4 py-3 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
         />
       </div>
@@ -307,15 +309,15 @@ export default function HelpPage() {
           {activeSection === "getting-started" && (
             <div className="space-y-6">
               <div>
-                <h2 className="text-base font-semibold text-gray-900">Getting Started</h2>
-                <p className="text-sm text-gray-500 mt-0.5">Follow these steps to have a working compliance assessment in minutes.</p>
+                <h2 className="text-base font-semibold text-gray-900">{t("help.getting_started")}</h2>
+                <p className="text-sm text-gray-500 mt-0.5">{t("help.getting_started_subtitle")}</p>
               </div>
 
               {/* ── HOW TO IMPORT DOCUMENTS ── highlighted box */}
               <div className="bg-blue-50 border border-blue-200 rounded-2xl p-5">
                 <div className="flex items-center gap-2 mb-3">
                   <FolderUp className="w-5 h-5 text-blue-600" />
-                  <p className="font-bold text-blue-900 text-sm">How to import your documents</p>
+                  <p className="font-bold text-blue-900 text-sm">{t("help.how_to_import")}</p>
                   <Info className="w-4 h-4 text-blue-400" />
                 </div>
                 <ol className="space-y-2.5">
@@ -343,7 +345,7 @@ export default function HelpPage() {
                   to="/compliance"
                   className="mt-4 inline-flex items-center gap-1.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold px-4 py-2 rounded-lg transition-colors"
                 >
-                  Go to Compliance <ArrowRight className="w-4 h-4" />
+                  {t("help.go_to_compliance")} <ArrowRight className="w-4 h-4" />
                 </Link>
               </div>
 
@@ -365,7 +367,7 @@ export default function HelpPage() {
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
-                        <span className="text-xs font-bold text-gray-400">Step {step}</span>
+                        <span className="text-xs font-bold text-gray-400">{t("help.step_label")} {step}</span>
                         <span className="inline-flex items-center gap-1 bg-gray-100 rounded px-1.5 py-0.5 text-xs font-mono text-gray-600">
                           <MousePointerClick className="w-3 h-3" /> {where}
                         </span>
@@ -383,8 +385,8 @@ export default function HelpPage() {
           {activeSection === "modules" && (
             <div className="space-y-4">
               <div>
-                <h2 className="text-base font-semibold text-gray-900">Module Guides</h2>
-                <p className="text-sm text-gray-500 mt-0.5">Step-by-step instructions for each platform module. Click to expand.</p>
+                <h2 className="text-base font-semibold text-gray-900">{t("help.module_guides")}</h2>
+                <p className="text-sm text-gray-500 mt-0.5">{t("help.faq_subtitle")}</p>
               </div>
               {MODULES.map(mod => <ModuleCard key={mod.id} mod={mod} />)}
             </div>
@@ -395,14 +397,14 @@ export default function HelpPage() {
             <div className="space-y-4">
               <div>
                 <h2 className="text-base font-semibold text-gray-900">
-                  Frequently Asked Questions
-                  {searchQuery && <span className="ml-2 text-sm font-normal text-gray-400">— {filteredFaq.length} result{filteredFaq.length !== 1 ? "s" : ""} for "{searchQuery}"</span>}
+                  {t("help.faq")}
+                  {searchQuery && <span className="ml-2 text-sm font-normal text-gray-400">— {filteredFaq.length} {t("help.results_for")} "{searchQuery}"</span>}
                 </h2>
               </div>
               <div className="bg-white border border-gray-200 rounded-xl px-5">
                 {filteredFaq.length > 0
                   ? filteredFaq.map((item, i) => <FaqItem key={i} q={item.q} a={item.a} />)
-                  : <p className="py-8 text-center text-sm text-gray-400">No results found for "{searchQuery}"</p>
+                  : <p className="py-8 text-center text-sm text-gray-400">{t("help.no_results")} "{searchQuery}"</p>
                 }
               </div>
             </div>
@@ -412,8 +414,8 @@ export default function HelpPage() {
           {activeSection === "contact" && (
             <div className="space-y-5">
               <div>
-                <h2 className="text-base font-semibold text-gray-900">Contact Support</h2>
-                <p className="text-sm text-gray-500 mt-0.5">We typically respond within 4 business hours.</p>
+                <h2 className="text-base font-semibold text-gray-900">{t("help.contact")}</h2>
+                <p className="text-sm text-gray-500 mt-0.5">{t("help.contact_subtitle")}</p>
               </div>
 
               <div className="grid grid-cols-2 gap-4">
@@ -421,48 +423,48 @@ export default function HelpPage() {
                   <div className="w-9 h-9 bg-blue-50 rounded-xl flex items-center justify-center mb-3">
                     <Mail className="w-4 h-4 text-blue-600" />
                   </div>
-                  <p className="text-sm font-semibold text-gray-900">Email Support</p>
-                  <p className="text-xs text-gray-500 mt-1">For billing, account, and technical issues.</p>
+                  <p className="text-sm font-semibold text-gray-900">{t("help.email_support")}</p>
+                  <p className="text-xs text-gray-500 mt-1">{t("help.email_support_desc")}</p>
                   <p className="text-xs text-blue-600 mt-2 font-medium">support@grcplatform.io</p>
                 </div>
                 <div className="p-5 bg-white border border-gray-200 rounded-xl hover:border-blue-300 transition-colors cursor-pointer">
                   <div className="w-9 h-9 bg-green-50 rounded-xl flex items-center justify-center mb-3">
                     <MessageCircle className="w-4 h-4 text-green-600" />
                   </div>
-                  <p className="text-sm font-semibold text-gray-900">Live Chat</p>
-                  <p className="text-xs text-gray-500 mt-1">Available Mon–Fri, 9am–6pm CET.</p>
-                  <p className="text-xs text-green-600 mt-2 font-medium">Start a chat →</p>
+                  <p className="text-sm font-semibold text-gray-900">{t("help.live_chat")}</p>
+                  <p className="text-xs text-gray-500 mt-1">{t("help.live_chat_desc")}</p>
+                  <p className="text-xs text-green-600 mt-2 font-medium">{t("help.live_chat_action")}</p>
                 </div>
               </div>
 
               {/* Submit a ticket */}
               <div className="bg-white border border-gray-200 rounded-xl p-5 space-y-4">
-                <p className="text-sm font-semibold text-gray-800">Submit a Support Ticket</p>
+                <p className="text-sm font-semibold text-gray-800">{t("help.submit_ticket")}</p>
                 <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">Subject</label>
-                  <input type="text" placeholder="Briefly describe your issue"
+                  <label className="block text-xs font-medium text-gray-600 mb-1">{t("help.ticket_subject")}</label>
+                  <input type="text" placeholder={t("help.ticket_subject_placeholder")}
                     className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">Category</label>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">{t("help.ticket_category")}</label>
                   <select className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500">
-                    <option>Technical Issue</option>
-                    <option>Billing & Subscription</option>
-                    <option>Feature Request</option>
-                    <option>Framework / Compliance Question</option>
-                    <option>Account & Access</option>
-                    <option>Other</option>
+                    <option>{t("help.ticket_cat_technical")}</option>
+                    <option>{t("help.ticket_cat_billing")}</option>
+                    <option>{t("help.ticket_cat_feature")}</option>
+                    <option>{t("help.ticket_cat_compliance")}</option>
+                    <option>{t("help.ticket_cat_account")}</option>
+                    <option>{t("help.ticket_cat_other")}</option>
                   </select>
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">Description</label>
-                  <textarea rows={4} placeholder="Provide as much detail as possible — steps to reproduce, error messages, screenshots..."
+                  <label className="block text-xs font-medium text-gray-600 mb-1">{t("help.ticket_description")}</label>
+                  <textarea rows={4} placeholder={t("help.ticket_description_placeholder")}
                     className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none" />
                 </div>
                 <button type="button"
                   className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors">
                   <Mail className="w-4 h-4" />
-                  Submit ticket
+                  {t("help.ticket_submit")}
                 </button>
               </div>
             </div>

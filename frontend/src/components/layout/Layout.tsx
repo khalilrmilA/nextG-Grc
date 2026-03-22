@@ -485,6 +485,27 @@ export default function Layout() {
           ))}
         </nav>
 
+        {/* Company Admin Panel — only for admin role */}
+        {user?.role === "admin" && (
+          <div className="px-3 pb-2">
+            <NavLink
+              to="/company-admin"
+              className={({ isActive }) =>
+                `flex items-center gap-3 px-3 py-2.5 w-full rounded-xl text-sm font-medium transition-all ${
+                  isActive ? sc.navActive : sc.navItem
+                }`
+              }
+            >
+              {({ isActive }) => (
+                <>
+                  <Briefcase className={`w-4 h-4 flex-shrink-0 ${isActive ? sc.navIconActive : sc.navIcon}`} />
+                  <span className="flex-1">Admin Panel</span>
+                </>
+              )}
+            </NavLink>
+          </div>
+        )}
+
         {/* Bottom actions */}
         <div className={`px-3 pb-4 pt-3 border-t ${sc.divider} space-y-0.5`}>
           {[

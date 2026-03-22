@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useTranslation } from "react-i18next";
 import { useSearchParams } from "react-router-dom";
 import {
   Settings, User, Bell, Shield, Key, Globe, Palette,
@@ -68,11 +69,12 @@ function Toggle({ enabled, onChange, label, description }: {
 }
 
 function SaveBar({ onSave, saved }: { onSave: () => void; saved: boolean }) {
+  const { t } = useTranslation();
   return (
     <div className="flex items-center justify-end gap-3 pt-6 mt-6 border-t border-gray-100">
       {saved && (
         <span className="flex items-center gap-1.5 text-sm text-green-600">
-          <Check className="w-4 h-4" /> Saved
+          <Check className="w-4 h-4" /> {t("settings.saved")}
         </span>
       )}
       <button
@@ -81,7 +83,7 @@ function SaveBar({ onSave, saved }: { onSave: () => void; saved: boolean }) {
         className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
       >
         <Save className="w-4 h-4" />
-        Save changes
+        {t("settings.save_changes")}
       </button>
     </div>
   );
@@ -89,20 +91,21 @@ function SaveBar({ onSave, saved }: { onSave: () => void; saved: boolean }) {
 
 // Lock overlay for plan-gated tabs
 function LockedOverlay({ requiredPlan }: { requiredPlan: string }) {
+  const { t } = useTranslation();
   return (
     <div className="flex flex-col items-center justify-center py-20 text-center">
       <div className="w-14 h-14 rounded-full bg-gray-100 flex items-center justify-center mb-4">
         <Lock className="w-6 h-6 text-gray-400" />
       </div>
-      <h3 className="text-base font-semibold text-gray-800">Feature locked</h3>
+      <h3 className="text-base font-semibold text-gray-800">{t("settings.feature_locked")}</h3>
       <p className="text-sm text-gray-500 mt-1 max-w-xs">
-        This settings section requires the <span className="font-semibold">{requiredPlan}</span> plan or higher.
+        {t("settings.feature_locked_desc", { plan: requiredPlan })}
       </p>
       <button
         type="button"
         className="mt-5 px-5 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
       >
-        Upgrade plan
+        {t("settings.upgrade_plan")}
       </button>
     </div>
   );
@@ -111,6 +114,7 @@ function LockedOverlay({ requiredPlan }: { requiredPlan: string }) {
 // ── Tab: Framework ────────────────────────────────────────────────────────────
 
 function FrameworkTab() {
+  const { t } = useTranslation();
   const { primaryFramework, selectedFrameworks, allFrameworks, loading, saveFrameworks } = useFramework();
 
   const [primaryId, setPrimaryId] = useState<string>(() => primaryFramework?.id ?? "");
@@ -154,11 +158,8 @@ function FrameworkTab() {
   return (
     <div className="space-y-5">
       <div>
-        <h2 className="text-base font-semibold text-gray-900">Workspace Frameworks</h2>
-        <p className="text-sm text-gray-500 mt-0.5">
-          Select your <strong>primary framework</strong> (radio) — the dashboard and controls are built around it.
-          Add <strong>secondary frameworks</strong> (checkboxes) for cross-framework tracking.
-        </p>
+        <h2 className="text-base font-semibold text-gray-900">{t("settings.framework_title")}</h2>
+        <p className="text-sm text-gray-500 mt-0.5">{t("settings.framework_subtitle")}</p>
       </div>
 
       {/* Summary */}
@@ -167,7 +168,7 @@ function FrameworkTab() {
           <strong>Primary:</strong> {primaryFw.name} ({primaryFw.control_count} controls)
           {secondaryIds.length > 0 && (
             <span className="ml-2 text-blue-600">
-              +{secondaryIds.length} secondary framework{secondaryIds.length > 1 ? "s" : ""}
+              {t("settings.secondary_count", { count: secondaryIds.length })}
             </span>
           )}
         </div>
@@ -178,7 +179,7 @@ function FrameworkTab() {
         type="text"
         value={search}
         onChange={e => setSearch(e.target.value)}
-        placeholder="Search frameworks…"
+        placeholder={t("settings.search_frameworks")}
         className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
       />
 
@@ -237,7 +238,7 @@ function FrameworkTab() {
 
                 {isPrimary && (
                   <span className="ml-6 mt-1 inline-block text-xs font-medium text-blue-700 bg-blue-100 px-2 py-0.5 rounded-full">
-                    Primary
+                    {t("settings.primary_label")}
                   </span>
                 )}
               </div>
@@ -247,11 +248,11 @@ function FrameworkTab() {
       )}
 
       <div className="flex items-center justify-between pt-4 border-t border-gray-100">
-        <p className="text-xs text-gray-400">Existing assessments are not affected when you switch frameworks.</p>
+        <p className="text-xs text-gray-400">{t("settings.framework_note")}</p>
         <div className="flex items-center gap-3">
           {saved && (
             <span className="flex items-center gap-1.5 text-sm text-green-600">
-              <Check className="w-4 h-4" /> Saved
+              <Check className="w-4 h-4" /> {t("settings.saved")}
             </span>
           )}
           <button
@@ -261,7 +262,7 @@ function FrameworkTab() {
             className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >
             {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-            {saving ? "Saving…" : "Save Frameworks"}
+            {saving ? t("settings.saving") : t("settings.save_frameworks")}
           </button>
         </div>
       </div>
@@ -272,6 +273,7 @@ function FrameworkTab() {
 // ── Tab: Profile ──────────────────────────────────────────────────────────────
 
 function ProfileTab() {
+  const { t } = useTranslation();
   const user = useAuthStore(u => u);
   const [form, setForm] = useState({
     firstName: user?.name.split(" ")[0] ?? "Admin",
@@ -285,8 +287,8 @@ function ProfileTab() {
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-base font-semibold text-gray-900">Profile Information</h2>
-        <p className="text-sm text-gray-500 mt-0.5">Update your personal details and preferences.</p>
+        <h2 className="text-base font-semibold text-gray-900">{t("settings.profile_title")}</h2>
+        <p className="text-sm text-gray-500 mt-0.5">{t("settings.profile_subtitle")}</p>
       </div>
 
       {/* Role badge */}
@@ -304,21 +306,21 @@ function ProfileTab() {
       </div>
 
       <div className="grid grid-cols-2 gap-4">
-        <Field label="First name">
+        <Field label={t("settings.first_name")}>
           <Input value={form.firstName} onChange={v => setForm(f => ({ ...f, firstName: v }))} />
         </Field>
-        <Field label="Last name">
+        <Field label={t("settings.last_name")}>
           <Input value={form.lastName} onChange={v => setForm(f => ({ ...f, lastName: v }))} />
         </Field>
       </div>
-      <Field label="Email address">
+      <Field label={t("settings.email_address")}>
         <Input value={form.email} onChange={v => setForm(f => ({ ...f, email: v }))} type="email" />
       </Field>
-      <Field label="Phone number" hint="Used for MFA and critical security alerts.">
+      <Field label={t("settings.phone_number")} hint={t("settings.phone_hint")}>
         <Input value={form.phone} onChange={v => setForm(f => ({ ...f, phone: v }))} placeholder="+33 6 00 00 00 00" />
       </Field>
       <div className="grid grid-cols-2 gap-4">
-        <Field label="Timezone">
+        <Field label={t("settings.timezone")}>
           <select value={form.timezone} onChange={e => setForm(f => ({ ...f, timezone: e.target.value }))}
             className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500">
             {["UTC-8 (Los Angeles)", "UTC-5 (New York)", "UTC+0 (London)", "UTC+1 (Paris)", "UTC+3 (Riyadh)", "UTC+8 (Singapore)"].map(tz => (
@@ -326,7 +328,7 @@ function ProfileTab() {
             ))}
           </select>
         </Field>
-        <Field label="Language">
+        <Field label={t("settings.language")}>
           <select value={form.language} onChange={e => setForm(f => ({ ...f, language: e.target.value }))}
             className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500">
             {["English", "Français", "العربية", "Español", "Deutsch"].map(l => <option key={l}>{l}</option>)}
@@ -348,6 +350,7 @@ const PLAN_CARDS: { tier: PlanTier; price: string; features: string[] }[] = [
 ];
 
 function OrganizationTab() {
+  const { t } = useTranslation();
   const user = useAuthStore(u => u);
   const currentPlan = user?.plan ?? "free_trial";
   const [form, setForm] = useState({
@@ -361,8 +364,8 @@ function OrganizationTab() {
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-base font-semibold text-gray-900">Organization Settings</h2>
-        <p className="text-sm text-gray-500 mt-0.5">Manage your company profile and subscription.</p>
+        <h2 className="text-base font-semibold text-gray-900">{t("settings.org_title")}</h2>
+        <p className="text-sm text-gray-500 mt-0.5">{t("settings.org_subtitle")}</p>
       </div>
 
       {/* Current plan */}
@@ -372,16 +375,16 @@ function OrganizationTab() {
             <p className="text-sm font-semibold text-blue-800">{PLAN_FEATURES[currentPlan].label}</p>
             <p className="text-xs text-blue-600 mt-0.5">
               {PLAN_FEATURES[currentPlan].maxFrameworks === 999
-                ? "Unlimited frameworks"
-                : `${PLAN_FEATURES[currentPlan].maxFrameworks} frameworks`} ·{" "}
+                ? t("settings.unlimited_frameworks")
+                : `${PLAN_FEATURES[currentPlan].maxFrameworks} ${t("settings.frameworks_label")}`} ·{" "}
               {PLAN_FEATURES[currentPlan].maxAdmins === 999
-                ? "Unlimited admins"
-                : `${PLAN_FEATURES[currentPlan].maxAdmins} admins`}
+                ? t("settings.unlimited_admins")
+                : `${PLAN_FEATURES[currentPlan].maxAdmins} ${t("settings.admins_label")}`}
             </p>
           </div>
           <button type="button" onClick={() => setShowPlans(v => !v)}
             className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 text-white text-xs font-semibold rounded-lg hover:bg-blue-700 transition-colors">
-            {showPlans ? "Hide plans" : "Change plan"}
+            {showPlans ? t("settings.hide_plans") : t("settings.change_plan")}
             <ChevronDown className={`w-3 h-3 transition-transform ${showPlans ? "rotate-180" : ""}`} />
           </button>
         </div>
@@ -395,7 +398,7 @@ function OrganizationTab() {
                   className={`p-3 rounded-xl border-2 transition-all ${isCurrent ? "border-blue-500 bg-white" : "border-gray-200 bg-white hover:border-blue-300"}`}>
                   <div className="flex items-center justify-between mb-2">
                     <p className="text-sm font-semibold text-gray-800 capitalize">{PLAN_FEATURES[tier].label}</p>
-                    {isCurrent && <span className="text-xs font-bold text-blue-600">Current</span>}
+                    {isCurrent && <span className="text-xs font-bold text-blue-600">{t("settings.current_plan_label")}</span>}
                   </div>
                   <p className="text-base font-bold text-gray-900 mb-2">{price}</p>
                   <ul className="space-y-1">
@@ -409,7 +412,7 @@ function OrganizationTab() {
                   {!isCurrent && (
                     <button type="button"
                       className="mt-3 w-full py-1.5 bg-blue-600 text-white text-xs font-medium rounded-lg hover:bg-blue-700 transition-colors">
-                      {tier === "enterprise" ? "Contact sales" : "Upgrade"}
+                      {tier === "enterprise" ? t("settings.contact_sales") : t("settings.upgrade")}
                     </button>
                   )}
                 </div>
@@ -419,31 +422,31 @@ function OrganizationTab() {
         )}
       </div>
 
-      <Field label="Organization name">
+      <Field label={t("settings.org_name_label")}>
         <Input value={form.name} onChange={v => setForm(f => ({ ...f, name: v }))} />
       </Field>
       <div className="grid grid-cols-2 gap-4">
-        <Field label="Primary domain" hint="Used for email domain verification.">
+        <Field label={t("settings.primary_domain")} hint={t("settings.domain_hint")}>
           <Input value={form.domain} onChange={v => setForm(f => ({ ...f, domain: v }))} placeholder="company.com" />
         </Field>
-        <Field label="VAT / Tax number">
+        <Field label={t("settings.vat_number")}>
           <Input value={form.vatNumber} onChange={v => setForm(f => ({ ...f, vatNumber: v }))} placeholder="FR00000000000" />
         </Field>
       </div>
       <div className="grid grid-cols-3 gap-4">
-        <Field label="Industry">
+        <Field label={t("settings.industry")}>
           <select value={form.industry} onChange={e => setForm(f => ({ ...f, industry: e.target.value }))}
             className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500">
             {["Technology", "Finance & Banking", "Healthcare", "Retail", "Manufacturing", "Government", "Education", "Other"].map(i => <option key={i}>{i}</option>)}
           </select>
         </Field>
-        <Field label="Company size">
+        <Field label={t("settings.company_size")}>
           <select value={form.size} onChange={e => setForm(f => ({ ...f, size: e.target.value }))}
             className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500">
             {["1–9", "10–49", "50–99", "100–499", "500–999", "1000+"].map(s => <option key={s}>{s}</option>)}
           </select>
         </Field>
-        <Field label="Country">
+        <Field label={t("settings.country")}>
           <select value={form.country} onChange={e => setForm(f => ({ ...f, country: e.target.value }))}
             className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500">
             {["France", "United States", "United Kingdom", "Germany", "Saudi Arabia", "UAE", "Canada", "Other"].map(c => <option key={c}>{c}</option>)}
@@ -482,6 +485,7 @@ function prefKey(type: NotificationType, channel: NotificationChannel) {
 }
 
 function NotificationsTab() {
+  const { t } = useTranslation();
   const qc = useQueryClient();
 
   // Load preferences from backend; fall back to all-enabled defaults on error
@@ -551,11 +555,11 @@ function NotificationsTab() {
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-base font-semibold text-gray-900">Notification Preferences</h2>
-        <p className="text-sm text-gray-500 mt-0.5">Choose which events trigger email and in-app notifications.</p>
+        <h2 className="text-base font-semibold text-gray-900">{t("settings.notif_title")}</h2>
+        <p className="text-sm text-gray-500 mt-0.5">{t("settings.notif_subtitle")}</p>
         {isError && (
           <p className="text-xs text-amber-600 mt-1 flex items-center gap-1">
-            <AlertTriangle className="w-3 h-3" /> Backend offline — changes will apply once connected.
+            <AlertTriangle className="w-3 h-3" /> {t("settings.notif_backend_offline")}
           </p>
         )}
       </div>
@@ -563,7 +567,7 @@ function NotificationsTab() {
       {/* Email notifications */}
       <div className="bg-white border border-gray-200 rounded-xl p-5">
         <p className="text-sm font-semibold text-gray-800 mb-3 flex items-center gap-2">
-          <Globe className="w-4 h-4 text-blue-500" /> Email notifications
+          <Globe className="w-4 h-4 text-blue-500" /> {t("settings.email_notifications")}
         </p>
         {EMAIL_ROWS.map(({ type, label, description }) => (
           <Toggle
@@ -579,7 +583,7 @@ function NotificationsTab() {
       {/* In-app notifications */}
       <div className="bg-white border border-gray-200 rounded-xl p-5">
         <p className="text-sm font-semibold text-gray-800 mb-3 flex items-center gap-2">
-          <Bell className="w-4 h-4 text-blue-500" /> In-app notifications
+          <Bell className="w-4 h-4 text-blue-500" /> {t("settings.inapp_notifications")}
         </p>
         {INAPP_ROWS.map(({ type, label }) => (
           <Toggle
@@ -599,6 +603,7 @@ function NotificationsTab() {
 // ── Tab: Security ─────────────────────────────────────────────────────────────
 
 function SecurityTab() {
+  const { t } = useTranslation();
   const [showCurrent, setShowCurrent] = useState(false);
   const [showNew, setShowNew]         = useState(false);
   const [pw, setPw]   = useState({ current: "", next: "", confirm: "" });
@@ -618,13 +623,13 @@ function SecurityTab() {
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-base font-semibold text-gray-900">Security Settings</h2>
-        <p className="text-sm text-gray-500 mt-0.5">Manage password, MFA, and active sessions.</p>
+        <h2 className="text-base font-semibold text-gray-900">{t("settings.security_title")}</h2>
+        <p className="text-sm text-gray-500 mt-0.5">{t("settings.security_subtitle")}</p>
       </div>
 
       <div className="bg-white border border-gray-200 rounded-xl p-5 space-y-4">
-        <p className="text-sm font-semibold text-gray-800">Change Password</p>
-        <Field label="Current password">
+        <p className="text-sm font-semibold text-gray-800">{t("settings.change_password_title")}</p>
+        <Field label={t("settings.current_password")}>
           <div className="relative">
             <Input value={pw.current} onChange={v => setPw(p => ({ ...p, current: v }))} type={showCurrent ? "text" : "password"} placeholder="••••••••" />
             <button type="button" onClick={() => setShowCurrent(s => !s)} className="absolute right-3 top-2.5 text-gray-400 hover:text-gray-600">
@@ -632,7 +637,7 @@ function SecurityTab() {
             </button>
           </div>
         </Field>
-        <Field label="New password" hint="Min. 12 characters, including uppercase, numbers, and symbols.">
+        <Field label={t("settings.new_password")} hint={t("settings.new_password_hint")}>
           <div className="relative">
             <Input value={pw.next} onChange={v => setPw(p => ({ ...p, next: v }))} type={showNew ? "text" : "password"} placeholder="••••••••" />
             <button type="button" onClick={() => setShowNew(s => !s)} className="absolute right-3 top-2.5 text-gray-400 hover:text-gray-600">
@@ -640,17 +645,17 @@ function SecurityTab() {
             </button>
           </div>
         </Field>
-        <Field label="Confirm new password">
+        <Field label={t("settings.confirm_password")}>
           <Input value={pw.confirm} onChange={v => setPw(p => ({ ...p, confirm: v }))} type="password" placeholder="••••••••" />
           {pw.confirm && pw.next !== pw.confirm && (
-            <p className="text-xs text-red-500 mt-1 flex items-center gap-1"><AlertTriangle className="w-3 h-3" /> Passwords do not match</p>
+            <p className="text-xs text-red-500 mt-1 flex items-center gap-1"><AlertTriangle className="w-3 h-3" /> {t("settings.passwords_no_match")}</p>
           )}
         </Field>
         <div className="flex items-center justify-end gap-3 pt-2">
-          {saved && <span className="flex items-center gap-1.5 text-sm text-green-600"><Check className="w-4 h-4" /> Password updated</span>}
+          {saved && <span className="flex items-center gap-1.5 text-sm text-green-600"><Check className="w-4 h-4" /> {t("settings.password_updated")}</span>}
           <button type="button" onClick={savePassword}
             className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors">
-            Update password
+            {t("settings.update_password")}
           </button>
         </div>
       </div>
@@ -658,8 +663,8 @@ function SecurityTab() {
       <div className="bg-white border border-gray-200 rounded-xl p-5">
         <div className="flex items-center justify-between">
           <div>
-            <p className="text-sm font-semibold text-gray-800">Two-Factor Authentication (2FA)</p>
-            <p className="text-xs text-gray-400 mt-0.5">Add an extra layer of security using an authenticator app or SMS.</p>
+            <p className="text-sm font-semibold text-gray-800">{t("settings.two_factor_title")}</p>
+            <p className="text-xs text-gray-400 mt-0.5">{t("settings.two_factor_desc")}</p>
           </div>
           <button type="button" onClick={() => setMfa(v => !v)}
             className={`relative inline-flex h-5 w-9 flex-shrink-0 rounded-full transition-colors ${mfa ? "bg-blue-600" : "bg-gray-200"}`}>
@@ -668,25 +673,25 @@ function SecurityTab() {
         </div>
         {mfa && (
           <div className="mt-4 p-3 bg-blue-50 border border-blue-100 rounded-lg text-xs text-blue-700">
-            Scan the QR code with your authenticator app (Google Authenticator, Authy, etc.) to complete setup.
+            {t("settings.two_factor_setup")}
           </div>
         )}
       </div>
 
       <div className="bg-white border border-gray-200 rounded-xl p-5">
-        <p className="text-sm font-semibold text-gray-800 mb-3">Active Sessions</p>
+        <p className="text-sm font-semibold text-gray-800 mb-3">{t("settings.active_sessions")}</p>
         <div className="space-y-3">
           {sessions.map(s => (
             <div key={s.id} className="flex items-center justify-between py-2 border-b border-gray-100 last:border-0">
               <div>
                 <p className="text-sm font-medium text-gray-800">
                   {s.device}{" "}
-                  {s.current && <span className="ml-2 px-1.5 py-0.5 bg-green-100 text-green-700 text-xs rounded-full">Current</span>}
+                  {s.current && <span className="ml-2 px-1.5 py-0.5 bg-green-100 text-green-700 text-xs rounded-full">{t("settings.current_session")}</span>}
                 </p>
                 <p className="text-xs text-gray-400 mt-0.5">{s.location} · {s.ip} · {s.last}</p>
               </div>
               {!s.current && (
-                <button type="button" className="text-xs text-red-500 hover:text-red-700 font-medium">Revoke</button>
+                <button type="button" className="text-xs text-red-500 hover:text-red-700 font-medium">{t("settings.revoke")}</button>
               )}
             </div>
           ))}
@@ -699,6 +704,7 @@ function SecurityTab() {
 // ── Tab: API & Integrations ───────────────────────────────────────────────────
 
 function ApiTab() {
+  const { t } = useTranslation();
   const [keys, setKeys] = useState([
     { id: "1", name: "Production API Key", prefix: "grc_prod_••••••••••••••••", created: "2025-01-10", last_used: "Today" },
     { id: "2", name: "CI/CD Pipeline Key", prefix: "grc_cicd_••••••••••••••••", created: "2025-02-01", last_used: "3 days ago" },
@@ -732,16 +738,16 @@ function ApiTab() {
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-base font-semibold text-gray-900">API Keys & Integrations</h2>
-        <p className="text-sm text-gray-500 mt-0.5">Manage API keys for programmatic access and third-party integrations.</p>
+        <h2 className="text-base font-semibold text-gray-900">{t("settings.api_integrations")}</h2>
+        <p className="text-sm text-gray-500 mt-0.5">{t("settings.api_keys_title")}</p>
       </div>
 
       <div className="bg-white border border-gray-200 rounded-xl p-5">
         <div className="flex items-center justify-between mb-4">
-          <p className="text-sm font-semibold text-gray-800">API Keys</p>
+          <p className="text-sm font-semibold text-gray-800">{t("settings.api_keys")}</p>
           <button type="button" onClick={() => setShowNew(v => !v)}
             className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 text-white text-xs font-medium rounded-lg hover:bg-blue-700 transition-colors">
-            <Key className="w-3 h-3" /> Generate key
+            <Key className="w-3 h-3" /> {t("settings.generate_key_btn")}
           </button>
         </div>
         {showNew && (
@@ -749,9 +755,9 @@ function ApiTab() {
             <input value={newName} onChange={e => setNewName(e.target.value)} placeholder="Key name (e.g. My App)"
               className="flex-1 px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
             <button type="button" onClick={createKey}
-              className="px-3 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700">Create</button>
+              className="px-3 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700">{t("common.create")}</button>
             <button type="button" onClick={() => setShowNew(false)}
-              className="px-3 py-2 text-gray-500 text-sm rounded-lg hover:bg-gray-100">Cancel</button>
+              className="px-3 py-2 text-gray-500 text-sm rounded-lg hover:bg-gray-100">{t("common.cancel")}</button>
           </div>
         )}
         <div className="space-y-3">
@@ -763,14 +769,14 @@ function ApiTab() {
                 <p className="text-xs text-gray-400 mt-0.5">Created {k.created} · Last used {k.last_used}</p>
               </div>
               <button type="button" onClick={() => setKeys(prev => prev.filter(x => x.id !== k.id))}
-                className="text-xs text-red-500 hover:text-red-700 font-medium">Revoke</button>
+                className="text-xs text-red-500 hover:text-red-700 font-medium">{t("settings.revoke")}</button>
             </div>
           ))}
         </div>
       </div>
 
       <div className="bg-white border border-gray-200 rounded-xl p-5">
-        <p className="text-sm font-semibold text-gray-800 mb-4">Integrations</p>
+        <p className="text-sm font-semibold text-gray-800 mb-4">{t("settings.integrations")}</p>
         <div className="grid grid-cols-2 gap-3">
           {integrations.map(intg => (
             <div key={intg.name} className="flex items-start justify-between p-3 border border-gray-200 rounded-lg">
@@ -784,7 +790,7 @@ function ApiTab() {
                     ? "bg-green-50 text-green-700 border-green-200 hover:bg-red-50 hover:text-red-600 hover:border-red-200"
                     : "bg-white text-gray-600 border-gray-200 hover:bg-blue-50 hover:text-blue-600 hover:border-blue-200"
                 }`}>
-                {intg.connected ? "Connected" : "Connect"}
+                {intg.connected ? t("settings.connected") : t("settings.connect")}
               </button>
             </div>
           ))}
@@ -837,6 +843,7 @@ function SectionCard({ title, children }: { title: string; children: React.React
 }
 
 function AppearanceTab() {
+  const { t } = useTranslation();
   const [ap, set] = useAppearance();
   const [saved, setSaved] = useState(false);
 
@@ -858,25 +865,25 @@ function AppearanceTab() {
     <div className="space-y-6">
       <div className="flex items-start justify-between">
         <div>
-          <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100">Appearance</h2>
-          <p className="text-sm text-gray-500 mt-0.5">Changes apply instantly and are saved automatically.</p>
+          <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100">{t("settings.appearance_title")}</h2>
+          <p className="text-sm text-gray-500 mt-0.5">{t("settings.appearance_subtitle")}</p>
         </div>
         <button
           type="button"
           onClick={reset}
           className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 font-medium px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
         >
-          <RotateCcw className="w-3 h-3" /> Reset to defaults
+          <RotateCcw className="w-3 h-3" /> {t("settings.reset_defaults")}
         </button>
       </div>
 
       {/* ── Color theme ── */}
-      <SectionCard title="Color theme">
+      <SectionCard title={t("settings.color_theme")}>
         <div className="grid grid-cols-3 gap-3">
           {([
-            { value: "light",  label: "Light",  Icon: Sun     },
-            { value: "dark",   label: "Dark",   Icon: Moon    },
-            { value: "system", label: "System", Icon: Monitor },
+            { value: "light",  label: t("settings.themes.light"),  Icon: Sun     },
+            { value: "dark",   label: t("settings.themes.dark"),   Icon: Moon    },
+            { value: "system", label: t("settings.themes.system"), Icon: Monitor },
           ] as { value: ThemeMode; label: string; Icon: typeof Sun }[]).map(({ value, label, Icon }) => (
             <OptionCard key={value} selected={ap.theme === value} onClick={() => handleSet({ theme: value })}>
               <div className="flex flex-col items-center gap-2 py-1">
@@ -903,7 +910,7 @@ function AppearanceTab() {
       </SectionCard>
 
       {/* ── Accent colour ── */}
-      <SectionCard title="Accent color">
+      <SectionCard title={t("settings.accent_color_title")}>
         <div className="flex flex-wrap gap-3">
           {ACCENT_OPTIONS.map(({ value, label, bg, ring }) => (
             <button
@@ -918,17 +925,17 @@ function AppearanceTab() {
           ))}
         </div>
         <p className="text-xs text-gray-400">
-          Current: <span className="font-medium text-gray-600 dark:text-gray-300 capitalize">{ap.accent}</span>
+          {t("settings.accent_current")} <span className="font-medium text-gray-600 dark:text-gray-300 capitalize">{ap.accent}</span>
         </p>
       </SectionCard>
 
       {/* ── Font size ── */}
-      <SectionCard title="Font size">
+      <SectionCard title={t("settings.font_size")}>
         <div className="grid grid-cols-3 gap-3">
           {([
-            { value: "sm", label: "Small",   preview: "text-xs" },
-            { value: "md", label: "Default",  preview: "text-sm" },
-            { value: "lg", label: "Large",    preview: "text-base" },
+            { value: "sm", label: t("settings.font_small"),   preview: "text-xs" },
+            { value: "md", label: t("settings.font_default"),  preview: "text-sm" },
+            { value: "lg", label: t("settings.font_large"),    preview: "text-base" },
           ] as { value: FontSize; label: string; preview: string }[]).map(({ value, label, preview }) => (
             <OptionCard key={value} selected={ap.fontSize === value} onClick={() => handleSet({ fontSize: value })}>
               <div className="flex flex-col items-center gap-1 py-1">
@@ -941,12 +948,12 @@ function AppearanceTab() {
       </SectionCard>
 
       {/* ── Density ── */}
-      <SectionCard title="Table & list density">
+      <SectionCard title={t("settings.density_title")}>
         <div className="grid grid-cols-3 gap-3">
           {([
-            { value: "compact",     label: "Compact",     rows: [2, 2, 2, 2] },
-            { value: "default",     label: "Default",     rows: [3, 3, 3]    },
-            { value: "comfortable", label: "Comfortable", rows: [4, 4]       },
+            { value: "compact",     label: t("settings.density_compact"),     rows: [2, 2, 2, 2] },
+            { value: "default",     label: t("settings.density_default"),     rows: [3, 3, 3]    },
+            { value: "comfortable", label: t("settings.density_comfortable"), rows: [4, 4]       },
           ] as { value: Density; label: string; rows: number[] }[]).map(({ value, label, rows }) => (
             <OptionCard key={value} selected={ap.density === value} onClick={() => handleSet({ density: value })}>
               <div className="flex flex-col items-center gap-1.5 py-1">
@@ -966,7 +973,7 @@ function AppearanceTab() {
       </SectionCard>
 
       {/* ── Sidebar style ── */}
-      <SectionCard title="Sidebar style">
+      <SectionCard title={t("settings.sidebar_title")}>
         <div className="grid grid-cols-3 gap-3">
           {SIDEBAR_OPTIONS.map(({ value, label, preview }) => (
             <OptionCard key={value} selected={ap.sidebarStyle === value} onClick={() => handleSet({ sidebarStyle: value })}>
@@ -987,18 +994,18 @@ function AppearanceTab() {
       </SectionCard>
 
       {/* ── Extra toggles ── */}
-      <SectionCard title="Accessibility & extras">
+      <SectionCard title={t("settings.accessibility_title")}>
         <Toggle
           enabled={ap.reducedMotion}
           onChange={v => handleSet({ reducedMotion: v })}
-          label="Reduce motion"
-          description="Minimize animations and transitions throughout the UI"
+          label={t("settings.reduce_motion")}
+          description={t("settings.reduce_motion_desc")}
         />
         <Toggle
           enabled={ap.compactNumbers}
           onChange={v => handleSet({ compactNumbers: v })}
-          label="Compact numbers"
-          description="Show 1.2k instead of 1,200 in charts and tables"
+          label={t("settings.compact_numbers")}
+          description={t("settings.compact_numbers_desc")}
         />
       </SectionCard>
 
@@ -1006,7 +1013,7 @@ function AppearanceTab() {
       <div className="flex items-center justify-between pt-4 border-t border-gray-100 dark:border-gray-700">
         {saved && (
           <span className="flex items-center gap-1.5 text-sm text-green-600">
-            <Check className="w-4 h-4" /> Preferences saved
+            <Check className="w-4 h-4" /> {t("settings.preferences_saved")}
           </span>
         )}
         {!saved && <span />}
@@ -1015,7 +1022,7 @@ function AppearanceTab() {
           onClick={save}
           className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
         >
-          <Save className="w-4 h-4" /> Save preferences
+          <Save className="w-4 h-4" /> {t("settings.save_preferences")}
         </button>
       </div>
     </div>
@@ -1047,6 +1054,7 @@ const STATUS_BADGE: Record<ManagedUser["status"], string> = {
 };
 
 function AdminTab() {
+  const { t } = useTranslation();
   const [users, setUsers] = useState<ManagedUser[]>([
     { id: "1", name: "Admin",        email: "admin@demo.com",   role: "admin",   plan: "enterprise",   status: "active",    lastLogin: "Now"          },
     { id: "2", name: "Sophie Martin", email: "ciso@demo.com",    role: "ciso",    plan: "professional", status: "active",    lastLogin: "2 hours ago"  },
@@ -1092,20 +1100,20 @@ function AdminTab() {
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-base font-semibold text-gray-900 flex items-center gap-2">
-            <Crown className="w-4 h-4 text-yellow-500" /> Admin Panel
+            <Crown className="w-4 h-4 text-yellow-500" /> {t("settings.admin_title")}
           </h2>
-          <p className="text-sm text-gray-500 mt-0.5">Manage users, roles, and plan assignments across your organization.</p>
+          <p className="text-sm text-gray-500 mt-0.5">{t("settings.admin_subtitle")}</p>
         </div>
         <button type="button" onClick={() => setShowInvite(v => !v)}
           className="flex items-center gap-1.5 px-3 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors">
-          <Plus className="w-4 h-4" /> Invite user
+          <Plus className="w-4 h-4" /> {t("settings.invite_user")}
         </button>
       </div>
 
       {/* Invite form */}
       {showInvite && (
         <div className="bg-blue-50 border border-blue-100 rounded-xl p-4 space-y-3">
-          <p className="text-sm font-semibold text-blue-800">Invite a new user</p>
+          <p className="text-sm font-semibold text-blue-800">{t("settings.invite_new_user")}</p>
           <div className="grid grid-cols-3 gap-3">
             <input value={invite.email} onChange={e => setInvite(i => ({ ...i, email: e.target.value }))}
               placeholder="user@company.com" type="email"
@@ -1127,9 +1135,9 @@ function AdminTab() {
           </div>
           <div className="flex gap-2">
             <button type="button" onClick={sendInvite}
-              className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700">Send invite</button>
+              className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700">{t("settings.send_invite")}</button>
             <button type="button" onClick={() => setShowInvite(false)}
-              className="px-4 py-2 text-gray-600 text-sm rounded-lg hover:bg-gray-100">Cancel</button>
+              className="px-4 py-2 text-gray-600 text-sm rounded-lg hover:bg-gray-100">{t("common.cancel")}</button>
           </div>
         </div>
       )}
@@ -1139,7 +1147,7 @@ function AdminTab() {
         <table className="w-full text-sm">
           <thead className="bg-gray-50 border-b border-gray-200">
             <tr>
-              {["User", "Role", "Plan", "Status", "Last login", "Actions"].map(h => (
+              {[t("settings.col_user"), t("settings.col_role"), t("settings.col_plan"), t("settings.col_status"), t("settings.col_last_login"), t("settings.col_actions")].map(h => (
                 <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">{h}</th>
               ))}
             </tr>
@@ -1186,7 +1194,7 @@ function AdminTab() {
                   <div className="flex items-center gap-2">
                     <button type="button" onClick={() => toggleSuspend(u.id)}
                       className={`text-xs font-medium transition-colors ${u.status === "suspended" ? "text-green-600 hover:text-green-700" : "text-orange-500 hover:text-orange-700"}`}>
-                      {u.status === "suspended" ? "Activate" : "Suspend"}
+                      {u.status === "suspended" ? t("settings.activate") : t("settings.suspend")}
                     </button>
                     <button type="button" onClick={() => removeUser(u.id)}
                       className="text-red-400 hover:text-red-600 transition-colors">
@@ -1203,10 +1211,10 @@ function AdminTab() {
       {/* Stats */}
       <div className="grid grid-cols-4 gap-3">
         {[
-          { label: "Total users",  value: users.length,                                     color: "text-gray-800" },
-          { label: "Active",       value: users.filter(u => u.status === "active").length,   color: "text-green-600" },
-          { label: "Invited",      value: users.filter(u => u.status === "invited").length,  color: "text-orange-500" },
-          { label: "Suspended",    value: users.filter(u => u.status === "suspended").length, color: "text-red-500" },
+          { label: t("settings.stat_total_users"), value: users.length,                                     color: "text-gray-800" },
+          { label: t("settings.stat_active"),      value: users.filter(u => u.status === "active").length,   color: "text-green-600" },
+          { label: t("settings.stat_invited"),     value: users.filter(u => u.status === "invited").length,  color: "text-orange-500" },
+          { label: t("settings.stat_suspended"),   value: users.filter(u => u.status === "suspended").length, color: "text-red-500" },
         ].map(({ label, value, color }) => (
           <div key={label} className="bg-white border border-gray-200 rounded-xl p-4 text-center">
             <p className={`text-2xl font-bold ${color}`}>{value}</p>
@@ -1235,8 +1243,10 @@ function planAllows(userPlan: PlanTier, required: PlanTier): boolean {
 }
 
 export default function SettingsPage() {
+  const { t } = useTranslation();
   const user    = useAuthStore(u => u);
   const isAdmin = user?.role === "admin";
+  const isSuperAdmin = user?.role === "super_admin";
   const plan    = user?.plan ?? "free_trial";
 
   const [searchParams] = useSearchParams();
@@ -1253,19 +1263,22 @@ export default function SettingsPage() {
     if (t && valid.includes(t as Tab)) setActiveTab(t as Tab);
   }, [searchParams]);
 
-  const ALL_TABS: { id: Tab; icon: React.ElementType; label: string; adminOnly?: boolean }[] = [
-    { id: "profile",       icon: User,      label: "Profile"            },
-    { id: "organization",  icon: Building2, label: "Organization"       },
-    { id: "framework",     icon: Shield,    label: "Framework"          },
-    { id: "notifications", icon: Bell,      label: "Notifications"      },
-    { id: "security",      icon: Shield,    label: "Security"           },
-    { id: "api",           icon: Key,       label: "API & Integrations" },
-    { id: "appearance",    icon: Palette,   label: "Appearance"         },
-    { id: "admin",         icon: Crown,     label: "Admin Panel", adminOnly: true },
+  const ALL_TABS: { id: Tab; icon: React.ElementType; label: string; adminOnly?: boolean; superAdminOnly?: boolean }[] = [
+    { id: "profile",       icon: User,      label: t("settings.profile")            },
+    { id: "organization",  icon: Building2, label: t("settings.organization")       },
+    { id: "framework",     icon: Shield,    label: t("settings.framework")          },
+    { id: "notifications", icon: Bell,      label: t("settings.notifications")      },
+    { id: "security",      icon: Shield,    label: t("settings.security")           },
+    { id: "api",           icon: Key,       label: t("settings.api_integrations")   },
+    { id: "appearance",    icon: Palette,   label: t("settings.appearance")         },
+    { id: "admin",         icon: Crown,     label: t("settings.admin_panel"), superAdminOnly: true },
   ];
 
-  // Filter: admin sees all; others see non-admin tabs
-  const visibleTabs = ALL_TABS.filter(t => isAdmin || !t.adminOnly);
+  // Admin Panel tab only visible to super_admin; regular admin uses /company-admin
+  const visibleTabs = ALL_TABS.filter(t => {
+    if ((t as { superAdminOnly?: boolean }).superAdminOnly) return isSuperAdmin;
+    return true;
+  });
 
   function tabContent(tab: Tab): React.ReactNode {
     if (tab === "admin") return <AdminTab />;
@@ -1290,8 +1303,8 @@ export default function SettingsPage() {
           <Settings className="w-5 h-5 text-blue-600" />
         </div>
         <div>
-          <h1 className="text-xl font-bold text-gray-900">Settings</h1>
-          <p className="text-sm text-gray-500">Manage your account, organization, and platform preferences</p>
+          <h1 className="text-xl font-bold text-gray-900">{t("settings.title")}</h1>
+          <p className="text-sm text-gray-500">{t("settings.subtitle")}</p>
         </div>
       </div>
 
@@ -1299,9 +1312,9 @@ export default function SettingsPage() {
         {/* Sidebar tabs */}
         <aside className="w-52 flex-shrink-0">
           <nav className="space-y-0.5">
-            {visibleTabs.map(({ id, icon: Icon, label, adminOnly }) => {
+            {visibleTabs.map(({ id, icon: Icon, label, superAdminOnly }) => {
               const required   = TAB_MIN_PLAN[id];
-              const isLocked   = !isAdmin && required !== undefined && !planAllows(plan, required);
+              const isLocked   = !isAdmin && !isSuperAdmin && required !== undefined && !planAllows(plan, required);
               const isActive   = activeTab === id;
               return (
                 <button key={id} type="button" onClick={() => setActiveTab(id)}
@@ -1310,10 +1323,10 @@ export default function SettingsPage() {
                       ? "bg-blue-600 text-white shadow-sm"
                       : "text-gray-600 hover:bg-gray-100"
                   }`}>
-                  <Icon className={`w-4 h-4 flex-shrink-0 ${adminOnly && !isActive ? "text-yellow-500" : ""}`} />
+                  <Icon className={`w-4 h-4 flex-shrink-0 ${superAdminOnly && !isActive ? "text-yellow-500" : ""}`} />
                   <span className="flex-1 text-left">{label}</span>
                   {isLocked && !isActive && <Lock className="w-3 h-3 text-gray-400" />}
-                  {adminOnly && <Crown className={`w-3 h-3 ${isActive ? "text-yellow-300" : "text-yellow-500"}`} />}
+                  {superAdminOnly && <Crown className={`w-3 h-3 ${isActive ? "text-yellow-300" : "text-yellow-500"}`} />}
                 </button>
               );
             })}
@@ -1321,15 +1334,15 @@ export default function SettingsPage() {
 
           {/* Plan info chip at bottom of settings nav */}
           <div className="mt-6 p-3 bg-gray-50 border border-gray-200 rounded-xl">
-            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Current plan</p>
+            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">{t("settings.current_plan_label")}</p>
             <p className="text-sm font-bold text-gray-800 mt-1">{isAdmin ? "Admin (Enterprise)" : PLAN_FEATURES[plan].label}</p>
             {plan === "free_trial" && !isAdmin && (
-              <p className="text-xs text-orange-500 mt-0.5">{user?.daysRemaining ?? 14} days remaining</p>
+              <p className="text-xs text-orange-500 mt-0.5">{t("settings.days_remaining", { days: user?.daysRemaining ?? 14 })}</p>
             )}
             {!isAdmin && plan !== "enterprise" && (
               <button type="button" onClick={() => setActiveTab("organization")}
                 className="mt-2 text-xs font-medium text-blue-600 hover:text-blue-700">
-                Upgrade →
+                {t("settings.upgrade_arrow")}
               </button>
             )}
           </div>

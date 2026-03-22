@@ -207,7 +207,16 @@
       "Bash(taskkill //F //PID 23768 //PID 25320 //PID 6296 //PID 40584 //PID 36496 //PID 23700 //PID 18928 //PID 39236 //PID 34128 //PID 26380)",
       "Bash(grep -l \"version\\\\|audit\" /d/GRC/frontend/src/pages/*.tsx)",
       "Bash(grep -r \"export\\\\|report\\\\|PDF\\\\|xlsx\\\\|download\" /d/GRC/frontend/src/pages/*.tsx)",
-      "Bash(xargs grep -l \"audit\\\\|log\\\\|history\\\\|action\")"
+      "Bash(xargs grep -l \"audit\\\\|log\\\\|history\\\\|action\")",
+      "Bash(curl -s http://localhost:8000/api/v1/health)",
+      "Bash(source venv/Scripts/activate)",
+      "Bash(uvicorn app.main:app --reload --port 8000)",
+      "Bash(py -m uvicorn --version)",
+      "Bash(npm run:*)",
+      "Bash(curl -s http://localhost:8000/api/v1/users -H 'Authorization: Bearer test')",
+      "Bash(taskkill /F /PID 50528 /PID 10608 /PID 20420)",
+      "Bash(wmic process:*)",
+      "Bash(grep -rn \"openai\\\\|open_ai\\\\|OpenAI\" /d/GRC/backend/app/ /d/GRC/frontend/src/ --include=*.py --include=*.ts --include=*.tsx)"
     ]
   }
 }

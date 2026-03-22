@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Link } from "react-router-dom";
 import { FileText, Plus, CheckCircle, Clock, AlertCircle, User, Calendar, Link2, X, ChevronRight, Wand2 } from "lucide-react";
 
@@ -14,14 +15,6 @@ const POLICIES = [
 
 type PolicyEntry = typeof POLICIES[0];
 
-const STATUS_MAP: Record<string, { label: string; icon: typeof CheckCircle; color: string }> = {
-  draft:     { label: "Draft",     icon: Clock,        color: "bg-gray-100 text-gray-500"    },
-  in_review: { label: "In Review", icon: AlertCircle,  color: "bg-orange-100 text-orange-600"},
-  approved:  { label: "Approved",  icon: CheckCircle,  color: "bg-blue-100 text-blue-600"    },
-  published: { label: "Published", icon: CheckCircle,  color: "bg-green-100 text-green-600"  },
-  retired:   { label: "Retired",   icon: Clock,        color: "bg-gray-100 text-gray-400"    },
-};
-
 const CAT_COLORS: Record<string, string> = {
   Security:          "bg-blue-50 text-blue-700",
   HR:                "bg-pink-50 text-pink-700",
@@ -31,11 +24,11 @@ const CAT_COLORS: Record<string, string> = {
 };
 
 const CATEGORY_OPTIONS = ["Security", "HR", "Data Governance", "Vendor Risk", "BCP / DR", "Legal & Compliance", "Privacy", "Physical Security"];
-const STATUS_OPTIONS    = Object.keys(STATUS_MAP);
+const STATUS_KEYS      = ["draft", "in_review", "approved", "published", "retired"];
 const REVIEW_FREQUENCIES = [
-  { value: 6,  label: "Every 6 months" },
-  { value: 12, label: "Annually"       },
-  { value: 24, label: "Every 2 years"  },
+  { value: 6,  labelKey: "policies.review_6mo"  },
+  { value: 12, labelKey: "policies.review_12mo" },
+  { value: 24, labelKey: "policies.review_24mo" },
 ];
 
 function attestationColor(rate: number) {
@@ -46,16 +39,25 @@ function attestationColor(rate: number) {
 
 // ── New Policy Modal ──────────────────────────────────────────────────────────
 function NewPolicyModal({ onClose, onSaved }: { readonly onClose: () => void; readonly onSaved: (p: PolicyEntry) => void }) {
+  const { t } = useTranslation();
   const [form, setForm] = useState({
     title: "", category: "Security", owner: "",
     status: "draft", review_months: 12, description: "",
   });
   const [error, setError] = useState("");
 
+  const STATUS_MAP: Record<string, { label: string; icon: typeof CheckCircle; color: string }> = {
+    draft:     { label: t("policies.draft"),     icon: Clock,        color: "bg-gray-100 text-gray-500"    },
+    in_review: { label: t("policies.in_review"), icon: AlertCircle,  color: "bg-orange-100 text-orange-600"},
+    approved:  { label: t("policies.approved"),  icon: CheckCircle,  color: "bg-blue-100 text-blue-600"    },
+    published: { label: t("policies.published"), icon: CheckCircle,  color: "bg-green-100 text-green-600"  },
+    retired:   { label: t("policies.retired"),   icon: Clock,        color: "bg-gray-100 text-gray-400"    },
+  };
+
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!form.title.trim()) { setError("Title is required."); return; }
-    if (!form.owner.trim()) { setError("Owner is required."); return; }
+    if (!form.title.trim()) { setError(t("policies.title_required")); return; }
+    if (!form.owner.trim()) { setError(t("policies.owner_required")); return; }
     const nextReview = new Date();
     nextReview.setMonth(nextReview.getMonth() + form.review_months);
     onSaved({
@@ -77,67 +79,67 @@ function NewPolicyModal({ onClose, onSaved }: { readonly onClose: () => void; re
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
-          <h2 className="font-semibold text-gray-900">New Policy</h2>
+          <h2 className="font-semibold text-gray-900">{t("policies.new_policy")}</h2>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600"><X className="w-5 h-5" /></button>
         </div>
         <form onSubmit={handleSubmit} className="p-6 space-y-4">
           {error && <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{error}</p>}
 
           <div>
-            <label htmlFor="pol-title" className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Title *</label>
+            <label htmlFor="pol-title" className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">{t("policies.policy_title_label")} *</label>
             <input id="pol-title" className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-              placeholder="e.g. Password Management Policy"
+              placeholder={t("policies.policy_title_placeholder")}
               value={form.title} onChange={e => setForm(f => ({ ...f, title: e.target.value }))} />
           </div>
 
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label htmlFor="pol-category" className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Category</label>
+              <label htmlFor="pol-category" className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">{t("policies.category_label")}</label>
               <select id="pol-category" className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
                 value={form.category} onChange={e => setForm(f => ({ ...f, category: e.target.value }))}>
                 {CATEGORY_OPTIONS.map(o => <option key={o} value={o}>{o}</option>)}
               </select>
             </div>
             <div>
-              <label htmlFor="pol-status" className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Status</label>
+              <label htmlFor="pol-status" className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">{t("policies.status_label")}</label>
               <select id="pol-status" className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
                 value={form.status} onChange={e => setForm(f => ({ ...f, status: e.target.value }))}>
-                {STATUS_OPTIONS.map(o => <option key={o} value={o}>{STATUS_MAP[o].label}</option>)}
+                {STATUS_KEYS.map(o => <option key={o} value={o}>{STATUS_MAP[o]?.label ?? o}</option>)}
               </select>
             </div>
           </div>
 
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label htmlFor="pol-owner" className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Owner *</label>
+              <label htmlFor="pol-owner" className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">{t("policies.owner_label")} *</label>
               <input id="pol-owner" className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder="e.g. CISO, IT Manager"
+                placeholder={t("policies.owner_placeholder")}
                 value={form.owner} onChange={e => setForm(f => ({ ...f, owner: e.target.value }))} />
             </div>
             <div>
-              <label htmlFor="pol-review" className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Review Cycle</label>
+              <label htmlFor="pol-review" className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">{t("policies.review_cycle")}</label>
               <select id="pol-review" className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
                 value={form.review_months} onChange={e => setForm(f => ({ ...f, review_months: +e.target.value }))}>
-                {REVIEW_FREQUENCIES.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
+                {REVIEW_FREQUENCIES.map(r => <option key={r.value} value={r.value}>{t(r.labelKey)}</option>)}
               </select>
             </div>
           </div>
 
           <div>
-            <label htmlFor="pol-desc" className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Description</label>
+            <label htmlFor="pol-desc" className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">{t("common.description")}</label>
             <textarea id="pol-desc" rows={3} className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
-              placeholder="What does this policy cover and why is it needed?"
+              placeholder={t("policies.description_placeholder")}
               value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} />
           </div>
 
           <div className="flex gap-3 pt-2">
             <button type="button" onClick={onClose}
               className="flex-1 py-2.5 rounded-lg border border-gray-200 text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors">
-              Cancel
+              {t("common.cancel")}
             </button>
             <button type="submit"
               className="flex-1 py-2.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium transition-colors">
-              Create Policy
+              {t("policies.create_policy")}
             </button>
           </div>
         </form>
@@ -146,22 +148,32 @@ function NewPolicyModal({ onClose, onSaved }: { readonly onClose: () => void; re
   );
 }
 
-// ── Workflow transition map ───────────────────────────────────────────────────
-const WORKFLOW_ACTIONS: Record<string, { label: string; next: string; color: string } | undefined> = {
-  draft:     { label: "Submit for Review", next: "in_review", color: "bg-orange-500 hover:bg-orange-600 text-white" },
-  in_review: { label: "Approve",           next: "approved",  color: "bg-blue-600 hover:bg-blue-700 text-white"    },
-  approved:  { label: "Publish",           next: "published", color: "bg-green-600 hover:bg-green-700 text-white"  },
-};
-
 // ── Policy Detail Modal ───────────────────────────────────────────────────────
 function PolicyDetailModal({ policy, onClose, onStatusChange }: {
   readonly policy: PolicyEntry;
   readonly onClose: () => void;
   readonly onStatusChange: (id: string, next: string) => void;
 }) {
+  const { t } = useTranslation();
+
+  const STATUS_MAP: Record<string, { label: string; icon: typeof CheckCircle; color: string }> = {
+    draft:     { label: t("policies.draft"),     icon: Clock,        color: "bg-gray-100 text-gray-500"    },
+    in_review: { label: t("policies.in_review"), icon: AlertCircle,  color: "bg-orange-100 text-orange-600"},
+    approved:  { label: t("policies.approved"),  icon: CheckCircle,  color: "bg-blue-100 text-blue-600"    },
+    published: { label: t("policies.published"), icon: CheckCircle,  color: "bg-green-100 text-green-600"  },
+    retired:   { label: t("policies.retired"),   icon: Clock,        color: "bg-gray-100 text-gray-400"    },
+  };
+
+  const WORKFLOW_ACTIONS: Record<string, { label: string; next: string; color: string } | undefined> = {
+    draft:     { label: t("policies.submit_for_review"), next: "in_review", color: "bg-orange-500 hover:bg-orange-600 text-white" },
+    in_review: { label: t("policies.approve"),           next: "approved",  color: "bg-blue-600 hover:bg-blue-700 text-white"    },
+    approved:  { label: t("policies.publish"),           next: "published", color: "bg-green-600 hover:bg-green-700 text-white"  },
+  };
+
   const s = STATUS_MAP[policy.status] ?? STATUS_MAP.draft;
   const StatusIcon = s.icon;
   const action = WORKFLOW_ACTIONS[policy.status];
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-xl max-h-[90vh] overflow-y-auto">
@@ -192,23 +204,23 @@ function PolicyDetailModal({ policy, onClose, onStatusChange }: {
           <div className="grid grid-cols-3 gap-3">
             <div className="bg-gray-50 rounded-xl p-3 text-center">
               <p className="text-xl font-bold text-gray-900">{policy.linked_controls}</p>
-              <p className="text-xs text-gray-400 mt-0.5">Linked Controls</p>
+              <p className="text-xs text-gray-400 mt-0.5">{t("policies.linked_controls")}</p>
             </div>
             <div className="bg-gray-50 rounded-xl p-3 text-center">
               <p className="text-xl font-bold text-gray-900">
                 {policy.attestation_rate === null ? "—" : `${policy.attestation_rate}%`}
               </p>
-              <p className="text-xs text-gray-400 mt-0.5">Attestation</p>
+              <p className="text-xs text-gray-400 mt-0.5">{t("policies.kpi_attestation")}</p>
             </div>
             <div className="bg-gray-50 rounded-xl p-3 text-center">
               <p className="text-xl font-bold text-gray-900">v{policy.version}</p>
-              <p className="text-xs text-gray-400 mt-0.5">Version</p>
+              <p className="text-xs text-gray-400 mt-0.5">{t("policies.version")}</p>
             </div>
           </div>
 
           {policy.description && (
             <div>
-              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1">Description</p>
+              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1">{t("common.description")}</p>
               <p className="text-sm text-gray-700 leading-relaxed">{policy.description}</p>
             </div>
           )}
@@ -216,7 +228,7 @@ function PolicyDetailModal({ policy, onClose, onStatusChange }: {
           {/* Attestation bar */}
           {policy.attestation_rate != null && (
             <div>
-              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Attestation Rate</p>
+              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">{t("policies.attestation_rate")}</p>
               <div className="flex items-center gap-3">
                 <div className="flex-1 h-2.5 bg-gray-100 rounded-full overflow-hidden">
                   <div className={`h-full rounded-full ${attestationColor(policy.attestation_rate)} transition-all`}
@@ -229,23 +241,23 @@ function PolicyDetailModal({ policy, onClose, onStatusChange }: {
 
           <div className="grid grid-cols-2 gap-3 pt-2 border-t border-gray-50">
             <div>
-              <p className="text-xs text-gray-400 flex items-center gap-1"><User className="w-3 h-3" />Owner</p>
+              <p className="text-xs text-gray-400 flex items-center gap-1"><User className="w-3 h-3" />{t("common.owner")}</p>
               <p className="text-sm font-medium text-gray-700 mt-0.5">{policy.owner}</p>
             </div>
             <div>
-              <p className="text-xs text-gray-400 flex items-center gap-1"><Calendar className="w-3 h-3" />Next Review</p>
+              <p className="text-xs text-gray-400 flex items-center gap-1"><Calendar className="w-3 h-3" />{t("policies.col_next_review")}</p>
               <p className="text-sm font-medium text-gray-700 mt-0.5">{policy.next_review}</p>
             </div>
           </div>
 
           <div className="pt-2 border-t border-gray-50">
-            <p className="text-xs text-gray-400 flex items-center gap-1 mb-1"><Link2 className="w-3 h-3" />Linked Controls</p>
-            <p className="text-sm text-gray-600">{policy.linked_controls} control{policy.linked_controls === 1 ? "" : "s"} mapped</p>
+            <p className="text-xs text-gray-400 flex items-center gap-1 mb-1"><Link2 className="w-3 h-3" />{t("policies.linked_controls")}</p>
+            <p className="text-sm text-gray-600">{t("policies.controls_mapped", { count: policy.linked_controls })}</p>
           </div>
 
           {/* Approval workflow */}
           <div className="pt-3 border-t border-gray-100">
-            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">Approval Workflow</p>
+            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">{t("policies.approval_workflow")}</p>
             <div className="flex items-center gap-2 mb-4">
               {(["draft", "in_review", "approved", "published"] as const).map((step, i) => {
                 const steps = ["draft", "in_review", "approved", "published"];
@@ -280,7 +292,7 @@ function PolicyDetailModal({ policy, onClose, onStatusChange }: {
             )}
             {policy.status === "published" && (
               <p className="text-center text-xs text-green-600 font-medium py-2">
-                ✓ Policy is live and active
+                ✓ {t("policies.policy_live")}
               </p>
             )}
           </div>
@@ -292,10 +304,19 @@ function PolicyDetailModal({ policy, onClose, onStatusChange }: {
 
 // ── Main Page ─────────────────────────────────────────────────────────────────
 export default function PoliciesPage() {
+  const { t } = useTranslation();
   const [policies, setPolicies] = useState(POLICIES);
   const [statusFilter, setStatusFilter] = useState("all");
   const [showAdd, setShowAdd] = useState(false);
   const [selected, setSelected] = useState<PolicyEntry | null>(null);
+
+  const STATUS_MAP: Record<string, { label: string; icon: typeof CheckCircle; color: string }> = {
+    draft:     { label: t("policies.draft"),     icon: Clock,        color: "bg-gray-100 text-gray-500"    },
+    in_review: { label: t("policies.in_review"), icon: AlertCircle,  color: "bg-orange-100 text-orange-600"},
+    approved:  { label: t("policies.approved"),  icon: CheckCircle,  color: "bg-blue-100 text-blue-600"    },
+    published: { label: t("policies.published"), icon: CheckCircle,  color: "bg-green-100 text-green-600"  },
+    retired:   { label: t("policies.retired"),   icon: Clock,        color: "bg-gray-100 text-gray-400"    },
+  };
 
   function handleStatusChange(id: string, next: string) {
     setPolicies((prev) => prev.map((p) =>
@@ -316,14 +337,14 @@ export default function PoliciesPage() {
     <div className="p-8 max-w-7xl space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Policy Management</h1>
+          <h1 className="text-2xl font-bold text-gray-900">{t("policies.management_title")}</h1>
           <p className="text-gray-500 text-sm mt-1">
-            {published.length} published · {policies.filter(p => p.status === "in_review").length} under review
+            {t("policies.subtitle", { published: published.length, review: policies.filter(p => p.status === "in_review").length })}
           </p>
         </div>
         <button onClick={() => setShowAdd(true)}
           className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors">
-          <Plus className="w-4 h-4" /> New Policy
+          <Plus className="w-4 h-4" /> {t("policies.new_policy")}
         </button>
       </div>
 
@@ -335,27 +356,25 @@ export default function PoliciesPage() {
               <Wand2 className="w-5 h-5" />
             </div>
             <div>
-              <p className="font-semibold text-sm">Starting from scratch?</p>
-              <p className="text-xs text-white/80 mt-0.5">
-                Generate your complete GRC document library with AI — Information Security Policy, ISMS Scope, Incident Response Plan and 24 more, tailored to your company.
-              </p>
+              <p className="font-semibold text-sm">{t("policies.ai_banner_title")}</p>
+              <p className="text-xs text-white/80 mt-0.5">{t("policies.ai_banner_desc")}</p>
             </div>
           </div>
           <Link
             to="/policy-generator"
             className="flex-shrink-0 flex items-center gap-2 bg-white text-purple-700 font-semibold text-sm px-4 py-2.5 rounded-xl hover:bg-purple-50 transition-colors"
           >
-            <Wand2 className="w-4 h-4" /> Open Generator
+            <Wand2 className="w-4 h-4" /> {t("policies.open_generator")}
           </Link>
         </div>
       )}
 
       <div className="grid grid-cols-4 gap-4">
         {[
-          { label: "Total Policies",   value: policies.length,  sub: "in library" },
-          { label: "Published",        value: published.length, sub: "live & effective" },
-          { label: "Avg. Attestation", value: `${avgAttestation}%`, sub: "published policies" },
-          { label: "Pending Review",   value: policies.filter(p => p.status === "in_review" || p.status === "draft").length, sub: "need action" },
+          { label: t("policies.kpi_total"),       value: policies.length,  sub: t("policies.kpi_total_sub") },
+          { label: t("policies.kpi_published"),    value: published.length, sub: t("policies.kpi_published_sub") },
+          { label: t("policies.kpi_attestation"),  value: `${avgAttestation}%`, sub: t("policies.kpi_attestation_sub") },
+          { label: t("policies.kpi_pending"),      value: policies.filter(p => p.status === "in_review" || p.status === "draft").length, sub: t("policies.kpi_pending_sub") },
         ].map(s => (
           <div key={s.label} className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
             <p className="text-2xl font-bold text-gray-900">{s.value}</p>
@@ -367,19 +386,19 @@ export default function PoliciesPage() {
 
       <div className="flex gap-2">
         {[
-          { key: "all",       label: "All"       },
-          { key: "published", label: "Published" },
-          { key: "approved",  label: "Approved"  },
-          { key: "in_review", label: "In Review" },
-          { key: "draft",     label: "Draft"     },
-        ].map(t => (
-          <button key={t.key} onClick={() => setStatusFilter(t.key)}
+          { key: "all",       label: t("common.all")           },
+          { key: "published", label: t("policies.published")   },
+          { key: "approved",  label: t("policies.approved")    },
+          { key: "in_review", label: t("policies.in_review")   },
+          { key: "draft",     label: t("policies.draft")       },
+        ].map(tab => (
+          <button key={tab.key} onClick={() => setStatusFilter(tab.key)}
             className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
-              statusFilter === t.key
+              statusFilter === tab.key
                 ? "bg-blue-600 text-white border-blue-600"
                 : "bg-white text-gray-600 border-gray-200 hover:bg-gray-50"
             }`}>
-            {t.label}
+            {tab.label}
           </button>
         ))}
       </div>
@@ -388,7 +407,7 @@ export default function PoliciesPage() {
         <table className="w-full">
           <thead>
             <tr className="bg-gray-50 border-b border-gray-100">
-              {["Policy", "Category", "Status", "Attestation", "Controls", "Next Review", ""].map(h => (
+              {[t("policies.col_policy"), t("policies.col_category"), t("common.status"), t("policies.col_attestation"), t("policies.col_controls"), t("policies.col_next_review"), ""].map(h => (
                 <th key={h} className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wider px-4 py-3.5 first:px-6">{h}</th>
               ))}
             </tr>
@@ -457,7 +476,7 @@ export default function PoliciesPage() {
           </tbody>
         </table>
         {filtered.length === 0 && (
-          <div className="text-center py-16 text-gray-400 text-sm">No policies match this filter</div>
+          <div className="text-center py-16 text-gray-400 text-sm">{t("policies.no_filter_match")}</div>
         )}
       </div>
 

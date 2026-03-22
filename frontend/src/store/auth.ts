@@ -1,4 +1,4 @@
-export type UserRole = "admin" | "ciso" | "auditor" | "viewer";
+export type UserRole = "admin" | "ciso" | "auditor" | "viewer" | "super_admin";
 export type PlanTier = "free_trial" | "starter" | "professional" | "enterprise";
 
 export interface AuthUser {
@@ -89,6 +89,13 @@ export const DEMO_USERS: Record<string, AuthUser> = {
     plan: "free_trial",
     daysRemaining: 11,
     org: "Acme Corp",
+  },
+  "superadmin@platform.com": {
+    email: "superadmin@platform.com",
+    name: "Super Admin",
+    role: "super_admin",
+    plan: "enterprise",
+    org: "Platform Owner",
   },
 };
 

@@ -22,11 +22,19 @@ import CheatSheetPage from "./pages/CheatSheetPage";
 import SettingsPage from "./pages/SettingsPage";
 import HelpPage from "./pages/HelpPage";
 import PolicyGeneratorPage from "./pages/PolicyGeneratorPage";
+import SuperAdminPage from "./pages/SuperAdminPage";
+import CompanyAdminPage from "./pages/CompanyAdminPage";
 
 function PrivateRoute({ children }: { readonly children: React.ReactNode }) {
   const user = useAuthStore((u) => u);
-
   return user ? <>{children}</> : <Navigate to="/login" replace />;
+}
+
+function SuperAdminRoute({ children }: { readonly children: React.ReactNode }) {
+  const user = useAuthStore((u) => u);
+  if (!user) return <Navigate to="/login" replace />;
+  if (user.role !== "super_admin") return <Navigate to="/dashboard" replace />;
+  return <>{children}</>;
 }
 
 export default function App() {
@@ -35,6 +43,7 @@ export default function App() {
       <Route path="/landing" element={<LandingPage />} />
       <Route path="/login" element={<LoginPage />} />
       <Route path="/register" element={<RegisterPage />} />
+      <Route path="/super-admin" element={<SuperAdminRoute><SuperAdminPage /></SuperAdminRoute>} />
       <Route
         path="/"
         element={
@@ -62,6 +71,7 @@ export default function App() {
         <Route path="cheat" element={<CheatSheetPage />} />
         <Route path="settings" element={<SettingsPage />} />
         <Route path="help" element={<HelpPage />} />
+        <Route path="company-admin" element={<CompanyAdminPage />} />
       </Route>
     </Routes>
   );
