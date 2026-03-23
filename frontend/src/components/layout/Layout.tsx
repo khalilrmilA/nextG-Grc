@@ -40,7 +40,7 @@ const NAV_GROUPS = [
 ];
 
 const AUDITOR_NAV = [
-  { to: "/auditor-portal", icon: ClipboardCheck, label: "My Assignments" },
+  { to: "/auditor/portal", icon: ClipboardCheck, label: "My Assignments" },
 ];
 
 const PAGE_LABELS: Record<string, string> = {
@@ -57,10 +57,9 @@ const PAGE_LABELS: Record<string, string> = {
 };
 
 function roleIcon(role: string) {
-  if (role === "admin")   return { Icon: Crown,        color: "from-yellow-500 to-orange-500" };
-  if (role === "ciso")    return { Icon: Briefcase,    color: "from-blue-500 to-blue-600"     };
-  if (role === "auditor") return { Icon: ClipboardList, color: "from-purple-500 to-purple-600" };
-  return                         { Icon: Eye,           color: "from-gray-400 to-gray-500"    };
+  if (role === "super_admin") return { Icon: Crown,         color: "from-yellow-500 to-orange-500" };
+  if (role === "admin")       return { Icon: Crown,         color: "from-yellow-500 to-orange-500" };
+  return                             { Icon: Shield,         color: "from-blue-500 to-blue-600"    };
 }
 
 function planBadgeStyle(plan: PlanTier) {
@@ -344,20 +343,24 @@ export default function Layout() {
   const sc = sidebarTextClasses(appearance.sidebarStyle);
 
   const { primaryFramework } = useFramework();
-  const plan      = user?.plan ?? "free_trial";
-  const isAdmin   = user?.role === "admin";
-  const features  = PLAN_FEATURES[plan];
-  const accessible = isAdmin ? null : features.modules;
+  const plan        = user?.plan ?? "free_trial";
+  const isAdmin     = user?.role === "admin";
+  const isSuperAdmin = user?.role === "super_admin";
+  const features    = PLAN_FEATURES[plan];
+  // Everyone except auditors gets full access to all modules
+  const isUser      = user?.role !== "auditor" && user?.role !== "super_admin";
+  const accessible  = null; // no module gating — all roles see everything
 
-  const badge = planBadgeStyle(plan);
+  const badge = (isSuperAdmin || isAdmin) ? planBadgeStyle("enterprise") : planBadgeStyle(plan);
   const { Icon: RoleIcon, color: roleColor } = roleIcon(user?.role ?? "viewer");
   const initials = (user?.name ?? "U").charAt(0).toUpperCase();
-
-  const planLabel = isAdmin ? "Admin" : PLAN_FEATURES[plan].label;
+  // Role label: super_admin → "Admin", everyone else → their company name
+  const planLabel = isSuperAdmin ? "Admin" : (user?.org ?? PLAN_FEATURES[plan].label);
   function resolvePlanSub() {
-    if (isAdmin) return "Full platform access";
+    if (isSuperAdmin) return "Platform Owner";
+    if (isAdmin) return "Account Owner";
     if (plan === "free_trial") return `${user?.daysRemaining ?? 14} days remaining`;
-    return `${features.maxFrameworks} frameworks · ${features.maxAdmins} admins`;
+    return PLAN_FEATURES[plan].label;
   }
   const planSub = resolvePlanSub();
 
@@ -383,9 +386,8 @@ export default function Layout() {
               <p className={`text-xs font-semibold ${badge.text}`}>{planLabel}</p>
               <p className={`text-xs mt-0.5 ${badge.sub}`}>{planSub}</p>
             </div>
-            {isAdmin && <Crown className="w-4 h-4 text-yellow-400" />}
-            {!isAdmin && plan === "free_trial" && <Zap className="w-4 h-4 text-blue-400" />}
-            {!isAdmin && plan !== "free_trial" && <Shield className="w-4 h-4 text-blue-400" />}
+            {(isSuperAdmin || isAdmin) && <Crown className="w-4 h-4 text-yellow-400" />}
+            {isUser && <Shield className="w-4 h-4 text-blue-400" />}
           </div>
           {plan === "free_trial" && !isAdmin && (
             <div className="mt-2 h-1 bg-black/20 rounded-full overflow-hidden">
@@ -569,7 +571,9 @@ export default function Layout() {
               </div>
               <div className="hidden sm:block">
                 <p className="text-xs font-semibold text-gray-800 leading-none">{user?.name ?? "User"}</p>
-                <p className="text-xs text-gray-400 mt-0.5 capitalize">{user?.role ?? "viewer"} · {user?.org ?? ""}</p>
+                <p className="text-xs text-gray-400 mt-0.5">
+                  {isSuperAdmin ? "Platform Admin" : isAdmin ? `${user?.org} · Owner` : user?.org ?? ""}
+                </p>
               </div>
             </div>
           </div>

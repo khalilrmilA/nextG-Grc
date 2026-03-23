@@ -40,7 +40,7 @@ const MOCK_ACCESS: AccessControlEntry[] = [
 ];
 
 const ALL_MODULES = ["dashboard","risks","compliance","frameworks","audits","policies","vendors","policy-generator"];
-const ROLES = ["admin","ciso","auditor","viewer"];
+const ROLES = ["user", "auditor"];
 
 // ── Shared: Demo Banner ───────────────────────────────────────────────────────
 
@@ -131,14 +131,21 @@ function UsersTab() {
                   <span className="px-2.5 py-1 bg-gray-100 text-gray-700 rounded-lg text-xs font-medium">{u.tenant_name}</span>
                 </td>
                 <td className="px-5 py-3.5">
-                  <select
-                    value={u.role}
-                    disabled={busy === u.id}
-                    onChange={e => changeRole(u, e.target.value)}
-                    className="text-xs border border-gray-200 rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white capitalize"
-                  >
-                    {ROLES.map(r => <option key={r} value={r}>{r}</option>)}
-                  </select>
+                  {u.role === "super_admin" || u.role === "admin" ? (
+                    <span className="inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-1 bg-yellow-50 text-yellow-700 border border-yellow-200 rounded-lg">
+                      👑 {u.role === "super_admin" ? "Super Admin" : "Owner"}
+                    </span>
+                  ) : (
+                    <select
+                      value={u.role}
+                      disabled={busy === u.id}
+                      onChange={e => changeRole(u, e.target.value)}
+                      className="text-xs border border-gray-200 rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
+                    >
+                      <option value="user">User (Full Access)</option>
+                      <option value="auditor">Auditor (Limited)</option>
+                    </select>
+                  )}
                 </td>
                 <td className="px-5 py-3.5">
                   <button

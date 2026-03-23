@@ -13,7 +13,7 @@ export default function LoginPage() {
   const navigate = useNavigate();
 
   function redirectAfterLogin(role?: string) {
-    if (role === "auditor")          navigate("/auditor-portal");
+    if (role === "auditor")          navigate("/auditor/portal");
     else if (role === "super_admin") navigate("/super-admin");
     else                             navigate("/dashboard");
   }
@@ -153,7 +153,7 @@ export default function LoginPage() {
             </button>
           </form>
 
-          <div className="flex items-center gap-3 my-5">
+            <div className="flex items-center gap-3 my-5">
             <div className="flex-1 h-px bg-gray-100" />
             <span className="text-xs text-gray-400">New to GRC Platform?</span>
             <div className="flex-1 h-px bg-gray-100" />
@@ -165,6 +165,32 @@ export default function LoginPage() {
           >
             Create an account
           </Link>
+        </div>
+
+        {/* Quick-access shortcuts (dev/demo) */}
+        <div className="mt-4 bg-white/5 border border-white/10 rounded-2xl p-4">
+          <p className="text-xs font-semibold text-slate-400 uppercase tracking-widest mb-3 text-center">Quick Access</p>
+          <div className="grid grid-cols-2 gap-2">
+            {[
+              { label: "Super Admin",  email: "superadmin@platform.com", password: "super123", color: "from-yellow-500 to-orange-500", icon: "👑" },
+              { label: "Acme Corp",    email: "admin@demo.com",          password: "demo123",  color: "from-blue-500 to-indigo-500",   icon: "🏢" },
+              { label: "User",         email: "ciso@demo.com",           password: "demo123",  color: "from-green-500 to-emerald-500", icon: "👤" },
+              { label: "Auditor",      email: "auditor@demo.com",        password: "demo123",  color: "from-purple-500 to-violet-500", icon: "🔍" },
+            ].map(({ label, email: e, password: p, color, icon }) => (
+              <button
+                key={e}
+                type="button"
+                onClick={() => { setEmail(e); setPassword(p); }}
+                className="flex items-center gap-2 px-3 py-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 hover:border-white/20 transition-all text-left group"
+              >
+                <span className="text-base">{icon}</span>
+                <div>
+                  <p className={`text-xs font-semibold bg-gradient-to-r ${color} bg-clip-text text-transparent leading-none`}>{label}</p>
+                  <p className="text-[10px] text-slate-500 mt-0.5 truncate">{e}</p>
+                </div>
+              </button>
+            ))}
+          </div>
         </div>
 
         <p className="text-center mt-5 text-xs text-slate-500">

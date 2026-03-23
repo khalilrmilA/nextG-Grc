@@ -114,7 +114,7 @@ export default function AuditChecklistPage() {
       {/* Header */}
       <div>
         <button
-          onClick={() => navigate("/auditor-portal")}
+          onClick={() => navigate("/auditor/portal")}
           className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-800 mb-3"
         >
           <ArrowLeft className="w-4 h-4" />
@@ -126,7 +126,7 @@ export default function AuditChecklistPage() {
             <p className="text-sm text-gray-500 mt-1">Review and record your verdict for each control</p>
           </div>
           <button
-            onClick={() => navigate(`/auditor-portal/${assessmentId}/report`)}
+            onClick={() => navigate(`/auditor/portal/${assessmentId}/report`)}
             className="flex items-center gap-1.5 text-sm bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition-colors"
           >
             <FileText className="w-4 h-4" />

@@ -1,6 +1,7 @@
 import { Routes, Route, Navigate } from "react-router-dom";
 import { useAuthStore } from "./store/auth";
 import Layout from "./components/layout/Layout";
+import AuditorLayout from "./components/layout/AuditorLayout";
 import LoginPage from "./pages/LoginPage";
 import RegisterPage from "./pages/RegisterPage";
 import LandingPage from "./pages/LandingPage";
@@ -27,7 +28,19 @@ import CompanyAdminPage from "./pages/CompanyAdminPage";
 
 function PrivateRoute({ children }: { readonly children: React.ReactNode }) {
   const user = useAuthStore((u) => u);
-  return user ? <>{children}</> : <Navigate to="/login" replace />;
+  if (!user) return <Navigate to="/login" replace />;
+  // Auditors have their own layout — block them from main app
+  if (user.role === "auditor") return <Navigate to="/auditor/portal" replace />;
+  // Super admin has their own page
+  if (user.role === "super_admin") return <Navigate to="/super-admin" replace />;
+  return <>{children}</>;
+}
+
+function AuditorRoute({ children }: { readonly children: React.ReactNode }) {
+  const user = useAuthStore((u) => u);
+  if (!user) return <Navigate to="/login" replace />;
+  if (user.role !== "auditor") return <Navigate to="/dashboard" replace />;
+  return <>{children}</>;
 }
 
 function SuperAdminRoute({ children }: { readonly children: React.ReactNode }) {
@@ -44,6 +57,24 @@ export default function App() {
       <Route path="/login" element={<LoginPage />} />
       <Route path="/register" element={<RegisterPage />} />
       <Route path="/super-admin" element={<SuperAdminRoute><SuperAdminPage /></SuperAdminRoute>} />
+      {/* ── Auditor-only routes (dedicated layout) ── */}
+      <Route
+        path="/auditor"
+        element={
+          <AuditorRoute>
+            <AuditorLayout />
+          </AuditorRoute>
+        }
+      >
+        <Route index element={<AuditorPortalPage />} />
+        <Route path="portal" element={<AuditorPortalPage />} />
+        <Route path="portal/:assessmentId" element={<AuditChecklistPage />} />
+        <Route path="portal/:assessmentId/report" element={<AuditReportPage />} />
+        <Route path="settings" element={<SettingsPage />} />
+        <Route path="help" element={<HelpPage />} />
+      </Route>
+
+      {/* ── Main app routes ── */}
       <Route
         path="/"
         element={
@@ -59,9 +90,6 @@ export default function App() {
         <Route path="compliance/:assessmentId" element={<AssessmentDetailPage />} />
         <Route path="compliance/assessments/:assessmentId/remediation-plan" element={<RemediationPlannerPage />} />
         <Route path="compliance/:assessmentId/traceability" element={<TraceabilityPage />} />
-        <Route path="auditor-portal" element={<AuditorPortalPage />} />
-        <Route path="auditor-portal/:assessmentId" element={<AuditChecklistPage />} />
-        <Route path="auditor-portal/:assessmentId/report" element={<AuditReportPage />} />
         <Route path="frameworks" element={<FrameworksPage />} />
         <Route path="frameworks/custom/new" element={<CustomFrameworkPage />} />
         <Route path="audits" element={<AuditsPage />} />

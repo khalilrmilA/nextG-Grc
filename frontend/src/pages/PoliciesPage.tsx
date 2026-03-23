@@ -5,12 +5,6 @@ import { FileText, Plus, CheckCircle, Clock, AlertCircle, User, Calendar, Link2,
 
 const POLICIES = [
   { id: "1", title: "Information Security Policy",        category: "Security",        version: 3, status: "published", owner: "CISO",         attestation_rate: 94,   linked_controls: 12, next_review: "2026-06-01", description: "Defines the organization's overall approach to information security, including objectives, scope, and management commitment." },
-  { id: "2", title: "Acceptable Use Policy",              category: "HR",              version: 2, status: "published", owner: "HR Director",  attestation_rate: 87,   linked_controls: 5,  next_review: "2026-03-01", description: "Governs the acceptable use of company IT resources, including computers, networks, and internet access by employees." },
-  { id: "3", title: "Data Classification Policy",         category: "Data Governance", version: 1, status: "approved",  owner: "DPO",          attestation_rate: null, linked_controls: 8,  next_review: "2026-06-01", description: "Establishes a framework for classifying organizational data based on sensitivity, value, and criticality." },
-  { id: "4", title: "Incident Response Policy",           category: "Security",        version: 4, status: "in_review", owner: "SOC Lead",     attestation_rate: null, linked_controls: 7,  next_review: "2026-01-15", description: "Defines procedures for detecting, reporting, and responding to information security incidents." },
-  { id: "5", title: "Third-Party Risk Management Policy", category: "Vendor Risk",     version: 1, status: "draft",     owner: "Procurement",  attestation_rate: null, linked_controls: 4,  next_review: "—",          description: "Establishes requirements for assessing and managing risks associated with third-party vendors and suppliers." },
-  { id: "6", title: "Access Control Policy",              category: "Security",        version: 2, status: "published", owner: "IT Manager",  attestation_rate: 78,   linked_controls: 15, next_review: "2026-04-01", description: "Defines requirements for user access management, including provisioning, review, and revocation of access rights." },
-  { id: "7", title: "Business Continuity Plan",           category: "BCP / DR",        version: 1, status: "approved",  owner: "COO",          attestation_rate: null, linked_controls: 9,  next_review: "2026-09-01", description: "Outlines strategies and procedures to maintain essential business functions during and after a disruption." },
 ];
 
 type PolicyEntry = typeof POLICIES[0];

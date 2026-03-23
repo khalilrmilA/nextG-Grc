@@ -12,9 +12,6 @@ const FW_SHORT: Record<string, string> = {
 
 const AUDITS = [
   { id: "1", title: "ISO 27001 Internal Audit Q4 2025", type: "Internal", framework: "ISO 27001", status: "fieldwork", start: "2025-11-01", end: "2025-12-15", findings: { critical: 1, high: 3, medium: 4, low: 2, observation: 1 }, fwColor: "bg-blue-50 text-blue-700", scope: "All production IT systems, cloud workloads, and HR systems.", lead_auditor: "Sarah Chen (CISO)", objective: "Assess conformance against ISO 27001:2022 controls" },
-  { id: "2", title: "SOC 2 Type II External Audit", type: "External", framework: "SOC 2", status: "reporting", start: "2025-09-01", end: "2025-11-30", findings: { critical: 0, high: 1, medium: 2, low: 3, observation: 2 }, fwColor: "bg-purple-50 text-purple-700", scope: "Trust Services Criteria: Security, Availability, Confidentiality.", lead_auditor: "Deloitte LLP", objective: "Issue SOC 2 Type II report for customer assurance" },
-  { id: "3", title: "PCI DSS Annual Assessment", type: "Certification", framework: "PCI DSS", status: "planning", start: "2026-01-15", end: "2026-03-31", findings: { critical: 0, high: 0, medium: 0, low: 0, observation: 0 }, fwColor: "bg-orange-50 text-orange-700", scope: "Cardholder data environment (CDE), payment processing systems.", lead_auditor: "TBD", objective: "Achieve PCI DSS v4.0 certification" },
-  { id: "4", title: "GDPR Article 35 DPIA", type: "Internal", framework: "GDPR", status: "closed", start: "2025-07-01", end: "2025-09-30", findings: { critical: 0, high: 0, medium: 1, low: 2, observation: 3 }, fwColor: "bg-emerald-50 text-emerald-700", scope: "Data Processing Impact Assessment for new analytics platform.", lead_auditor: "Maria López (DPO)", objective: "Identify and mitigate GDPR risks for new data processing activities" },
 ];
 
 type AuditEntry = typeof AUDITS[0];

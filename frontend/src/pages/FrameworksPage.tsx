@@ -1,13 +1,14 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import {
   Globe, BookOpen, Search, ArrowRight, Plus,
   Loader2, Trash2, AlertCircle, RefreshCw, Filter,
   Shield, Lock, FileText, Heart, CreditCard, Cpu, Scale,
+  X, ChevronDown, ChevronRight as ChevronRightIcon, CheckSquare, Square, Copy, Check,
 } from "lucide-react";
 import { frameworksApi } from "@/api/endpoints";
-import type { Framework } from "@/types";
+import type { Framework, FrameworkControl } from "@/types";
 
 // ── Per-framework metadata (icon, category, region) ──────────────────────────
 const FW_META: Record<string, {
@@ -64,15 +65,276 @@ function getMeta(shortName: string) {
   };
 }
 
+// ── Framework controls drawer ─────────────────────────────────────────────────
+function FrameworkDrawer({
+  fw,
+  open,
+  onClose,
+  onUseInDocGen,
+}: {
+  readonly fw: Framework | null;
+  readonly open: boolean;
+  readonly onClose: () => void;
+  readonly onUseInDocGen: (fw: Framework, selected: FrameworkControl[]) => void;
+}) {
+  const navigate = useNavigate();
+  const [controls, setControls]       = useState<FrameworkControl[]>([]);
+  const [loadingCtrl, setLoadingCtrl] = useState(false);
+  const [selected, setSelected]       = useState<Set<string>>(new Set());
+  const [collapsed, setCollapsed]     = useState<Set<string>>(new Set());
+  const [copied, setCopied]           = useState(false);
+
+  const load = useCallback(async () => {
+    if (!fw) return;
+    setLoadingCtrl(true);
+    setSelected(new Set());
+    try {
+      const list = await frameworksApi.getControls(fw.id);
+      setControls(list);
+    } catch {
+      setControls([]);
+    } finally {
+      setLoadingCtrl(false);
+    }
+  }, [fw]);
+
+  useEffect(() => { if (open && fw) load(); }, [open, fw, load]);
+
+  if (!fw) return null;
+
+  const meta = getMeta(fw.short_name);
+  const Icon = meta.icon;
+
+  // Group controls by category
+  const groups: Record<string, FrameworkControl[]> = {};
+  for (const c of controls) {
+    const grp = c.category || "General";
+    if (!groups[grp]) groups[grp] = [];
+    groups[grp].push(c);
+  }
+  const groupNames = Object.keys(groups).sort();
+
+  function toggleControl(id: string) {
+    setSelected(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }
+
+  function toggleGroup(grp: string) {
+    const ids = groups[grp].map(c => c.id);
+    const allSelected = ids.every(id => selected.has(id));
+    setSelected(prev => {
+      const next = new Set(prev);
+      if (allSelected) ids.forEach(id => next.delete(id));
+      else ids.forEach(id => next.add(id));
+      return next;
+    });
+  }
+
+  function selectAll() { setSelected(new Set(controls.map(c => c.id))); }
+  function clearAll()  { setSelected(new Set()); }
+
+  function toggleCollapse(grp: string) {
+    setCollapsed(prev => {
+      const next = new Set(prev);
+      if (next.has(grp)) next.delete(grp); else next.add(grp);
+      return next;
+    });
+  }
+
+  function copySelected() {
+    const selectedControls = controls.filter(c => selected.has(c.id));
+    const text = selectedControls.map(c => `${c.control_id} — ${c.title}`).join("\n");
+    navigator.clipboard.writeText(text).catch(() => {});
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  }
+
+  const selectedControls = controls.filter(c => selected.has(c.id));
+
+  return (
+    <>
+      {/* Backdrop */}
+      {open && (
+        <div
+          className="fixed inset-0 bg-black/40 z-40 transition-opacity"
+          onClick={onClose}
+        />
+      )}
+
+      {/* Drawer */}
+      <div
+        className={`fixed top-0 right-0 h-full w-[620px] max-w-full bg-white z-50 shadow-2xl flex flex-col transition-transform duration-300 ${
+          open ? "translate-x-0" : "translate-x-full"
+        }`}
+      >
+        {/* Header */}
+        <div className="flex items-start gap-3 px-6 py-5 border-b border-gray-100 flex-shrink-0">
+          <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${meta.bg}`}>
+            <Icon className={`w-5 h-5 ${meta.color}`} />
+          </div>
+          <div className="flex-1 min-w-0">
+            <h2 className="font-bold text-gray-900 text-base leading-tight">{fw.name}</h2>
+            <p className="text-xs text-gray-400 mt-0.5">{fw.short_name}{fw.version ? ` · v${fw.version}` : ""} · {controls.length} controls</p>
+          </div>
+          <button type="button" onClick={onClose} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors flex-shrink-0">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        {/* Description */}
+        <div className="px-6 py-3 bg-gray-50 border-b border-gray-100 flex-shrink-0">
+          <p className="text-xs text-gray-500 leading-relaxed">{meta.description}</p>
+        </div>
+
+        {/* Toolbar */}
+        {controls.length > 0 && (
+          <div className="px-6 py-3 border-b border-gray-100 flex items-center justify-between flex-shrink-0 gap-3">
+            <div className="flex items-center gap-2">
+              <button type="button" onClick={selectAll}
+                className="text-xs px-2.5 py-1.5 rounded-lg bg-blue-50 text-blue-600 hover:bg-blue-100 font-medium transition-colors">
+                Select all
+              </button>
+              <button type="button" onClick={clearAll}
+                className="text-xs px-2.5 py-1.5 rounded-lg bg-gray-100 text-gray-600 hover:bg-gray-200 font-medium transition-colors">
+                Clear
+              </button>
+              {selected.size > 0 && (
+                <span className="text-xs text-gray-500 font-medium">
+                  {selected.size} / {controls.length} selected
+                </span>
+              )}
+            </div>
+            {selected.size > 0 && (
+              <button type="button" onClick={copySelected}
+                className="flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-lg bg-gray-100 text-gray-600 hover:bg-gray-200 font-medium transition-colors">
+                {copied ? <Check className="w-3 h-3 text-green-500" /> : <Copy className="w-3 h-3" />}
+                {copied ? "Copied!" : "Copy IDs"}
+              </button>
+            )}
+          </div>
+        )}
+
+        {/* Controls list */}
+        <div className="flex-1 overflow-y-auto">
+          {loadingCtrl ? (
+            <div className="flex items-center justify-center py-16 gap-2 text-gray-400">
+              <Loader2 className="w-5 h-5 animate-spin" />
+              <span className="text-sm">Loading controls…</span>
+            </div>
+          ) : controls.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-16 text-center px-8">
+              <BookOpen className="w-10 h-10 text-gray-200 mb-3" />
+              <p className="text-sm font-medium text-gray-500">No controls available</p>
+              <p className="text-xs text-gray-400 mt-1">Controls will appear here once the framework is loaded from the backend.</p>
+            </div>
+          ) : (
+            <div className="divide-y divide-gray-50">
+              {groupNames.map(grp => {
+                const items = groups[grp];
+                const allGrpSelected = items.every(c => selected.has(c.id));
+                const someGrpSelected = items.some(c => selected.has(c.id));
+                const isCollapsed = collapsed.has(grp);
+                return (
+                  <div key={grp}>
+                    {/* Group header */}
+                    <div className="flex items-center gap-2 px-6 py-2.5 bg-gray-50 sticky top-0 z-10">
+                      <button type="button" onClick={() => toggleGroup(grp)} className="flex-shrink-0">
+                        {allGrpSelected
+                          ? <CheckSquare className="w-4 h-4 text-blue-600" />
+                          : someGrpSelected
+                          ? <CheckSquare className="w-4 h-4 text-blue-300" />
+                          : <Square className="w-4 h-4 text-gray-300" />}
+                      </button>
+                      <button type="button" onClick={() => toggleCollapse(grp)}
+                        className="flex items-center gap-1.5 flex-1 text-left">
+                        <span className="text-xs font-semibold text-gray-600 uppercase tracking-wide">{grp}</span>
+                        <span className="text-xs text-gray-400 bg-gray-200 px-1.5 py-0.5 rounded-full">{items.length}</span>
+                        {isCollapsed
+                          ? <ChevronRightIcon className="w-3 h-3 text-gray-400 ml-auto" />
+                          : <ChevronDown className="w-3 h-3 text-gray-400 ml-auto" />}
+                      </button>
+                    </div>
+
+                    {/* Controls in group */}
+                    {!isCollapsed && items.map(ctrl => (
+                      <div
+                        key={ctrl.id}
+                        onClick={() => toggleControl(ctrl.id)}
+                        className={`flex items-start gap-3 px-6 py-3 cursor-pointer transition-colors hover:bg-blue-50/50 ${
+                          selected.has(ctrl.id) ? "bg-blue-50/30" : ""
+                        }`}
+                      >
+                        <div className="flex-shrink-0 mt-0.5">
+                          {selected.has(ctrl.id)
+                            ? <CheckSquare className="w-4 h-4 text-blue-600" />
+                            : <Square className="w-4 h-4 text-gray-300" />}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="text-xs font-mono font-bold text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded flex-shrink-0">
+                              {ctrl.control_id}
+                            </span>
+                            <span className="text-sm font-medium text-gray-800 leading-snug">{ctrl.title}</span>
+                          </div>
+                          {ctrl.description && (
+                            <p className="text-xs text-gray-400 mt-1 line-clamp-2">{ctrl.description}</p>
+                          )}
+                          {ctrl.tags && ctrl.tags.length > 0 && (
+                            <div className="flex flex-wrap gap-1 mt-1.5">
+                              {ctrl.tags.slice(0, 3).map(tag => (
+                                <span key={tag} className="text-[10px] px-1.5 py-0.5 bg-gray-100 text-gray-500 rounded">{tag}</span>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* Footer actions */}
+        <div className="px-6 py-4 border-t border-gray-100 flex items-center gap-3 flex-shrink-0 bg-white">
+          <button
+            type="button"
+            onClick={() => { onUseInDocGen(fw, selectedControls); navigate("/policy-generator"); }}
+            disabled={selected.size === 0}
+            className="flex-1 flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed text-white font-medium py-2.5 px-4 rounded-xl text-sm transition-colors"
+          >
+            <FileText className="w-4 h-4" />
+            Use {selected.size > 0 ? `${selected.size} selected` : "controls"} in Doc Generator
+          </button>
+          <button
+            type="button"
+            onClick={() => navigate("/compliance")}
+            className="flex items-center gap-1.5 text-sm font-medium text-gray-600 hover:text-gray-900 px-4 py-2.5 border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors"
+          >
+            <ArrowRight className="w-3.5 h-3.5" />
+            Assess
+          </button>
+        </div>
+      </div>
+    </>
+  );
+}
+
 // ── Framework card ─────────────────────────────────────────────────────────────
 function FrameworkCard({
   fw,
   onDelete,
   onAssess,
+  onViewControls,
 }: {
   readonly fw: Framework;
   readonly onDelete: (id: string) => void;
   readonly onAssess: (fw: Framework) => void;
+  readonly onViewControls: (fw: Framework) => void;
 }) {
   const { t } = useTranslation();
   const meta = getMeta(fw.short_name);
@@ -94,7 +356,10 @@ function FrameworkCard({
   }
 
   return (
-    <div className="bg-white rounded-2xl border border-gray-100 shadow-sm hover:shadow-lg hover:border-blue-200 transition-all group relative overflow-hidden flex flex-col">
+    <div
+      className="bg-white rounded-2xl border border-gray-100 shadow-sm hover:shadow-lg hover:border-blue-200 transition-all group relative overflow-hidden flex flex-col cursor-pointer"
+      onClick={() => onViewControls(fw)}
+    >
       {/* Top bar */}
       <div className="p-5 flex-1">
         <div className="flex items-start justify-between gap-2 mb-3">
@@ -116,7 +381,7 @@ function FrameworkCard({
           {/* Delete for custom */}
           {isCustom && (
             confirmDelete ? (
-              <div className="flex items-center gap-1 flex-shrink-0">
+              <div className="flex items-center gap-1 flex-shrink-0" onClick={e => e.stopPropagation()}>
                 <button type="button" onClick={handleDelete} disabled={deleting}
                   className="text-xs px-2 py-1 bg-red-500 text-white rounded-lg hover:bg-red-600 disabled:opacity-50">
                   {deleting ? "..." : t("common.delete")}
@@ -127,7 +392,7 @@ function FrameworkCard({
                 </button>
               </div>
             ) : (
-              <button type="button" onClick={() => setConfirmDelete(true)}
+              <button type="button" onClick={e => { e.stopPropagation(); setConfirmDelete(true); }}
                 className="p-1.5 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors flex-shrink-0">
                 <Trash2 className="w-3.5 h-3.5" />
               </button>
@@ -154,22 +419,24 @@ function FrameworkCard({
       </div>
 
       {/* Footer */}
-      <div className="px-5 pb-4 border-t border-gray-50 pt-3 flex items-center justify-between">
+      <div className="px-5 pb-4 border-t border-gray-50 pt-3 flex items-center justify-between" onClick={e => e.stopPropagation()}>
         <div className="text-center">
           <p className="text-lg font-bold text-gray-900">{fw.control_count ?? 0}</p>
           <p className="text-xs text-gray-400">{t("frameworks.controls")}</p>
         </div>
-        {fw.control_count && fw.control_count > 0 ? (
-          <button
-            type="button"
-            onClick={() => onAssess(fw)}
-            className="flex items-center gap-1.5 text-xs font-semibold text-blue-600 hover:text-blue-700 bg-blue-50 hover:bg-blue-100 px-3 py-1.5 rounded-lg transition-all"
-          >
-            Start Assessment <ArrowRight className="w-3 h-3" />
-          </button>
-        ) : (
-          <span className="text-xs text-gray-400 italic">Add controls first</span>
-        )}
+        <div className="flex items-center gap-2">
+          {fw.control_count && fw.control_count > 0 ? (
+            <button
+              type="button"
+              onClick={() => onViewControls(fw)}
+              className="flex items-center gap-1.5 text-xs font-semibold text-blue-600 hover:text-blue-700 bg-blue-50 hover:bg-blue-100 px-3 py-1.5 rounded-lg transition-all"
+            >
+              View Controls <ArrowRight className="w-3 h-3" />
+            </button>
+          ) : (
+            <span className="text-xs text-gray-400 italic">No controls yet</span>
+          )}
+        </div>
       </div>
     </div>
   );
@@ -186,6 +453,8 @@ export default function FrameworksPage() {
   const [frameworks, setFrameworks]   = useState<Framework[]>([]);
   const [loading, setLoading]     = useState(true);
   const [error, setError]         = useState("");
+  const [drawerFw, setDrawerFw]   = useState<Framework | null>(null);
+  const [drawerOpen, setDrawerOpen] = useState(false);
 
   async function load() {
     setLoading(true);
@@ -208,6 +477,17 @@ export default function FrameworksPage() {
 
   function handleAssess(_fw: Framework) {
     navigate("/compliance");
+  }
+
+  function openDrawer(fw: Framework) {
+    setDrawerFw(fw);
+    setDrawerOpen(true);
+  }
+
+  function handleUseInDocGen(fw: Framework, selected: FrameworkControl[]) {
+    // Pass selected controls to doc generator via sessionStorage
+    sessionStorage.setItem("docgen_framework", JSON.stringify({ id: fw.id, name: fw.name, short_name: fw.short_name }));
+    sessionStorage.setItem("docgen_controls", JSON.stringify(selected));
   }
 
   const filtered = frameworks.filter(fw => {
@@ -349,7 +629,7 @@ export default function FrameworksPage() {
                 <span className="text-xs text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full">{customs.length}</span>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {customs.map(fw => <FrameworkCard key={fw.id} fw={fw} onDelete={handleDelete} onAssess={handleAssess} />)}
+                {customs.map(fw => <FrameworkCard key={fw.id} fw={fw} onDelete={handleDelete} onAssess={handleAssess} onViewControls={openDrawer} />)}
               </div>
             </section>
           )}
@@ -363,7 +643,7 @@ export default function FrameworksPage() {
                 <span className="text-xs text-green-600 bg-green-50 px-2 py-0.5 rounded-full font-medium">✓ Ready to use</span>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {builtins.map(fw => <FrameworkCard key={fw.id} fw={fw} onDelete={handleDelete} onAssess={handleAssess} />)}
+                {builtins.map(fw => <FrameworkCard key={fw.id} fw={fw} onDelete={handleDelete} onAssess={handleAssess} onViewControls={openDrawer} />)}
               </div>
             </section>
           )}
@@ -376,7 +656,7 @@ export default function FrameworksPage() {
                 <span className="text-xs text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full">{demo.length}</span>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {demo.map(fw => <FrameworkCard key={fw.id} fw={fw} onDelete={handleDelete} onAssess={handleAssess} />)}
+                {demo.map(fw => <FrameworkCard key={fw.id} fw={fw} onDelete={handleDelete} onAssess={handleAssess} onViewControls={openDrawer} />)}
               </div>
             </section>
           )}
@@ -394,6 +674,14 @@ export default function FrameworksPage() {
           )}
         </>
       )}
+
+      {/* Controls drawer */}
+      <FrameworkDrawer
+        fw={drawerFw}
+        open={drawerOpen}
+        onClose={() => setDrawerOpen(false)}
+        onUseInDocGen={handleUseInDocGen}
+      />
     </div>
   );
 }

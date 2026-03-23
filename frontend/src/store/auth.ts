@@ -1,4 +1,4 @@
-export type UserRole = "admin" | "ciso" | "auditor" | "viewer" | "super_admin";
+export type UserRole = "super_admin" | "admin" | "user" | "auditor";
 export type PlanTier = "free_trial" | "starter" | "professional" | "enterprise";
 
 export interface AuthUser {
@@ -63,7 +63,7 @@ export const PLAN_FEATURES: Record<PlanTier, {
 export const DEMO_USERS: Record<string, AuthUser> = {
   "admin@demo.com": {
     email: "admin@demo.com",
-    name: "Admin",
+    name: "Admin Demo",
     role: "admin",
     plan: "enterprise",
     org: "Acme Corp",
@@ -71,7 +71,7 @@ export const DEMO_USERS: Record<string, AuthUser> = {
   "ciso@demo.com": {
     email: "ciso@demo.com",
     name: "Sophie Martin",
-    role: "ciso",
+    role: "user",
     plan: "professional",
     org: "Acme Corp",
   },
@@ -80,14 +80,6 @@ export const DEMO_USERS: Record<string, AuthUser> = {
     name: "Jean Dupont",
     role: "auditor",
     plan: "starter",
-    org: "Acme Corp",
-  },
-  "viewer@demo.com": {
-    email: "viewer@demo.com",
-    name: "Trial User",
-    role: "viewer",
-    plan: "free_trial",
-    daysRemaining: 11,
     org: "Acme Corp",
   },
   "superadmin@platform.com": {

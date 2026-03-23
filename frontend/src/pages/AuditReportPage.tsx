@@ -59,7 +59,7 @@ export default function AuditReportPage() {
       {/* Header */}
       <div>
         <button
-          onClick={() => navigate(`/auditor-portal/${assessmentId}`)}
+          onClick={() => navigate(`/auditor/portal/${assessmentId}`)}
           className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-800 mb-3"
         >
           <ArrowLeft className="w-4 h-4" />

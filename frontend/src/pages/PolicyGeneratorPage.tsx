@@ -3,11 +3,12 @@ import {
   Wand2, ChevronRight, Loader2, Copy, CheckCheck,
   Download, Save, RotateCcw, FileText, BookOpen,
   ClipboardList, Shield, Sparkles, X, Pencil, Eye,
-  CheckCircle,
+  CheckCircle, CheckSquare, Square, ChevronDown, Search,
 } from "lucide-react";
-import { aiApi } from "@/api/endpoints";
+import { aiApi, frameworksApi } from "@/api/endpoints";
 import { makeThinkFilter } from "@/lib/sse";
 import { useAuthStore } from "@/store/auth";
+import type { Framework, FrameworkControl } from "@/types";
 
 // ── Document catalogue ─────────────────────────────────────────────────────────
 
@@ -119,6 +120,268 @@ function renderMarkdown(text: string) {
   });
 }
 
+// ── Control Picker Modal ───────────────────────────────────────────────────────
+
+function ControlPickerModal({
+  open,
+  onClose,
+  onConfirm,
+  initial,
+}: {
+  readonly open: boolean;
+  readonly onClose: () => void;
+  readonly onConfirm: (controls: FrameworkControl[], frameworkName: string) => void;
+  readonly initial: FrameworkControl[];
+}) {
+  const [frameworks, setFrameworks]   = useState<Framework[]>([]);
+  const [activeFw, setActiveFw]       = useState<Framework | null>(null);
+  const [controls, setControls]       = useState<FrameworkControl[]>([]);
+  const [loadingFw, setLoadingFw]     = useState(false);
+  const [loadingCtrl, setLoadingCtrl] = useState(false);
+  const [selected, setSelected]       = useState<Set<string>>(new Set(initial.map(c => c.id)));
+  const [selectedControls, setSelectedControls] = useState<FrameworkControl[]>([...initial]);
+  const [search, setSearch]           = useState("");
+  const [collapsed, setCollapsed]     = useState<Set<string>>(new Set());
+
+  // Load frameworks list
+  useEffect(() => {
+    if (!open) return;
+    setLoadingFw(true);
+    frameworksApi.list()
+      .then(list => { setFrameworks(list); if (!activeFw && list.length > 0) setActiveFw(list[0]); })
+      .catch(() => {})
+      .finally(() => setLoadingFw(false));
+  }, [open]);
+
+  // Load controls when framework changes
+  useEffect(() => {
+    if (!activeFw) return;
+    setLoadingCtrl(true);
+    setControls([]);
+    frameworksApi.getControls(activeFw.id)
+      .then(setControls)
+      .catch(() => setControls([]))
+      .finally(() => setLoadingCtrl(false));
+  }, [activeFw]);
+
+  function toggleControl(ctrl: FrameworkControl) {
+    setSelected(prev => {
+      const next = new Set(prev);
+      if (next.has(ctrl.id)) {
+        next.delete(ctrl.id);
+        setSelectedControls(sc => sc.filter(c => c.id !== ctrl.id));
+      } else {
+        next.add(ctrl.id);
+        setSelectedControls(sc => [...sc, ctrl]);
+      }
+      return next;
+    });
+  }
+
+  function toggleGroup(items: FrameworkControl[]) {
+    const allOn = items.every(c => selected.has(c.id));
+    setSelected(prev => {
+      const next = new Set(prev);
+      if (allOn) {
+        items.forEach(c => { next.delete(c.id); });
+        setSelectedControls(sc => sc.filter(c => !items.some(i => i.id === c.id)));
+      } else {
+        items.forEach(c => next.add(c.id));
+        setSelectedControls(sc => {
+          const existing = new Set(sc.map(c => c.id));
+          return [...sc, ...items.filter(c => !existing.has(c.id))];
+        });
+      }
+      return next;
+    });
+  }
+
+  function toggleCollapse(grp: string) {
+    setCollapsed(prev => { const n = new Set(prev); n.has(grp) ? n.delete(grp) : n.add(grp); return n; });
+  }
+
+  const filtered = controls.filter(c =>
+    !search || c.control_id.toLowerCase().includes(search.toLowerCase()) || c.title.toLowerCase().includes(search.toLowerCase())
+  );
+
+  const groups: Record<string, FrameworkControl[]> = {};
+  for (const c of filtered) {
+    const g = c.category || "General";
+    if (!groups[g]) groups[g] = [];
+    groups[g].push(c);
+  }
+  const groupNames = Object.keys(groups).sort();
+
+  if (!open) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/50" onClick={onClose} />
+      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-3xl h-[85vh] flex flex-col overflow-hidden">
+
+        {/* Header */}
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 flex-shrink-0">
+          <div>
+            <h2 className="font-bold text-gray-900 text-base">Select Target Controls</h2>
+            <p className="text-xs text-gray-400 mt-0.5">Choose controls to include as context for the AI document generator</p>
+          </div>
+          <button type="button" onClick={onClose} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        <div className="flex flex-1 min-h-0">
+          {/* Left: Framework list */}
+          <div className="w-48 border-r border-gray-100 flex flex-col flex-shrink-0">
+            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider px-4 pt-3 pb-2">Frameworks</p>
+            {loadingFw ? (
+              <div className="flex items-center justify-center py-8"><Loader2 className="w-4 h-4 animate-spin text-gray-300" /></div>
+            ) : (
+              <div className="flex-1 overflow-y-auto">
+                {frameworks.map(fw => {
+                  const ctrlCount = selectedControls.filter(c => {
+                    // can't easily know which fw a control belongs to without storing it — just show total
+                    return true;
+                  });
+                  const isActive = activeFw?.id === fw.id;
+                  return (
+                    <button
+                      key={fw.id}
+                      type="button"
+                      onClick={() => setActiveFw(fw)}
+                      className={`w-full text-left px-4 py-2.5 text-xs font-medium transition-colors flex items-center justify-between gap-2 ${
+                        isActive ? "bg-blue-50 text-blue-700 border-r-2 border-blue-600" : "text-gray-600 hover:bg-gray-50"
+                      }`}
+                    >
+                      <span className="truncate">{fw.short_name}</span>
+                      {fw.control_count && fw.control_count > 0 && (
+                        <span className={`text-[10px] px-1.5 py-0.5 rounded-full flex-shrink-0 ${isActive ? "bg-blue-100 text-blue-600" : "bg-gray-100 text-gray-400"}`}>
+                          {fw.control_count}
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          {/* Right: Controls list */}
+          <div className="flex-1 flex flex-col min-w-0">
+            {/* Search + stats */}
+            <div className="px-4 py-3 border-b border-gray-100 flex-shrink-0 space-y-2">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
+                <input
+                  type="text"
+                  placeholder="Search controls…"
+                  value={search}
+                  onChange={e => setSearch(e.target.value)}
+                  className="w-full pl-9 pr-3 py-1.5 border border-gray-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+              {selected.size > 0 && (
+                <p className="text-xs text-blue-600 font-medium">{selected.size} control{selected.size !== 1 ? "s" : ""} selected total</p>
+              )}
+            </div>
+
+            {/* Controls */}
+            <div className="flex-1 overflow-y-auto">
+              {loadingCtrl ? (
+                <div className="flex items-center justify-center py-12 gap-2 text-gray-400">
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <span className="text-sm">Loading controls…</span>
+                </div>
+              ) : controls.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-12 text-center px-6">
+                  <BookOpen className="w-8 h-8 text-gray-200 mb-2" />
+                  <p className="text-sm text-gray-400">No controls for this framework</p>
+                </div>
+              ) : (
+                <div className="divide-y divide-gray-50">
+                  {groupNames.map(grp => {
+                    const items = groups[grp];
+                    const allOn = items.every(c => selected.has(c.id));
+                    const someOn = items.some(c => selected.has(c.id));
+                    const isCol = collapsed.has(grp);
+                    return (
+                      <div key={grp}>
+                        <div className="flex items-center gap-2 px-4 py-2 bg-gray-50 sticky top-0 z-10">
+                          <button type="button" onClick={() => toggleGroup(items)} className="flex-shrink-0">
+                            {allOn
+                              ? <CheckSquare className="w-3.5 h-3.5 text-blue-600" />
+                              : someOn
+                              ? <CheckSquare className="w-3.5 h-3.5 text-blue-300" />
+                              : <Square className="w-3.5 h-3.5 text-gray-300" />}
+                          </button>
+                          <button type="button" onClick={() => toggleCollapse(grp)} className="flex items-center gap-1.5 flex-1 text-left">
+                            <span className="text-xs font-semibold text-gray-600 uppercase tracking-wide">{grp}</span>
+                            <span className="text-[10px] text-gray-400 bg-gray-200 px-1.5 py-0.5 rounded-full">{items.length}</span>
+                            {isCol ? <ChevronRight className="w-3 h-3 text-gray-400 ml-auto" /> : <ChevronDown className="w-3 h-3 text-gray-400 ml-auto" />}
+                          </button>
+                        </div>
+                        {!isCol && items.map(ctrl => (
+                          <div
+                            key={ctrl.id}
+                            onClick={() => toggleControl(ctrl)}
+                            className={`flex items-start gap-3 px-4 py-2.5 cursor-pointer transition-colors hover:bg-blue-50/50 ${selected.has(ctrl.id) ? "bg-blue-50/30" : ""}`}
+                          >
+                            <div className="flex-shrink-0 mt-0.5">
+                              {selected.has(ctrl.id)
+                                ? <CheckSquare className="w-3.5 h-3.5 text-blue-600" />
+                                : <Square className="w-3.5 h-3.5 text-gray-300" />}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <span className="text-[10px] font-mono font-bold text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded flex-shrink-0">{ctrl.control_id}</span>
+                                <span className="text-xs font-medium text-gray-800 leading-snug">{ctrl.title}</span>
+                              </div>
+                              {ctrl.description && (
+                                <p className="text-[11px] text-gray-400 mt-0.5 line-clamp-1">{ctrl.description}</p>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div className="px-6 py-4 border-t border-gray-100 flex items-center justify-between gap-3 flex-shrink-0 bg-white">
+          <div className="flex items-center gap-2">
+            {selected.size > 0 ? (
+              <>
+                <CheckCircle className="w-4 h-4 text-green-500" />
+                <span className="text-sm font-medium text-gray-700">{selected.size} control{selected.size !== 1 ? "s" : ""} selected</span>
+              </>
+            ) : (
+              <span className="text-sm text-gray-400">No controls selected yet</span>
+            )}
+          </div>
+          <div className="flex items-center gap-2">
+            <button type="button" onClick={onClose}
+              className="px-4 py-2 text-sm text-gray-600 border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors">
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={() => { onConfirm(selectedControls, activeFw?.name ?? ""); onClose(); }}
+              className="px-5 py-2 text-sm font-semibold bg-blue-600 hover:bg-blue-700 text-white rounded-xl transition-colors"
+            >
+              Apply {selected.size > 0 ? `(${selected.size})` : ""}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Main page ──────────────────────────────────────────────────────────────────
 
 export default function PolicyGeneratorPage() {
@@ -127,6 +390,23 @@ export default function PolicyGeneratorPage() {
 
   const [activeCategory, setActiveCategory] = useState<string>("foundation");
   const [selectedDoc, setSelectedDoc] = useState<string | null>(null);
+
+  // Control picker modal
+  const [showControlPicker, setShowControlPicker] = useState(false);
+  const [targetControls, setTargetControls] = useState<FrameworkControl[]>([]);
+
+  // Load pre-selected controls from Frameworks page (via sessionStorage)
+  const [preselectedControls, setPreselectedControls] = useState<{ control_id: string; title: string }[]>([]);
+  const [preselectedFramework, setPreselectedFramework] = useState<{ name: string; short_name: string } | null>(null);
+
+  useEffect(() => {
+    try {
+      const fwRaw = sessionStorage.getItem("docgen_framework");
+      const ctrlRaw = sessionStorage.getItem("docgen_controls");
+      if (fwRaw) setPreselectedFramework(JSON.parse(fwRaw));
+      if (ctrlRaw) setPreselectedControls(JSON.parse(ctrlRaw));
+    } catch { /* ignore */ }
+  }, []);
 
   // Org context form
   const [form, setForm] = useState({
@@ -151,6 +431,18 @@ export default function PolicyGeneratorPage() {
 
   const abortRef = useRef<AbortController | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+
+  // Auto-populate framework from Frameworks page selection
+  useEffect(() => {
+    if (preselectedFramework) {
+      setForm(f => ({
+        ...f,
+        frameworks: f.frameworks.includes(preselectedFramework.short_name)
+          ? f.frameworks
+          : [...f.frameworks, preselectedFramework.short_name],
+      }));
+    }
+  }, [preselectedFramework]);
 
   // Auto-scroll while streaming
   useEffect(() => {
@@ -186,7 +478,17 @@ export default function PolicyGeneratorPage() {
           size: form.size,
           country: form.country,
           frameworks: form.frameworks.length > 0 ? form.frameworks.join(", ") : undefined,
-          specific_requirements: form.specific_requirements || undefined,
+          specific_requirements: (() => {
+          const parts: string[] = [];
+          if (form.specific_requirements) parts.push(form.specific_requirements);
+          const allControls = [
+            ...targetControls,
+            ...preselectedControls.map(c => ({ control_id: c.control_id, title: c.title } as FrameworkControl)),
+          ];
+          if (allControls.length > 0)
+            parts.push(`Target controls: ${allControls.map(c => `${c.control_id} (${c.title})`).join("; ")}`);
+          return parts.length > 0 ? parts.join("\n") : undefined;
+        })(),
         },
         (token) => {
           const filtered = filter(token);
@@ -385,6 +687,69 @@ export default function PolicyGeneratorPage() {
               })}
             </div>
           </div>
+
+          {/* Target Controls */}
+          <div>
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="text-xs text-gray-500">Target Controls <span className="text-gray-400">(optional)</span></label>
+              {targetControls.length > 0 && (
+                <button type="button" onClick={() => setTargetControls([])}
+                  className="text-xs text-gray-400 hover:text-red-500 transition-colors">
+                  Clear all
+                </button>
+              )}
+            </div>
+
+            {/* Selected control chips */}
+            {targetControls.length > 0 && (
+              <div className="flex flex-wrap gap-1 mb-2 max-h-16 overflow-y-auto p-2 bg-gray-50 rounded-lg border border-gray-100">
+                {targetControls.map(c => (
+                  <span
+                    key={c.id}
+                    className="inline-flex items-center gap-1 text-[10px] font-mono font-medium bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded cursor-pointer hover:bg-red-100 hover:text-red-600 transition-colors"
+                    title={c.title}
+                    onClick={() => setTargetControls(prev => prev.filter(x => x.id !== c.id))}
+                  >
+                    {c.control_id} <X className="w-2.5 h-2.5" />
+                  </span>
+                ))}
+              </div>
+            )}
+
+            <button
+              type="button"
+              onClick={() => setShowControlPicker(true)}
+              className="w-full flex items-center justify-center gap-2 py-2 border border-dashed border-gray-300 rounded-lg text-xs font-medium text-gray-500 hover:border-blue-400 hover:text-blue-600 hover:bg-blue-50/50 transition-all"
+            >
+              <CheckSquare className="w-3.5 h-3.5" />
+              {targetControls.length > 0 ? `${targetControls.length} controls selected — click to edit` : "Pick controls from a framework…"}
+            </button>
+          </div>
+
+          {/* Pre-selected controls banner (from Frameworks page) */}
+          {preselectedControls.length > 0 && (
+            <div className="bg-blue-50 border border-blue-200 rounded-xl p-3">
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-xs font-semibold text-blue-700">
+                  {preselectedControls.length} controls pre-selected from {preselectedFramework?.short_name ?? "framework"}
+                </p>
+                <button
+                  type="button"
+                  onClick={() => { setPreselectedControls([]); sessionStorage.removeItem("docgen_controls"); sessionStorage.removeItem("docgen_framework"); }}
+                  className="text-xs text-blue-500 hover:text-blue-700"
+                >
+                  Clear
+                </button>
+              </div>
+              <div className="flex flex-wrap gap-1 max-h-20 overflow-y-auto">
+                {preselectedControls.map(c => (
+                  <span key={c.control_id} className="text-[10px] font-mono bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded">
+                    {c.control_id}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
 
           <div>
             <label className="text-xs text-gray-500 mb-1 block">Special Requirements <span className="text-gray-400">(optional)</span></label>
@@ -602,6 +967,14 @@ export default function PolicyGeneratorPage() {
           </div>
         )}
       </div>
+
+      {/* Control Picker Modal */}
+      <ControlPickerModal
+        open={showControlPicker}
+        onClose={() => setShowControlPicker(false)}
+        onConfirm={(controls) => setTargetControls(controls)}
+        initial={targetControls}
+      />
     </div>
   );
 }
