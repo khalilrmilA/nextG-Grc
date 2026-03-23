@@ -657,7 +657,6 @@ Generate the complete {request.document_type} now. Start directly with the docum
 
 @router.get("/health")
 async def ai_health():
-    """Check if Ollama is reachable."""
     base_url = settings.OLLAMA_BASE_URL.rstrip("/")
     reachable = False
     try:

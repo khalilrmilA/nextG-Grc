@@ -767,7 +767,7 @@ async def analyze_assessment(
 
     assessment.compliance_score = score
     assessment.status = AssessmentStatus.IN_PROGRESS
-    await db.flush()
+    await db.commit()
 
     return {
         "status": "completed",
