@@ -216,7 +216,9 @@
       "Bash(curl -s http://localhost:8000/api/v1/users -H 'Authorization: Bearer test')",
       "Bash(taskkill /F /PID 50528 /PID 10608 /PID 20420)",
       "Bash(wmic process:*)",
-      "Bash(grep -rn \"openai\\\\|open_ai\\\\|OpenAI\" /d/GRC/backend/app/ /d/GRC/frontend/src/ --include=*.py --include=*.ts --include=*.tsx)"
+      "Bash(grep -rn \"openai\\\\|open_ai\\\\|OpenAI\" /d/GRC/backend/app/ /d/GRC/frontend/src/ --include=*.py --include=*.ts --include=*.tsx)",
+      "Bash(pip install:*)",
+      "Bash(find /d/GRC/frameworks -name *.yaml)"
     ]
   }
 }
