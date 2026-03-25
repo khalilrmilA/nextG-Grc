@@ -293,6 +293,7 @@ export interface ControlAssessmentDetail extends BaseEntity {
   status: ControlStatus;
   notes?: string;
   implementation_notes?: string;
+  not_applicable_justification?: string;
   ai_confidence?: number;
   cross_framework_coverage: CrosswalkMapping[];
 }

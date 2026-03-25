@@ -187,6 +187,18 @@ export const complianceApi = {
     apiClient
       .post(`/compliance/assessments/${assessmentId}/gaps/bulk-action`, data)
       .then((r) => r.data),
+
+  uploadControlEvidence: (controlAssessmentId: string, file: File) => {
+    const formData = new FormData();
+    formData.append("file", file);
+    return apiClient
+      .post<{ id: string; file_name: string; file_size_bytes: number; content_type: string }>(
+        `/compliance/control-assessments/${controlAssessmentId}/evidence`,
+        formData,
+        { headers: { "Content-Type": "multipart/form-data" } }
+      )
+      .then((r) => r.data);
+  },
 };
 
 // ─── Custom Framework Builder ─────────────────

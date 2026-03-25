@@ -22,6 +22,8 @@ from app.models.compliance import (
     ComplianceGap,
     ControlAssessment,
     ControlStatus,
+    Evidence,
+    EvidenceType,
     UploadedDocument,
 )
 from app.models.framework import Framework, FrameworkControl
@@ -58,6 +60,16 @@ class UploadedDocumentResponse(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class EvidenceResponse(BaseModel):
+    id: str
+    file_name: str | None = None
+    file_size_bytes: int | None = None
+    content_type: str | None = None
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
 class ControlAssessmentResponse(BaseModel):
     id: str
     assessment_id: str
@@ -69,6 +81,7 @@ class ControlAssessmentResponse(BaseModel):
     status: ControlStatus
     notes: str | None = None
     implementation_notes: str | None = None
+    not_applicable_justification: str | None = None
     ai_confidence: float | None = None
     cross_framework_coverage: list[dict] = []
 
@@ -848,6 +861,7 @@ async def update_control_assessment(
         status=ca.status,
         notes=ca.notes,
         implementation_notes=ca.implementation_notes,
+        not_applicable_justification=ca.not_applicable_justification,
         ai_confidence=ca.ai_confidence,
         cross_framework_coverage=control.mapped_controls or [],
     )
@@ -1186,3 +1200,79 @@ async def get_traceability_matrix(
             "action_items_open": action_items_open,
         },
     }
+
+
+@router.post("/control-assessments/{control_assessment_id}/evidence")
+async def upload_control_evidence(
+    control_assessment_id: str,
+    file: UploadFile = File(...),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_roles(UserRole.TENANT_ADMIN, UserRole.SUPER_ADMIN)),
+    tenant_id: str = Depends(get_tenant_id),
+) -> EvidenceResponse:
+    """Upload evidence file for a specific control assessment."""
+    result = await db.execute(
+        select(ControlAssessment, ComplianceAssessment)
+        .join(ComplianceAssessment, ControlAssessment.assessment_id == ComplianceAssessment.id)
+        .where(
+            ControlAssessment.id == control_assessment_id,
+            ComplianceAssessment.tenant_id == tenant_id,
+        )
+    )
+    row = result.first()
+    if not row:
+        raise HTTPException(status_code=404, detail="Control assessment not found")
+
+    ca, assessment = row
+
+    # Accept: PDF, DOCX, images, TXT
+    content_type = file.content_type or ""
+    name_lower = (file.filename or "").lower()
+    is_allowed = (
+        "pdf" in content_type
+        or "docx" in content_type
+        or "word" in content_type
+        or "text/plain" in content_type
+        or "image/png" in content_type
+        or "image/jpeg" in content_type
+        or name_lower.endswith(".pdf")
+        or name_lower.endswith(".docx")
+        or name_lower.endswith(".txt")
+        or name_lower.endswith(".png")
+        or name_lower.endswith(".jpg")
+        or name_lower.endswith(".jpeg")
+    )
+    if not is_allowed:
+        raise HTTPException(status_code=422, detail="Only PDF, DOCX, TXT, PNG, JPG files are supported")
+
+    file_bytes = await file.read()
+    max_bytes = settings.MAX_UPLOAD_SIZE_MB * 1024 * 1024
+    if len(file_bytes) > max_bytes:
+        raise HTTPException(status_code=413, detail=f"File too large (max {settings.MAX_UPLOAD_SIZE_MB}MB)")
+
+    safe_name = _sanitize_filename(file.filename or "evidence.txt")
+    rel_path = f"{tenant_id}/evidence/{uuid.uuid4().hex}_{safe_name}"
+    full_path = Path(settings.UPLOADS_DIR) / rel_path
+    full_path.parent.mkdir(parents=True, exist_ok=True)
+    full_path.write_bytes(file_bytes)
+
+    evidence = Evidence(
+        control_assessment_id=control_assessment_id,
+        tenant_id=tenant_id,
+        name=file.filename or safe_name,
+        evidence_type=EvidenceType.DOCUMENT,
+        file_name=file.filename or safe_name,
+        file_size_bytes=len(file_bytes),
+        content_type=content_type,
+        uploaded_by_id=current_user.id,
+    )
+    db.add(evidence)
+    await db.flush()
+
+    return EvidenceResponse(
+        id=evidence.id,
+        file_name=evidence.file_name,
+        file_size_bytes=evidence.file_size_bytes,
+        content_type=evidence.content_type,
+        created_at=evidence.created_at,
+    )
