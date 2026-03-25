@@ -218,7 +218,16 @@
       "Bash(wmic process:*)",
       "Bash(grep -rn \"openai\\\\|open_ai\\\\|OpenAI\" /d/GRC/backend/app/ /d/GRC/frontend/src/ --include=*.py --include=*.ts --include=*.tsx)",
       "Bash(pip install:*)",
-      "Bash(find /d/GRC/frameworks -name *.yaml)"
+      "Bash(find /d/GRC/frameworks -name *.yaml)",
+      "Bash(git worktree:*)",
+      "Bash(cp -rf /tmp/restore2/backend /d/GRC/)",
+      "Bash(cp -rf /tmp/restore2/frontend /d/GRC/)",
+      "Bash(cp -rf /tmp/restore2/frameworks /d/GRC/)",
+      "Bash(cp /tmp/restore2/CLAUDE.md /d/GRC/)",
+      "Bash(cp -rf /tmp/restore3/backend /d/GRC/)",
+      "Bash(cp -rf /tmp/restore3/frontend /d/GRC/)",
+      "Bash(cp -rf /tmp/restore3/frameworks /d/GRC/)",
+      "Bash(cp /tmp/restore3/README.md /d/GRC/)"
     ]
   }
 }

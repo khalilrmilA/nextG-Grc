@@ -4,7 +4,7 @@ import {
   ArrowLeft, Upload, FileText, Play, Loader2,
   CheckCircle, XCircle, AlertTriangle, MinusCircle,
   ChevronDown, ChevronUp, Sparkles, Globe, GitBranch,
-  Download, Table2, Paperclip, X, MessageSquare,
+  Download, Table2,
 } from "lucide-react";
 import { complianceApi } from "@/api/endpoints";
 import type { AssessmentDetail, GapDetail, ControlAssessmentDetail } from "@/types";
@@ -195,12 +195,9 @@ function ResultsTab({
   const [filter, setFilter] = useState<"all" | "implemented" | "partial" | "gap">("all");
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [policyGap, setPolicyGap] = useState<GapDetail | null>(null);
-  const [overrides, setOverrides]         = useState<Record<string, string>>({});
-  const [justifications, setJustifications] = useState<Record<string, string>>({});
-  const [attachments, setAttachments]     = useState<Record<string, File>>({});
-  const [dragOver, setDragOver]           = useState<string | null>(null);
-  const [history, setHistory]             = useState<Record<string, { status: string; by: string; at: string }[]>>({});
-  const [saving, setSaving]               = useState<string | null>(null);
+  const [overrides, setOverrides] = useState<Record<string, string>>({});
+  const [history, setHistory] = useState<Record<string, { status: string; by: string; at: string }[]>>({});
+  const [saving, setSaving] = useState<string | null>(null);
 
   async function handleStatusOverride(caId: string, currentStatus: string, newStatus: string) {
     if (newStatus === currentStatus) return;
@@ -218,29 +215,6 @@ function ResultsTab({
     } catch {/* silent */} finally {
       setSaving(null);
     }
-  }
-
-  async function saveJustification(caId: string) {
-    const text = justifications[caId];
-    if (!text?.trim()) return;
-    setSaving(caId);
-    try {
-      await complianceApi.updateControlAssessment(caId, { notes: text } as never);
-    } catch {/* silent */} finally {
-      setSaving(null);
-    }
-  }
-
-  function handleFileDrop(caId: string, e: React.DragEvent) {
-    e.preventDefault();
-    setDragOver(null);
-    const file = e.dataTransfer.files[0];
-    if (file) setAttachments(prev => ({ ...prev, [caId]: file }));
-  }
-
-  function handleFileInput(caId: string, e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (file) setAttachments(prev => ({ ...prev, [caId]: file }));
   }
 
   const cas = assessment.control_assessments;
@@ -496,70 +470,6 @@ function ResultsTab({
                     )}
                   </div>
 
-                  {/* Justification + evidence */}
-                  <div className="mt-3 space-y-2">
-                    {/* Text justification */}
-                    <div className="relative">
-                      <div className="flex items-center gap-1.5 mb-1">
-                        <MessageSquare className="w-3 h-3 text-gray-400" />
-                        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Justification</p>
-                      </div>
-                      <textarea
-                        rows={2}
-                        value={justifications[ca.id] ?? ""}
-                        onChange={e => setJustifications(prev => ({ ...prev, [ca.id]: e.target.value }))}
-                        onBlur={() => saveJustification(ca.id)}
-                        placeholder="Explain why this status was set — e.g. control is covered by policy X, compensating control in place, risk accepted…"
-                        className="w-full text-xs border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-400 resize-none text-gray-700 placeholder-gray-300"
-                      />
-                    </div>
-
-                    {/* File drop zone */}
-                    <div>
-                      <div className="flex items-center gap-1.5 mb-1">
-                        <Paperclip className="w-3 h-3 text-gray-400" />
-                        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Evidence file</p>
-                      </div>
-                      {attachments[ca.id] ? (
-                        <div className="flex items-center gap-2 px-3 py-2 bg-green-50 border border-green-200 rounded-lg">
-                          <FileText className="w-3.5 h-3.5 text-green-600 flex-shrink-0" />
-                          <span className="text-xs text-green-700 font-medium flex-1 truncate">{attachments[ca.id].name}</span>
-                          <span className="text-[10px] text-green-500">{(attachments[ca.id].size / 1024).toFixed(0)} KB</span>
-                          <button
-                            type="button"
-                            onClick={() => setAttachments(prev => { const n = { ...prev }; delete n[ca.id]; return n; })}
-                            className="p-0.5 rounded hover:bg-green-100 text-green-400 hover:text-red-500 transition-colors"
-                          >
-                            <X className="w-3 h-3" />
-                          </button>
-                        </div>
-                      ) : (
-                        <div
-                          onDragOver={e => { e.preventDefault(); setDragOver(ca.id); }}
-                          onDragLeave={() => setDragOver(null)}
-                          onDrop={e => handleFileDrop(ca.id, e)}
-                          className={`relative flex items-center gap-2 px-3 py-2.5 border-2 border-dashed rounded-lg transition-colors cursor-pointer ${
-                            dragOver === ca.id
-                              ? "border-blue-400 bg-blue-50"
-                              : "border-gray-200 hover:border-blue-300 hover:bg-gray-50"
-                          }`}
-                        >
-                          <input
-                            type="file"
-                            accept=".pdf,.doc,.docx,.png,.jpg,.xlsx,.csv"
-                            onChange={e => handleFileInput(ca.id, e)}
-                            className="absolute inset-0 opacity-0 cursor-pointer"
-                          />
-                          <Upload className="w-3.5 h-3.5 text-gray-300 flex-shrink-0" />
-                          <span className="text-xs text-gray-400">
-                            Drop a file or <span className="text-blue-500 font-medium">browse</span>
-                            <span className="text-gray-300 ml-1">· PDF, DOC, PNG, XLSX</span>
-                          </span>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-
                   {/* Status change history */}
                   {history[ca.id] && history[ca.id].length > 0 && (
                     <div>
@@ -594,172 +504,51 @@ function ResultsTab({
 
 // ─── Tab: Cross-Framework Coverage ────────────────────────────────────────────
 
-const FW_DESCRIPTIONS: Record<string, { desc: string; category: string; color: string; bg: string }> = {
-  "SOC 2":          { desc: "Trust Services Criteria for SaaS/cloud providers", category: "Audit",       color: "text-purple-700", bg: "bg-purple-50" },
-  "NIST CSF":       { desc: "Cybersecurity Framework — Govern, Identify, Protect, Detect, Respond", category: "Security",    color: "text-indigo-700", bg: "bg-indigo-50" },
-  "NIST 800-53":    { desc: "Comprehensive controls for US federal systems", category: "Government",  color: "text-slate-700",  bg: "bg-slate-50"   },
-  "GDPR":           { desc: "EU data protection regulation", category: "Privacy",     color: "text-emerald-700", bg: "bg-emerald-50" },
-  "HIPAA":          { desc: "US healthcare data protection (PHI/ePHI)", category: "Healthcare",  color: "text-red-700",    bg: "bg-red-50"     },
-  "PCI DSS":        { desc: "Payment card data security standard", category: "Finance",     color: "text-orange-700", bg: "bg-orange-50"  },
-  "CIS Controls":   { desc: "18 prioritized security controls", category: "Security",    color: "text-cyan-700",   bg: "bg-cyan-50"    },
-  "ISO 27001":      { desc: "Information Security Management System", category: "Security",    color: "text-blue-700",   bg: "bg-blue-50"    },
-};
-
-function fitLabel(pct: number): { label: string; color: string; bg: string } {
-  if (pct >= 75) return { label: "Excellent fit",  color: "text-green-700",  bg: "bg-green-50 border-green-200"  };
-  if (pct >= 50) return { label: "Good fit",        color: "text-blue-700",   bg: "bg-blue-50 border-blue-200"    };
-  if (pct >= 25) return { label: "Partial fit",     color: "text-yellow-700", bg: "bg-yellow-50 border-yellow-200"};
-  return               { label: "Low overlap",      color: "text-gray-500",   bg: "bg-gray-50 border-gray-200"    };
-}
-
-function CrossFrameworkTab({
-  assessment,
-  onRerunAnalysis,
-}: {
-  readonly assessment: AssessmentDetail;
-  readonly onRerunAnalysis: () => Promise<void>;
-}) {
-  const [running, setRunning] = useState(false);
-  const [expanded, setExpanded] = useState<string | null>(null);
+function CrossFrameworkTab({ assessment }: { readonly assessment: AssessmentDetail }) {
   const summary = assessment.cross_framework_summary;
   const entries = Object.entries(summary).sort((a, b) => b[1].percent - a[1].percent);
 
-  async function runAnalysis() {
-    setRunning(true);
-    try { await onRerunAnalysis(); } finally { setRunning(false); }
+  if (entries.length === 0) {
+    return (
+      <div className="text-center py-16 text-gray-400 text-sm">
+        <Globe className="w-10 h-10 mx-auto mb-3 opacity-30" />
+        No cross-framework mappings found. Run analysis first, or this framework may not have cross-walk data.
+      </div>
+    );
   }
 
   return (
-    <div className="space-y-5">
-      {/* Header */}
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <h3 className="text-sm font-semibold text-gray-800">Cross-Framework Coverage</h3>
-          <p className="text-xs text-gray-500 mt-0.5">
-            Based on your <strong>{assessment.framework_short_name}</strong> compliance, see which other frameworks you already partially satisfy — and which to adopt next.
-          </p>
-        </div>
-        <button
-          type="button"
-          onClick={runAnalysis}
-          disabled={running}
-          className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-xs font-semibold rounded-xl transition-colors flex-shrink-0"
-        >
-          {running ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <GitBranch className="w-3.5 h-3.5" />}
-          {running ? "Analyzing…" : entries.length === 0 ? "Run Analysis" : "Re-run Analysis"}
-        </button>
-      </div>
-
-      {entries.length === 0 ? (
-        <div className="bg-gray-50 border border-dashed border-gray-200 rounded-2xl py-14 text-center">
-          <GitBranch className="w-10 h-10 mx-auto mb-3 text-gray-300" />
-          <p className="text-sm font-medium text-gray-500">No cross-framework data yet</p>
-          <p className="text-xs text-gray-400 mt-1 mb-4">Run the analysis to discover which frameworks your current compliance already covers.</p>
-          <button
-            type="button"
-            onClick={runAnalysis}
-            disabled={running}
-            className="inline-flex items-center gap-2 px-5 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-sm font-semibold rounded-xl transition-colors"
-          >
-            {running ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
-            {running ? "Running…" : "Run Cross-Framework Analysis"}
-          </button>
-        </div>
-      ) : (
-        <>
-          {/* Summary legend */}
-          <div className="grid grid-cols-3 gap-3">
-            {[
-              { label: "Frameworks mapped",    value: entries.length,                                              color: "text-indigo-600" },
-              { label: "Best overlap",          value: `${entries[0]?.[1].percent ?? 0}%`,                         color: "text-green-600"  },
-              { label: "Ready to certify (≥75%)", value: entries.filter(([,d]) => d.percent >= 75).length,         color: "text-blue-600"   },
-            ].map(s => (
-              <div key={s.label} className="bg-white rounded-xl border border-gray-100 p-3 text-center">
-                <p className={`text-xl font-bold ${s.color}`}>{s.value}</p>
-                <p className="text-xs text-gray-400 mt-0.5">{s.label}</p>
+    <div className="space-y-4">
+      <p className="text-sm text-gray-500">
+        Based on your compliance against <strong>{assessment.framework_short_name}</strong>, here is the estimated coverage in other frameworks.
+      </p>
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        {entries.map(([fw, data]) => (
+          <div key={fw} className="bg-white rounded-2xl border border-gray-100 p-5">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-sm font-semibold text-gray-800">{fw}</h3>
+              <span className={`text-sm font-bold ${scoreColor(data.percent)}`}>{data.percent}%</span>
+            </div>
+            <div className="h-2 rounded-full bg-gray-100 overflow-hidden mb-2">
+              <div
+                className={`h-full rounded-full ${data.percent >= 80 ? "bg-green-500" : data.percent >= 60 ? "bg-yellow-400" : "bg-red-400"}`}
+                style={{ width: `${data.percent}%` }}
+              />
+            </div>
+            <p className="text-xs text-gray-500">{data.covered} of {data.total_mapped} mapped controls covered</p>
+            {data.controls.length > 0 && (
+              <div className="flex flex-wrap gap-1 mt-2">
+                {data.controls.slice(0, 8).map((c, i) => (
+                  <span key={i} className="text-xs bg-indigo-50 text-indigo-700 px-1.5 py-0.5 rounded font-mono">{c}</span>
+                ))}
+                {data.controls.length > 8 && (
+                  <span className="text-xs text-gray-400">+{data.controls.length - 8} more</span>
+                )}
               </div>
-            ))}
+            )}
           </div>
-
-          {/* Framework cards */}
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            {entries.map(([fw, data]) => {
-              const meta = FW_DESCRIPTIONS[fw] ?? { desc: "", category: "Security", color: "text-gray-700", bg: "bg-gray-50" };
-              const fit  = fitLabel(data.percent);
-              const isOpen = expanded === fw;
-              const gap = data.total_mapped - data.covered;
-              return (
-                <div
-                  key={fw}
-                  className={`bg-white rounded-2xl border transition-all ${isOpen ? "border-indigo-200 shadow-md" : "border-gray-100 hover:border-indigo-100 hover:shadow-sm"}`}
-                >
-                  <button
-                    type="button"
-                    className="w-full text-left p-5"
-                    onClick={() => setExpanded(isOpen ? null : fw)}
-                  >
-                    <div className="flex items-start justify-between gap-3 mb-3">
-                      <div className="flex items-center gap-2">
-                        <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${meta.bg} ${meta.color}`}>{meta.category}</span>
-                        <h3 className="text-sm font-bold text-gray-900">{fw}</h3>
-                      </div>
-                      <div className="flex items-center gap-2 flex-shrink-0">
-                        <span className={`text-xs font-semibold px-2 py-0.5 rounded-full border ${fit.bg} ${fit.color}`}>{fit.label}</span>
-                        <span className={`text-base font-bold ${scoreColor(data.percent)}`}>{data.percent}%</span>
-                      </div>
-                    </div>
-
-                    {meta.desc && <p className="text-xs text-gray-400 mb-3">{meta.desc}</p>}
-
-                    {/* Progress bar */}
-                    <div className="h-2 rounded-full bg-gray-100 overflow-hidden mb-2">
-                      <div
-                        className={`h-full rounded-full transition-all ${data.percent >= 75 ? "bg-green-500" : data.percent >= 50 ? "bg-blue-500" : data.percent >= 25 ? "bg-yellow-400" : "bg-red-400"}`}
-                        style={{ width: `${data.percent}%` }}
-                      />
-                    </div>
-
-                    <div className="flex items-center justify-between text-xs text-gray-400">
-                      <span><strong className="text-green-600">{data.covered}</strong> controls covered</span>
-                      <span><strong className="text-red-400">{gap}</strong> gaps remaining</span>
-                      <span className="text-gray-300">{data.total_mapped} mapped total</span>
-                    </div>
-                  </button>
-
-                  {/* Expanded: covered controls + recommendation */}
-                  {isOpen && (
-                    <div className="px-5 pb-5 border-t border-gray-50 pt-4 space-y-3">
-                      {data.controls.length > 0 && (
-                        <div>
-                          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Already covered controls</p>
-                          <div className="flex flex-wrap gap-1">
-                            {data.controls.map((c, i) => (
-                              <span key={i} className="text-xs font-mono bg-green-50 text-green-700 px-1.5 py-0.5 rounded border border-green-100">{c}</span>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-
-                      <div className={`rounded-xl p-3 ${data.percent >= 75 ? "bg-green-50 border border-green-100" : data.percent >= 50 ? "bg-blue-50 border border-blue-100" : "bg-yellow-50 border border-yellow-100"}`}>
-                        <p className="text-xs font-semibold mb-1 text-gray-700">
-                          {data.percent >= 75 ? "✅ Ready to pursue certification" : data.percent >= 50 ? "🔵 Good starting point" : "⚠️ Significant gaps remain"}
-                        </p>
-                        <p className="text-xs text-gray-600">
-                          {data.percent >= 75
-                            ? `You already satisfy ${data.percent}% of ${fw} requirements through your ${assessment.framework_short_name} work. Consider starting a ${fw} assessment.`
-                            : data.percent >= 50
-                            ? `You're halfway there. ${gap} more controls need attention before pursuing ${fw} certification.`
-                            : `${fw} requires significant additional work beyond ${assessment.framework_short_name}. Evaluate if business needs justify the investment.`}
-                        </p>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        </>
-      )}
+        ))}
+      </div>
     </div>
   );
 }
@@ -793,19 +582,6 @@ export default function AssessmentDetailPage() {
     );
   }
 
-  async function rerunAnalysis() {
-    if (!assessmentId) return;
-    try {
-      await complianceApi.analyzeAssessment(assessmentId);
-      // Reload assessment to get updated cross_framework_summary + control assessments
-      const updated = await complianceApi.getAssessment(assessmentId);
-      setAssessment(updated);
-      setGaps(updated.gaps);
-    } catch (err) {
-      alert(`Analysis failed: ${err instanceof Error ? err.message : "Unknown error"}`);
-    }
-  }
-
   if (loading) {
     return (
       <div className="p-8 flex items-center justify-center min-h-64">
@@ -831,7 +607,7 @@ export default function AssessmentDetailPage() {
     { key: "checklist", label: "Document Checklist" },
     { key: "results",   label: `Results${hasResults ? ` (${assessment.control_assessments.length})` : ""}`, disabled: !hasResults },
     { key: "gapreport", label: `Gap Report${gapCount > 0 ? ` (${gapCount})` : ""}`, disabled: gapCount === 0 },
-    { key: "crossfw",   label: `Cross-Framework${Object.keys(assessment.cross_framework_summary).length > 0 ? ` (${Object.keys(assessment.cross_framework_summary).length})` : ""}` },
+    { key: "crossfw",   label: `Cross-Framework${Object.keys(assessment.cross_framework_summary).length > 0 ? ` (${Object.keys(assessment.cross_framework_summary).length})` : ""}`, disabled: !hasResults },
   ];
 
   return (
@@ -936,7 +712,7 @@ export default function AssessmentDetailPage() {
         />
       )}
       {activeTab === "crossfw" && (
-        <CrossFrameworkTab assessment={assessment} onRerunAnalysis={rerunAnalysis} />
+        <CrossFrameworkTab assessment={assessment} />
       )}
     </div>
   );

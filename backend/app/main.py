@@ -12,7 +12,6 @@ from app.core.config import settings
 from app.core.database import engine, Base, AsyncSessionLocal
 from app.api.v1.router import api_router
 from app.core.seed_mandatory_docs import seed_mandatory_documents
-from app.frameworks.loader import load_all_frameworks
 
 logger = structlog.get_logger()
 
@@ -31,12 +30,6 @@ async def lifespan(app: FastAPI):
     # Seed reference data
     async with AsyncSessionLocal() as db:
         await seed_mandatory_documents(db)
-        # Load all framework YAML files with crosswalk mappings
-        try:
-            fws = await load_all_frameworks(db)
-            logger.info(f"Loaded {sum(fws.values())} controls from {len(fws)} frameworks")
-        except Exception as e:
-            logger.error(f"Failed to load frameworks: {e}")
 
     if settings.SENTRY_DSN:
         sentry_sdk.init(
