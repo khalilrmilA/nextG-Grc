@@ -534,37 +534,43 @@ function ResultsTab({
                     </div>
                   )}
 
-                  {/* Justification & Evidence - Inline */}
-                  <div className="pt-2 space-y-1.5">
+                  {/* Justification & Evidence - Themed Inline */}
+                  <div className="pt-2 space-y-2">
                     <div className="grid grid-cols-3 gap-2 items-start">
-                      {/* Notes Textarea */}
+                      {/* Notes Textarea - Blue Theme */}
                       <div className="col-span-2">
-                        <label className="text-xs font-semibold text-gray-600 mb-1 block">Notes</label>
+                        <div className="flex items-center gap-1.5 mb-1.5">
+                          <div className="w-2 h-2 rounded-full bg-blue-500" />
+                          <label className="text-xs font-semibold text-blue-700 uppercase tracking-wide">Justification</label>
+                        </div>
                         <textarea
                           value={justifications[ca.id] ?? ca.notes ?? ""}
                           onChange={(e) => handleJustificationChange(ca.id, e.target.value)}
                           placeholder="Add notes or justification..."
-                          className="w-full px-2.5 py-1.5 text-xs border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none bg-white"
+                          className="w-full px-3 py-2 text-xs border-2 border-blue-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none bg-blue-50 hover:bg-blue-50 transition-all placeholder-blue-400"
                           rows={1}
                         />
                         {savedJustifications[ca.id] && (
-                          <p className="text-xs text-green-600 mt-0.5 flex items-center gap-1">
+                          <p className="text-xs text-blue-600 mt-0.5 flex items-center gap-1 font-medium">
                             <CheckCircle className="w-3 h-3" /> Saved
                           </p>
                         )}
                       </div>
 
-                      {/* Evidence Upload - Compact */}
+                      {/* Evidence Upload - Purple Theme */}
                       <div>
-                        <label className="text-xs font-semibold text-gray-600 mb-1 block">Evidence</label>
+                        <div className="flex items-center gap-1.5 mb-1.5">
+                          <div className="w-2 h-2 rounded-full bg-purple-500" />
+                          <label className="text-xs font-semibold text-purple-700 uppercase tracking-wide">Files</label>
+                        </div>
                         <div
-                          onDragOver={(e) => { e.preventDefault(); e.currentTarget.classList.add("bg-blue-50", "border-blue-400"); }}
-                          onDragLeave={(e) => { e.preventDefault(); e.currentTarget.classList.remove("bg-blue-50", "border-blue-400"); }}
+                          onDragOver={(e) => { e.preventDefault(); e.currentTarget.classList.add("bg-purple-50", "border-purple-400", "shadow-md"); }}
+                          onDragLeave={(e) => { e.preventDefault(); e.currentTarget.classList.remove("bg-purple-50", "border-purple-400", "shadow-md"); }}
                           onDrop={(e) => {
                             handleEvidenceDrop(ca.id, e);
-                            e.currentTarget.classList.remove("bg-blue-50", "border-blue-400");
+                            e.currentTarget.classList.remove("bg-purple-50", "border-purple-400", "shadow-md");
                           }}
-                          className="border-2 border-dashed border-gray-300 rounded-lg p-2 text-center cursor-pointer hover:border-blue-400 hover:bg-blue-50 transition-all"
+                          className="border-2 border-dashed border-purple-300 rounded-lg p-2.5 text-center cursor-pointer hover:border-purple-400 hover:bg-purple-50 hover:shadow-md transition-all bg-purple-50/40"
                         >
                           <input
                             type="file"
@@ -580,25 +586,32 @@ function ResultsTab({
                           />
                           <label htmlFor={`evidence-input-${ca.id}`} className="cursor-pointer block">
                             {uploadingEvidence === ca.id ? (
-                              <Loader2 className="w-3.5 h-3.5 animate-spin text-blue-500 mx-auto" />
+                              <Loader2 className="w-4 h-4 animate-spin text-purple-600 mx-auto" />
                             ) : (
-                              <Upload className="w-3.5 h-3.5 text-gray-500 mx-auto hover:text-blue-600" />
+                              <Upload className="w-4 h-4 text-purple-600 mx-auto hover:text-purple-700 transition-colors" />
                             )}
                           </label>
                         </div>
                       </div>
                     </div>
 
-                    {/* Uploaded Files List */}
+                    {/* Uploaded Files List - Green Theme */}
                     {uploadedFiles[ca.id] && uploadedFiles[ca.id].length > 0 && (
-                      <div className="mt-1.5 bg-green-50 border border-green-200 rounded-lg p-1.5">
-                        {uploadedFiles[ca.id].map((fileName, i) => (
-                          <div key={i} className="flex items-center gap-1.5 text-xs text-green-700">
-                            <FileText className="w-3 h-3 flex-shrink-0 text-green-600" />
-                            <span className="truncate">{fileName}</span>
-                            <CheckCircle className="w-3 h-3 flex-shrink-0 text-green-600 ml-auto" />
-                          </div>
-                        ))}
+                      <div className="bg-gradient-to-r from-green-50 to-emerald-50 border-2 border-green-200 rounded-lg p-2">
+                        <div className="flex items-center gap-1.5 mb-1">
+                          <div className="w-2 h-2 rounded-full bg-green-600" />
+                          <span className="text-xs font-semibold text-green-700 uppercase tracking-wide">Uploaded</span>
+                          <span className="ml-auto text-xs font-bold text-green-600 bg-white px-1.5 py-0.5 rounded-full">{uploadedFiles[ca.id].length}</span>
+                        </div>
+                        <div className="space-y-0.5">
+                          {uploadedFiles[ca.id].map((fileName, i) => (
+                            <div key={i} className="flex items-center gap-1.5 text-xs text-green-700 bg-white/60 px-2 py-1 rounded">
+                              <FileText className="w-3.5 h-3.5 flex-shrink-0 text-green-600" />
+                              <span className="truncate font-medium">{fileName}</span>
+                              <CheckCircle className="w-3 h-3 flex-shrink-0 text-green-600 ml-auto" />
+                            </div>
+                          ))}
+                        </div>
                       </div>
                     )}
                   </div>
