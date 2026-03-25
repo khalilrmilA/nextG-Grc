@@ -89,6 +89,20 @@ export const DEMO_USERS: Record<string, AuthUser> = {
     plan: "enterprise",
     org: "Platform Owner",
   },
+  "khalilrmila@nextstep-it.com": {
+    email: "khalilrmila@nextstep-it.com",
+    name: "Khalil Rmila",
+    role: "admin",
+    plan: "enterprise",
+    org: "NextStep IT",
+  },
+  "khalilrmilaaudit@nextstep-it.com": {
+    email: "khalilrmilaaudit@nextstep-it.com",
+    name: "Khalil Rmila (Auditor)",
+    role: "auditor",
+    plan: "professional",
+    org: "NextStep IT",
+  },
 };
 
 // ── Simple in-memory + localStorage auth store ──────────────────────────────

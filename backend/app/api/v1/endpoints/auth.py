@@ -60,23 +60,40 @@ class RefreshRequest(BaseModel):
 
 @router.post("/login", response_model=TokenResponse)
 async def login(body: LoginRequest, db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(User).where(User.email == body.email))
-    user = result.scalar_one_or_none()
+    import logging
+    logger = logging.getLogger(__name__)
+    try:
+        result = await db.execute(select(User).where(User.email == body.email))
+        user = result.scalar_one_or_none()
+        logger.info(f"Login attempt for {body.email}, user found: {user is not None}")
 
-    if not user or not user.hashed_password or not verify_password(body.password, user.hashed_password):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid email or password",
+        if not user or not user.hashed_password or not verify_password(body.password, user.hashed_password):
+            logger.warning(f"Login failed for {body.email}")
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid email or password",
+            )
+
+        if not user.is_active:
+            logger.warning(f"Login blocked - account disabled: {body.email}")
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Account disabled")
+
+        token_data = {"sub": user.id, "tenant_id": user.tenant_id, "role": user.role}
+        logger.info(f"Login successful for {body.email}")
+        return TokenResponse(
+            access_token=create_access_token(token_data),
+            refresh_token=create_refresh_token(token_data),
         )
-
-    if not user.is_active:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Account disabled")
-
-    token_data = {"sub": user.id, "tenant_id": user.tenant_id, "role": user.role}
-    return TokenResponse(
-        access_token=create_access_token(token_data),
-        refresh_token=create_refresh_token(token_data),
-    )
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        logger = logging.getLogger(__name__)
+        logger.error(f"Login error: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Login error: {str(e)[:100]}",
+        )
 
 
 @router.post("/register", response_model=TokenResponse, status_code=status.HTTP_201_CREATED)

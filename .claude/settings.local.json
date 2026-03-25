@@ -227,7 +227,9 @@
       "Bash(cp -rf /tmp/restore3/backend /d/GRC/)",
       "Bash(cp -rf /tmp/restore3/frontend /d/GRC/)",
       "Bash(cp -rf /tmp/restore3/frameworks /d/GRC/)",
-      "Bash(cp /tmp/restore3/README.md /d/GRC/)"
+      "Bash(cp /tmp/restore3/README.md /d/GRC/)",
+      "Bash(curl -s \"http://localhost:8000/api/v1/frameworks/3efb00a2-c734-4a4a-a86c-1d0c18dc8be7/controls\")",
+      "Bash(curl -v -X POST http://localhost:8000/api/v1/auth/login -H \"Content-Type: application/json\" -d '{\"\"\"\"email\"\"\"\":\"\"\"\"admin@demo.com\"\"\"\",\"\"\"\"password\"\"\"\":\"\"\"\"demo123\"\"\"\"}')"
     ]
   }
 }

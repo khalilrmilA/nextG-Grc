@@ -5,15 +5,28 @@ from passlib.context import CryptContext
 from fastapi import HTTPException, status
 from app.core.config import settings
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+# Use Argon2 for password hashing (more reliable than bcrypt)
+pwd_context = CryptContext(schemes=["argon2"], deprecated="auto")
 
 
 def hash_password(password: str) -> str:
+    """Hash password using Argon2."""
     return pwd_context.hash(password)
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
-    return pwd_context.verify(plain_password, hashed_password)
+    """Verify password against hash. Supports both Argon2 and bcrypt for legacy compatibility."""
+    try:
+        return pwd_context.verify(plain_password, hashed_password)
+    except Exception:
+        # Fallback: try manual bcrypt verification for legacy passwords
+        try:
+            import bcrypt
+            plain_bytes = plain_password[:72].encode('utf-8')
+            hashed_bytes = hashed_password.encode('utf-8') if isinstance(hashed_password, str) else hashed_password
+            return bcrypt.checkpw(plain_bytes, hashed_bytes)
+        except Exception:
+            return False
 
 
 def create_access_token(data: dict[str, Any]) -> str:

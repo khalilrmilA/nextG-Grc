@@ -1,4 +1,5 @@
-python -m uvicorn app.main:app --reload --port 8000
+cd d:/GRC/backend && python -m venv venv 2>&1 | head -20
+cd d:/GRC/backend && source venv/Scripts/activate && uvicorn app.main:app --reload --port 8000
 GRC Platform — Framework-First Transformation (Full Rebuild)
 Context
 Major platform transformation: make the entire product framework-driven from first registration.
