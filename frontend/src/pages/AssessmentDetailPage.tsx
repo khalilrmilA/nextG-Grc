@@ -534,66 +534,68 @@ function ResultsTab({
                     </div>
                   )}
 
-                  {/* Justification / Notes */}
-                  <div className="pt-2">
-                    <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Justification</p>
-                    <textarea
-                      value={justifications[ca.id] ?? ca.notes ?? ""}
-                      onChange={(e) => handleJustificationChange(ca.id, e.target.value)}
-                      placeholder="Add justification or implementation notes..."
-                      className="w-full px-3 py-2 text-xs border border-gray-200 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none bg-gray-50 hover:bg-white transition-colors"
-                      rows={2}
-                    />
-                    {savedJustifications[ca.id] && (
-                      <p className="text-xs text-green-600 mt-1">✓ Saved</p>
-                    )}
-                  </div>
-
-                  {/* Evidence File Upload */}
-                  <div className="pt-2">
-                    <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Evidence</p>
-                    <div
-                      onDragOver={(e) => { e.preventDefault(); e.currentTarget.classList.add("bg-blue-50", "border-blue-300"); }}
-                      onDragLeave={(e) => { e.preventDefault(); e.currentTarget.classList.remove("bg-blue-50", "border-blue-300"); }}
-                      onDrop={(e) => {
-                        handleEvidenceDrop(ca.id, e);
-                        e.currentTarget.classList.remove("bg-blue-50", "border-blue-300");
-                      }}
-                      className="border-2 border-dashed border-gray-200 rounded-lg p-3 text-center cursor-pointer hover:border-blue-300 hover:bg-blue-50/30 transition-all"
-                    >
-                      <input
-                        type="file"
-                        id={`evidence-input-${ca.id}`}
-                        accept=".pdf,.docx,.txt,.png,.jpg,.jpeg"
-                        onChange={(e) => {
-                          if (e.target.files && e.target.files[0]) {
-                            handleEvidenceUpload(ca.id, e.target.files[0]);
-                          }
-                          e.target.value = "";
-                        }}
-                        className="hidden"
-                      />
-                      <label htmlFor={`evidence-input-${ca.id}`} className="cursor-pointer block">
-                        {uploadingEvidence === ca.id ? (
-                          <>
-                            <Loader2 className="w-4 h-4 animate-spin text-blue-500 mx-auto mb-1" />
-                            <p className="text-xs text-gray-600">Uploading…</p>
-                          </>
-                        ) : (
-                          <>
-                            <Upload className="w-4 h-4 text-gray-400 mx-auto mb-1" />
-                            <p className="text-xs text-gray-700 font-medium">Drop file or click to upload</p>
-                            <p className="text-xs text-gray-400">PDF, DOCX, TXT, PNG, JPG — max 10 MB</p>
-                          </>
+                  {/* Justification & Evidence - Inline */}
+                  <div className="pt-2 space-y-1.5">
+                    <div className="grid grid-cols-3 gap-2 items-start">
+                      {/* Notes Textarea */}
+                      <div className="col-span-2">
+                        <label className="text-xs font-semibold text-gray-600 mb-1 block">Notes</label>
+                        <textarea
+                          value={justifications[ca.id] ?? ca.notes ?? ""}
+                          onChange={(e) => handleJustificationChange(ca.id, e.target.value)}
+                          placeholder="Add notes or justification..."
+                          className="w-full px-2.5 py-1.5 text-xs border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none bg-white"
+                          rows={1}
+                        />
+                        {savedJustifications[ca.id] && (
+                          <p className="text-xs text-green-600 mt-0.5 flex items-center gap-1">
+                            <CheckCircle className="w-3 h-3" /> Saved
+                          </p>
                         )}
-                      </label>
+                      </div>
+
+                      {/* Evidence Upload - Compact */}
+                      <div>
+                        <label className="text-xs font-semibold text-gray-600 mb-1 block">Evidence</label>
+                        <div
+                          onDragOver={(e) => { e.preventDefault(); e.currentTarget.classList.add("bg-blue-50", "border-blue-400"); }}
+                          onDragLeave={(e) => { e.preventDefault(); e.currentTarget.classList.remove("bg-blue-50", "border-blue-400"); }}
+                          onDrop={(e) => {
+                            handleEvidenceDrop(ca.id, e);
+                            e.currentTarget.classList.remove("bg-blue-50", "border-blue-400");
+                          }}
+                          className="border-2 border-dashed border-gray-300 rounded-lg p-2 text-center cursor-pointer hover:border-blue-400 hover:bg-blue-50 transition-all"
+                        >
+                          <input
+                            type="file"
+                            id={`evidence-input-${ca.id}`}
+                            accept=".pdf,.docx,.txt,.png,.jpg,.jpeg"
+                            onChange={(e) => {
+                              if (e.target.files && e.target.files[0]) {
+                                handleEvidenceUpload(ca.id, e.target.files[0]);
+                              }
+                              e.target.value = "";
+                            }}
+                            className="hidden"
+                          />
+                          <label htmlFor={`evidence-input-${ca.id}`} className="cursor-pointer block">
+                            {uploadingEvidence === ca.id ? (
+                              <Loader2 className="w-3.5 h-3.5 animate-spin text-blue-500 mx-auto" />
+                            ) : (
+                              <Upload className="w-3.5 h-3.5 text-gray-500 mx-auto hover:text-blue-600" />
+                            )}
+                          </label>
+                        </div>
+                      </div>
                     </div>
+
+                    {/* Uploaded Files List */}
                     {uploadedFiles[ca.id] && uploadedFiles[ca.id].length > 0 && (
-                      <div className="mt-2 space-y-1">
+                      <div className="mt-1.5 bg-green-50 border border-green-200 rounded-lg p-1.5">
                         {uploadedFiles[ca.id].map((fileName, i) => (
-                          <div key={i} className="flex items-center gap-2 bg-green-50 text-green-700 px-3 py-2 rounded text-xs">
-                            <FileText className="w-3.5 h-3.5 flex-shrink-0 text-green-600" />
-                            <span className="truncate font-medium">{fileName}</span>
+                          <div key={i} className="flex items-center gap-1.5 text-xs text-green-700">
+                            <FileText className="w-3 h-3 flex-shrink-0 text-green-600" />
+                            <span className="truncate">{fileName}</span>
                             <CheckCircle className="w-3 h-3 flex-shrink-0 text-green-600 ml-auto" />
                           </div>
                         ))}
