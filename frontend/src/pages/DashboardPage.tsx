@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate, Link } from "react-router-dom";
@@ -10,11 +10,11 @@ import {
   AlertTriangle, ClipboardList, Building2, FileText, Activity,
   Shield, TrendingUp, TrendingDown, ChevronRight, Plus,
   Sparkles, Upload, CheckCircle2, XCircle,
-  AlertCircle, LayoutDashboard, BookOpen,
+  AlertCircle, LayoutDashboard, BookOpen, X, Loader2, Save, ChevronDown, ChevronRight as ChevronRightIcon,
 } from "lucide-react";
-import { dashboardApi } from "../api/endpoints";
+import { dashboardApi, customFrameworkApi, frameworksApi } from "../api/endpoints";
 import { useAuthStore } from "../store/auth";
-import type { DashboardSummary } from "../types";
+import type { DashboardSummary, Framework } from "../types";
 import ComplianceJourneyMap from "../components/features/compliance/ComplianceJourneyMap";
 import ReadinessScoreWidget from "../components/features/compliance/ReadinessScoreWidget";
 
@@ -533,6 +533,193 @@ function FrameworkOverviewCard({ fw, onSelect }: { fw: any; onSelect: () => void
   );
 }
 
+// ── Framework Management Modal ────────────────────────────────────────────────
+
+function FrameworkManagementModal({
+  isOpen,
+  onClose,
+  onFrameworkAdded,
+}: {
+  isOpen: boolean;
+  onClose: () => void;
+  onFrameworkAdded: () => void;
+}) {
+  const { t } = useTranslation();
+  const [allFrameworks, setAllFrameworks] = useState<Framework[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [showCreateForm, setShowCreateForm] = useState(false);
+  const [name, setName] = useState("");
+  const [shortName, setShortName] = useState("");
+  const [version, setVersion] = useState("1.0");
+  const [creating, setCreating] = useState(false);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    if (!isOpen) return;
+    loadFrameworks();
+  }, [isOpen]);
+
+  async function loadFrameworks() {
+    try {
+      setLoading(true);
+      const fws = await frameworksApi.list();
+      setAllFrameworks(fws);
+    } catch {
+      setAllFrameworks([]);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  function autoSlug(n: string) {
+    return n.toUpperCase().replace(/[^A-Z0-9]/g, "_").slice(0, 20);
+  }
+
+  async function handleCreateFramework(e: React.FormEvent) {
+    e.preventDefault();
+    if (!name.trim() || !shortName.trim()) return;
+
+    setCreating(true);
+    setError("");
+    try {
+      await customFrameworkApi.create({
+        name: name.trim(),
+        short_name: shortName.trim(),
+        version: version.trim() || "1.0",
+      });
+
+      // Reset form and reload
+      setName("");
+      setShortName("");
+      setVersion("1.0");
+      setShowCreateForm(false);
+      await loadFrameworks();
+      onFrameworkAdded();
+    } catch {
+      setError("Failed to create framework. Please try again.");
+    } finally {
+      setCreating(false);
+    }
+  }
+
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-2xl shadow-xl max-w-2xl w-full max-h-[80vh] overflow-y-auto">
+        {/* Header */}
+        <div className="sticky top-0 bg-white border-b border-gray-100 px-6 py-4 flex items-center justify-between">
+          <h2 className="text-lg font-semibold text-gray-900">Manage Frameworks</h2>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        {/* Content */}
+        <div className="p-6 space-y-6">
+          {/* Available frameworks list */}
+          <div>
+            <h3 className="text-sm font-semibold text-gray-700 mb-3">Available Frameworks</h3>
+            {loading ? (
+              <div className="flex justify-center py-8">
+                <Loader2 className="w-5 h-5 animate-spin text-blue-500" />
+              </div>
+            ) : allFrameworks.length === 0 ? (
+              <p className="text-sm text-gray-400 py-4">No frameworks available yet.</p>
+            ) : (
+              <div className="grid grid-cols-2 gap-2 max-h-64 overflow-y-auto pr-2">
+                {allFrameworks.map((fw) => (
+                  <div
+                    key={fw.id}
+                    className="p-3 border border-gray-200 rounded-lg hover:border-blue-300 hover:bg-blue-50 transition-colors cursor-default"
+                  >
+                    <p className="text-xs font-mono font-bold text-gray-600">{fw.short_name}</p>
+                    <p className="text-sm font-medium text-gray-800 mt-0.5">{fw.name}</p>
+                    <p className="text-xs text-gray-400 mt-1">{fw.control_count ?? 0} controls</p>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Create new framework section */}
+          {!showCreateForm ? (
+            <button
+              onClick={() => setShowCreateForm(true)}
+              className="w-full flex items-center justify-center gap-2 border-2 border-dashed border-gray-200 hover:border-blue-300 hover:bg-blue-50 text-gray-600 hover:text-blue-600 font-medium py-3 rounded-lg transition-colors"
+            >
+              <Plus className="w-4 h-4" />
+              Add New Framework
+            </button>
+          ) : (
+            <div className="border border-gray-200 rounded-lg p-4 space-y-3">
+              <h4 className="text-sm font-semibold text-gray-700">Create New Framework</h4>
+              <form onSubmit={handleCreateFramework} className="space-y-3">
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">Framework Name *</label>
+                  <input
+                    type="text"
+                    value={name}
+                    onChange={(e) => {
+                      setName(e.target.value);
+                      if (!shortName) setShortName(autoSlug(e.target.value));
+                    }}
+                    placeholder="e.g. Internal Security Standard"
+                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    required
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Short Code *</label>
+                    <input
+                      type="text"
+                      maxLength={20}
+                      value={shortName}
+                      onChange={(e) => setShortName(e.target.value.toUpperCase().replace(/[^A-Z0-9_-]/g, "").slice(0, 20))}
+                      placeholder="e.g. INTERNAL_SEC"
+                      className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Version</label>
+                    <input
+                      type="text"
+                      value={version}
+                      onChange={(e) => setVersion(e.target.value)}
+                      placeholder="1.0"
+                      className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                </div>
+                {error && <p className="text-xs text-red-600">{error}</p>}
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowCreateForm(false)}
+                    className="flex-1 px-3 py-2 border border-gray-200 text-gray-700 font-medium text-sm rounded-lg hover:bg-gray-50 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={creating || !name.trim() || !shortName.trim()}
+                    className="flex-1 flex items-center justify-center gap-2 px-3 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-medium text-sm rounded-lg transition-colors"
+                  >
+                    {creating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                    Create
+                  </button>
+                </div>
+              </form>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Overview dashboard (Stage 1) ──────────────────────────────────────────────
 
 function OverviewDashboard({
@@ -549,6 +736,7 @@ function OverviewDashboard({
   const { t } = useTranslation();
   const d = genericData ?? DEMO_DATA;
   const frameworks: any[] = overviewData?.frameworks ?? [];
+  const [showFrameworkModal, setShowFrameworkModal] = useState(false);
 
   return (
     <div className="space-y-8">
@@ -581,15 +769,25 @@ function OverviewDashboard({
             />
           ))}
           {/* Add framework card */}
-          <Link
-            to="/compliance"
+          <button
+            onClick={() => setShowFrameworkModal(true)}
             className="flex flex-col items-center justify-center gap-2 bg-gray-50 border-2 border-dashed border-gray-200 rounded-2xl p-6 text-gray-400 hover:border-blue-300 hover:text-blue-500 hover:bg-blue-50 transition-all min-h-[180px]"
           >
             <Plus className="w-6 h-6" />
             <span className="text-sm font-medium">{t("dashboard.add_framework")}</span>
-          </Link>
+          </button>
         </div>
       </div>
+
+      {/* Framework management modal */}
+      <FrameworkManagementModal
+        isOpen={showFrameworkModal}
+        onClose={() => setShowFrameworkModal(false)}
+        onFrameworkAdded={() => {
+          setShowFrameworkModal(false);
+          // Optionally refresh frameworks list here
+        }}
+      />
 
       {/* Cross-module KPIs */}
       <div>
