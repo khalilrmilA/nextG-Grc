@@ -61,7 +61,7 @@ function NewPolicyModal({ onClose, onSaved }: { readonly onClose: () => void; re
       owner: form.owner.trim(),
       status: form.status,
       version: 1,
-      attestation_rate: null,
+      attestation_rate: 0,
       linked_controls: 0,
       next_review: nextReview.toISOString().slice(0, 10),
       description: form.description.trim(),

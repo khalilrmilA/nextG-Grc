@@ -11,16 +11,6 @@ interface Props {
   readonly blockerPct: number;      // 0–100 where 100 = no blockers
 }
 
-function arcPath(pct: number, r: number, cx: number, cy: number): string {
-  const angle = Math.min(pct / 100, 0.9999) * Math.PI; // 0 → π (left to right)
-  const startX = cx - r;
-  const startY = cy;
-  const endX = cx + Math.cos(Math.PI - angle) * r;
-  const endY = cy - Math.sin(Math.PI - angle) * r;
-  const largeArc = angle > Math.PI / 2 ? 0 : 0;
-  return `M ${startX} ${startY} A ${r} ${r} 0 ${largeArc} 1 ${endX} ${endY}`;
-}
-
 function scoreColor(s: number): string {
   if (s >= 80) return "#22c55e";
   if (s >= 60) return "#eab308";

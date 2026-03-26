@@ -5,7 +5,7 @@ import {
   Settings, User, Bell, Shield, Key, Globe, Palette,
   Building2, Save, Eye, EyeOff, Check, AlertTriangle,
   Lock, Crown, Trash2, Plus, ChevronDown, Loader2,
-  Sun, Moon, Monitor, AlignJustify, RotateCcw,
+  Sun, Moon, Monitor, RotateCcw,
 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuthStore, PLAN_FEATURES, type PlanTier } from "../store/auth";

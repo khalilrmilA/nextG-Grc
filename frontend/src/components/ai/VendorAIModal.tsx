@@ -112,7 +112,7 @@ export default function VendorAIModal({ vendorName, vendorIndustry, vendorServic
     abortRef.current = new AbortController();
     aiApi.streamVendorAnalysis(
       vendorName,
-      vendorIndustry,
+      vendorIndustry || "Unknown",
       vendorServices,
       responses,
       (token) => setOutput(prev => prev + token),

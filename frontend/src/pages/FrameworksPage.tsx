@@ -328,12 +328,10 @@ function FrameworkDrawer({
 function FrameworkCard({
   fw,
   onDelete,
-  onAssess,
   onViewControls,
 }: {
   readonly fw: Framework;
   readonly onDelete: (id: string) => void;
-  readonly onAssess: (fw: Framework) => void;
   readonly onViewControls: (fw: Framework) => void;
 }) {
   const { t } = useTranslation();
@@ -473,10 +471,6 @@ export default function FrameworksPage() {
 
   function handleDelete(id: string) {
     setFrameworks(prev => prev.filter(f => f.id !== id));
-  }
-
-  function handleAssess(_fw: Framework) {
-    navigate("/compliance");
   }
 
   function openDrawer(fw: Framework) {
@@ -629,7 +623,7 @@ export default function FrameworksPage() {
                 <span className="text-xs text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full">{customs.length}</span>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {customs.map(fw => <FrameworkCard key={fw.id} fw={fw} onDelete={handleDelete} onAssess={handleAssess} onViewControls={openDrawer} />)}
+                {customs.map(fw => <FrameworkCard key={fw.id} fw={fw} onDelete={handleDelete} onViewControls={openDrawer} />)}
               </div>
             </section>
           )}
@@ -643,7 +637,7 @@ export default function FrameworksPage() {
                 <span className="text-xs text-green-600 bg-green-50 px-2 py-0.5 rounded-full font-medium">✓ Ready to use</span>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {builtins.map(fw => <FrameworkCard key={fw.id} fw={fw} onDelete={handleDelete} onAssess={handleAssess} onViewControls={openDrawer} />)}
+                {builtins.map(fw => <FrameworkCard key={fw.id} fw={fw} onDelete={handleDelete} onViewControls={openDrawer} />)}
               </div>
             </section>
           )}
@@ -656,7 +650,7 @@ export default function FrameworksPage() {
                 <span className="text-xs text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full">{demo.length}</span>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {demo.map(fw => <FrameworkCard key={fw.id} fw={fw} onDelete={handleDelete} onAssess={handleAssess} onViewControls={openDrawer} />)}
+                {demo.map(fw => <FrameworkCard key={fw.id} fw={fw} onDelete={handleDelete} onViewControls={openDrawer} />)}
               </div>
             </section>
           )}

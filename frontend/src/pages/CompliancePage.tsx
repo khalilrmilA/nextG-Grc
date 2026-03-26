@@ -244,7 +244,7 @@ export default function CompliancePage() {
           { key: "draft",        label: t("compliance.filter_draft")         },
         ].map((tab) => (
           <button
-            key={t.key}
+            key={tab.key}
             onClick={() => setStatusFilter(tab.key)}
             className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
               statusFilter === tab.key

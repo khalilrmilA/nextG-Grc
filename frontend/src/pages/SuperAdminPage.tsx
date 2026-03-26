@@ -40,7 +40,6 @@ const MOCK_ACCESS: AccessControlEntry[] = [
 ];
 
 const ALL_MODULES = ["dashboard","risks","compliance","frameworks","audits","policies","vendors","policy-generator"];
-const ROLES = ["user", "auditor"];
 
 // ── Shared: Demo Banner ───────────────────────────────────────────────────────
 

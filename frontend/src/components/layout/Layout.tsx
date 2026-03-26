@@ -13,8 +13,8 @@ import { useFramework } from "../../context/FrameworkContext";
 import {
   LayoutDashboard, AlertTriangle, CheckSquare, BookOpen,
   ClipboardList, FileText, Building2, LogOut, Shield,
-  ChevronRight, Bell, Settings, HelpCircle, Zap, Lock,
-  Crown, Briefcase, Eye, X, Trash2, Wand2,
+  ChevronRight, Bell, Settings, HelpCircle, Lock,
+  Crown, Briefcase, X, Trash2, Wand2,
   AlertCircle, Info, ShieldAlert, ClipboardCheck,
 } from "lucide-react";
 
@@ -346,7 +346,6 @@ export default function Layout() {
   const plan        = user?.plan ?? "free_trial";
   const isAdmin     = user?.role === "admin";
   const isSuperAdmin = user?.role === "super_admin";
-  const features    = PLAN_FEATURES[plan];
   // Everyone except auditors gets full access to all modules
   const isUser      = user?.role !== "auditor" && user?.role !== "super_admin";
   const accessible  = null; // no module gating — all roles see everything

@@ -5,7 +5,7 @@ import {
   HelpCircle, Search, BookOpen, LayoutDashboard, AlertTriangle,
   CheckSquare, ClipboardList, FileText, Building2, BookMarked,
   ChevronDown, ChevronRight, Mail, MessageCircle, Zap,
-  Shield, BarChart3, Upload, Bot, FolderUp, MousePointerClick,
+  Shield, BarChart3, Bot, FolderUp, MousePointerClick,
   ArrowRight, Info,
 } from "lucide-react";
 
