@@ -10,9 +10,9 @@ import {
   AlertTriangle, ClipboardList, Building2, FileText, Activity,
   Shield, TrendingUp, TrendingDown, ChevronRight, Plus,
   Sparkles, Upload, CheckCircle2, XCircle,
-  AlertCircle, LayoutDashboard, BookOpen, X, Loader2, Save, ChevronDown, ChevronRight as ChevronRightIcon,
+  AlertCircle, LayoutDashboard, BookOpen, X, Loader2,
 } from "lucide-react";
-import { dashboardApi, customFrameworkApi, frameworksApi } from "../api/endpoints";
+import { dashboardApi, frameworksApi, authApi } from "../api/endpoints";
 import { useAuthStore } from "../store/auth";
 import type { DashboardSummary, Framework } from "../types";
 import ComplianceJourneyMap from "../components/features/compliance/ComplianceJourneyMap";
@@ -538,21 +538,20 @@ function FrameworkOverviewCard({ fw, onSelect }: { fw: any; onSelect: () => void
 function FrameworkManagementModal({
   isOpen,
   onClose,
+  currentFrameworkIds,
+  primaryFrameworkId,
   onFrameworkAdded,
 }: {
   isOpen: boolean;
   onClose: () => void;
+  currentFrameworkIds: string[];
+  primaryFrameworkId: string | null;
   onFrameworkAdded: () => void;
 }) {
-  const { t } = useTranslation();
   const [allFrameworks, setAllFrameworks] = useState<Framework[]>([]);
   const [loading, setLoading] = useState(true);
-  const [showCreateForm, setShowCreateForm] = useState(false);
-  const [name, setName] = useState("");
-  const [shortName, setShortName] = useState("");
-  const [version, setVersion] = useState("1.0");
-  const [creating, setCreating] = useState(false);
-  const [error, setError] = useState("");
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [adding, setAdding] = useState(false);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -564,6 +563,7 @@ function FrameworkManagementModal({
       setLoading(true);
       const fws = await frameworksApi.list();
       setAllFrameworks(fws);
+      setSelectedId(null);
     } catch {
       setAllFrameworks([]);
     } finally {
@@ -571,149 +571,105 @@ function FrameworkManagementModal({
     }
   }
 
-  function autoSlug(n: string) {
-    return n.toUpperCase().replace(/[^A-Z0-9]/g, "_").slice(0, 20);
-  }
-
-  async function handleCreateFramework(e: React.FormEvent) {
-    e.preventDefault();
-    if (!name.trim() || !shortName.trim()) return;
-
-    setCreating(true);
-    setError("");
+  async function handleAddFramework() {
+    if (!selectedId) return;
+    setAdding(true);
     try {
-      await customFrameworkApi.create({
-        name: name.trim(),
-        short_name: shortName.trim(),
-        version: version.trim() || "1.0",
-      });
+      // Add the new framework if not already in the list
+      const updatedFrameworks = currentFrameworkIds.includes(selectedId)
+        ? currentFrameworkIds
+        : [...currentFrameworkIds, selectedId];
 
-      // Reset form and reload
-      setName("");
-      setShortName("");
-      setVersion("1.0");
-      setShowCreateForm(false);
-      await loadFrameworks();
+      // Update with the same primary framework (or the new one if primary not set)
+      const primaryId = primaryFrameworkId || selectedId;
+
+      await authApi.updateSelectedFrameworks(primaryId, updatedFrameworks);
+
+      // Trigger callback to refresh
       onFrameworkAdded();
-    } catch {
-      setError("Failed to create framework. Please try again.");
+      onClose();
+    } catch (err) {
+      console.error("Failed to add framework:", err);
     } finally {
-      setCreating(false);
+      setAdding(false);
     }
   }
 
   if (!isOpen) return null;
+
+  const selectedFramework = allFrameworks.find((fw) => fw.id === selectedId);
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-2xl shadow-xl max-w-2xl w-full max-h-[80vh] overflow-y-auto">
         {/* Header */}
         <div className="sticky top-0 bg-white border-b border-gray-100 px-6 py-4 flex items-center justify-between">
-          <h2 className="text-lg font-semibold text-gray-900">Manage Frameworks</h2>
+          <h2 className="text-lg font-semibold text-gray-900">Add Framework</h2>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
             <X className="w-5 h-5" />
           </button>
         </div>
 
         {/* Content */}
-        <div className="p-6 space-y-6">
+        <div className="p-6 space-y-4">
           {/* Available frameworks list */}
           <div>
-            <h3 className="text-sm font-semibold text-gray-700 mb-3">Available Frameworks</h3>
+            <h3 className="text-sm font-semibold text-gray-700 mb-3">Select Framework</h3>
             {loading ? (
               <div className="flex justify-center py-8">
                 <Loader2 className="w-5 h-5 animate-spin text-blue-500" />
               </div>
             ) : allFrameworks.length === 0 ? (
-              <p className="text-sm text-gray-400 py-4">No frameworks available yet.</p>
+              <p className="text-sm text-gray-400 py-4">No frameworks available.</p>
             ) : (
-              <div className="grid grid-cols-2 gap-2 max-h-64 overflow-y-auto pr-2">
+              <div className="grid grid-cols-2 gap-3 max-h-64 overflow-y-auto pr-2">
                 {allFrameworks.map((fw) => (
-                  <div
+                  <button
                     key={fw.id}
-                    className="p-3 border border-gray-200 rounded-lg hover:border-blue-300 hover:bg-blue-50 transition-colors cursor-default"
+                    onClick={() => setSelectedId(fw.id)}
+                    className={`p-3 border-2 rounded-lg transition-all text-left ${
+                      selectedId === fw.id
+                        ? "border-blue-500 bg-blue-50"
+                        : "border-gray-200 hover:border-blue-300 hover:bg-blue-50"
+                    }`}
                   >
                     <p className="text-xs font-mono font-bold text-gray-600">{fw.short_name}</p>
                     <p className="text-sm font-medium text-gray-800 mt-0.5">{fw.name}</p>
                     <p className="text-xs text-gray-400 mt-1">{fw.control_count ?? 0} controls</p>
-                  </div>
+                  </button>
                 ))}
               </div>
             )}
           </div>
 
-          {/* Create new framework section */}
-          {!showCreateForm ? (
-            <button
-              onClick={() => setShowCreateForm(true)}
-              className="w-full flex items-center justify-center gap-2 border-2 border-dashed border-gray-200 hover:border-blue-300 hover:bg-blue-50 text-gray-600 hover:text-blue-600 font-medium py-3 rounded-lg transition-colors"
-            >
-              <Plus className="w-4 h-4" />
-              Add New Framework
-            </button>
-          ) : (
-            <div className="border border-gray-200 rounded-lg p-4 space-y-3">
-              <h4 className="text-sm font-semibold text-gray-700">Create New Framework</h4>
-              <form onSubmit={handleCreateFramework} className="space-y-3">
-                <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">Framework Name *</label>
-                  <input
-                    type="text"
-                    value={name}
-                    onChange={(e) => {
-                      setName(e.target.value);
-                      if (!shortName) setShortName(autoSlug(e.target.value));
-                    }}
-                    placeholder="e.g. Internal Security Standard"
-                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    required
-                  />
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">Short Code *</label>
-                    <input
-                      type="text"
-                      maxLength={20}
-                      value={shortName}
-                      onChange={(e) => setShortName(e.target.value.toUpperCase().replace(/[^A-Z0-9_-]/g, "").slice(0, 20))}
-                      placeholder="e.g. INTERNAL_SEC"
-                      className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      required
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">Version</label>
-                    <input
-                      type="text"
-                      value={version}
-                      onChange={(e) => setVersion(e.target.value)}
-                      placeholder="1.0"
-                      className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    />
-                  </div>
-                </div>
-                {error && <p className="text-xs text-red-600">{error}</p>}
-                <div className="flex gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setShowCreateForm(false)}
-                    className="flex-1 px-3 py-2 border border-gray-200 text-gray-700 font-medium text-sm rounded-lg hover:bg-gray-50 transition-colors"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={creating || !name.trim() || !shortName.trim()}
-                    className="flex-1 flex items-center justify-center gap-2 px-3 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-medium text-sm rounded-lg transition-colors"
-                  >
-                    {creating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-                    Create
-                  </button>
-                </div>
-              </form>
+          {/* Selected framework details */}
+          {selectedFramework && (
+            <div className="border-t border-gray-100 pt-4">
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                <p className="text-xs text-blue-600 font-medium mb-1">Selected:</p>
+                <p className="text-sm font-semibold text-blue-900">{selectedFramework.name}</p>
+                <p className="text-xs text-blue-700 mt-1">{selectedFramework.control_count ?? 0} controls</p>
+              </div>
             </div>
           )}
+
+          {/* Action buttons */}
+          <div className="flex gap-2 pt-2">
+            <button
+              onClick={onClose}
+              className="flex-1 px-4 py-2 border border-gray-200 text-gray-700 font-medium text-sm rounded-lg hover:bg-gray-50 transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleAddFramework}
+              disabled={!selectedId || adding}
+              className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-medium text-sm rounded-lg transition-colors"
+            >
+              {adding ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
+              Add Framework
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -737,6 +693,9 @@ function OverviewDashboard({
   const d = genericData ?? DEMO_DATA;
   const frameworks: any[] = overviewData?.frameworks ?? [];
   const [showFrameworkModal, setShowFrameworkModal] = useState(false);
+  const authUser = useAuthStore((state) => state);
+  const currentFrameworkIds = authUser?.selected_framework_ids || [];
+  const primaryFrameworkId = authUser?.primary_framework_id || null;
 
   return (
     <div className="space-y-8">
@@ -771,10 +730,17 @@ function OverviewDashboard({
           {/* Add framework card */}
           <button
             onClick={() => setShowFrameworkModal(true)}
-            className="flex flex-col items-center justify-center gap-2 bg-gray-50 border-2 border-dashed border-gray-200 rounded-2xl p-6 text-gray-400 hover:border-blue-300 hover:text-blue-500 hover:bg-blue-50 transition-all min-h-[180px]"
+            className="group bg-white rounded-2xl border border-gray-100 shadow-sm hover:shadow-lg hover:border-blue-200 transition-all p-6 text-left flex flex-col gap-4 w-full min-h-[240px] items-center justify-center"
           >
-            <Plus className="w-6 h-6" />
-            <span className="text-sm font-medium">{t("dashboard.add_framework")}</span>
+            <div className="flex flex-col items-center gap-3">
+              <div className="w-12 h-12 rounded-xl bg-blue-100 flex items-center justify-center">
+                <Plus className="w-6 h-6 text-blue-600" />
+              </div>
+              <div className="text-center">
+                <p className="text-sm font-semibold text-gray-800">{t("dashboard.add_framework")}</p>
+                <p className="text-xs text-gray-400 mt-1">Select from available frameworks</p>
+              </div>
+            </div>
           </button>
         </div>
       </div>
@@ -783,9 +749,12 @@ function OverviewDashboard({
       <FrameworkManagementModal
         isOpen={showFrameworkModal}
         onClose={() => setShowFrameworkModal(false)}
+        currentFrameworkIds={currentFrameworkIds}
+        primaryFrameworkId={primaryFrameworkId}
         onFrameworkAdded={() => {
           setShowFrameworkModal(false);
-          // Optionally refresh frameworks list here
+          // Refresh page to see updated frameworks
+          window.location.reload();
         }}
       />
 
