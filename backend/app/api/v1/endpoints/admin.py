@@ -1,15 +1,22 @@
 """Super admin endpoints — platform-wide user and tenant management."""
+import logging
 from typing import Annotated
+from datetime import datetime, timedelta
+from uuid import uuid4
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
-from pydantic import BaseModel
+from sqlalchemy import select, and_
+from pydantic import BaseModel, field_serializer
 
 from app.core.database import get_db
 from app.models.user import User, UserRole
 from app.models.tenant import Tenant
 from app.models.subscription import Subscription
+from app.models.ai_access import AiAccessRequest, AiUsageQuota
 from app.api.v1.dependencies.auth import require_roles
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -188,3 +195,145 @@ async def update_tenant_access(
         plan=plan,
         enabled_modules=body.get("enabled_modules", MODULE_DEFAULTS),
     )
+
+
+# ── AI Access Management ───────────────────────────────────────────────────────
+
+class AiAccessRequestResponse(BaseModel):
+    id: str
+    user_email: str
+    user_name: str
+    feature: str
+    reason: str
+    status: str
+    admin_notes: str | None
+    requested_at: datetime
+    responded_at: datetime | None
+
+    model_config = {"from_attributes": True}
+
+    @field_serializer('requested_at', 'responded_at')
+    def serialize_datetime(self, value: datetime | None) -> str | None:
+        return value.isoformat() if value else None
+
+
+@router.get("/ai-access/requests", response_model=list[AiAccessRequestResponse])
+async def list_ai_access_requests(
+    db: Annotated[AsyncSession, Depends(get_db)],
+    _: Annotated[User, Depends(_require_super_admin())],
+    status: str | None = None,
+):
+    """List AI access requests, optionally filtered by status."""
+    query = select(AiAccessRequest)
+    if status:
+        query = query.where(AiAccessRequest.status == status)
+    result = await db.execute(query.order_by(AiAccessRequest.requested_at.desc()))
+    return result.scalars().all()
+
+
+@router.patch("/ai-access/requests/{request_id}/approve", response_model=AiAccessRequestResponse)
+async def approve_ai_request(
+    request_id: str,
+    body: dict,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    _: Annotated[User, Depends(_require_super_admin())],
+):
+    """Approve an AI access request."""
+    result = await db.execute(
+        select(AiAccessRequest).where(AiAccessRequest.id == request_id)
+    )
+    request = result.scalar_one_or_none()
+    if not request:
+        raise HTTPException(status_code=404, detail="Request not found")
+
+    request.status = "approved"
+    request.responded_at = datetime.utcnow()
+    request.admin_notes = body.get("admin_notes")
+
+    # Create usage quota for the user
+    quota_id = str(uuid4())
+    quota = AiUsageQuota(
+        id=quota_id,
+        tenant_id=request.tenant_id,
+        user_id=request.user_id,
+        feature=request.feature,
+        is_approved=True,
+        monthly_limit_tokens=10000,
+        monthly_limit_requests=100,
+        reset_date=datetime.utcnow() + timedelta(days=30),
+    )
+    db.add(quota)
+    await db.commit()
+    await db.refresh(request)
+
+    logger.info(f"AI access request approved: {request_id}")
+    return request
+
+
+@router.patch("/ai-access/requests/{request_id}/deny", response_model=AiAccessRequestResponse)
+async def deny_ai_request(
+    request_id: str,
+    body: dict,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    _: Annotated[User, Depends(_require_super_admin())],
+):
+    """Deny an AI access request."""
+    result = await db.execute(
+        select(AiAccessRequest).where(AiAccessRequest.id == request_id)
+    )
+    request = result.scalar_one_or_none()
+    if not request:
+        raise HTTPException(status_code=404, detail="Request not found")
+
+    request.status = "denied"
+    request.responded_at = datetime.utcnow()
+    request.admin_notes = body.get("admin_notes")
+    await db.commit()
+    await db.refresh(request)
+
+    logger.info(f"AI access request denied: {request_id}")
+    return request
+
+
+@router.post("/ai-usage/quota")
+async def set_user_quota(
+    body: dict,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    _: Annotated[User, Depends(_require_super_admin())],
+):
+    """Set AI usage quota for a user."""
+    user_id = body.get("user_id")
+    feature = body.get("feature", "document-generation")
+    monthly_limit = body.get("monthly_limit", 10000)
+
+    # Update or create quota
+    result = await db.execute(
+        select(AiUsageQuota).where(
+            and_(AiUsageQuota.user_id == user_id, AiUsageQuota.feature == feature)
+        )
+    )
+    quota = result.scalar_one_or_none()
+
+    if quota:
+        quota.monthly_limit_tokens = monthly_limit
+        await db.commit()
+    else:
+        quota_id = str(uuid4())
+        user_result = await db.execute(select(User).where(User.id == user_id))
+        user = user_result.scalar_one_or_none()
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+
+        quota = AiUsageQuota(
+            id=quota_id,
+            tenant_id=user.tenant_id,
+            user_id=user_id,
+            feature=feature,
+            monthly_limit_tokens=monthly_limit,
+            is_approved=True,
+            reset_date=datetime.utcnow() + timedelta(days=30),
+        )
+        db.add(quota)
+        await db.commit()
+
+    return {"status": "ok", "quota_id": quota.id}

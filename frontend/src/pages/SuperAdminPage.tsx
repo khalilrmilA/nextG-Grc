@@ -5,14 +5,16 @@ import {
   superAdminUsersApi,
   superAdminFrameworksApi,
   superAdminAccessApi,
+  superAdminAiAccessApi,
   type SuperAdminUser,
   type SuperAdminFramework,
   type AccessControlEntry,
 } from "../api/superadmin";
+import type { AiAccessRequest } from "../types";
 import {
-  Users, Shield, BookOpen, LogOut, Settings,
+  Users, Shield, BookOpen, LogOut, Settings, Sparkles,
   ToggleLeft, ToggleRight, Trash2, Upload,
-  Plus, AlertCircle, Loader2, X, CheckCircle,
+  Plus, AlertCircle, Loader2, X, CheckCircle, ThumbsUp, ThumbsDown,
 } from "lucide-react";
 
 // ── Mock data (offline / demo fallback) ──────────────────────────────────────
@@ -688,14 +690,161 @@ function SettingsTab() {
   );
 }
 
+// ── Tab: AI Access Requests ───────────────────────────────────────────────────
+
+function AiAccessTab() {
+  const [requests, setRequests] = useState<AiAccessRequest[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [isDemo, setIsDemo] = useState(false);
+  const [responding, setResponding] = useState<string | null>(null);
+
+  useEffect(() => {
+    superAdminAiAccessApi.listAiRequests()
+      .then(data => { setRequests(data); setLoading(false); })
+      .catch(() => {
+        setRequests([
+          { id: "r1", tenant_id: "t1", user_id: "u1", user_email: "ciso@demo.com", user_name: "Sophie Martin", feature: "document-generation", reason: "Need to generate ISO 27001 policies", status: "pending", requested_at: new Date(Date.now() - 86400000).toISOString(), created_at: "", updated_at: "" },
+          { id: "r2", tenant_id: "t2", user_id: "u3", user_email: "audit@demo.com", user_name: "Jean Dupont", feature: "ai-analysis", reason: "Analyze compliance gaps for SOC 2", status: "pending", requested_at: new Date().toISOString(), created_at: "", updated_at: "" },
+        ]);
+        setIsDemo(true);
+        setLoading(false);
+      });
+  }, []);
+
+  async function approveRequest(id: string) {
+    setResponding(id);
+    try {
+      const updated = await superAdminAiAccessApi.approveRequest(id, "Approved - Welcome to AI features");
+      setRequests(prev => prev.map(r => r.id === id ? updated : r));
+    } catch {
+      setRequests(prev => prev.map(r => r.id === id ? { ...r, status: "approved" as const } : r));
+    } finally { setResponding(null); }
+  }
+
+  async function denyRequest(id: string) {
+    setResponding(id);
+    try {
+      const updated = await superAdminAiAccessApi.denyRequest(id, "AI access not available for your current plan");
+      setRequests(prev => prev.map(r => r.id === id ? updated : r));
+    } catch {
+      setRequests(prev => prev.map(r => r.id === id ? { ...r, status: "denied" as const } : r));
+    } finally { setResponding(null); }
+  }
+
+  if (loading) return <div className="flex justify-center py-20"><Loader2 className="w-8 h-8 animate-spin text-indigo-500" /></div>;
+
+  const pending = requests.filter(r => r.status === "pending");
+  const approved = requests.filter(r => r.status === "approved");
+  const denied = requests.filter(r => r.status === "denied");
+
+  return (
+    <div className="space-y-6">
+      {isDemo && <DemoBanner />}
+
+      {/* Pending requests */}
+      <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-lg font-semibold text-gray-900">Pending Requests</h2>
+          <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-amber-100 text-amber-700 text-xs font-bold">{pending.length}</span>
+        </div>
+
+        {pending.length === 0 ? (
+          <p className="text-sm text-gray-400 py-8 text-center">No pending requests</p>
+        ) : (
+          <div className="space-y-3">
+            {pending.map(req => (
+              <div key={req.id} className="flex items-start justify-between p-4 border border-amber-200 bg-amber-50 rounded-lg">
+                <div className="flex-1">
+                  <div className="flex items-center gap-2 mb-1">
+                    <p className="font-semibold text-gray-900">{req.user_name}</p>
+                    <span className="text-xs px-2 py-1 bg-blue-100 text-blue-700 rounded-full font-medium">{req.feature.replace("-", " ")}</span>
+                  </div>
+                  <p className="text-sm text-gray-600 mb-2">{req.reason}</p>
+                  <p className="text-xs text-gray-500">{req.user_email} · {new Date(req.requested_at).toLocaleDateString()}</p>
+                </div>
+                <div className="flex gap-2 ml-4">
+                  <button type="button" onClick={() => approveRequest(req.id)} disabled={responding === req.id}
+                    className="flex items-center gap-1 px-3 py-1.5 bg-green-600 text-white text-xs font-medium rounded-lg hover:bg-green-700 disabled:opacity-60">
+                    {responding === req.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <ThumbsUp className="w-3 h-3" />} Approve
+                  </button>
+                  <button type="button" onClick={() => denyRequest(req.id)} disabled={responding === req.id}
+                    className="flex items-center gap-1 px-3 py-1.5 bg-red-600 text-white text-xs font-medium rounded-lg hover:bg-red-700 disabled:opacity-60">
+                    {responding === req.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <ThumbsDown className="w-3 h-3" />} Deny
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Approved & Denied */}
+      <div className="grid grid-cols-2 gap-6">
+        {/* Approved */}
+        <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
+          <h3 className="text-lg font-semibold text-gray-900 mb-3">Approved ({approved.length})</h3>
+          <div className="space-y-2">
+            {approved.map(req => (
+              <div key={req.id} className="flex items-center justify-between p-3 border border-green-200 bg-green-50 rounded-lg">
+                <div className="flex-1">
+                  <p className="text-sm font-medium text-gray-900">{req.user_name}</p>
+                  <p className="text-xs text-gray-500">{req.user_email}</p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <CheckCircle className="w-4 h-4 text-green-600 flex-shrink-0" />
+                  <button
+                    type="button"
+                    onClick={() => denyRequest(req.id)}
+                    disabled={responding === req.id}
+                    className="flex items-center gap-1 px-2 py-1 text-xs font-medium text-red-600 hover:bg-red-100 rounded transition-colors disabled:opacity-60"
+                  >
+                    {responding === req.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <X className="w-3 h-3" />} Revoke
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Denied */}
+        <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
+          <h3 className="text-lg font-semibold text-gray-900 mb-3">Denied ({denied.length})</h3>
+          <div className="space-y-2">
+            {denied.map(req => (
+              <div key={req.id} className="flex items-center justify-between p-3 border border-red-200 bg-red-50 rounded-lg">
+                <div className="flex-1">
+                  <p className="text-sm font-medium text-gray-900">{req.user_name}</p>
+                  <p className="text-xs text-gray-500">{req.user_email}</p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <X className="w-4 h-4 text-red-600 flex-shrink-0" />
+                  <button
+                    type="button"
+                    onClick={() => approveRequest(req.id)}
+                    disabled={responding === req.id}
+                    className="flex items-center gap-1 px-2 py-1 text-xs font-medium text-green-600 hover:bg-green-100 rounded transition-colors disabled:opacity-60"
+                  >
+                    {responding === req.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <ThumbsUp className="w-3 h-3" />} Approve
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Main Page ─────────────────────────────────────────────────────────────────
 
-type TabId = "users" | "access" | "frameworks" | "settings";
+type TabId = "users" | "access" | "frameworks" | "ai-access" | "settings";
 
 const TABS: { id: TabId; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
   { id: "users",      label: "Users",          icon: Users    },
   { id: "access",     label: "Access Control", icon: Shield   },
   { id: "frameworks", label: "Frameworks",     icon: BookOpen },
+  { id: "ai-access",  label: "AI Requests",    icon: Sparkles },
   { id: "settings",   label: "Settings",       icon: Settings },
 ];
 
@@ -776,6 +925,7 @@ export default function SuperAdminPage() {
               {activeTab === "users" && "Manage users and roles across all tenants"}
               {activeTab === "access" && "Control which modules each tenant can access"}
               {activeTab === "frameworks" && "Upload and manage compliance frameworks"}
+              {activeTab === "ai-access" && "Review and approve AI feature access requests"}
               {activeTab === "settings" && "Platform configuration and credentials"}
             </p>
           </div>
@@ -789,6 +939,7 @@ export default function SuperAdminPage() {
           {activeTab === "users"      && <UsersTab />}
           {activeTab === "access"     && <AccessControlTab />}
           {activeTab === "frameworks" && <FrameworksTab />}
+          {activeTab === "ai-access"  && <AiAccessTab />}
           {activeTab === "settings"   && <SettingsTab />}
         </main>
       </div>

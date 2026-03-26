@@ -43,3 +43,6 @@ class Tenant(Base):
     policies: Mapped[list["Policy"]] = relationship("Policy", back_populates="tenant")
     vendors: Mapped[list["Vendor"]] = relationship("Vendor", back_populates="tenant")
     assets: Mapped[list["Asset"]] = relationship("Asset", back_populates="tenant")
+    ai_access_requests: Mapped[list["AiAccessRequest"]] = relationship("AiAccessRequest", back_populates="tenant")
+    ai_usage_quotas: Mapped[list["AiUsageQuota"]] = relationship("AiUsageQuota", back_populates="tenant")
+    api_tokens: Mapped[list["ApiToken"]] = relationship("ApiToken", back_populates="tenant")

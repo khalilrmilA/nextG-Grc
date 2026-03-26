@@ -4,19 +4,20 @@ import { useSearchParams } from "react-router-dom";
 import {
   Settings, User, Bell, Shield, Key, Globe, Palette,
   Building2, Save, Eye, EyeOff, Check, AlertTriangle,
-  Lock, Crown, Trash2, Plus, ChevronDown, Loader2,
+  Lock, Crown, Trash2, Plus, ChevronDown, Loader2, Zap,
   Sun, Moon, Monitor, RotateCcw,
 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuthStore, PLAN_FEATURES, type PlanTier } from "../store/auth";
-import { notificationsApi } from "../api/endpoints";
+import { notificationsApi, authApi } from "../api/endpoints";
 import type { NotificationPreference, NotificationType, NotificationChannel } from "../types";
 import { useAppearance, appearanceStore, type ThemeMode, type Density, type AccentColor, type FontSize, type SidebarStyle } from "../store/appearance";
 import { useFramework } from "../context/FrameworkContext";
+import AiAccessRequestDialog from "../components/features/ai/AiAccessRequestDialog";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-type Tab = "profile" | "organization" | "framework" | "notifications" | "security" | "api" | "appearance" | "admin";
+type Tab = "profile" | "organization" | "framework" | "notifications" | "security" | "ai-access" | "api" | "appearance" | "admin";
 
 // ── Reusable primitives ───────────────────────────────────────────────────────
 
@@ -701,100 +702,275 @@ function SecurityTab() {
   );
 }
 
+// ── Tab: AI Access ────────────────────────────────────────────────────────────
+
+function AiAccessTab() {
+  const [showRequestDialog, setShowRequestDialog] = useState(false);
+
+  const { data: usage, isLoading: usageLoading } = useQuery({
+    queryKey: ["auth", "ai-usage"],
+    queryFn: authApi.getAiUsage,
+    refetchInterval: 30000, // Refresh every 30 seconds
+  });
+
+  const { data: status, isLoading: statusLoading } = useQuery({
+    queryKey: ["auth", "ai-access-status"],
+    queryFn: authApi.getAiAccessStatus,
+  });
+
+  const isLoading = usageLoading || statusLoading;
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h2 className="text-base font-semibold text-gray-900">AI Access & Usage</h2>
+        <p className="text-sm text-gray-500 mt-0.5">Manage your AI feature access and monitor token usage</p>
+      </div>
+
+      {/* Current Usage */}
+      {isLoading ? (
+        <div className="flex items-center justify-center py-12">
+          <Loader2 className="w-5 h-5 animate-spin text-gray-400" />
+        </div>
+      ) : usage ? (
+        <div className="bg-white border border-gray-200 rounded-xl p-5 space-y-6">
+          <div>
+            <h3 className="text-sm font-semibold text-gray-800 mb-4">Token Usage This Month</h3>
+            <div className="space-y-3">
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-sm font-medium text-gray-700">Tokens</span>
+                  <span className="text-sm font-medium text-gray-900">
+                    {usage.tokens_used} / {usage.tokens_limit}
+                  </span>
+                </div>
+                <div className="w-full bg-gray-200 rounded-full h-2">
+                  <div
+                    className={`h-2 rounded-full transition-all ${
+                      usage.percentage_used >= 100
+                        ? "bg-red-500"
+                        : usage.percentage_used >= 80
+                        ? "bg-orange-500"
+                        : "bg-blue-500"
+                    }`}
+                    style={{ width: `${Math.min(usage.percentage_used, 100)}%` }}
+                  />
+                </div>
+              </div>
+
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-sm font-medium text-gray-700">Requests</span>
+                  <span className="text-sm font-medium text-gray-900">
+                    {usage.requests_made} / {usage.requests_limit}
+                  </span>
+                </div>
+                <div className="w-full bg-gray-200 rounded-full h-2">
+                  <div
+                    className={`h-2 rounded-full transition-all ${
+                      (usage.requests_made / usage.requests_limit * 100) >= 100
+                        ? "bg-red-500"
+                        : (usage.requests_made / usage.requests_limit * 100) >= 80
+                        ? "bg-orange-500"
+                        : "bg-purple-500"
+                    }`}
+                    style={{ width: `${Math.min((usage.requests_made / usage.requests_limit * 100), 100)}%` }}
+                  />
+                </div>
+              </div>
+            </div>
+            <p className="text-xs text-gray-500 mt-4">
+              Resets on {new Date(usage.reset_at).toLocaleDateString()}
+            </p>
+          </div>
+        </div>
+      ) : null}
+
+      {/* Access Requests */}
+      {status && status.requests.length > 0 && (
+        <div className="bg-white border border-gray-200 rounded-xl p-5 space-y-4">
+          <h3 className="text-sm font-semibold text-gray-800">Access Requests</h3>
+          <div className="space-y-3">
+            {status.requests.map((req) => (
+              <div key={req.id} className="flex items-start justify-between p-3 bg-gray-50 rounded-lg border border-gray-100">
+                <div className="flex-1">
+                  <p className="text-sm font-medium text-gray-900 capitalize">{req.feature.replace("-", " ")}</p>
+                  <p className="text-xs text-gray-500 mt-1">{req.reason}</p>
+                </div>
+                <span
+                  className={`text-xs font-semibold px-2.5 py-1 rounded-full ${
+                    req.status === "approved"
+                      ? "bg-green-100 text-green-700"
+                      : req.status === "denied"
+                      ? "bg-red-100 text-red-700"
+                      : "bg-yellow-100 text-yellow-700"
+                  }`}
+                >
+                  {req.status.charAt(0).toUpperCase() + req.status.slice(1)}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Request Button */}
+      <div className="bg-gradient-to-br from-blue-50 to-indigo-50 border border-blue-200 rounded-xl p-5 space-y-3">
+        <div className="flex items-start gap-3">
+          <div className="w-10 h-10 rounded-lg bg-blue-100 flex items-center justify-center flex-shrink-0">
+            <Zap className="w-5 h-5 text-blue-600" />
+          </div>
+          <div className="flex-1">
+            <h3 className="text-sm font-semibold text-gray-900">Need More AI Access?</h3>
+            <p className="text-xs text-gray-600 mt-1">
+              Request access to additional AI features like document generation and intelligent analysis.
+            </p>
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={() => setShowRequestDialog(true)}
+          className="w-full py-2.5 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors"
+        >
+          Request AI Access
+        </button>
+      </div>
+
+      <AiAccessRequestDialog
+        isOpen={showRequestDialog}
+        onClose={() => setShowRequestDialog(false)}
+        feature="all"
+      />
+    </div>
+  );
+}
+
 // ── Tab: API & Integrations ───────────────────────────────────────────────────
 
 function ApiTab() {
-  const { t } = useTranslation();
-  const [keys, setKeys] = useState([
-    { id: "1", name: "Production API Key", prefix: "grc_prod_••••••••••••••••", created: "2025-01-10", last_used: "Today" },
-    { id: "2", name: "CI/CD Pipeline Key", prefix: "grc_cicd_••••••••••••••••", created: "2025-02-01", last_used: "3 days ago" },
-  ]);
+  const queryClient = useQueryClient();
   const [showNew, setShowNew] = useState(false);
   const [newName, setNewName] = useState("");
-  const [integrations, setIntegrations] = useState([
-    { name: "Jira",             desc: "Sync findings & risks as Jira issues",      connected: true  },
-    { name: "Slack",            desc: "Send alerts and reports to Slack channels",  connected: false },
-    { name: "Microsoft Teams",  desc: "GRC notifications in Teams",                connected: false },
-    { name: "GitHub Actions",   desc: "Trigger compliance checks in CI/CD",         connected: true  },
-    { name: "AWS Security Hub", desc: "Import findings from AWS",                   connected: false },
-    { name: "Splunk / SIEM",    desc: "Forward audit logs to SIEM",                 connected: false },
-  ]);
+  const [showToken, setShowToken] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
 
-  function createKey() {
-    if (!newName.trim()) return;
-    setKeys(prev => [...prev, {
-      id: String(Date.now()), name: newName.trim(),
-      prefix: `grc_${newName.toLowerCase().replace(/\s+/g, "_").slice(0, 8)}_••••••••••••••••`,
-      created: new Date().toISOString().split("T")[0], last_used: "Never",
-    }]);
-    setNewName("");
-    setShowNew(false);
-  }
+  const { data: tokens = [], isLoading } = useQuery({
+    queryKey: ["auth", "api-tokens"],
+    queryFn: authApi.listApiTokens,
+    retry: false,
+  });
 
-  function toggleIntegration(name: string) {
-    setIntegrations(prev => prev.map(i => i.name === name ? { ...i, connected: !i.connected } : i));
+  const generateMutation = useMutation({
+    mutationFn: () => authApi.generateApiToken(newName),
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["auth", "api-tokens"] });
+      setShowToken(data.token);
+      setNewName("");
+      setShowNew(false);
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (tokenName: string) => authApi.deleteApiToken(tokenName),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["auth", "api-tokens"] });
+    },
+  });
+
+  function handleCopyToken() {
+    if (showToken) {
+      navigator.clipboard.writeText(showToken);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }
   }
 
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-base font-semibold text-gray-900">{t("settings.api_integrations")}</h2>
-        <p className="text-sm text-gray-500 mt-0.5">{t("settings.api_keys_title")}</p>
+        <h2 className="text-base font-semibold text-gray-900">API Tokens</h2>
+        <p className="text-sm text-gray-500 mt-0.5">Generate API tokens for programmatic access to docs generation and AI features</p>
       </div>
+
+      {/* Token Display Modal */}
+      {showToken && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-xl max-w-md w-full p-6">
+            <h3 className="text-lg font-semibold text-gray-900 mb-3">Your API Token</h3>
+            <p className="text-sm text-gray-600 mb-4">Save this token securely. You won't be able to see it again.</p>
+            <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 mb-4 font-mono text-xs break-all text-gray-700">
+              {showToken}
+            </div>
+            <div className="flex gap-2">
+              <button type="button" onClick={handleCopyToken}
+                className="flex-1 px-3 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700">
+                {copied ? "✓ Copied" : "Copy Token"}
+              </button>
+              <button type="button" onClick={() => setShowToken(null)}
+                className="flex-1 px-3 py-2 border border-gray-200 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-50">
+                Done
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="bg-white border border-gray-200 rounded-xl p-5">
         <div className="flex items-center justify-between mb-4">
-          <p className="text-sm font-semibold text-gray-800">{t("settings.api_keys")}</p>
+          <p className="text-sm font-semibold text-gray-800">Active Tokens</p>
           <button type="button" onClick={() => setShowNew(v => !v)}
             className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 text-white text-xs font-medium rounded-lg hover:bg-blue-700 transition-colors">
-            <Key className="w-3 h-3" /> {t("settings.generate_key_btn")}
+            <Plus className="w-3 h-3" /> Generate Token
           </button>
         </div>
+
         {showNew && (
           <div className="mb-4 flex gap-2">
-            <input value={newName} onChange={e => setNewName(e.target.value)} placeholder="Key name (e.g. My App)"
+            <input value={newName} onChange={e => setNewName(e.target.value)} placeholder="Token name (e.g. CI/CD Pipeline)"
               className="flex-1 px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-            <button type="button" onClick={createKey}
-              className="px-3 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700">{t("common.create")}</button>
+            <button type="button" onClick={() => generateMutation.mutate()} disabled={!newName.trim() || generateMutation.isPending}
+              className="px-3 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-60 flex items-center gap-1">
+              {generateMutation.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : <Plus className="w-3 h-3" />}
+              Create
+            </button>
             <button type="button" onClick={() => setShowNew(false)}
-              className="px-3 py-2 text-gray-500 text-sm rounded-lg hover:bg-gray-100">{t("common.cancel")}</button>
+              className="px-3 py-2 text-gray-500 text-sm rounded-lg hover:bg-gray-100">Cancel</button>
           </div>
         )}
-        <div className="space-y-3">
-          {keys.map(k => (
-            <div key={k.id} className="flex items-center justify-between py-2 border-b border-gray-100 last:border-0">
-              <div>
-                <p className="text-sm font-medium text-gray-800">{k.name}</p>
-                <p className="text-xs font-mono text-gray-400 mt-0.5">{k.prefix}</p>
-                <p className="text-xs text-gray-400 mt-0.5">Created {k.created} · Last used {k.last_used}</p>
+
+        {isLoading ? (
+          <div className="flex justify-center py-8">
+            <Loader2 className="w-5 h-5 animate-spin text-blue-500" />
+          </div>
+        ) : tokens.length === 0 ? (
+          <p className="text-sm text-gray-400 py-4">No tokens yet. Create one to get started.</p>
+        ) : (
+          <div className="space-y-3">
+            {tokens.map((token) => (
+              <div key={token.token_name} className="flex items-center justify-between py-2 border-b border-gray-100 last:border-0">
+                <div>
+                  <p className="text-sm font-medium text-gray-800">{token.token_name}</p>
+                  <p className="text-xs text-gray-400 mt-0.5">
+                    Created {new Date(token.created_at).toLocaleDateString()}
+                    {token.last_used && ` · Last used ${new Date(token.last_used).toLocaleDateString()}`}
+                  </p>
+                </div>
+                <button type="button" onClick={() => deleteMutation.mutate(token.token_name)} disabled={deleteMutation.isPending}
+                  className="text-xs text-red-500 hover:text-red-700 font-medium disabled:opacity-50">
+                  {deleteMutation.isPending ? "Revoking..." : "Revoke"}
+                </button>
               </div>
-              <button type="button" onClick={() => setKeys(prev => prev.filter(x => x.id !== k.id))}
-                className="text-xs text-red-500 hover:text-red-700 font-medium">{t("settings.revoke")}</button>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        )}
       </div>
 
-      <div className="bg-white border border-gray-200 rounded-xl p-5">
-        <p className="text-sm font-semibold text-gray-800 mb-4">{t("settings.integrations")}</p>
-        <div className="grid grid-cols-2 gap-3">
-          {integrations.map(intg => (
-            <div key={intg.name} className="flex items-start justify-between p-3 border border-gray-200 rounded-lg">
-              <div>
-                <p className="text-sm font-medium text-gray-800">{intg.name}</p>
-                <p className="text-xs text-gray-400 mt-0.5">{intg.desc}</p>
-              </div>
-              <button type="button" onClick={() => toggleIntegration(intg.name)}
-                className={`ml-3 flex-shrink-0 px-2.5 py-1 text-xs font-medium rounded-lg border transition-colors ${
-                  intg.connected
-                    ? "bg-green-50 text-green-700 border-green-200 hover:bg-red-50 hover:text-red-600 hover:border-red-200"
-                    : "bg-white text-gray-600 border-gray-200 hover:bg-blue-50 hover:text-blue-600 hover:border-blue-200"
-                }`}>
-                {intg.connected ? t("settings.connected") : t("settings.connect")}
-              </button>
-            </div>
-          ))}
-        </div>
+      <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
+        <p className="text-sm font-semibold text-blue-900 mb-2">Using API Tokens</p>
+        <code className="block text-xs text-blue-800 bg-white p-3 rounded border border-blue-100 mb-3 font-mono">
+          curl -H "Authorization: Bearer YOUR_TOKEN" https://api.grc.local/api/v1/ai/generate-docs
+        </code>
+        <p className="text-xs text-blue-700">Use tokens for: Document generation, AI features, and programmatic access.</p>
       </div>
     </div>
   );
@@ -1252,14 +1428,14 @@ export default function SettingsPage() {
   const [searchParams] = useSearchParams();
   const [activeTab, setActiveTab] = useState<Tab>(() => {
     const t = searchParams.get("tab");
-    const valid: Tab[] = ["profile","organization","framework","notifications","security","api","appearance","admin"];
+    const valid: Tab[] = ["profile","organization","framework","notifications","security","ai-access","api","appearance","admin"];
     return valid.includes(t as Tab) ? (t as Tab) : "profile";
   });
 
   // Sync if URL changes
   useEffect(() => {
     const t = searchParams.get("tab");
-    const valid: Tab[] = ["profile","organization","framework","notifications","security","api","appearance","admin"];
+    const valid: Tab[] = ["profile","organization","framework","notifications","security","ai-access","api","appearance","admin"];
     if (t && valid.includes(t as Tab)) setActiveTab(t as Tab);
   }, [searchParams]);
 
@@ -1269,6 +1445,7 @@ export default function SettingsPage() {
     { id: "framework",     icon: Shield,    label: t("settings.framework")          },
     { id: "notifications", icon: Bell,      label: t("settings.notifications")      },
     { id: "security",      icon: Shield,    label: t("settings.security")           },
+    { id: "ai-access",     icon: Zap,       label: "AI Access"                      },
     { id: "api",           icon: Key,       label: t("settings.api_integrations")   },
     { id: "appearance",    icon: Palette,   label: t("settings.appearance")         },
     { id: "admin",         icon: Crown,     label: t("settings.admin_panel"), superAdminOnly: true },
@@ -1291,6 +1468,7 @@ export default function SettingsPage() {
     if (tab === "framework")     return <FrameworkTab />;
     if (tab === "notifications") return <NotificationsTab />;
     if (tab === "security")      return <SecurityTab />;
+    if (tab === "ai-access")     return <AiAccessTab />;
     if (tab === "api")           return <ApiTab />;
     return <AppearanceTab />;
   }

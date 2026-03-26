@@ -42,6 +42,9 @@ class User(Base):
 
     # Relationships
     tenant: Mapped["Tenant"] = relationship("Tenant", back_populates="users")
+    ai_access_requests: Mapped[list["AiAccessRequest"]] = relationship("AiAccessRequest", back_populates="user")
+    ai_usage_quotas: Mapped[list["AiUsageQuota"]] = relationship("AiUsageQuota", back_populates="user")
+    api_tokens: Mapped[list["ApiToken"]] = relationship("ApiToken", back_populates="user")
 
     @property
     def full_name(self) -> str:

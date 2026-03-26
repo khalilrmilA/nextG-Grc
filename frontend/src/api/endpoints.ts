@@ -28,6 +28,9 @@ import type {
   NotificationListResponse,
   NotificationPreference,
   DocumentChecklistResponse,
+  AiAccessRequest,
+  AiUsageQuota,
+  AiTokenUsage,
 } from "@/types";
 
 const API_BASE = import.meta.env.VITE_API_URL ?? "http://localhost:8000/api/v1";
@@ -77,6 +80,24 @@ export const authApi = {
 
   updateSelectedFrameworks: (primary_framework_id: string, selected_framework_ids: string[]) =>
     apiClient.patch<UserProfile>("/auth/me/frameworks", { primary_framework_id, selected_framework_ids }).then((r) => r.data),
+
+  generateApiToken: (name: string) =>
+    apiClient.post<{ token: string; token_name: string; created_at: string }>("/auth/api-tokens", { name }).then((r) => r.data),
+
+  listApiTokens: () =>
+    apiClient.get<Array<{ token_name: string; created_at: string; last_used?: string }>>("/auth/api-tokens").then((r) => r.data),
+
+  deleteApiToken: (tokenName: string) =>
+    apiClient.delete(`/auth/api-tokens/${tokenName}`),
+
+  requestAiAccess: (feature: "document-generation" | "ai-analysis" | "all", reason: string) =>
+    apiClient.post<AiAccessRequest>("/auth/ai-access/request", { feature, reason }).then((r) => r.data),
+
+  getAiAccessStatus: () =>
+    apiClient.get<{ requests: AiAccessRequest[]; quotas: AiUsageQuota[] }>("/auth/ai-access/status").then((r) => r.data),
+
+  getAiUsage: () =>
+    apiClient.get<AiTokenUsage>("/auth/ai-usage").then((r) => r.data),
 };
 
 // ─── Frameworks ──────────────────────────────

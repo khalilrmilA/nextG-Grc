@@ -16,6 +16,8 @@ export interface AuthUser {
   selected_framework_ids?: string[];
   org_size?: string | null;
   primary_assessment_id?: string | null;
+  // Access control — modules accessible to this tenant
+  accessible_modules?: string[];
 }
 
 export const PLAN_FEATURES: Record<PlanTier, {

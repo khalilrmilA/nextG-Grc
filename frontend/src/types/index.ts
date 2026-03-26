@@ -457,3 +457,37 @@ export interface Subscription extends BaseEntity {
   current_period_end?: string;
   limits: Record<string, boolean | number>;
 }
+
+// ─── AI Access & Usage ────────────────────────
+
+export interface AiAccessRequest extends BaseEntity {
+  tenant_id: string;
+  user_id: string;
+  user_email: string;
+  user_name: string;
+  feature: "document-generation" | "ai-analysis" | "all";
+  reason: string;
+  status: "pending" | "approved" | "denied";
+  admin_notes?: string;
+  requested_at: string;
+  responded_at?: string;
+}
+
+export interface AiUsageQuota extends BaseEntity {
+  tenant_id: string;
+  user_id: string;
+  feature: "document-generation" | "ai-analysis";
+  monthly_limit: number;
+  monthly_used: number;
+  reset_date: string;
+  is_approved: boolean;
+}
+
+export interface AiTokenUsage {
+  tokens_used: number;
+  tokens_limit: number;
+  requests_made: number;
+  requests_limit: number;
+  reset_at: string;
+  percentage_used: number;
+}

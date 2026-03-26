@@ -1,4 +1,5 @@
-import { Routes, Route, Navigate } from "react-router-dom";
+import { Routes, Route, Navigate, Link } from "react-router-dom";
+import { Lock } from "lucide-react";
 import { useAuthStore } from "./store/auth";
 import Layout from "./components/layout/Layout";
 import AuditorLayout from "./components/layout/AuditorLayout";
@@ -26,13 +27,30 @@ import PolicyGeneratorPage from "./pages/PolicyGeneratorPage";
 import SuperAdminPage from "./pages/SuperAdminPage";
 import CompanyAdminPage from "./pages/CompanyAdminPage";
 
-function PrivateRoute({ children }: { readonly children: React.ReactNode }) {
+function PrivateRoute({ children, requiredModule }: { readonly children: React.ReactNode; requiredModule?: string }) {
   const user = useAuthStore((u) => u);
   if (!user) return <Navigate to="/login" replace />;
   // Auditors have their own layout — block them from main app
   if (user.role === "auditor") return <Navigate to="/auditor/portal" replace />;
   // Super admin has their own page
   if (user.role === "super_admin") return <Navigate to="/super-admin" replace />;
+  // Check module access if required
+  if (requiredModule && user.accessible_modules && !user.accessible_modules.includes(requiredModule)) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-screen bg-gray-50 p-4">
+        <div className="text-center max-w-md">
+          <div className="w-16 h-16 bg-amber-100 rounded-full flex items-center justify-center mx-auto mb-4">
+            <Lock className="w-8 h-8 text-amber-600" />
+          </div>
+          <h1 className="text-2xl font-bold text-gray-900 mb-2">Access Restricted</h1>
+          <p className="text-gray-600 mb-6">This module is not enabled for your organization. Contact your administrator to request access.</p>
+          <Link to="/dashboard" className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
+            Return to Dashboard
+          </Link>
+        </div>
+      </div>
+    );
+  }
   return <>{children}</>;
 }
 
@@ -85,17 +103,17 @@ export default function App() {
       >
         <Route index element={<Navigate to="/dashboard" replace />} />
         <Route path="dashboard" element={<DashboardPage />} />
-        <Route path="risks" element={<RisksPage />} />
-        <Route path="compliance" element={<CompliancePage />} />
-        <Route path="compliance/:assessmentId" element={<AssessmentDetailPage />} />
-        <Route path="compliance/assessments/:assessmentId/remediation-plan" element={<RemediationPlannerPage />} />
-        <Route path="compliance/:assessmentId/traceability" element={<TraceabilityPage />} />
-        <Route path="frameworks" element={<FrameworksPage />} />
-        <Route path="frameworks/custom/new" element={<CustomFrameworkPage />} />
-        <Route path="audits" element={<AuditsPage />} />
-        <Route path="policies" element={<PoliciesPage />} />
-        <Route path="policy-generator" element={<PolicyGeneratorPage />} />
-        <Route path="vendors" element={<VendorsPage />} />
+        <Route path="risks" element={<PrivateRoute requiredModule="risks"><RisksPage /></PrivateRoute>} />
+        <Route path="compliance" element={<PrivateRoute requiredModule="compliance"><CompliancePage /></PrivateRoute>} />
+        <Route path="compliance/:assessmentId" element={<PrivateRoute requiredModule="compliance"><AssessmentDetailPage /></PrivateRoute>} />
+        <Route path="compliance/assessments/:assessmentId/remediation-plan" element={<PrivateRoute requiredModule="compliance"><RemediationPlannerPage /></PrivateRoute>} />
+        <Route path="compliance/:assessmentId/traceability" element={<PrivateRoute requiredModule="compliance"><TraceabilityPage /></PrivateRoute>} />
+        <Route path="frameworks" element={<PrivateRoute requiredModule="frameworks"><FrameworksPage /></PrivateRoute>} />
+        <Route path="frameworks/custom/new" element={<PrivateRoute requiredModule="frameworks"><CustomFrameworkPage /></PrivateRoute>} />
+        <Route path="audits" element={<PrivateRoute requiredModule="audits"><AuditsPage /></PrivateRoute>} />
+        <Route path="policies" element={<PrivateRoute requiredModule="policies"><PoliciesPage /></PrivateRoute>} />
+        <Route path="policy-generator" element={<PrivateRoute requiredModule="policy-generator"><PolicyGeneratorPage /></PrivateRoute>} />
+        <Route path="vendors" element={<PrivateRoute requiredModule="vendors"><VendorsPage /></PrivateRoute>} />
         <Route path="cheat" element={<CheatSheetPage />} />
         <Route path="settings" element={<SettingsPage />} />
         <Route path="help" element={<HelpPage />} />

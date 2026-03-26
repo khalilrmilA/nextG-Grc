@@ -1,4 +1,5 @@
 import { apiClient } from "./client";
+import type { AiAccessRequest } from "@/types";
 
 export interface SuperAdminUser {
   id: string;
@@ -77,5 +78,27 @@ export const superAdminAccessApi = {
   updateTenantAccess: (tenant_id: string, enabled_modules: string[]) =>
     apiClient
       .patch(`/admin/tenant-access/${tenant_id}`, { enabled_modules })
+      .then((r) => r.data),
+};
+
+export const superAdminAiAccessApi = {
+  listAiRequests: (status?: "pending" | "approved" | "denied") =>
+    apiClient
+      .get<AiAccessRequest[]>("/admin/ai-access/requests", { params: status ? { status } : {} })
+      .then((r) => r.data),
+
+  approveRequest: (requestId: string, adminNotes?: string) =>
+    apiClient
+      .patch<AiAccessRequest>(`/admin/ai-access/requests/${requestId}/approve`, { admin_notes: adminNotes })
+      .then((r) => r.data),
+
+  denyRequest: (requestId: string, reason: string) =>
+    apiClient
+      .patch<AiAccessRequest>(`/admin/ai-access/requests/${requestId}/deny`, { admin_notes: reason })
+      .then((r) => r.data),
+
+  setUserQuota: (userId: string, feature: string, monthlyLimit: number) =>
+    apiClient
+      .post(`/admin/ai-usage/quota`, { user_id: userId, feature, monthly_limit: monthlyLimit })
       .then((r) => r.data),
 };
