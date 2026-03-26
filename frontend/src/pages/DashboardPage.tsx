@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useTranslation } from "react-i18next";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, Link } from "react-router-dom";
 import {
   XAxis, YAxis, CartesianGrid,
@@ -12,7 +12,7 @@ import {
   Sparkles, Upload, CheckCircle2, XCircle,
   AlertCircle, LayoutDashboard, BookOpen, X, Loader2,
 } from "lucide-react";
-import { dashboardApi, frameworksApi, authApi } from "../api/endpoints";
+import { dashboardApi, frameworksApi, authApi, complianceApi } from "../api/endpoints";
 import { useAuthStore } from "../store/auth";
 import type { DashboardSummary, Framework } from "../types";
 import ComplianceJourneyMap from "../components/features/compliance/ComplianceJourneyMap";
@@ -548,6 +548,7 @@ function FrameworkManagementModal({
   primaryFrameworkId: string | null;
   onFrameworkAdded: () => void;
 }) {
+  const queryClient = useQueryClient();
   const [allFrameworks, setAllFrameworks] = useState<Framework[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -584,6 +585,26 @@ function FrameworkManagementModal({
       const primaryId = primaryFrameworkId || selectedId;
 
       await authApi.updateSelectedFrameworks(primaryId, updatedFrameworks);
+
+      // Auto-create an assessment for the new framework if it doesn't exist
+      const selectedFramework = allFrameworks.find((fw) => fw.id === selectedId);
+      if (selectedFramework && !currentFrameworkIds.includes(selectedId)) {
+        try {
+          await complianceApi.createAssessment({
+            framework_id: selectedId,
+            name: `${selectedFramework.short_name} Assessment`,
+            description: `Compliance assessment for ${selectedFramework.name}`,
+            scope_description: `Assessment scope for ${selectedFramework.short_name} framework`,
+          });
+        } catch (err) {
+          console.error("Failed to auto-create assessment:", err);
+          // Don't fail the whole operation if assessment creation fails
+        }
+      }
+
+      // Invalidate dashboard queries to refresh data
+      queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+      queryClient.invalidateQueries({ queryKey: ["compliance"] });
 
       // Trigger callback to refresh
       onFrameworkAdded();
@@ -753,8 +774,6 @@ function OverviewDashboard({
         primaryFrameworkId={primaryFrameworkId}
         onFrameworkAdded={() => {
           setShowFrameworkModal(false);
-          // Refresh page to see updated frameworks
-          window.location.reload();
         }}
       />
 

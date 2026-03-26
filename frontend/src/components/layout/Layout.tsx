@@ -348,7 +348,6 @@ export default function Layout() {
   const isSuperAdmin = user?.role === "super_admin";
   // Everyone except auditors gets full access to all modules
   const isUser      = user?.role !== "auditor" && user?.role !== "super_admin";
-  const accessible  = null; // no module gating — all roles see everything
 
   const badge = (isSuperAdmin || isAdmin) ? planBadgeStyle("enterprise") : planBadgeStyle(plan);
   const { Icon: RoleIcon, color: roleColor } = roleIcon(user?.role ?? "viewer");
@@ -446,7 +445,7 @@ export default function Layout() {
               </p>
               <div className="space-y-0.5">
                 {group.items.map(({ to, icon: Icon, label, module }) => {
-                  const locked = accessible !== null && !accessible.includes(module);
+                  const locked = false; // accessible is always null — no module gating
                   if (locked) {
                     return (
                       <button

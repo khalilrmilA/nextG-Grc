@@ -239,10 +239,6 @@ function ControlPickerModal({
             ) : (
               <div className="flex-1 overflow-y-auto">
                 {frameworks.map(fw => {
-                  const ctrlCount = selectedControls.filter(c => {
-                    // can't easily know which fw a control belongs to without storing it — just show total
-                    return true;
-                  });
                   const isActive = activeFw?.id === fw.id;
                   return (
                     <button

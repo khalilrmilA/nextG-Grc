@@ -224,6 +224,8 @@ export interface Policy extends BaseEntity {
   linked_controls: string[];
   review_frequency_months: number;
   next_review_date?: string;
+  policy_type?: string;
+  version?: number | string;
 }
 
 // ─── Vendor ──────────────────────────────────

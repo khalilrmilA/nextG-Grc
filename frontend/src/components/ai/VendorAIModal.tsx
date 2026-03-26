@@ -113,7 +113,7 @@ export default function VendorAIModal({ vendorName, vendorIndustry, vendorServic
     aiApi.streamVendorAnalysis(
       vendorName,
       vendorIndustry || "Unknown",
-      vendorServices,
+      vendorServices || "",
       responses,
       (token) => setOutput(prev => prev + token),
       () => { setLoading(false); setDone(true); },

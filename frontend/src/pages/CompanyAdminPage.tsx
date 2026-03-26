@@ -156,9 +156,19 @@ export default function CompanyAdminPage() {
 
   useEffect(() => {
     import("../api/endpoints").then(({ usersApi: api }) => {
-      api.list()
-        .then((data: Auditor[]) => {
-          setAuditors(data.filter((u: Auditor) => u.role === "auditor" || u.role === "AUDITOR"));
+      api.listUsers()
+        .then((data: { id: string; name: string; email: string; role: string }[]) => {
+          const auditors = data
+            .filter((u) => u.role === "auditor" || u.role === "AUDITOR")
+            .map((u) => ({
+              id: u.id,
+              email: u.email,
+              first_name: u.name.split(" ")[0],
+              last_name: u.name.split(" ").slice(1).join(" ") || "-",
+              role: u.role,
+              is_active: true,
+            }));
+          setAuditors(auditors);
           setLoading(false);
         })
         .catch(() => {
