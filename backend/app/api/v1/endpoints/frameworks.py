@@ -10,6 +10,7 @@ from app.models.framework import Framework, FrameworkControl, ControlCategory, C
 from app.api.v1.dependencies import get_current_user, get_tenant_id, get_current_user_optional, get_tenant_id_optional
 from app.api.v1.dependencies.auth import require_roles
 from app.models.user import User, UserRole
+from app.workers.tasks.notifications import notify_framework_new, notify_framework_updated
 
 _VALID_CATEGORIES = {c.name for c in ControlCategory}
 
@@ -214,6 +215,10 @@ async def create_framework(
     await db.flush()
     resp = FrameworkResponse.model_validate(fw)
     resp.control_count = 0
+
+    # Send notification to all users
+    notify_framework_new.delay(fw.id, body.name)
+
     return resp
 
 
@@ -282,6 +287,17 @@ async def update_control(
         control.category = body.category
     if body.tags is not None:
         control.tags = body.tags
+
+    await db.flush()
+
+    # Get framework name for notification
+    fw_result = await db.execute(
+        select(Framework).where(Framework.id == framework_id)
+    )
+    fw = fw_result.scalar_one_or_none()
+    if fw:
+        # Send notification to all users that framework was updated
+        notify_framework_updated.delay(fw.id, fw.name)
 
     return ControlResponse.model_validate(control)
 

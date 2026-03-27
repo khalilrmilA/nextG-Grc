@@ -11,6 +11,7 @@ from app.core.database import get_db
 from app.api.v1.dependencies import get_current_user
 from app.models.user import User
 from app.models.ai_access import AiAccessRequest, AiUsageQuota, ApiToken
+from app.workers.tasks.notifications import notify_ai_access_request
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/auth/ai-access", tags=["AI Access"])
@@ -154,6 +155,13 @@ async def request_ai_access(
         await db.refresh(ai_request)
 
         logger.info(f"AI access request created: {request_id} by {current_user.email}")
+
+        # Send notification to admins
+        notify_ai_access_request.delay(
+            request_id, current_user.full_name, current_user.email,
+            body.feature, body.reason
+        )
+
         return ai_request
     except Exception as e:
         logger.error(f"Failed to create AI access request: {str(e)}")

@@ -24,6 +24,12 @@ class NotificationType(str, enum.Enum):
     # Compliance events
     COMPLIANCE_SCORE_DROP = "compliance_score_drop"
     COMPLIANCE_ANALYSIS_DONE = "compliance_analysis_done"
+    # Framework events
+    FRAMEWORK_NEW = "framework_new"
+    FRAMEWORK_UPDATED = "framework_updated"
+    # AI Access events
+    AI_ACCESS_APPROVED = "ai_access_approved"
+    AI_ACCESS_REQUEST = "ai_access_request"
     # General
     WEEKLY_DIGEST = "weekly_digest"
     SYSTEM = "system"

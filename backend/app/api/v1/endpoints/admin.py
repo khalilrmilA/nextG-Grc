@@ -15,6 +15,12 @@ from app.models.tenant import Tenant
 from app.models.subscription import Subscription
 from app.models.ai_access import AiAccessRequest, AiUsageQuota
 from app.api.v1.dependencies.auth import require_roles
+from app.workers.tasks.notifications import (
+    notify_ai_access_approved,
+    notify_ai_access_request,
+    notify_framework_new,
+    notify_framework_updated,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -290,6 +296,10 @@ async def approve_ai_request(
         raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
 
     logger.info(f"AI access request approved: {request_id}, new status: {request.status}")
+
+    # Send notification to user
+    notify_ai_access_approved.delay(request.user_id, request.user_email)
+
     return {
         "id": request.id,
         "user_email": request.user_email,

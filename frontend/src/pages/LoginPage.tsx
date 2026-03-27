@@ -49,6 +49,7 @@ export default function LoginPage() {
         if (current) {
           authSession.login({
             ...current,
+            role: (profile.role as UserRole),
             tenant_id: profile.tenant_id,
             primary_framework_id: profile.primary_framework_id,
             selected_framework_ids: profile.selected_framework_ids,

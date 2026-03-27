@@ -404,3 +404,182 @@ def send_weekly_digest():
             await db.commit()
             logger.info("Weekly digest sent to %d admins/CISOs", len(admins))
     _run(_inner())
+
+
+# ── Framework notification tasks ──────────────────────────────────────────────────
+
+@shared_task(bind=True, max_retries=3, default_retry_delay=60)
+def notify_framework_new(self, framework_id: str, framework_name: str):
+    """Notify all users when a new framework is added."""
+    async def _inner():
+        async with _SessionLocal() as db:
+            # Get all active users
+            result = await db.execute(
+                select(User).where(User.is_active == True)
+            )
+            users = result.scalars().all()
+
+            title = f"New framework available: {framework_name}"
+            message = f"A new compliance framework '{framework_name}' has been added to the platform."
+
+            for user in users:
+                ntype = NotificationType.FRAMEWORK_NEW
+                if await _user_wants(db, user.id, ntype, NotificationChannel.IN_APP):
+                    await _create_notification(
+                        db, user_id=user.id, tenant_id=user.tenant_id,
+                        ntype=ntype, title=title, message=message,
+                        data={"framework_id": framework_id, "link": "/frameworks"},
+                    )
+
+                if await _user_wants(db, user.id, ntype, NotificationChannel.EMAIL):
+                    await email_service.send_notification_email(
+                        to_email=user.email,
+                        subject=title,
+                        body=message,
+                        action_url=f"{settings.FRONTEND_URL}/frameworks",
+                    )
+
+            await db.commit()
+            logger.info("Framework new notification sent to %d users", len(users))
+    try:
+        _run(_inner())
+    except Exception as exc:
+        logger.error("notify_framework_new failed: %s", exc)
+        raise self.retry(exc=exc)
+
+
+@shared_task(bind=True, max_retries=3, default_retry_delay=60)
+def notify_framework_updated(self, framework_id: str, framework_name: str):
+    """Notify all users when a framework is updated."""
+    async def _inner():
+        async with _SessionLocal() as db:
+            # Get all active users
+            result = await db.execute(
+                select(User).where(User.is_active == True)
+            )
+            users = result.scalars().all()
+
+            title = f"Framework updated: {framework_name}"
+            message = f"The compliance framework '{framework_name}' has been updated with new controls."
+
+            for user in users:
+                ntype = NotificationType.FRAMEWORK_UPDATED
+                if await _user_wants(db, user.id, ntype, NotificationChannel.IN_APP):
+                    await _create_notification(
+                        db, user_id=user.id, tenant_id=user.tenant_id,
+                        ntype=ntype, title=title, message=message,
+                        data={"framework_id": framework_id, "link": "/frameworks"},
+                    )
+
+                if await _user_wants(db, user.id, ntype, NotificationChannel.EMAIL):
+                    await email_service.send_notification_email(
+                        to_email=user.email,
+                        subject=title,
+                        body=message,
+                        action_url=f"{settings.FRONTEND_URL}/frameworks",
+                    )
+
+            await db.commit()
+            logger.info("Framework update notification sent to %d users", len(users))
+    try:
+        _run(_inner())
+    except Exception as exc:
+        logger.error("notify_framework_updated failed: %s", exc)
+        raise self.retry(exc=exc)
+
+
+# ── AI Access notification tasks ──────────────────────────────────────────────────
+
+@shared_task(bind=True, max_retries=3, default_retry_delay=60)
+def notify_ai_access_approved(self, user_id: str, user_email: str):
+    """Notify user when their AI access request is approved."""
+    async def _inner():
+        async with _SessionLocal() as db:
+            user = await db.get(User, user_id)
+            if not user:
+                return
+
+            title = "AI Access Approved"
+            message = "Your AI access request has been approved! You can now use all AI features with your monthly token limit."
+
+            ntype = NotificationType.AI_ACCESS_APPROVED
+            if await _user_wants(db, user.id, ntype, NotificationChannel.IN_APP):
+                await _create_notification(
+                    db, user_id=user.id, tenant_id=user.tenant_id,
+                    ntype=ntype, title=title, message=message,
+                    data={"link": "/settings?tab=ai-access"},
+                )
+
+            if await _user_wants(db, user.id, ntype, NotificationChannel.EMAIL):
+                await email_service.send_notification_email(
+                    to_email=user_email,
+                    subject=title,
+                    body=message,
+                    action_url=f"{settings.FRONTEND_URL}/settings?tab=ai-access",
+                )
+
+            await db.commit()
+            logger.info("AI access approved notification sent to %s", user_email)
+    try:
+        _run(_inner())
+    except Exception as exc:
+        logger.error("notify_ai_access_approved failed: %s", exc)
+        raise self.retry(exc=exc)
+
+
+@shared_task(bind=True, max_retries=3, default_retry_delay=60)
+def notify_ai_access_request(self, request_id: str, user_name: str, user_email: str, feature: str, reason: str):
+    """Notify admins when a user requests AI access."""
+    async def _inner():
+        async with _SessionLocal() as db:
+            # Get the tenant ID from the request
+            from app.models.ai_access import AiAccessRequest
+            ai_request = await db.get(AiAccessRequest, request_id)
+            if not ai_request:
+                return
+
+            # Get all admins in the tenant
+            result = await db.execute(
+                select(User).where(
+                    and_(
+                        User.tenant_id == ai_request.tenant_id,
+                        User.is_active == True,
+                        User.role.in_(["tenant_admin", "super_admin"]),
+                    )
+                )
+            )
+            admins = result.scalars().all()
+
+            title = f"AI Access Request from {user_name}"
+            message = f"{user_name} ({user_email}) has requested access to {feature.replace('-', ' ')} AI features."
+
+            for admin in admins:
+                ntype = NotificationType.AI_ACCESS_REQUEST
+                if await _user_wants(db, admin.id, ntype, NotificationChannel.IN_APP):
+                    await _create_notification(
+                        db, user_id=admin.id, tenant_id=admin.tenant_id,
+                        ntype=ntype, title=title, message=message,
+                        data={
+                            "request_id": request_id,
+                            "user_email": user_email,
+                            "feature": feature,
+                            "reason": reason,
+                            "link": "/super-admin?tab=ai-access",
+                        },
+                    )
+
+                if await _user_wants(db, admin.id, ntype, NotificationChannel.EMAIL):
+                    await email_service.send_notification_email(
+                        to_email=admin.email,
+                        subject=title,
+                        body=f"{message}\n\nReason: {reason}",
+                        action_url=f"{settings.FRONTEND_URL}/super-admin?tab=ai-access",
+                    )
+
+            await db.commit()
+            logger.info("AI access request notification sent to %d admins", len(admins))
+    try:
+        _run(_inner())
+    except Exception as exc:
+        logger.error("notify_ai_access_request failed: %s", exc)
+        raise self.retry(exc=exc)
