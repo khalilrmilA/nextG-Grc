@@ -98,6 +98,9 @@ export const authApi = {
 
   getAiUsage: () =>
     apiClient.get<AiTokenUsage>("/auth/ai-usage").then((r) => r.data),
+
+  checkAiAccess: () =>
+    apiClient.get<{ has_access: boolean; tokens_used: number; tokens_limit: number; requests_used: number; requests_limit: number; percentage_used: number; reset_at: string | null }>("/ai/access-check").then((r) => r.data),
 };
 
 // ─── Frameworks ──────────────────────────────

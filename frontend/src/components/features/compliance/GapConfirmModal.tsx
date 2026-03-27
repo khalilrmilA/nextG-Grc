@@ -1,6 +1,8 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { X, Sparkles, Loader2, CheckCircle, User, Calendar, MessageSquare } from "lucide-react";
 import { aiApi, complianceApi } from "@/api/endpoints";
+import AiGate from "@/components/features/ai/AiGate";
+import { useAiTokenRefresh } from "@/hooks/useAiTokenRefresh";
 import type { GapDetail } from "@/types";
 
 interface Props {
@@ -18,6 +20,7 @@ const SEVERITY_COLOR: Record<string, string> = {
 };
 
 export default function GapConfirmModal({ gap, assessmentId, onClose, onAccepted }: Props) {
+  const { refreshAiTokens } = useAiTokenRefresh();
   const [aiText, setAiText] = useState("");
   const [aiDone, setAiDone] = useState(false);
   const [aiError, setAiError] = useState("");
@@ -44,7 +47,10 @@ export default function GapConfirmModal({ gap, assessmentId, onClose, onAccepted
       gap.gap_description,
       "compliance",
       (token) => setAiText((prev) => prev + token),
-      () => setAiDone(true),
+      async () => {
+        setAiDone(true);
+        await refreshAiTokens();
+      },
       abortRef.current.signal,
     ).catch((err) => {
       if (err?.name !== "AbortError") {
@@ -52,7 +58,7 @@ export default function GapConfirmModal({ gap, assessmentId, onClose, onAccepted
         setAiDone(true);
       }
     });
-  }, [gap]);
+  }, [gap, refreshAiTokens]);
 
   useEffect(() => {
     streamAnalysis();
@@ -85,6 +91,7 @@ export default function GapConfirmModal({ gap, assessmentId, onClose, onAccepted
   }
 
   return (
+    <AiGate featureLabel="Gap Analysis">
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col">
         {/* Header */}
@@ -228,5 +235,6 @@ export default function GapConfirmModal({ gap, assessmentId, onClose, onAccepted
         </div>
       </div>
     </div>
+    </AiGate>
   );
 }

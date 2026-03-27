@@ -5,6 +5,8 @@
 import { useState, useRef, useEffect } from "react";
 import { X, RefreshCw, Copy, Download, Sparkles, ShieldCheck, ChevronDown, ChevronUp } from "lucide-react";
 import { aiApi } from "@/api/endpoints";
+import { useAiTokenRefresh } from "@/hooks/useAiTokenRefresh";
+import AiGate from "@/components/features/ai/AiGate";
 
 interface Props {
   vendorName: string;
@@ -84,6 +86,7 @@ function QuestionnairePanel({
 
 // ── Main Modal ────────────────────────────────────────────────────────────────
 export default function VendorAIModal({ vendorName, vendorIndustry, vendorServices, onClose }: Props) {
+  const { refreshAiTokens } = useAiTokenRefresh();
   const [responses, setResponses] = useState<Record<string, string>>(DEFAULT_QUESTIONNAIRE);
   const [output, setOutput]       = useState("");
   const [loading, setLoading]     = useState(false);
@@ -116,7 +119,11 @@ export default function VendorAIModal({ vendorName, vendorIndustry, vendorServic
       vendorServices || "",
       responses,
       (token) => setOutput(prev => prev + token),
-      () => { setLoading(false); setDone(true); },
+      async () => {
+        setLoading(false);
+        setDone(true);
+        await refreshAiTokens();
+      },
       abortRef.current.signal,
     ).catch(() => setLoading(false));
   }
@@ -136,106 +143,108 @@ export default function VendorAIModal({ vendorName, vendorIndustry, vendorServic
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col overflow-hidden">
+    <AiGate featureLabel="Vendor Risk Assessment">
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+        <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col overflow-hidden">
 
-        {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 flex-shrink-0">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-xl flex items-center justify-center">
-              <ShieldCheck className="w-5 h-5 text-white" />
-            </div>
-            <div>
-              <h2 className="font-semibold text-gray-900 text-sm">AI Vendor Risk Assessment</h2>
-              <p className="text-xs text-gray-400">{vendorName}{vendorIndustry ? ` · ${vendorIndustry}` : ""}</p>
-            </div>
-          </div>
-          <div className="flex items-center gap-2">
-            {loading && (
-              <button type="button" onClick={() => { abortRef.current?.abort(); setLoading(false); }}
-                className="text-xs px-3 py-1.5 bg-gray-100 text-gray-600 rounded-lg hover:bg-gray-200 transition-colors">
-                Stop
-              </button>
-            )}
-            {done && (
-              <>
-                <button type="button" onClick={analyze}
-                  className="flex items-center gap-1.5 text-xs px-3 py-1.5 bg-gray-100 text-gray-600 rounded-lg hover:bg-gray-200 transition-colors">
-                  <RefreshCw className="w-3 h-3" /> Regenerate
-                </button>
-                <button type="button" onClick={copyToClipboard}
-                  className="flex items-center gap-1.5 text-xs px-3 py-1.5 bg-gray-100 text-gray-600 rounded-lg hover:bg-gray-200 transition-colors">
-                  <Copy className="w-3 h-3" /> Copy
-                </button>
-                <button type="button" onClick={downloadMd}
-                  className="flex items-center gap-1.5 text-xs px-3 py-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
-                  <Download className="w-3 h-3" /> Download .md
-                </button>
-              </>
-            )}
-            <button type="button" onClick={onClose}
-              className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors">
-              <X className="w-4 h-4" />
-            </button>
-          </div>
-        </div>
-
-        {/* Pre-analysis — questionnaire + launch */}
-        {!started && (
-          <div className="flex-1 overflow-y-auto px-6 py-5 space-y-4">
-            <p className="text-sm text-gray-600">
-              Review and update the questionnaire responses below, then run the AI assessment.
-              The AI will score the vendor across security domains and highlight critical risks.
-            </p>
-            {vendorServices && (
-              <div className="bg-gray-50 rounded-xl px-4 py-3 text-xs text-gray-600">
-                <span className="font-semibold text-gray-700">Services: </span>{vendorServices}
+          {/* Header */}
+          <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 flex-shrink-0">
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-xl flex items-center justify-center">
+                <ShieldCheck className="w-5 h-5 text-white" />
               </div>
-            )}
-            <QuestionnairePanel responses={responses} onChange={handleResponseChange} />
-            <button
-              type="button"
-              onClick={analyze}
-              className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white text-sm font-medium transition-all shadow-sm"
-            >
-              <Sparkles className="w-4 h-4" />
-              Run AI Risk Assessment
-            </button>
-          </div>
-        )}
-
-        {/* Streaming output */}
-        {started && (
-          <>
-            <div className="px-6 py-2 bg-gray-50 border-b border-gray-100 flex items-center gap-4 text-xs text-gray-500 flex-shrink-0">
-              <span><strong className="text-gray-700">Vendor:</strong> {vendorName}</span>
-              {loading && <span className="ml-auto animate-pulse text-emerald-500">AI analyzing vendor risk…</span>}
-              {done    && <span className="ml-auto text-green-600 font-medium flex items-center gap-1"><ShieldCheck className="w-3 h-3" /> Assessment complete</span>}
+              <div>
+                <h2 className="font-semibold text-gray-900 text-sm">AI Vendor Risk Assessment</h2>
+                <p className="text-xs text-gray-400">{vendorName}{vendorIndustry ? ` · ${vendorIndustry}` : ""}</p>
+              </div>
             </div>
+            <div className="flex items-center gap-2">
+              {loading && (
+                <button type="button" onClick={() => { abortRef.current?.abort(); setLoading(false); }}
+                  className="text-xs px-3 py-1.5 bg-gray-100 text-gray-600 rounded-lg hover:bg-gray-200 transition-colors">
+                  Stop
+                </button>
+              )}
+              {done && (
+                <>
+                  <button type="button" onClick={analyze}
+                    className="flex items-center gap-1.5 text-xs px-3 py-1.5 bg-gray-100 text-gray-600 rounded-lg hover:bg-gray-200 transition-colors">
+                    <RefreshCw className="w-3 h-3" /> Regenerate
+                  </button>
+                  <button type="button" onClick={copyToClipboard}
+                    className="flex items-center gap-1.5 text-xs px-3 py-1.5 bg-gray-100 text-gray-600 rounded-lg hover:bg-gray-200 transition-colors">
+                    <Copy className="w-3 h-3" /> Copy
+                  </button>
+                  <button type="button" onClick={downloadMd}
+                    className="flex items-center gap-1.5 text-xs px-3 py-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
+                    <Download className="w-3 h-3" /> Download .md
+                  </button>
+                </>
+              )}
+              <button type="button" onClick={onClose}
+                className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
 
-            <div className="flex-1 overflow-y-auto px-6 py-4">
-              {!output && loading && (
-                <div className="flex flex-col items-center justify-center py-16 gap-3 text-gray-400">
-                  <div className="flex gap-1">
-                    {[0,1,2].map(i => (
-                      <span key={i} className="w-2 h-2 bg-emerald-400 rounded-full animate-bounce"
-                        style={{ animationDelay: `${i * 0.15}s` }} />
-                    ))}
-                  </div>
-                  <p className="text-sm">Analyzing vendor security posture…</p>
+          {/* Pre-analysis — questionnaire + launch */}
+          {!started && (
+            <div className="flex-1 overflow-y-auto px-6 py-5 space-y-4">
+              <p className="text-sm text-gray-600">
+                Review and update the questionnaire responses below, then run the AI assessment.
+                The AI will score the vendor across security domains and highlight critical risks.
+              </p>
+              {vendorServices && (
+                <div className="bg-gray-50 rounded-xl px-4 py-3 text-xs text-gray-600">
+                  <span className="font-semibold text-gray-700">Services: </span>{vendorServices}
                 </div>
               )}
-              {output && (
-                <div
-                  className="prose-sm max-w-none text-gray-700 leading-relaxed"
-                  dangerouslySetInnerHTML={{ __html: renderMarkdown(output) }}
-                />
-              )}
-              <div ref={bottomRef} />
+              <QuestionnairePanel responses={responses} onChange={handleResponseChange} />
+              <button
+                type="button"
+                onClick={analyze}
+                className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white text-sm font-medium transition-all shadow-sm"
+              >
+                <Sparkles className="w-4 h-4" />
+                Run AI Risk Assessment
+              </button>
             </div>
-          </>
-        )}
+          )}
+
+          {/* Streaming output */}
+          {started && (
+            <>
+              <div className="px-6 py-2 bg-gray-50 border-b border-gray-100 flex items-center gap-4 text-xs text-gray-500 flex-shrink-0">
+                <span><strong className="text-gray-700">Vendor:</strong> {vendorName}</span>
+                {loading && <span className="ml-auto animate-pulse text-emerald-500">AI analyzing vendor risk…</span>}
+                {done    && <span className="ml-auto text-green-600 font-medium flex items-center gap-1"><ShieldCheck className="w-3 h-3" /> Assessment complete</span>}
+              </div>
+
+              <div className="flex-1 overflow-y-auto px-6 py-4">
+                {!output && loading && (
+                  <div className="flex flex-col items-center justify-center py-16 gap-3 text-gray-400">
+                    <div className="flex gap-1">
+                      {[0,1,2].map(i => (
+                        <span key={i} className="w-2 h-2 bg-emerald-400 rounded-full animate-bounce"
+                          style={{ animationDelay: `${i * 0.15}s` }} />
+                      ))}
+                    </div>
+                    <p className="text-sm">Analyzing vendor security posture…</p>
+                  </div>
+                )}
+                {output && (
+                  <div
+                    className="prose-sm max-w-none text-gray-700 leading-relaxed"
+                    dangerouslySetInnerHTML={{ __html: renderMarkdown(output) }}
+                  />
+                )}
+                <div ref={bottomRef} />
+              </div>
+            </>
+          )}
+        </div>
       </div>
-    </div>
+    </AiGate>
   );
 }

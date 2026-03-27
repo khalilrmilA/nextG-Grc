@@ -2,10 +2,13 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { ArrowLeft, Sparkles, Loader2, RotateCcw, Copy, CheckCheck } from "lucide-react";
 import { aiApi, complianceApi } from "@/api/endpoints";
+import { useAiTokenRefresh } from "@/hooks/useAiTokenRefresh";
+import AiGate from "@/components/features/ai/AiGate";
 
 export default function RemediationPlannerPage() {
   const { assessmentId } = useParams<{ assessmentId: string }>();
   const navigate = useNavigate();
+  const { refreshAiTokens } = useAiTokenRefresh();
 
   const [planText, setPlanText] = useState("");
   const [streaming, setStreaming] = useState(false);
@@ -45,9 +48,10 @@ export default function RemediationPlannerPage() {
           scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
         }
       },
-      () => {
+      async () => {
         setStreaming(false);
         setDone(true);
+        await refreshAiTokens();
       },
       abortRef.current.signal,
     ).catch((err) => {
@@ -128,90 +132,92 @@ export default function RemediationPlannerPage() {
   }
 
   return (
-    <div className="p-8 max-w-4xl space-y-6">
-      {/* Header */}
-      <div>
-        <button
-          onClick={() => navigate(`/compliance/assessments/${assessmentId}`)}
-          className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-800 mb-3"
-        >
-          <ArrowLeft className="w-4 h-4" />
-          Back to assessment
-        </button>
-        <div className="flex items-start justify-between">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
-              <Sparkles className="w-6 h-6 text-purple-500" />
-              90-Day Remediation Plan
-            </h1>
-            {assessmentName && (
-              <p className="text-sm text-gray-500 mt-1">
-                {assessmentName}
-                {frameworkName && (
-                  <span className="ml-2 font-semibold px-2 py-0.5 rounded-md bg-blue-50 text-blue-700 text-xs">
-                    {frameworkName}
-                  </span>
-                )}
-              </p>
-            )}
-          </div>
-          <div className="flex items-center gap-2">
-            {done && (
-              <>
-                <button
-                  onClick={handleCopy}
-                  className="flex items-center gap-1.5 text-sm border border-gray-200 hover:bg-gray-50 text-gray-600 px-3 py-1.5 rounded-lg transition-colors"
-                >
-                  {copied ? <CheckCheck className="w-4 h-4 text-green-500" /> : <Copy className="w-4 h-4" />}
-                  {copied ? "Copied!" : "Copy"}
-                </button>
-                <button
-                  onClick={startStream}
-                  className="flex items-center gap-1.5 text-sm border border-gray-200 hover:bg-gray-50 text-gray-600 px-3 py-1.5 rounded-lg transition-colors"
-                >
-                  <RotateCcw className="w-4 h-4" />
-                  Regenerate
-                </button>
-              </>
-            )}
+    <AiGate featureLabel="Remediation Planner">
+      <div className="p-8 max-w-4xl space-y-6">
+        {/* Header */}
+        <div>
+          <button
+            onClick={() => navigate(`/compliance/assessments/${assessmentId}`)}
+            className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-800 mb-3"
+          >
+            <ArrowLeft className="w-4 h-4" />
+            Back to assessment
+          </button>
+          <div className="flex items-start justify-between">
+            <div>
+              <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
+                <Sparkles className="w-6 h-6 text-purple-500" />
+                90-Day Remediation Plan
+              </h1>
+              {assessmentName && (
+                <p className="text-sm text-gray-500 mt-1">
+                  {assessmentName}
+                  {frameworkName && (
+                    <span className="ml-2 font-semibold px-2 py-0.5 rounded-md bg-blue-50 text-blue-700 text-xs">
+                      {frameworkName}
+                    </span>
+                  )}
+                </p>
+              )}
+            </div>
+            <div className="flex items-center gap-2">
+              {done && (
+                <>
+                  <button
+                    onClick={handleCopy}
+                    className="flex items-center gap-1.5 text-sm border border-gray-200 hover:bg-gray-50 text-gray-600 px-3 py-1.5 rounded-lg transition-colors"
+                  >
+                    {copied ? <CheckCheck className="w-4 h-4 text-green-500" /> : <Copy className="w-4 h-4" />}
+                    {copied ? "Copied!" : "Copy"}
+                  </button>
+                  <button
+                    onClick={startStream}
+                    className="flex items-center gap-1.5 text-sm border border-gray-200 hover:bg-gray-50 text-gray-600 px-3 py-1.5 rounded-lg transition-colors"
+                  >
+                    <RotateCcw className="w-4 h-4" />
+                    Regenerate
+                  </button>
+                </>
+              )}
+            </div>
           </div>
         </div>
+
+        {/* Status bar */}
+        {streaming && (
+          <div className="flex items-center gap-2 text-sm text-purple-700 bg-purple-50 border border-purple-100 rounded-xl px-4 py-3">
+            <Loader2 className="w-4 h-4 animate-spin" />
+            AI is generating your personalized 90-day remediation plan…
+          </div>
+        )}
+
+        {error && (
+          <div className="bg-red-50 border border-red-200 rounded-xl p-4 text-sm text-red-700">
+            {error}
+            <button onClick={startStream} className="ml-3 text-red-600 underline">Retry</button>
+          </div>
+        )}
+
+        {/* Plan content */}
+        {(planText || streaming) && (
+          <div
+            ref={scrollRef}
+            className="bg-white rounded-2xl border border-gray-100 p-6 min-h-64 max-h-[calc(100vh-300px)] overflow-y-auto"
+          >
+            {renderPlan(planText)}
+            {streaming && (
+              <span className="inline-block w-2 h-4 bg-purple-400 animate-pulse ml-0.5 rounded-sm" />
+            )}
+          </div>
+        )}
+
+        {!planText && !streaming && !error && (
+          <div className="bg-white rounded-2xl border border-gray-100 p-12 text-center">
+            <Sparkles className="w-10 h-10 text-purple-300 mx-auto mb-3" />
+            <p className="text-sm text-gray-400">Starting generation…</p>
+          </div>
+        )}
       </div>
-
-      {/* Status bar */}
-      {streaming && (
-        <div className="flex items-center gap-2 text-sm text-purple-700 bg-purple-50 border border-purple-100 rounded-xl px-4 py-3">
-          <Loader2 className="w-4 h-4 animate-spin" />
-          AI is generating your personalized 90-day remediation plan…
-        </div>
-      )}
-
-      {error && (
-        <div className="bg-red-50 border border-red-200 rounded-xl p-4 text-sm text-red-700">
-          {error}
-          <button onClick={startStream} className="ml-3 text-red-600 underline">Retry</button>
-        </div>
-      )}
-
-      {/* Plan content */}
-      {(planText || streaming) && (
-        <div
-          ref={scrollRef}
-          className="bg-white rounded-2xl border border-gray-100 p-6 min-h-64 max-h-[calc(100vh-300px)] overflow-y-auto"
-        >
-          {renderPlan(planText)}
-          {streaming && (
-            <span className="inline-block w-2 h-4 bg-purple-400 animate-pulse ml-0.5 rounded-sm" />
-          )}
-        </div>
-      )}
-
-      {!planText && !streaming && !error && (
-        <div className="bg-white rounded-2xl border border-gray-100 p-12 text-center">
-          <Sparkles className="w-10 h-10 text-purple-300 mx-auto mb-3" />
-          <p className="text-sm text-gray-400">Starting generation…</p>
-        </div>
-      )}
-    </div>
+    </AiGate>
   );
 }

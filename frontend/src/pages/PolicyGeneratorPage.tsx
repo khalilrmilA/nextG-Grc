@@ -6,8 +6,10 @@ import {
   CheckCircle, CheckSquare, Square, ChevronDown, Search,
 } from "lucide-react";
 import { aiApi, frameworksApi } from "@/api/endpoints";
+import AiGate from "@/components/features/ai/AiGate";
 import { makeThinkFilter } from "@/lib/sse";
 import { useAuthStore } from "@/store/auth";
+import { useAiTokenRefresh } from "@/hooks/useAiTokenRefresh";
 import type { Framework, FrameworkControl } from "@/types";
 
 // ── Document catalogue ─────────────────────────────────────────────────────────
@@ -383,6 +385,7 @@ function ControlPickerModal({
 export default function PolicyGeneratorPage() {
   const user = useAuthStore((u) => u);
   const orgName = user?.org ?? "";
+  const { refreshAiTokens } = useAiTokenRefresh();
 
   const [activeCategory, setActiveCategory] = useState<string>("foundation");
   const [selectedDoc, setSelectedDoc] = useState<string | null>(null);
@@ -490,7 +493,12 @@ export default function PolicyGeneratorPage() {
           const filtered = filter(token);
           if (filtered) setOutput((prev) => prev + filtered);
         },
-        () => { setStreaming(false); setDone(true); },
+        async () => {
+          setStreaming(false);
+          setDone(true);
+          // Refresh token usage in real-time after generation completes
+          await refreshAiTokens();
+        },
         ctrl.signal,
       );
     } catch (err: unknown) {
@@ -547,6 +555,7 @@ export default function PolicyGeneratorPage() {
   const currentCat = DOCUMENT_CATEGORIES.find((c) => c.id === activeCategory);
 
   return (
+    <AiGate featureLabel="Document Generator">
     <div className="flex h-[calc(100vh-64px)] overflow-hidden">
 
       {/* ── LEFT PANEL ────────────────────────────────────────────────────── */}
@@ -972,5 +981,6 @@ export default function PolicyGeneratorPage() {
         initial={targetControls}
       />
     </div>
+    </AiGate>
   );
 }

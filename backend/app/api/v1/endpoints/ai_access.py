@@ -54,6 +54,76 @@ class AiAccessStatusResponse(BaseModel):
     quotas: list[dict]
 
 
+class AiAccessCheckResponse(BaseModel):
+    has_access: bool
+    tokens_used: int
+    tokens_limit: int
+    requests_used: int
+    requests_limit: int
+    percentage_used: int
+    reset_at: str | None
+
+
+@router.get("/check", response_model=AiAccessCheckResponse)
+async def check_ai_access(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Check if user has AI access and get current token usage."""
+    try:
+        # Check if user has an approved AI quota
+        result = await db.execute(
+            select(AiUsageQuota).where(
+                and_(
+                    AiUsageQuota.user_id == current_user.id,
+                    AiUsageQuota.is_approved == True,  # noqa: E712
+                )
+            )
+        )
+        quota = result.scalar_one_or_none()
+
+        if not quota:
+            # User has no approved access
+            return AiAccessCheckResponse(
+                has_access=False,
+                tokens_used=0,
+                tokens_limit=10000,
+                requests_used=0,
+                requests_limit=100,
+                percentage_used=0,
+                reset_at=None,
+            )
+
+        # Reset quota if needed
+        if datetime.utcnow() > quota.reset_date:
+            quota.monthly_used_tokens = 0
+            quota.monthly_used_requests = 0
+            quota.reset_date = datetime.utcnow() + timedelta(days=30)
+            await db.commit()
+
+        percentage = int(
+            (quota.monthly_used_tokens / quota.monthly_limit_tokens * 100)
+            if quota.monthly_limit_tokens > 0
+            else 0
+        )
+
+        return AiAccessCheckResponse(
+            has_access=True,
+            tokens_used=quota.monthly_used_tokens,
+            tokens_limit=quota.monthly_limit_tokens,
+            requests_used=quota.monthly_used_requests,
+            requests_limit=quota.monthly_limit_requests,
+            percentage_used=percentage,
+            reset_at=quota.reset_date.isoformat() if quota.reset_date else None,
+        )
+    except Exception as e:
+        logger.error(f"Failed to check AI access: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to check access",
+        )
+
+
 @router.post("/request", response_model=AiAccessRequestResponse)
 async def request_ai_access(
     body: AiAccessRequestCreate,

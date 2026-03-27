@@ -6,17 +6,84 @@ import json
 import asyncio
 from collections.abc import AsyncGenerator
 from typing import Annotated
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, and_
 
 from app.core.database import get_db
+from app.api.v1.dependencies.auth import get_current_user, bearer_scheme_optional
+from app.models.user import User
+from app.models.ai_access import AiUsageQuota
 from pydantic import BaseModel
 import httpx
 
 from app.core.config import settings
 
 router = APIRouter()
+
+
+# ─── Access control helpers ────────────────────────────────────────────────────
+
+async def _check_ai_quota(db: AsyncSession, user: User) -> AiUsageQuota | None:
+    """Return the user's approved quota row, or None if no access."""
+    from datetime import datetime
+    result = await db.execute(
+        select(AiUsageQuota).where(
+            and_(AiUsageQuota.user_id == user.id, AiUsageQuota.is_approved == True)  # noqa: E712
+        )
+    )
+    quota = result.scalar_one_or_none()
+    if quota and quota.reset_date and datetime.utcnow() > quota.reset_date:
+        # Auto-reset
+        from datetime import timedelta
+        quota.monthly_used_tokens = 0
+        quota.monthly_used_requests = 0
+        quota.reset_date = datetime.utcnow() + timedelta(days=30)
+        await db.commit()
+    return quota
+
+
+async def _require_ai_access(
+    db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_user)],
+) -> tuple[User, AiUsageQuota]:
+    """Dependency: user must have an approved AI quota, and not be over limit."""
+    quota = await _check_ai_quota(db, current_user)
+    if not quota:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="ai_access_required",
+        )
+    if quota.monthly_used_requests >= quota.monthly_limit_requests:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="quota_exceeded",
+        )
+    return current_user, quota
+
+
+async def _increment_usage(db: AsyncSession, quota: AiUsageQuota, token_estimate: int) -> None:
+    """Increment monthly usage counters after a request completes."""
+    quota.monthly_used_tokens += token_estimate
+    quota.monthly_used_requests += 1
+    await db.commit()
+
+
+async def _tracked_sse_generator(
+    messages: list[dict],
+    model: str,
+    system_prompt: str,
+    db: AsyncSession,
+    quota: AiUsageQuota,
+) -> AsyncGenerator[str, None]:
+    """Wrap _ollama_sse_generator and increment quota when stream ends."""
+    total_chars = 0
+    async for chunk in _ollama_sse_generator(messages, model, system_prompt):
+        total_chars += len(chunk)
+        yield chunk
+    # Estimate tokens from chars (~4 chars per token) and record usage
+    await _increment_usage(db, quota, max(1, total_chars // 4))
 
 DEFAULT_MODEL = settings.OLLAMA_CHAT_MODEL  # e.g. deepseek-v3.1:671b-cloud
 
@@ -175,8 +242,11 @@ async def _ollama_sse_generator(
 
 
 @router.post("/chat")
-async def chat(request: ChatRequest):
-    """Stream a GRC-aware AI chat response from Ollama."""
+async def chat(
+    request: ChatRequest,
+    current_user: Annotated[User, Depends(get_current_user)],
+):
+    """Stream a GRC-aware AI chat response from Ollama. Free for all authenticated users."""
     messages = [{"role": m.role, "content": m.content} for m in request.messages]
     return StreamingResponse(
         _ollama_sse_generator(messages, request.model, SYSTEM_PROMPT),
@@ -186,11 +256,16 @@ async def chat(request: ChatRequest):
 
 
 @router.post("/generate-policy")
-async def generate_policy(request: PolicyGenerateRequest):
+async def generate_policy(
+    request: PolicyGenerateRequest,
+    access: Annotated[tuple, Depends(_require_ai_access)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
     """
     Stream a generated policy/procedure document for a specific compliance gap.
     Uses Ollama with a specialized policy-writing system prompt.
     """
+    _, quota = access
     user_prompt = (
         f"Generate a complete policy/procedure document to address the following compliance requirement:\n\n"
         f"Framework: {request.framework_short_name}\n"
@@ -204,7 +279,7 @@ async def generate_policy(request: PolicyGenerateRequest):
     )
     messages = [{"role": "user", "content": user_prompt}]
     return StreamingResponse(
-        _ollama_sse_generator(messages, request.model, POLICY_SYSTEM_PROMPT),
+        _tracked_sse_generator(messages, request.model, POLICY_SYSTEM_PROMPT, db, quota),
         media_type=_SSE_MEDIA_TYPE,
         headers=_SSE_HEADERS,
     )
@@ -228,8 +303,13 @@ async def list_models():
 
 
 @router.post("/analyze-risk")
-async def analyze_risk(request: RiskAnalyzeRequest):
+async def analyze_risk(
+    request: RiskAnalyzeRequest,
+    access: Annotated[tuple, Depends(_require_ai_access)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
     """Stream AI-generated risk treatment suggestions, likelihood/impact scores, and linked controls."""
+    _, quota = access
     prompt = f"""Analyze this GRC risk and provide structured guidance:
 
 Risk Title: {request.title}
@@ -275,15 +355,20 @@ Be concise and actionable. Focus on practical steps."""
 
     messages = [{"role": "user", "content": prompt}]
     return StreamingResponse(
-        _ollama_sse_generator(messages, request.model, SYSTEM_PROMPT),
+        _tracked_sse_generator(messages, request.model, SYSTEM_PROMPT, db, quota),
         media_type=_SSE_MEDIA_TYPE,
         headers=_SSE_HEADERS,
     )
 
 
 @router.post("/analyze-evidence")
-async def analyze_evidence(request: EvidenceAnalyzeRequest):
+async def analyze_evidence(
+    request: EvidenceAnalyzeRequest,
+    access: Annotated[tuple, Depends(_require_ai_access)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
     """Stream AI analysis of uploaded document against framework controls."""
+    _, quota = access
     controls_text = "\n".join(
         f"- {c.get('control_id','?')} — {c.get('title','?')}: {c.get('description','')[:120]}"
         for c in request.controls[:30]  # cap to avoid huge prompts
@@ -322,15 +407,20 @@ Numbered list of 3-5 actionable next steps."""
 
     messages = [{"role": "user", "content": prompt}]
     return StreamingResponse(
-        _ollama_sse_generator(messages, request.model, SYSTEM_PROMPT),
+        _tracked_sse_generator(messages, request.model, SYSTEM_PROMPT, db, quota),
         media_type=_SSE_MEDIA_TYPE,
         headers=_SSE_HEADERS,
     )
 
 
 @router.post("/generate-audit-plan")
-async def generate_audit_plan(request: AuditPlanRequest):
+async def generate_audit_plan(
+    request: AuditPlanRequest,
+    access: Annotated[tuple, Depends(_require_ai_access)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
     """Stream an AI-generated audit program with test steps and evidence requirements."""
+    _, quota = access
     controls_text = "\n".join(
         f"- {c.get('control_id','?')} [{c.get('category','?')}] — {c.get('title','?')}"
         for c in request.controls[:40]
@@ -378,15 +468,20 @@ Be practical and specific. Focus on actionable test steps that an auditor can ex
 
     messages = [{"role": "user", "content": prompt}]
     return StreamingResponse(
-        _ollama_sse_generator(messages, request.model, SYSTEM_PROMPT),
+        _tracked_sse_generator(messages, request.model, SYSTEM_PROMPT, db, quota),
         media_type=_SSE_MEDIA_TYPE,
         headers=_SSE_HEADERS,
     )
 
 
 @router.post("/analyze-vendor")
-async def analyze_vendor(request: VendorRiskRequest):
+async def analyze_vendor(
+    request: VendorRiskRequest,
+    access: Annotated[tuple, Depends(_require_ai_access)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
     """Stream AI vendor risk scoring from questionnaire responses."""
+    _, quota = access
     qa_text = "\n".join(
         f"Q: {q}\nA: {a}"
         for q, a in list(request.questionnaire_responses.items())[:30]
@@ -436,7 +531,7 @@ Be direct and specific. Base scoring strictly on the responses provided."""
 
     messages = [{"role": "user", "content": prompt}]
     return StreamingResponse(
-        _ollama_sse_generator(messages, request.model, SYSTEM_PROMPT),
+        _tracked_sse_generator(messages, request.model, SYSTEM_PROMPT, db, quota),
         media_type=_SSE_MEDIA_TYPE,
         headers=_SSE_HEADERS,
     )
@@ -450,12 +545,17 @@ class RemediationPlanRequest(BaseModel):
 
 
 @router.post("/stream-remediation-plan")
-async def stream_remediation_plan(request: RemediationPlanRequest, db: Annotated[AsyncSession, Depends(get_db)]):
+async def stream_remediation_plan(
+    request: RemediationPlanRequest,
+    access: Annotated[tuple, Depends(_require_ai_access)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
     """
     Stream a prioritized 90-day remediation plan based on open compliance gaps.
     Gaps are sorted by severity/blocker status and organized into monthly phases.
     If gaps not provided, fetches them from the database for the given assessment.
     """
+    _, quota = access
     from sqlalchemy import select as sa_select
     from app.models.compliance import ComplianceAssessment, ComplianceGap, ControlAssessment
     from app.models.framework import Framework, FrameworkControl
@@ -580,7 +680,7 @@ Be specific, practical, and directly tied to the gaps listed above."""
 
     messages = [{"role": "user", "content": prompt}]
     return StreamingResponse(
-        _ollama_sse_generator(messages, request.model, SYSTEM_PROMPT),
+        _tracked_sse_generator(messages, request.model, SYSTEM_PROMPT, db, quota),
         media_type=_SSE_MEDIA_TYPE,
         headers=_SSE_HEADERS,
     )
@@ -623,11 +723,16 @@ class DocumentGenerateRequest(BaseModel):
 
 
 @router.post("/generate-document")
-async def generate_document(request: DocumentGenerateRequest):
+async def generate_document(
+    request: DocumentGenerateRequest,
+    access: Annotated[tuple, Depends(_require_ai_access)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
     """
     Stream a complete GRC document (policy, procedure, plan) tailored to the
     organization's context, size, industry, and target compliance framework(s).
     """
+    _, quota = access
     size_detail = _SIZE_DETAIL.get(request.size, _SIZE_DETAIL["smb"])
     framework_instruction = (
         f"Target Compliance Framework(s): {request.frameworks} — cite relevant controls inline."
@@ -649,10 +754,31 @@ Generate the complete {request.document_type} now. Start directly with the docum
 
     messages = [{"role": "user", "content": user_prompt}]
     return StreamingResponse(
-        _ollama_sse_generator(messages, request.model, DOCUMENT_GENERATION_SYSTEM_PROMPT),
+        _tracked_sse_generator(messages, request.model, DOCUMENT_GENERATION_SYSTEM_PROMPT, db, quota),
         media_type=_SSE_MEDIA_TYPE,
         headers=_SSE_HEADERS,
     )
+
+
+@router.get("/access-check")
+async def ai_access_check(
+    db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_user)],
+):
+    """Return the user's AI access status and current quota usage."""
+    quota = await _check_ai_quota(db, current_user)
+    if not quota:
+        return {"has_access": False, "tokens_used": 0, "tokens_limit": 0, "requests_used": 0, "requests_limit": 0, "percentage_used": 0, "reset_at": None}
+    pct = int(quota.monthly_used_tokens / quota.monthly_limit_tokens * 100) if quota.monthly_limit_tokens else 0
+    return {
+        "has_access": True,
+        "tokens_used": quota.monthly_used_tokens,
+        "tokens_limit": quota.monthly_limit_tokens,
+        "requests_used": quota.monthly_used_requests,
+        "requests_limit": quota.monthly_limit_requests,
+        "percentage_used": pct,
+        "reset_at": quota.reset_date.isoformat() if quota.reset_date else None,
+    }
 
 
 @router.get("/health")

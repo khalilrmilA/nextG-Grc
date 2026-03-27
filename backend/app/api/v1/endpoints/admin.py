@@ -217,6 +217,10 @@ class AiAccessRequestResponse(BaseModel):
         return value.isoformat() if value else None
 
 
+class AiAccessRequestUpdate(BaseModel):
+    admin_notes: str | None = None
+
+
 @router.get("/ai-access/requests", response_model=list[AiAccessRequestResponse])
 async def list_ai_access_requests(
     db: Annotated[AsyncSession, Depends(get_db)],
@@ -231,10 +235,10 @@ async def list_ai_access_requests(
     return result.scalars().all()
 
 
-@router.patch("/ai-access/requests/{request_id}/approve", response_model=AiAccessRequestResponse)
+@router.patch("/ai-access/requests/{request_id}/approve")
 async def approve_ai_request(
     request_id: str,
-    body: dict,
+    body: AiAccessRequestUpdate,
     db: Annotated[AsyncSession, Depends(get_db)],
     _: Annotated[User, Depends(_require_super_admin())],
 ):
@@ -246,34 +250,63 @@ async def approve_ai_request(
     if not request:
         raise HTTPException(status_code=404, detail="Request not found")
 
+    try:
+        logger.info(f"Found request: {request.user_email}, approving...")
+    except Exception as e:
+        logger.error(f"Error accessing request attributes: {str(e)}", exc_info=True)
     request.status = "approved"
     request.responded_at = datetime.utcnow()
-    request.admin_notes = body.get("admin_notes")
+    request.admin_notes = body.admin_notes
 
-    # Create usage quota for the user
-    quota_id = str(uuid4())
-    quota = AiUsageQuota(
-        id=quota_id,
-        tenant_id=request.tenant_id,
-        user_id=request.user_id,
-        feature=request.feature,
-        is_approved=True,
-        monthly_limit_tokens=10000,
-        monthly_limit_requests=100,
-        reset_date=datetime.utcnow() + timedelta(days=30),
+    # Create or update usage quota for the user
+    quota_result = await db.execute(
+        select(AiUsageQuota).where(AiUsageQuota.user_id == request.user_id)
     )
-    db.add(quota)
-    await db.commit()
-    await db.refresh(request)
+    quota = quota_result.scalar_one_or_none()
 
-    logger.info(f"AI access request approved: {request_id}")
-    return request
+    if quota:
+        quota.is_approved = True
+        logger.info(f"Updated existing quota for user {request.user_email}")
+    else:
+        quota_id = str(uuid4())
+        quota = AiUsageQuota(
+            id=quota_id,
+            tenant_id=request.tenant_id,
+            user_id=request.user_id,
+            feature=request.feature,
+            is_approved=True,
+            monthly_limit_tokens=10000,
+            monthly_limit_requests=100,
+            reset_date=datetime.utcnow() + timedelta(days=30),
+        )
+        db.add(quota)
+        logger.info(f"Created new quota for user {request.user_email}")
+
+    try:
+        await db.flush()
+        await db.commit()
+    except Exception as e:
+        logger.error(f"Database commit error: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
+
+    logger.info(f"AI access request approved: {request_id}, new status: {request.status}")
+    return {
+        "id": request.id,
+        "user_email": request.user_email,
+        "user_name": request.user_name,
+        "feature": request.feature,
+        "reason": request.reason,
+        "status": request.status,
+        "admin_notes": request.admin_notes,
+        "requested_at": request.requested_at.isoformat() if request.requested_at else None,
+        "responded_at": request.responded_at.isoformat() if request.responded_at else None,
+    }
 
 
-@router.patch("/ai-access/requests/{request_id}/deny", response_model=AiAccessRequestResponse)
+@router.patch("/ai-access/requests/{request_id}/deny")
 async def deny_ai_request(
     request_id: str,
-    body: dict,
+    body: AiAccessRequestUpdate,
     db: Annotated[AsyncSession, Depends(get_db)],
     _: Annotated[User, Depends(_require_super_admin())],
 ):
@@ -287,12 +320,21 @@ async def deny_ai_request(
 
     request.status = "denied"
     request.responded_at = datetime.utcnow()
-    request.admin_notes = body.get("admin_notes")
+    request.admin_notes = body.admin_notes
     await db.commit()
-    await db.refresh(request)
 
     logger.info(f"AI access request denied: {request_id}")
-    return request
+    return {
+        "id": request.id,
+        "user_email": request.user_email,
+        "user_name": request.user_name,
+        "feature": request.feature,
+        "reason": request.reason,
+        "status": request.status,
+        "admin_notes": request.admin_notes,
+        "requested_at": request.requested_at.isoformat() if request.requested_at else None,
+        "responded_at": request.responded_at.isoformat() if request.responded_at else None,
+    }
 
 
 @router.post("/ai-usage/quota")

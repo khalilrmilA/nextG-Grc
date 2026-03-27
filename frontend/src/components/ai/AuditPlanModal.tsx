@@ -5,6 +5,8 @@
 import { useState, useRef, useEffect } from "react";
 import { X, RefreshCw, Copy, Download, Sparkles, FileText } from "lucide-react";
 import { aiApi } from "@/api/endpoints";
+import { useAiTokenRefresh } from "@/hooks/useAiTokenRefresh";
+import AiGate from "@/components/features/ai/AiGate";
 
 interface Props {
   auditTitle: string;
@@ -75,6 +77,7 @@ export default function AuditPlanModal({
   auditTitle, frameworkName, frameworkShortName,
   auditScope, auditObjective, controls, onClose,
 }: Props) {
+  const { refreshAiTokens } = useAiTokenRefresh();
   const [output, setOutput]   = useState("");
   const [loading, setLoading] = useState(true);
   const [done, setDone]       = useState(false);
@@ -104,7 +107,11 @@ export default function AuditPlanModal({
         audit_title: auditTitle, audit_scope: auditScope, audit_objective: auditObjective,
         controls: resolvedControls },
       (token) => setOutput(prev => prev + token),
-      () => { setLoading(false); setDone(true); },
+      async () => {
+        setLoading(false);
+        setDone(true);
+        await refreshAiTokens();
+      },
       abortRef.current.signal,
     ).catch(() => setLoading(false));
   }
@@ -124,79 +131,81 @@ export default function AuditPlanModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col overflow-hidden">
-        {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 flex-shrink-0">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-xl flex items-center justify-center">
-              <Sparkles className="w-5 h-5 text-white" />
-            </div>
-            <div>
-              <h2 className="font-semibold text-gray-900 text-sm">AI Audit Program</h2>
-              <p className="text-xs text-gray-400">{frameworkName} · {resolvedControls.length} controls in scope</p>
-            </div>
-          </div>
-          <div className="flex items-center gap-2">
-            {loading && (
-              <button type="button" onClick={() => { abortRef.current?.abort(); setLoading(false); }}
-                className="text-xs px-3 py-1.5 bg-gray-100 text-gray-600 rounded-lg hover:bg-gray-200 transition-colors">
-                Stop
-              </button>
-            )}
-            {done && (
-              <>
-                <button type="button" onClick={generate}
-                  className="flex items-center gap-1.5 text-xs px-3 py-1.5 bg-gray-100 text-gray-600 rounded-lg hover:bg-gray-200 transition-colors">
-                  <RefreshCw className="w-3 h-3" /> Regenerate
-                </button>
-                <button type="button" onClick={copyToClipboard}
-                  className="flex items-center gap-1.5 text-xs px-3 py-1.5 bg-gray-100 text-gray-600 rounded-lg hover:bg-gray-200 transition-colors">
-                  <Copy className="w-3 h-3" /> Copy
-                </button>
-                <button type="button" onClick={downloadMd}
-                  className="flex items-center gap-1.5 text-xs px-3 py-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
-                  <Download className="w-3 h-3" /> Download .md
-                </button>
-              </>
-            )}
-            <button type="button" onClick={onClose}
-              className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors">
-              <X className="w-4 h-4" />
-            </button>
-          </div>
-        </div>
-
-        {/* Context bar */}
-        <div className="px-6 py-2 bg-gray-50 border-b border-gray-100 flex items-center gap-4 text-xs text-gray-500 flex-shrink-0">
-          <span><strong className="text-gray-700">Title:</strong> {auditTitle}</span>
-          {auditScope && <span><strong className="text-gray-700">Scope:</strong> {auditScope}</span>}
-          {loading && <span className="ml-auto animate-pulse text-indigo-500">AI generating audit program…</span>}
-          {done && <span className="ml-auto text-green-600 font-medium flex items-center gap-1"><FileText className="w-3 h-3" /> Complete</span>}
-        </div>
-
-        {/* Output */}
-        <div className="flex-1 overflow-y-auto px-6 py-4">
-          {!output && loading && (
-            <div className="flex flex-col items-center justify-center py-16 gap-3 text-gray-400">
-              <div className="flex gap-1">
-                {[0,1,2].map(i => (
-                  <span key={i} className="w-2 h-2 bg-indigo-400 rounded-full animate-bounce"
-                    style={{ animationDelay: `${i * 0.15}s` }} />
-                ))}
+    <AiGate featureLabel="Audit Plan Generator">
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+        <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col overflow-hidden">
+          {/* Header */}
+          <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 flex-shrink-0">
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-xl flex items-center justify-center">
+                <Sparkles className="w-5 h-5 text-white" />
               </div>
-              <p className="text-sm">Generating audit program…</p>
+              <div>
+                <h2 className="font-semibold text-gray-900 text-sm">AI Audit Program</h2>
+                <p className="text-xs text-gray-400">{frameworkName} · {resolvedControls.length} controls in scope</p>
+              </div>
             </div>
-          )}
-          {output && (
-            <div
-              className="prose-sm max-w-none text-gray-700 leading-relaxed"
-              dangerouslySetInnerHTML={{ __html: renderMarkdown(output) }}
-            />
-          )}
-          <div ref={bottomRef} />
+            <div className="flex items-center gap-2">
+              {loading && (
+                <button type="button" onClick={() => { abortRef.current?.abort(); setLoading(false); }}
+                  className="text-xs px-3 py-1.5 bg-gray-100 text-gray-600 rounded-lg hover:bg-gray-200 transition-colors">
+                  Stop
+                </button>
+              )}
+              {done && (
+                <>
+                  <button type="button" onClick={generate}
+                    className="flex items-center gap-1.5 text-xs px-3 py-1.5 bg-gray-100 text-gray-600 rounded-lg hover:bg-gray-200 transition-colors">
+                    <RefreshCw className="w-3 h-3" /> Regenerate
+                  </button>
+                  <button type="button" onClick={copyToClipboard}
+                    className="flex items-center gap-1.5 text-xs px-3 py-1.5 bg-gray-100 text-gray-600 rounded-lg hover:bg-gray-200 transition-colors">
+                    <Copy className="w-3 h-3" /> Copy
+                  </button>
+                  <button type="button" onClick={downloadMd}
+                    className="flex items-center gap-1.5 text-xs px-3 py-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
+                    <Download className="w-3 h-3" /> Download .md
+                  </button>
+                </>
+              )}
+              <button type="button" onClick={onClose}
+                className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+
+          {/* Context bar */}
+          <div className="px-6 py-2 bg-gray-50 border-b border-gray-100 flex items-center gap-4 text-xs text-gray-500 flex-shrink-0">
+            <span><strong className="text-gray-700">Title:</strong> {auditTitle}</span>
+            {auditScope && <span><strong className="text-gray-700">Scope:</strong> {auditScope}</span>}
+            {loading && <span className="ml-auto animate-pulse text-indigo-500">AI generating audit program…</span>}
+            {done && <span className="ml-auto text-green-600 font-medium flex items-center gap-1"><FileText className="w-3 h-3" /> Complete</span>}
+          </div>
+
+          {/* Output */}
+          <div className="flex-1 overflow-y-auto px-6 py-4">
+            {!output && loading && (
+              <div className="flex flex-col items-center justify-center py-16 gap-3 text-gray-400">
+                <div className="flex gap-1">
+                  {[0,1,2].map(i => (
+                    <span key={i} className="w-2 h-2 bg-indigo-400 rounded-full animate-bounce"
+                      style={{ animationDelay: `${i * 0.15}s` }} />
+                  ))}
+                </div>
+                <p className="text-sm">Generating audit program…</p>
+              </div>
+            )}
+            {output && (
+              <div
+                className="prose-sm max-w-none text-gray-700 leading-relaxed"
+                dangerouslySetInnerHTML={{ __html: renderMarkdown(output) }}
+              />
+            )}
+            <div ref={bottomRef} />
+          </div>
         </div>
       </div>
-    </div>
+    </AiGate>
   );
 }

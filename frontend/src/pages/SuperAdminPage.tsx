@@ -714,10 +714,18 @@ function AiAccessTab() {
   async function approveRequest(id: string) {
     setResponding(id);
     try {
+      console.log("Calling approve for request:", id);
       const updated = await superAdminAiAccessApi.approveRequest(id, "Approved - Welcome to AI features");
-      setRequests(prev => prev.map(r => r.id === id ? updated : r));
-    } catch {
-      setRequests(prev => prev.map(r => r.id === id ? { ...r, status: "approved" as const } : r));
+      console.log("Approve response:", updated);
+      setRequests(prev => {
+        const updated_list = prev.map(r => r.id === id ? updated : r);
+        console.log("Updated requests list:", updated_list);
+        return updated_list;
+      });
+    } catch (err) {
+      console.error("Approve failed:", err);
+      // Show alert so user knows there was an error
+      alert(`Error approving request: ${err instanceof Error ? err.message : String(err)}`);
     } finally { setResponding(null); }
   }
 
@@ -726,8 +734,9 @@ function AiAccessTab() {
     try {
       const updated = await superAdminAiAccessApi.denyRequest(id, "AI access not available for your current plan");
       setRequests(prev => prev.map(r => r.id === id ? updated : r));
-    } catch {
-      setRequests(prev => prev.map(r => r.id === id ? { ...r, status: "denied" as const } : r));
+    } catch (err) {
+      console.error("Deny failed:", err);
+      // Don't update locally on error - keep the original request
     } finally { setResponding(null); }
   }
 
