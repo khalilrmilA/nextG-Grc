@@ -55,17 +55,27 @@ async def _require_ai_access(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="ai_access_required",
         )
+    # Check both token AND request limits - reject if at or over limit
+    if quota.monthly_used_tokens >= quota.monthly_limit_tokens:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="token_limit_exceeded",
+        )
     if quota.monthly_used_requests >= quota.monthly_limit_requests:
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-            detail="quota_exceeded",
+            detail="request_limit_exceeded",
         )
     return current_user, quota
 
 
 async def _increment_usage(db: AsyncSession, quota: AiUsageQuota, token_estimate: int) -> None:
     """Increment monthly usage counters after a request completes."""
-    quota.monthly_used_tokens += token_estimate
+    # Only add tokens up to the limit - don't allow exceeding it
+    remaining_tokens = quota.monthly_limit_tokens - quota.monthly_used_tokens
+    tokens_to_add = min(token_estimate, max(0, remaining_tokens))
+
+    quota.monthly_used_tokens += tokens_to_add
     quota.monthly_used_requests += 1
     await db.commit()
 

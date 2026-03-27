@@ -107,8 +107,14 @@ async def check_ai_access(
             else 0
         )
 
+        # Check if user has exceeded token or request limits
+        has_access = (
+            quota.monthly_used_tokens < quota.monthly_limit_tokens
+            and quota.monthly_used_requests < quota.monthly_limit_requests
+        )
+
         return AiAccessCheckResponse(
-            has_access=True,
+            has_access=has_access,
             tokens_used=quota.monthly_used_tokens,
             tokens_limit=quota.monthly_limit_tokens,
             requests_used=quota.monthly_used_requests,

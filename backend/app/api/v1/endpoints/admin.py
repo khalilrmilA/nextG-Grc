@@ -321,7 +321,21 @@ async def deny_ai_request(
     request.status = "denied"
     request.responded_at = datetime.utcnow()
     request.admin_notes = body.admin_notes
-    await db.commit()
+
+    # Update quota to mark as not approved
+    quota_result = await db.execute(
+        select(AiUsageQuota).where(AiUsageQuota.user_id == request.user_id)
+    )
+    quota = quota_result.scalar_one_or_none()
+    if quota:
+        quota.is_approved = False
+
+    try:
+        await db.flush()
+        await db.commit()
+    except Exception as e:
+        logger.error(f"Database commit error: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
 
     logger.info(f"AI access request denied: {request_id}")
     return {

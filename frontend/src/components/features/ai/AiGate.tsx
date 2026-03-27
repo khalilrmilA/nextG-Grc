@@ -44,29 +44,45 @@ export default function AiGate({ children, featureLabel = "AI Feature" }: AiGate
   }
 
   if (!data?.has_access) {
+    const isLimitExceeded = data.tokens_used >= data.tokens_limit || data.requests_used >= data.requests_limit;
+
     return (
       <>
         <div className="flex flex-col items-center justify-center py-20 text-center px-6">
-          <div className="w-16 h-16 rounded-2xl bg-gray-100 flex items-center justify-center mb-4">
-            <Lock className="w-7 h-7 text-gray-400" />
+          <div className={`w-16 h-16 rounded-2xl flex items-center justify-center mb-4 ${isLimitExceeded ? "bg-red-100" : "bg-gray-100"}`}>
+            <Lock className={`w-7 h-7 ${isLimitExceeded ? "text-red-500" : "text-gray-400"}`} />
           </div>
-          <h2 className="text-lg font-semibold text-gray-900 mb-1">AI Access Required</h2>
-          <p className="text-sm text-gray-500 mb-6 max-w-sm">
-            <strong>{featureLabel}</strong> requires approved AI access. Submit a request and your admin will review it.
+          <h2 className={`text-lg font-semibold mb-1 ${isLimitExceeded ? "text-red-900" : "text-gray-900"}`}>
+            {isLimitExceeded ? "Monthly Limit Reached" : "AI Access Required"}
+          </h2>
+          <p className={`text-sm mb-6 max-w-sm ${isLimitExceeded ? "text-red-600" : "text-gray-500"}`}>
+            {isLimitExceeded ? (
+              <>
+                <strong>{featureLabel}</strong> limit has been reached for this month. Your usage will reset on {data.reset_at ? new Date(data.reset_at).toLocaleDateString() : "next month"}.
+              </>
+            ) : (
+              <>
+                <strong>{featureLabel}</strong> requires approved AI access. Submit a request and your admin will review it.
+              </>
+            )}
           </p>
-          <button
-            type="button"
-            onClick={() => setShowRequest(true)}
-            className="flex items-center gap-2 px-5 py-2.5 bg-blue-600 text-white text-sm font-medium rounded-xl hover:bg-blue-700 transition-colors"
-          >
-            <Zap className="w-4 h-4" /> Request AI Access
-          </button>
-          <p className="text-xs text-gray-400 mt-3">
-            Already requested?{" "}
-            <a href="/settings?tab=ai-access" className="text-blue-500 hover:underline">
-              Check status in Settings
-            </a>
-          </p>
+          {!isLimitExceeded && (
+            <>
+              <button
+                type="button"
+                onClick={() => setShowRequest(true)}
+                className="flex items-center gap-2 px-5 py-2.5 bg-blue-600 text-white text-sm font-medium rounded-xl hover:bg-blue-700 transition-colors"
+              >
+                <Zap className="w-4 h-4" /> Request AI Access
+              </button>
+              <p className="text-xs text-gray-400 mt-3">
+                Already requested?{" "}
+                <a href="/settings?tab=ai-access" className="text-blue-500 hover:underline">
+                  Check status in Settings
+                </a>
+              </p>
+            </>
+          )}
         </div>
         <AiAccessRequestDialog isOpen={showRequest} onClose={() => setShowRequest(false)} feature="all" />
       </>
