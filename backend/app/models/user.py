@@ -29,7 +29,7 @@ class User(Base):
     first_name: Mapped[str] = mapped_column(String(100), nullable=False)
     last_name: Mapped[str] = mapped_column(String(100), nullable=False)
     role: Mapped[UserRole] = mapped_column(
-        SAEnum(UserRole), nullable=False, default=UserRole.VIEWER
+        SAEnum(UserRole, native_enum=False), nullable=False, default=UserRole.VIEWER
     )
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     is_verified: Mapped[bool] = mapped_column(Boolean, default=False)

@@ -232,7 +232,8 @@
       "Bash(curl -v -X POST http://localhost:8000/api/v1/auth/login -H \"Content-Type: application/json\" -d '{\"\"\"\"email\"\"\"\":\"\"\"\"admin@demo.com\"\"\"\",\"\"\"\"password\"\"\"\":\"\"\"\"demo123\"\"\"\"}')",
       "Bash(npx tsc:*)",
       "Bash(TOKEN=\"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxZTI1ZDkzYi1hOGE5LTQzYmYtYjNkMS02NWJiZjJmMGRiMjEiLCJ0ZW5hbnRfaWQiOiI5N2M2MDZlYS0yNTg4LTQ5MTUtOTRlYi1iOGFkMjUyMzZkMGYiLCJyb2xlIjoiY2lzbyIsImV4cCI6MTc3NDU2ODkzOSwidHlwZSI6ImFjY2VzcyJ9.VkYHu8cFhZTeoQCBVJcxJt9KaE1fxOO61Q0CxdhmXDA\")",
-      "Bash(curl -s -H \"Authorization: Bearer $TOKEN\" http://localhost:8000/api/v1/access-check)"
+      "Bash(curl -s -H \"Authorization: Bearer $TOKEN\" http://localhost:8000/api/v1/access-check)",
+      "Bash(taskkill /IM python.exe)"
     ]
   }
 }
