@@ -110,8 +110,8 @@ const TOUR_STEPS: TourStep[] = [
   {
     id: "vendors",
     target: 'a[href="/vendors"]',
-    title: "Vendors (TPRM)",
-    body: "Manage third-party vendor risk. Send questionnaires, track responses, and score each vendor's security posture automatically.",
+    title: "3rd Parties (TPRM)",
+    body: "Manage 3rd party risk. Send questionnaires, track responses, and score each 3rd party's security posture automatically.",
     icon: Building2,
     iconColor: "from-pink-500 to-rose-600",
     placement: "right",

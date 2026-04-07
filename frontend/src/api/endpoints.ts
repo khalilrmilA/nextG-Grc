@@ -355,13 +355,72 @@ export const policiesApi = {
 // ─── Vendors ─────────────────────────────────
 
 export const vendorsApi = {
-  list: (params?: { page?: number; page_size?: number }) =>
-    apiClient.get<PaginatedResponse<Vendor>>("/vendors", { params }).then((r) => r.data),
+  list: () =>
+    apiClient.get<{ items: Vendor[]; total: number }>("/vendors").then((r) => r.data),
 
   get: (id: string) => apiClient.get<Vendor>(`/vendors/${id}`).then((r) => r.data),
 
   create: (data: Partial<Vendor>) =>
     apiClient.post<Vendor>("/vendors", data).then((r) => r.data),
+
+  approveAnalysis: (vendorId: string, riskScore: number, analysisNotes?: string) =>
+    apiClient.post<Vendor>(`/vendors/${vendorId}/approve-analysis`, {
+      risk_score: riskScore,
+      analysis_notes: analysisNotes,
+    }).then((r) => r.data),
+
+  analyzeStream: (options: {
+    vendorId: string;
+    questionnaireResponses: Record<string, string>;
+    onChunk: (chunk: string) => void;
+    onDone: () => void;
+    signal: AbortSignal;
+  }) => {
+    const { vendorId, questionnaireResponses, onChunk, onDone, signal } = options;
+    // Call vendor-specific analyze endpoint and stream the response
+    apiClient.post(`/vendors/${vendorId}/analyze`, {
+      questionnaire_responses: questionnaireResponses,
+    }, { signal }).then((resp) => {
+      // Extract analysis text from response
+      let text: string = "";
+
+      if (resp.data?.analysis && typeof resp.data.analysis === "string") {
+        text = resp.data.analysis;
+      } else if (typeof resp.data === "string") {
+        text = resp.data;
+      } else if (typeof resp.data === "object") {
+        text = JSON.stringify(resp.data, null, 2);
+      } else {
+        text = String(resp.data || "");
+      }
+
+      const chunkSize = 20; // Emit chunks of 20 chars
+
+      let index = 0;
+      const interval = setInterval(() => {
+        if (index >= text.length) {
+          clearInterval(interval);
+          onDone();
+          return;
+        }
+
+        const chunk = text.slice(index, index + chunkSize);
+        onChunk(chunk);
+        index += chunkSize;
+      }, 50); // 50ms between chunks for visual effect
+
+    }).catch((err) => {
+      console.error("Analysis error:", err);
+      onDone();
+    });
+
+    return {
+      close: () => {
+        // Abort the request
+        signal.dispatchEvent(new Event("abort"));
+      },
+    };
+  },
 };
 
 // ─── Dashboard ───────────────────────────────

@@ -84,8 +84,9 @@ class ControlAssessmentResponse(BaseModel):
     not_applicable_justification: str | None = None
     ai_confidence: float | None = None
     cross_framework_coverage: list[dict] = []
+    is_mandatory: bool = False
 
-    model_config = {"from_attributes": True}
+    model_config = {"from_attributes": True, "populate_by_name": True}
 
 
 class GapResponse(BaseModel):
@@ -396,6 +397,7 @@ async def _build_assessment_detail(
                 if ca.control_id in controls_map
                 else []
             ) or [],
+            is_mandatory=(controls_map[ca.control_id].is_mandatory if ca.control_id in controls_map else False),
         )
         for ca in cas
     ]
@@ -829,6 +831,12 @@ async def update_control_assessment(
     ca, assessment, control = row
 
     if body.status is not None:
+        # Block N/A on mandatory controls
+        if body.status == ControlStatus.NOT_APPLICABLE and control.is_mandatory:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Control '{control.control_id}' is mandatory and cannot be marked as Not Applicable."
+            )
         ca.status = body.status
     if body.notes is not None:
         ca.notes = body.notes
@@ -864,6 +872,7 @@ async def update_control_assessment(
         not_applicable_justification=ca.not_applicable_justification,
         ai_confidence=ca.ai_confidence,
         cross_framework_coverage=control.mapped_controls or [],
+        is_mandatory=control.is_mandatory,
     )
 
 

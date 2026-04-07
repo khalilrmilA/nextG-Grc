@@ -34,7 +34,7 @@ const NAV_GROUPS = [
       { to: "/audits",   icon: ClipboardList, label: "Audits",         module: "audits"   },
       { to: "/policies", icon: FileText,      label: "Policies",       module: "policies" },
       { to: "/policy-generator", icon: Wand2, label: "Doc Generator",  module: "policy-generator" },
-      { to: "/vendors",  icon: Building2,     label: "Vendors (TPRM)", module: "vendors"  },
+      { to: "/vendors",  icon: Building2,     label: "3rd Parties (TPRM)", module: "vendors"  },
     ],
   },
 ];
@@ -51,7 +51,7 @@ const PAGE_LABELS: Record<string, string> = {
   audits:     "Audits",
   policies:          "Policies",
   "policy-generator": "Doc Generator",
-  vendors:           "Vendors",
+  vendors:           "3rd Parties",
   settings:   "Settings",
   help:       "Help & Support",
 };

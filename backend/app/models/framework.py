@@ -16,15 +16,22 @@ class FrameworkStatus(str, enum.Enum):
 
 
 class ControlCategory(str, enum.Enum):
-    IDENTIFY = "identify"
-    PROTECT = "protect"
-    DETECT = "detect"
-    RESPOND = "respond"
-    RECOVER = "recover"
-    GOVERNANCE = "governance"
-    ORGANIZATIONAL = "organizational"
-    TECHNICAL = "technical"
-    PHYSICAL = "physical"
+    # NIST CSF 2.0 functions
+    IDENTIFY = "IDENTIFY"
+    PROTECT = "PROTECT"
+    DETECT = "DETECT"
+    RESPOND = "RESPOND"
+    RECOVER = "RECOVER"
+    GOVERNANCE = "GOVERNANCE"
+
+    # ISO 27001/27002 themes
+    ORGANIZATIONAL = "Organizational"
+    PEOPLE = "People"
+    PHYSICAL = "Physical"
+    TECHNOLOGICAL = "Technological"
+
+    # Special category for NIST 800-53 policy controls
+    POLICY = "POLICY"
 
 
 class Framework(Base):
@@ -68,9 +75,7 @@ class FrameworkControl(Base):
     title: Mapped[str] = mapped_column(String(500), nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     guidance: Mapped[str | None] = mapped_column(Text, nullable=True)
-    category: Mapped[ControlCategory | None] = mapped_column(
-        SAEnum(ControlCategory), nullable=True
-    )
+    category: Mapped[str | None] = mapped_column(String(50), nullable=True)
     parent_id: Mapped[str | None] = mapped_column(
         String(36), ForeignKey("framework_controls.id"), nullable=True
     )
@@ -82,6 +87,9 @@ class FrameworkControl(Base):
 
     # Tags for filtering and search
     tags: Mapped[list] = mapped_column(JSON, default=list)
+
+    # Mandatory controls cannot be marked as N/A — they must be implemented
+    is_mandatory: Mapped[bool] = mapped_column(Boolean, default=False)
 
     # Relationships
     framework: Mapped["Framework"] = relationship("Framework", back_populates="controls")

@@ -20,6 +20,7 @@ controls:
     title: "Understanding the organization and its context"
     description: "Determine external and internal issues relevant to the organization's purpose and affecting its ability to achieve the intended outcomes of its ISMS."
     category: "organizational"
+    mandatory: true
     tags: ["context", "isms-scope"]
     mapped_controls:
       - framework: "NIST_CSF2"
@@ -34,6 +35,7 @@ controls:
     title: "Understanding the needs and expectations of interested parties"
     description: "Determine interested parties and their requirements relevant to information security."
     category: "organizational"
+    mandatory: true
     tags: ["stakeholders", "requirements"]
     mapped_controls:
       - framework: "NIST_CSF2"
@@ -43,12 +45,14 @@ controls:
     title: "Determining the scope of the information security management system"
     description: "Determine boundaries and applicability of the ISMS to establish its scope."
     category: "organizational"
+    mandatory: true
     tags: ["isms-scope"]
 
   - id: "4.4"
     title: "Information security management system"
     description: "Establish, implement, maintain and continually improve an ISMS."
     category: "organizational"
+    mandatory: true
     tags: ["isms"]
 
   # ────────────────────────────────────────────────────
@@ -58,6 +62,7 @@ controls:
     title: "Leadership and commitment"
     description: "Top management shall demonstrate leadership and commitment with respect to the ISMS."
     category: "organizational"
+    mandatory: true
     tags: ["leadership", "management"]
     mapped_controls:
       - framework: "NIST_CSF2"
@@ -69,6 +74,7 @@ controls:
     title: "Policy"
     description: "Top management shall establish an information security policy."
     category: "organizational"
+    mandatory: true
     tags: ["policy", "leadership"]
     mapped_controls:
       - framework: "NIST_CSF2"
@@ -89,6 +95,7 @@ controls:
     title: "Organizational roles, responsibilities and authorities"
     description: "Top management shall ensure that responsibilities and authorities for relevant roles are assigned and communicated."
     category: "organizational"
+    mandatory: true
     tags: ["roles", "responsibilities"]
 
   # ────────────────────────────────────────────────────
@@ -98,6 +105,7 @@ controls:
     title: "Actions to address risks and opportunities"
     description: "Determine risks and opportunities that need to be addressed to ensure the ISMS can achieve its intended outcomes."
     category: "organizational"
+    mandatory: true
     tags: ["risk", "planning"]
     mapped_controls:
       - framework: "NIST_CSF2"
@@ -109,6 +117,7 @@ controls:
     title: "Information security risk assessment"
     description: "Apply risk assessment processes to identify, analyze and evaluate information security risks."
     category: "organizational"
+    mandatory: true
     tags: ["risk-assessment"]
     parent_id: "6.1"
     mapped_controls:
@@ -128,6 +137,7 @@ controls:
     title: "Information security risk treatment"
     description: "Select appropriate risk treatment options considering risk assessment results."
     category: "organizational"
+    mandatory: true
     tags: ["risk-treatment"]
     parent_id: "6.1"
     mapped_controls:
@@ -142,6 +152,7 @@ controls:
     title: "Information security objectives and planning to achieve them"
     description: "Establish information security objectives at relevant functions and levels."
     category: "organizational"
+    mandatory: true
     tags: ["objectives", "planning"]
 
   # ────────────────────────────────────────────────────

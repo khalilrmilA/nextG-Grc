@@ -1,15 +1,28 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useTranslation } from "react-i18next";
-import { Building2, Plus, Globe, AlertTriangle, Search, ShieldCheck, ShieldX, X, ChevronRight, Calendar, ExternalLink, Sparkles } from "lucide-react";
+import { Building2, Plus, Globe, AlertTriangle, Search, ShieldCheck, ShieldX, X, ChevronRight, Calendar, ExternalLink, Sparkles, Loader2 } from "lucide-react";
 import VendorAIModal from "../components/ai/VendorAIModal";
+import { vendorsApi } from "@/api/endpoints";
 
-const VENDORS = [
-  { id: "1", name: "AWS (Amazon Web Services)", industry: "Cloud Infrastructure",   country: "US", tier: "critical", status: "active",       risk_score: 18, dpa: true,  contract_expiry: "2026-12-31", services: "Cloud hosting, storage, compute",      website: "https://aws.amazon.com",      notes: "Primary cloud provider. SOC 2, ISO 27001, PCI DSS certified." },
-];
-
-type VendorEntry = typeof VENDORS[0];
+interface VendorEntry {
+  id: string;
+  name: string;
+  industry: string | null;
+  country: string | null;
+  website: string | null;
+  risk_tier: string;
+  status: string;
+  risk_score: number | null;
+  has_data_processing_agreement: boolean;
+  contract_expiry: string | null;
+  services_provided: string | null;
+  primary_contact_name?: string;
+  primary_contact_email?: string;
+  created_at?: string;
+}
 type Tier   = "critical" | "high" | "medium" | "low";
 type Status = "active" | "under_review" | "onboarding" | "offboarding" | "inactive";
+type RiskTier = Tier;
 
 const TIER_BADGE: Record<Tier, string> = {
   critical: "bg-red-100 text-red-700 border-red-200",
@@ -28,9 +41,18 @@ const STATUS_BADGE: Record<Status, string> = {
 const TIER_OPTIONS:   Tier[]   = ["critical", "high", "medium", "low"];
 const STATUS_OPTIONS: Status[] = ["active", "under_review", "onboarding", "offboarding", "inactive"];
 const INDUSTRY_OPTIONS = [
-  "Cloud Infrastructure", "Payment Processing", "Identity & Access Mgmt",
-  "Email Services", "Analytics", "Data Backup", "CRM / SaaS",
-  "Security Services", "HR / Payroll", "Legal Tech", "Other",
+  "Cloud Infrastructure", "Telecommunications", "Payment Processing",
+  "Identity & Access Mgmt", "Email Services", "Analytics", "Data Backup",
+  "CRM / SaaS", "Security Services", "HR / Payroll", "Legal Tech",
+  "IT Support & Maintenance", "Network Services", "Database Services",
+  "Consulting & Advisory", "Managed Services Provider (MSP)",
+  "Software Development", "Testing & QA", "Hosting & Colocation",
+  "Disaster Recovery", "Backup & Archive", "Development Tools",
+  "Supply Chain Management", "Healthcare Services", "Financial Services",
+  "Insurance", "Retail & E-commerce", "Manufacturing", "Logistics",
+  "Education", "Government", "Non-Profit", "Media & Entertainment",
+  "Real Estate", "Travel & Hospitality", "Transportation", "Energy",
+  "Utilities", "Pharmaceuticals", "Other",
 ];
 
 function riskScoreColor(score: number) {
@@ -45,30 +67,37 @@ function AddVendorModal({ onClose, onSaved }: { readonly onClose: () => void; re
   const { t } = useTranslation();
   const [form, setForm] = useState({
     name: "", industry: "Cloud Infrastructure", country: "", tier: "medium",
-    status: "onboarding", risk_score: 10, dpa: false,
+    status: "active", risk_score: 10, dpa: false,
     contract_expiry: "", services: "", website: "", notes: "",
   });
   const [error, setError] = useState("");
 
-  function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!form.name.trim())    { setError(t("vendors.name_required")); return; }
     if (!form.country.trim()) { setError(t("vendors.country_required")); return; }
-    onSaved({
-      id: String(Date.now()),
-      name: form.name.trim(),
-      industry: form.industry,
-      country: form.country.trim().toUpperCase().slice(0, 2),
-      tier: form.tier,
-      status: form.status,
-      risk_score: form.risk_score,
-      dpa: form.dpa,
-      contract_expiry: form.contract_expiry || "—",
-      services: form.services.trim(),
-      website: form.website.trim(),
-      notes: form.notes.trim(),
-    });
-    onClose();
+
+    try {
+      setError("");
+      const newVendor = await vendorsApi.create({
+        name: form.name.trim(),
+        industry: form.industry,
+        country: form.country.trim().toUpperCase().slice(0, 2),
+        risk_tier: form.tier,
+        status: form.status,
+        risk_score: form.risk_score,
+        services_provided: form.services.trim() || undefined,
+        has_data_processing_agreement: form.dpa,
+        contract_expiry: form.contract_expiry || undefined,
+        website: form.website.trim() || undefined,
+      } as any);
+
+      onSaved(newVendor);
+      onClose();
+    } catch (err) {
+      setError(`Failed to create 3rd party. Please try again. ${err instanceof Error ? err.message : ''}`);
+      console.error(err);
+    }
   }
 
   return (
@@ -189,7 +218,7 @@ function AddVendorModal({ onClose, onSaved }: { readonly onClose: () => void; re
 // ── Vendor Detail Modal ───────────────────────────────────────────────────────
 function VendorDetailModal({ vendor, onClose, onRunAI }: { readonly vendor: VendorEntry; readonly onClose: () => void; readonly onRunAI: () => void }) {
   const { t } = useTranslation();
-  const tier   = vendor.tier as Tier;
+  const tier   = vendor.risk_tier as Tier;
   const status = vendor.status as Status;
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
@@ -204,7 +233,7 @@ function VendorDetailModal({ vendor, onClose, onRunAI }: { readonly vendor: Vend
               <div>
                 <h2 className="font-semibold text-gray-900 leading-snug">{vendor.name}</h2>
                 <div className="flex items-center gap-2 mt-1.5 flex-wrap">
-                  <span className={`text-xs font-semibold px-2.5 py-0.5 rounded-full border capitalize ${TIER_BADGE[tier]}`}>{vendor.tier}</span>
+                  <span className={`text-xs font-semibold px-2.5 py-0.5 rounded-full border capitalize ${TIER_BADGE[tier]}`}>{vendor.risk_tier}</span>
                   <span className={`text-xs font-medium px-2.5 py-0.5 rounded-full capitalize ${STATUS_BADGE[status]}`}>{vendor.status.replaceAll("_", " ")}</span>
                   <span className="flex items-center gap-1 text-xs text-gray-400"><Globe className="w-3 h-3" />{vendor.country}</span>
                 </div>
@@ -222,12 +251,12 @@ function VendorDetailModal({ vendor, onClose, onRunAI }: { readonly vendor: Vend
               <p className="text-xs text-gray-400 mt-1">{t("vendors.risk_score_label")}</p>
             </div>
             <div className="bg-gray-50 rounded-xl p-3 text-center flex flex-col items-center justify-center">
-              {vendor.dpa
+              {vendor.has_data_processing_agreement
                 ? <ShieldCheck className="w-6 h-6 text-green-500" />
                 : <ShieldX className="w-6 h-6 text-red-500" />
               }
               <p className="text-xs text-gray-400 mt-1">{t("vendors.col_dpa")}</p>
-              <p className="text-xs font-semibold text-gray-700">{vendor.dpa ? t("vendors.dpa_signed_label") : t("vendors.dpa_missing_label")}</p>
+              <p className="text-xs font-semibold text-gray-700">{vendor.has_data_processing_agreement ? t("vendors.dpa_signed_label") : t("vendors.dpa_missing_label")}</p>
             </div>
             <div className="bg-gray-50 rounded-xl p-3 text-center">
               <p className="text-xs text-gray-400 mb-1 flex items-center justify-center gap-1"><Calendar className="w-3 h-3" />{t("vendors.contract_label")}</p>
@@ -240,17 +269,10 @@ function VendorDetailModal({ vendor, onClose, onRunAI }: { readonly vendor: Vend
             <p className="text-sm text-gray-700">{vendor.industry}</p>
           </div>
 
-          {vendor.services && (
+          {vendor.services_provided && (
             <div>
               <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1">{t("vendors.services_label")}</p>
-              <p className="text-sm text-gray-700">{vendor.services}</p>
-            </div>
-          )}
-
-          {vendor.notes && (
-            <div>
-              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1">{t("common.notes")}</p>
-              <p className="text-sm text-gray-700 leading-relaxed">{vendor.notes}</p>
+              <p className="text-sm text-gray-700">{vendor.services_provided}</p>
             </div>
           )}
 
@@ -263,10 +285,25 @@ function VendorDetailModal({ vendor, onClose, onRunAI }: { readonly vendor: Vend
             </div>
           )}
 
-          {!vendor.dpa && (
+          {!vendor.has_data_processing_agreement && (
             <div className="bg-red-50 border border-red-200 rounded-xl p-3 flex items-start gap-2">
               <AlertTriangle className="w-4 h-4 text-red-500 flex-shrink-0 mt-0.5" />
               <p className="text-xs text-red-700">{t("vendors.no_dpa_warning")}</p>
+            </div>
+          )}
+
+          {/* Show saved AI analysis if available */}
+          {(vendor as any).description && (
+            <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
+              <div className="flex items-center gap-2 mb-3">
+                <Sparkles className="w-4 h-4 text-blue-600" />
+                <p className="text-xs font-semibold text-blue-700">AI Risk Assessment Result</p>
+              </div>
+              <div className="prose prose-sm max-w-none text-gray-700 text-xs overflow-y-auto max-h-64">
+                {(vendor as any).description.split('\n').map((line: string, i: number) => (
+                  <div key={i} className="mb-1">{line}</div>
+                ))}
+              </div>
             </div>
           )}
 
@@ -287,28 +324,44 @@ function VendorDetailModal({ vendor, onClose, onRunAI }: { readonly vendor: Vend
 // ── Main Page ─────────────────────────────────────────────────────────────────
 export default function VendorsPage() {
   const { t } = useTranslation();
-  const [vendors, setVendors] = useState(VENDORS);
+  const [vendors, setVendors] = useState<VendorEntry[]>([]);
+  const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [tierFilter, setTierFilter] = useState("all");
   const [showAdd, setShowAdd] = useState(false);
   const [selected, setSelected] = useState<VendorEntry | null>(null);
   const [aiVendor, setAiVendor] = useState<VendorEntry | null>(null);
 
+  useEffect(() => {
+    const loadVendors = async () => {
+      try {
+        const response = await vendorsApi.list();
+        setVendors(response.items || []);
+      } catch (err) {
+        console.error("Failed to load vendors:", err);
+        setVendors([]);
+      } finally {
+        setLoading(false);
+      }
+    };
+    loadVendors();
+  }, []);
+
   const filtered = vendors.filter(v => {
     const matchSearch = v.name.toLowerCase().includes(search.toLowerCase()) ||
-      v.industry.toLowerCase().includes(search.toLowerCase());
-    const matchTier = tierFilter === "all" || v.tier === tierFilter;
+      (v.industry?.toLowerCase().includes(search.toLowerCase()) ?? false);
+    const matchTier = tierFilter === "all" || v.risk_tier === tierFilter;
     return matchSearch && matchTier;
   });
 
   const tierCounts = {
-    critical: vendors.filter(v => v.tier === "critical").length,
-    high:     vendors.filter(v => v.tier === "high").length,
-    medium:   vendors.filter(v => v.tier === "medium").length,
-    low:      vendors.filter(v => v.tier === "low").length,
+    critical: vendors.filter(v => v.risk_tier === "critical").length,
+    high:     vendors.filter(v => v.risk_tier === "high").length,
+    medium:   vendors.filter(v => v.risk_tier === "medium").length,
+    low:      vendors.filter(v => v.risk_tier === "low").length,
   };
-  const missingDpa = vendors.filter(v => !v.dpa).length;
-  const avgScore   = Math.round(vendors.reduce((s, v) => s + v.risk_score, 0) / vendors.length);
+  const missingDpa = vendors.filter(v => !v.has_data_processing_agreement).length;
+  const avgScore   = vendors.length > 0 ? Math.round(vendors.reduce((s, v) => s + (v.risk_score || 0), 0) / vendors.length) : 0;
 
   return (
     <div className="p-8 max-w-7xl space-y-6">
@@ -316,7 +369,7 @@ export default function VendorsPage() {
         <div>
           <h1 className="text-2xl font-bold text-gray-900">{t("vendors.management_title")}</h1>
           <p className="text-gray-500 text-sm mt-1">
-            {t("vendors.subtitle", { count: vendors.length, critical: vendors.filter(v => v.tier === "critical").length, missing_dpa: missingDpa })}
+            {t("vendors.subtitle", { count: vendors.length, critical: vendors.filter(v => v.risk_tier === "critical").length, missing_dpa: missingDpa })}
           </p>
         </div>
         <button onClick={() => setShowAdd(true)}
@@ -396,8 +449,8 @@ export default function VendorsPage() {
                   </div>
                 </td>
                 <td className="px-4 py-4">
-                  <span className={`text-xs font-semibold px-2.5 py-1 rounded-full border capitalize ${TIER_BADGE[v.tier as Tier]}`}>
-                    {v.tier}
+                  <span className={`text-xs font-semibold px-2.5 py-1 rounded-full border capitalize ${TIER_BADGE[v.risk_tier as Tier]}`}>
+                    {v.risk_tier}
                   </span>
                 </td>
                 <td className="px-4 py-4">
@@ -412,13 +465,13 @@ export default function VendorsPage() {
                   </div>
                 </td>
                 <td className="px-4 py-4 text-center">
-                  {v.dpa
+                  {v.has_data_processing_agreement
                     ? <ShieldCheck className="w-4 h-4 text-green-500 mx-auto" />
                     : <ShieldX className="w-4 h-4 text-red-500 mx-auto" />
                   }
                 </td>
                 <td className="px-4 py-4 text-xs text-gray-500">{v.contract_expiry}</td>
-                <td className="px-4 py-4 text-xs text-gray-400 max-w-[160px] truncate">{v.services}</td>
+                <td className="px-4 py-4 text-xs text-gray-400 max-w-[160px] truncate">{v.services_provided}</td>
                 <td className="px-4 py-4">
                   <ChevronRight className="w-4 h-4 text-gray-300 group-hover:text-blue-500 transition-colors" />
                 </td>
@@ -446,9 +499,10 @@ export default function VendorsPage() {
       )}
       {aiVendor && (
         <VendorAIModal
+          vendorId={aiVendor.id}
           vendorName={aiVendor.name}
           vendorIndustry={aiVendor.industry}
-          vendorServices={aiVendor.services}
+          vendorServices={aiVendor.services_provided}
           onClose={() => setAiVendor(null)}
         />
       )}

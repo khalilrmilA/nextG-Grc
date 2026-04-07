@@ -4,11 +4,12 @@
  */
 import { useState, useRef, useEffect } from "react";
 import { X, RefreshCw, Copy, Download, Sparkles, ShieldCheck, ChevronDown, ChevronUp } from "lucide-react";
-import { aiApi } from "@/api/endpoints";
+import { vendorsApi } from "@/api/endpoints";
 import { useAiTokenRefresh } from "@/hooks/useAiTokenRefresh";
 import AiGate from "@/components/features/ai/AiGate";
 
 interface Props {
+  vendorId: string;
   vendorName: string;
   vendorIndustry?: string;
   vendorServices?: string;
@@ -17,16 +18,16 @@ interface Props {
 
 // Default questionnaire for quick AI assessment when no custom Q&A provided
 const DEFAULT_QUESTIONNAIRE: Record<string, string> = {
-  "Does the vendor hold ISO 27001 certification?": "Unknown — not yet verified",
-  "Does the vendor hold SOC 2 Type II certification?": "Unknown — not yet verified",
-  "Does the vendor encrypt data at rest and in transit?": "Unknown — not yet verified",
-  "Does the vendor have a documented incident response plan?": "Unknown — not yet verified",
-  "Does the vendor conduct annual penetration testing?": "Unknown — not yet verified",
-  "Does the vendor have a business continuity / DR plan?": "Unknown — not yet verified",
-  "Does the vendor perform background checks on employees?": "Unknown — not yet verified",
-  "Does the vendor use multi-factor authentication?": "Unknown — not yet verified",
-  "Does the vendor have a vulnerability management program?": "Unknown — not yet verified",
-  "Does the vendor maintain a list of sub-processors?": "Unknown — not yet verified",
+  "Does the 3rd party hold ISO 27001 certification?": "N/A",
+  "Does the 3rd party hold SOC 2 Type II certification?": "N/A",
+  "Does the 3rd party encrypt data at rest and in transit?": "N/A",
+  "Does the 3rd party have a documented incident response plan?": "N/A",
+  "Does the 3rd party conduct annual penetration testing?": "N/A",
+  "Does the 3rd party have a business continuity / DR plan?": "N/A",
+  "Does the 3rd party perform background checks on employees?": "N/A",
+  "Does the 3rd party use multi-factor authentication?": "N/A",
+  "Does the 3rd party have a vulnerability management program?": "N/A",
+  "Does the 3rd party maintain a list of sub-processors?": "N/A",
 };
 
 function renderMarkdown(text: string) {
@@ -55,6 +56,8 @@ function QuestionnairePanel({
   readonly onChange: (q: string, a: string) => void;
 }) {
   const [open, setOpen] = useState(false);
+  const options = ["Yes", "No", "N/A"];
+
   return (
     <div className="border border-gray-200 rounded-xl overflow-hidden">
       <button
@@ -66,16 +69,25 @@ function QuestionnairePanel({
         {open ? <ChevronUp className="w-4 h-4 text-gray-400" /> : <ChevronDown className="w-4 h-4 text-gray-400" />}
       </button>
       {open && (
-        <div className="divide-y divide-gray-100 max-h-64 overflow-y-auto">
+        <div className="divide-y divide-gray-100 max-h-96 overflow-y-auto">
           {Object.entries(responses).map(([q, a]) => (
-            <div key={q} className="px-4 py-3 space-y-1.5">
+            <div key={q} className="px-4 py-3 space-y-2">
               <p className="text-xs font-medium text-gray-700">{q}</p>
-              <input
-                type="text"
-                value={a}
-                onChange={e => onChange(q, e.target.value)}
-                className="w-full border border-gray-200 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-400"
-              />
+              <div className="flex gap-3">
+                {options.map(option => (
+                  <label key={option} className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="radio"
+                      name={q}
+                      value={option}
+                      checked={a === option}
+                      onChange={e => onChange(q, e.target.value)}
+                      className="w-4 h-4 accent-blue-600"
+                    />
+                    <span className="text-xs text-gray-600">{option}</span>
+                  </label>
+                ))}
+              </div>
             </div>
           ))}
         </div>
@@ -85,13 +97,16 @@ function QuestionnairePanel({
 }
 
 // ── Main Modal ────────────────────────────────────────────────────────────────
-export default function VendorAIModal({ vendorName, vendorIndustry, vendorServices, onClose }: Props) {
+export default function VendorAIModal({ vendorId, vendorName, vendorIndustry, vendorServices, onClose }: Readonly<Props>) {
   const { refreshAiTokens } = useAiTokenRefresh();
   const [responses, setResponses] = useState<Record<string, string>>(DEFAULT_QUESTIONNAIRE);
   const [output, setOutput]       = useState("");
   const [loading, setLoading]     = useState(false);
   const [done, setDone]           = useState(false);
   const [started, setStarted]     = useState(false);
+  const [error, setError]         = useState("");
+  const [approving, setApproving] = useState(false);
+  const [approved, setApproved]   = useState(false);
   const abortRef  = useRef<AbortController | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
 
@@ -99,9 +114,29 @@ export default function VendorAIModal({ vendorName, vendorIndustry, vendorServic
     return () => { abortRef.current?.abort(); };
   }, []);
 
+  // Load saved analysis when modal opens
   useEffect(() => {
-    if (loading) bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [output]);
+    async function loadSavedAnalysis() {
+      try {
+        const vendor = await vendorsApi.get(vendorId);
+        if (vendor.description) {
+          setOutput(vendor.description);
+          setDone(true);
+          setStarted(true);
+        }
+      } catch (err) {
+        // Vendor not found or no saved analysis - that's fine
+        if (err instanceof Error) {
+          console.debug("Could not load saved analysis:", err.message);
+        }
+      }
+    }
+    loadSavedAnalysis();
+  }, [vendorId]);
+
+  useEffect(() => {
+    if (loading || output) bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [output, loading]);
 
   function handleResponseChange(q: string, a: string) {
     setResponses(prev => ({ ...prev, [q]: a }));
@@ -109,23 +144,23 @@ export default function VendorAIModal({ vendorName, vendorIndustry, vendorServic
 
   function analyze() {
     setOutput("");
+    setError("");
     setDone(false);
     setLoading(true);
     setStarted(true);
     abortRef.current = new AbortController();
-    aiApi.streamVendorAnalysis(
-      vendorName,
-      vendorIndustry || "Unknown",
-      vendorServices || "",
-      responses,
-      (token) => setOutput(prev => prev + token),
-      async () => {
+
+    vendorsApi.analyzeStream({
+      vendorId,
+      questionnaireResponses: responses,
+      onChunk: (token) => setOutput(prev => prev + token),
+      onDone: async () => {
         setLoading(false);
         setDone(true);
         await refreshAiTokens();
       },
-      abortRef.current.signal,
-    ).catch(() => setLoading(false));
+      signal: abortRef.current.signal,
+    });
   }
 
   function copyToClipboard() {
@@ -142,6 +177,29 @@ export default function VendorAIModal({ vendorName, vendorIndustry, vendorServic
     URL.revokeObjectURL(url);
   }
 
+  async function approveAnalysis() {
+    // Extract risk score from output (looks for "Score: X/10")
+    const scoreMatch = output.match(/Score:\s*(\d+)\/10/);
+    const riskScore = scoreMatch ? Number.parseInt(scoreMatch[1], 10) : 5;
+
+    setApproving(true);
+    try {
+      console.log(`Approving analysis for vendor ${vendorId} with risk score ${riskScore}`);
+      const result = await vendorsApi.approveAnalysis(vendorId, riskScore, output);
+      console.log("Approval result:", result);
+      setApproved(true);
+      setError("");
+      // Close modal after 2 seconds
+      setTimeout(() => onClose(), 2000);
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : String(err);
+      setError(`Failed to approve analysis: ${errorMsg}`);
+      console.error("Approval error:", err);
+    } finally {
+      setApproving(false);
+    }
+  }
+
   return (
     <AiGate featureLabel="Vendor Risk Assessment">
       <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
@@ -154,7 +212,7 @@ export default function VendorAIModal({ vendorName, vendorIndustry, vendorServic
                 <ShieldCheck className="w-5 h-5 text-white" />
               </div>
               <div>
-                <h2 className="font-semibold text-gray-900 text-sm">AI Vendor Risk Assessment</h2>
+                <h2 className="font-semibold text-gray-900 text-sm">AI 3rd Party Risk Assessment</h2>
                 <p className="text-xs text-gray-400">{vendorName}{vendorIndustry ? ` · ${vendorIndustry}` : ""}</p>
               </div>
             </div>
@@ -165,7 +223,7 @@ export default function VendorAIModal({ vendorName, vendorIndustry, vendorServic
                   Stop
                 </button>
               )}
-              {done && (
+              {done && !approved && (
                 <>
                   <button type="button" onClick={analyze}
                     className="flex items-center gap-1.5 text-xs px-3 py-1.5 bg-gray-100 text-gray-600 rounded-lg hover:bg-gray-200 transition-colors">
@@ -176,10 +234,19 @@ export default function VendorAIModal({ vendorName, vendorIndustry, vendorServic
                     <Copy className="w-3 h-3" /> Copy
                   </button>
                   <button type="button" onClick={downloadMd}
-                    className="flex items-center gap-1.5 text-xs px-3 py-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
+                    className="flex items-center gap-1.5 text-xs px-3 py-1.5 bg-gray-100 text-gray-600 rounded-lg hover:bg-gray-200 transition-colors">
                     <Download className="w-3 h-3" /> Download .md
                   </button>
+                  <button type="button" onClick={approveAnalysis} disabled={approving}
+                    className="flex items-center gap-1.5 text-xs px-3 py-1.5 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:bg-gray-400 transition-colors">
+                    {approving ? "Approving..." : "✓ Approve & Save"}
+                  </button>
                 </>
+              )}
+              {approved && (
+                <div className="flex items-center gap-2 text-xs text-green-600 font-medium">
+                  ✓ Analysis Approved
+                </div>
               )}
               <button type="button" onClick={onClose}
                 className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors">
@@ -191,9 +258,14 @@ export default function VendorAIModal({ vendorName, vendorIndustry, vendorServic
           {/* Pre-analysis — questionnaire + launch */}
           {!started && (
             <div className="flex-1 overflow-y-auto px-6 py-5 space-y-4">
+              {error && (
+                <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-3 text-sm text-red-700">
+                  {error}
+                </div>
+              )}
               <p className="text-sm text-gray-600">
                 Review and update the questionnaire responses below, then run the AI assessment.
-                The AI will score the vendor across security domains and highlight critical risks.
+                The AI will score the 3rd party across security domains and highlight critical risks.
               </p>
               {vendorServices && (
                 <div className="bg-gray-50 rounded-xl px-4 py-3 text-xs text-gray-600">
@@ -207,7 +279,7 @@ export default function VendorAIModal({ vendorName, vendorIndustry, vendorServic
                 className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white text-sm font-medium transition-all shadow-sm"
               >
                 <Sparkles className="w-4 h-4" />
-                Run AI Risk Assessment
+                Run AI 3rd Party Risk Assessment
               </button>
             </div>
           )}
@@ -216,8 +288,8 @@ export default function VendorAIModal({ vendorName, vendorIndustry, vendorServic
           {started && (
             <>
               <div className="px-6 py-2 bg-gray-50 border-b border-gray-100 flex items-center gap-4 text-xs text-gray-500 flex-shrink-0">
-                <span><strong className="text-gray-700">Vendor:</strong> {vendorName}</span>
-                {loading && <span className="ml-auto animate-pulse text-emerald-500">AI analyzing vendor risk…</span>}
+                <span><strong className="text-gray-700">3rd Party:</strong> {vendorName}</span>
+                {loading && <span className="ml-auto animate-pulse text-emerald-500">AI analyzing 3rd party risk…</span>}
                 {done    && <span className="ml-auto text-green-600 font-medium flex items-center gap-1"><ShieldCheck className="w-3 h-3" /> Assessment complete</span>}
               </div>
 
@@ -230,7 +302,7 @@ export default function VendorAIModal({ vendorName, vendorIndustry, vendorServic
                           style={{ animationDelay: `${i * 0.15}s` }} />
                       ))}
                     </div>
-                    <p className="text-sm">Analyzing vendor security posture…</p>
+                    <p className="text-sm">Analyzing 3rd party security posture…</p>
                   </div>
                 )}
                 {output && (

@@ -44,7 +44,7 @@ export default function AiGate({ children, featureLabel = "AI Feature" }: AiGate
   }
 
   if (!data?.has_access) {
-    const isLimitExceeded = data.tokens_used >= data.tokens_limit || data.requests_used >= data.requests_limit;
+    const isLimitExceeded = data && (data.tokens_used >= data.tokens_limit || data.requests_used >= data.requests_limit);
 
     return (
       <>

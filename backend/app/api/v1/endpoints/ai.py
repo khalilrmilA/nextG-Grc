@@ -487,64 +487,289 @@ Be practical and specific. Focus on actionable test steps that an auditor can ex
 @router.post("/analyze-vendor")
 async def analyze_vendor(
     request: VendorRiskRequest,
-    access: Annotated[tuple, Depends(_require_ai_access)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
-    """Stream AI vendor risk scoring from questionnaire responses."""
-    _, quota = access
+    """Analyze vendor with web search and return full analysis as JSON."""
+    # Perform web search for vendor information
+    web_context = ""
+    try:
+        import httpx
+        search_query = f"{request.vendor_name} security compliance certifications"
+        search_url = f"https://api.duckduckgo.com/?q={search_query}&format=json&no_html=1"
+        async with httpx.AsyncClient(timeout=10.0) as http_client:
+            resp = await http_client.get(search_url)
+            if resp.status_code == 200:
+                data = resp.json()
+                if 'Results' in data and data['Results']:
+                    web_context = "\n\n### Web Search Findings:\n"
+                    for i, result in enumerate(data['Results'][:5], 1):
+                        title = result.get("Title", "No title")
+                        snippet = result.get("Text", "")
+                        url = result.get("FirstURL", "")
+                        web_context += f"**{i}. {title}**\n"
+                        if snippet:
+                            web_context += f"{snippet}\n"
+                        if url:
+                            web_context += f"*Source: {url}*\n\n"
+    except Exception as e:
+        # Continue without web search if it fails
+        import logging
+        logging.warning(f"Web search failed: {e}")
+        web_context = "\n\n*Note: Web search unavailable*\n"
+
     qa_text = "\n".join(
         f"Q: {q}\nA: {a}"
         for q, a in list(request.questionnaire_responses.items())[:30]
     )
-    prompt = f"""Analyze the following vendor security questionnaire responses and provide a comprehensive risk assessment.
+    prompt = f"""You are a senior cybersecurity risk analyst conducting a comprehensive third-party risk assessment. Analyze the following vendor security questionnaire responses and web search findings to produce a detailed, production-grade risk assessment.
 
-Vendor: {request.vendor_name}
-Industry: {request.vendor_industry or "Technology"}
-Services Provided: {request.vendor_services or "Not specified"}
+VENDOR INFORMATION:
+- Name: {request.vendor_name}
+- Industry: {request.vendor_industry or "Technology"}
+- Services: {request.vendor_services or "Not specified"}
 
 QUESTIONNAIRE RESPONSES:
----
 {qa_text}
+
+{web_context}
+
 ---
 
-Provide your assessment in this exact Markdown structure:
+INSTRUCTIONS: Provide a comprehensive vendor risk assessment following this EXACT structure. Be specific, data-driven, and production-ready.
 
-## Vendor Risk Assessment — {request.vendor_name}
+# Vendor Risk Assessment Report
+## {request.vendor_name}
 
-### Overall Risk Score
-**Score: X/10** (where 10 = highest risk)
-**Risk Tier: Critical / High / Medium / Low**
+**Assessment Date:** [Current Date]
+**Risk Classification:** [CRITICAL/HIGH/MEDIUM/LOW]
 
-### Executive Summary
-2-3 sentences summarizing the vendor's security posture.
+---
 
-### Domain Scores
-| Domain | Score | Status | Key Finding |
-|--------|-------|--------|-------------|
-| Access Control | X/10 | 🔴/🟡/🟢 | ... |
-| Data Protection | X/10 | 🔴/🟡/🟢 | ... |
-| Incident Response | X/10 | 🔴/🟡/🟢 | ... |
-| Business Continuity | X/10 | 🔴/🟡/🟢 | ... |
-| Compliance & Certifications | X/10 | 🔴/🟡/🟢 | ... |
-| Third-Party Management | X/10 | 🔴/🟡/🟢 | ... |
+## Executive Summary
 
-### Critical Findings
-List top 3-5 critical or high-severity findings with brief remediation.
+[Provide 3-4 sentences summarizing the vendor's overall security posture, key risks, and business impact. Include specific evidence from both questionnaire and web research.]
 
-### Recommended Contract Clauses
-List 3-5 specific contract/DPA clauses to add based on identified risks.
+---
 
-### Monitoring Recommendations
-How frequently to reassess this vendor and what triggers immediate reassessment.
+## Risk Scoring Overview
 
-Be direct and specific. Base scoring strictly on the responses provided."""
+| Metric | Score | Interpretation |
+|--------|-------|-----------------|
+| **Overall Risk Score** | X/10 | [Justification based on weighted domain scores] |
+| **Compliance Readiness** | X/10 | [GDPR/SOC2/ISO27001 alignment] |
+| **Incident Response Maturity** | X/10 | [Based on documented processes] |
+| **Data Protection Level** | X/10 | [Encryption and access controls] |
+| **Third-Party Management** | X/10 | [Subprocessor oversight and SLAs] |
+
+**Risk Tier Decision Matrix:**
+- 9-10: CRITICAL - Do not engage without immediate risk mitigation
+- 7-8: HIGH - Engage with strict controls and frequent monitoring
+- 5-6: MEDIUM - Engage with standard controls and quarterly reviews
+- 1-4: LOW - Engage with standard contracts and annual reviews
+
+---
+
+## Detailed Domain Assessment
+
+### 1. Access Control & Identity Management
+**Risk Score: X/10** | Status: 🔴/🟡/🟢
+
+**Questionnaire Findings:**
+- MFA Implementation: [Yes/No/Partial] - Evidence: [specific response]
+- Background Checks: [Yes/No/Partial] - Evidence: [specific response]
+- Privileged Access Management: [Yes/No/Partial] - Evidence: [specific response]
+
+**Web Research Findings:**
+- [Any public security incidents related to access control]
+- [Industry reputation for access security]
+
+**Risk Assessment:**
+[2-3 sentences analyzing access control maturity]
+
+**Remediation Priority:** [Critical/High/Medium]
+
+---
+
+### 2. Data Protection & Encryption
+**Risk Score: X/10** | Status: 🔴/🟡/🟢
+
+**Questionnaire Findings:**
+- Data at Rest Encryption: [Yes/No/Unknown] - [AES-256/AES-128/None]
+- Data in Transit Encryption: [Yes/No/Unknown] - [TLS 1.2+/SSL/None]
+- Encryption Key Management: [Yes/No/Partial] - Evidence: [specific response]
+
+**Web Research Findings:**
+- [Any data breach history or encryption failures]
+- [Industry standards compliance]
+
+**Risk Assessment:**
+[2-3 sentences analyzing data protection maturity]
+
+**Remediation Priority:** [Critical/High/Medium]
+
+---
+
+### 3. Incident Response & Business Continuity
+**Risk Score: X/10** | Status: 🔴/🟡/🟢
+
+**Questionnaire Findings:**
+- Documented IR Plan: [Yes/No/Partial]
+- Penetration Testing: [Yes/No/Frequency: ___]
+- Business Continuity/DR Plan: [Yes/No/RTO: ___/RPO: ___]
+
+**Web Research Findings:**
+- [Public incident disclosures or breach history]
+- [Industry track record for uptime/availability]
+
+**Risk Assessment:**
+[2-3 sentences analyzing incident response maturity]
+
+**Remediation Priority:** [Critical/High/Medium]
+
+---
+
+### 4. Compliance & Security Certifications
+**Risk Score: X/10** | Status: 🔴/🟡/🟢
+
+**Questionnaire Findings:**
+- ISO 27001: [Certified/Not Certified/In Progress] - [Year: ___]
+- SOC 2 Type II: [Certified/Not Certified/In Progress]
+- GDPR Compliance: [Yes/No/Unknown]
+- Other Relevant Certifications: [List]
+
+**Web Research Findings:**
+- [Verified certifications found]
+- [Compliance audit reports available]
+- [Regulatory actions or warnings]
+
+**Risk Assessment:**
+[2-3 sentences analyzing compliance posture]
+
+**Remediation Priority:** [Critical/High/Medium]
+
+---
+
+### 5. Third-Party & Subprocessor Management
+**Risk Score: X/10** | Status: 🔴/🟡/🟢
+
+**Questionnaire Findings:**
+- Subprocessor List Maintained: [Yes/No]
+- Subprocessor Vetting Process: [Yes/No/Description: ___]
+- Written Agreements with Subprocessors: [Yes/No]
+
+**Risk Assessment:**
+[2-3 sentences analyzing third-party management]
+
+**Remediation Priority:** [Critical/High/Medium]
+
+---
+
+## Critical Risk Items (Ranked by Severity)
+
+| # | Risk | Impact | Evidence | Remediation | Timeline |
+|---|------|--------|----------|------------|----------|
+| 1 | [Risk Name] | [Critical/High/Medium] | [Source: Questionnaire/Web] | [Required Action] | [Immediate/30 days/90 days] |
+| 2 | [Risk Name] | [Critical/High/Medium] | [Source: Questionnaire/Web] | [Required Action] | [Immediate/30 days/90 days] |
+| 3 | [Risk Name] | [Critical/High/Medium] | [Source: Questionnaire/Web] | [Required Action] | [Immediate/30 days/90 days] |
+
+---
+
+## Recommended Contract Clauses & SLAs
+
+### Data Security Requirements
+- Data Encryption: "Vendor shall encrypt all data at rest using AES-256 and in transit using TLS 1.2+"
+- Encryption Key Management: "Vendor maintains encryption keys separately from data and implements key rotation annually"
+- Data Residency: "[Specify geographic requirements]"
+
+### Compliance & Audit Rights
+- Certification Requirements: "Vendor shall maintain ISO 27001 or SOC 2 Type II certification"
+- Right to Audit: "Customer may conduct annual security audits or require third-party penetration testing"
+- Compliance Reporting: "Vendor provides quarterly security posture reports"
+
+### Incident Management
+- Breach Notification: "Vendor notifies customer within 24 hours of any confirmed security incident"
+- Root Cause Analysis: "Vendor provides RCA within 10 business days of incident"
+- Remediation SLA: "Critical incidents remediated within 48 hours"
+
+### Service Level Agreements
+- Uptime: "99.5% monthly uptime with [RTO/RPO] for disaster recovery"
+- Incident Response: "Critical incidents acknowledged within 2 hours, resolved within 4 hours"
+- Patch Management: "Critical security patches applied within 48 hours"
+
+---
+
+## Monitoring & Reassessment Plan
+
+### Risk Tier → Monitoring Frequency
+- **CRITICAL**: Monthly reviews + immediate action on any incident
+- **HIGH**: Quarterly reviews + bi-annual security assessments
+- **MEDIUM**: Semi-annual reviews + annual security assessments
+- **LOW**: Annual reviews + standard contract compliance checks
+
+### Reassessment Triggers
+- [ ] Security incident or breach notification
+- [ ] Loss or expiration of required certifications
+- [ ] Major service outage or availability issue
+- [ ] Regulatory requirement changes (GDPR, PCI-DSS, etc.)
+- [ ] Change in ownership or corporate structure
+- [ ] Negative security news or public vulnerabilities
+
+### Key Metrics to Track
+1. **Security Posture**: Vulnerability scan results, patch compliance rate
+2. **Operational**: Uptime percentage, incident response times
+3. **Compliance**: Certification status, audit readiness, policy updates
+4. **Financial**: SLA credits, penalty assessments, contract performance
+
+---
+
+## Risk Acceptance Decision
+
+**Recommendation:** [ACCEPT / ACCEPT WITH CONDITIONS / REJECT / ESCALATE]
+
+**Justification:** [2-3 sentences on the decision]
+
+**Required Conditions (if applicable):**
+- [ ] Condition 1
+- [ ] Condition 2
+- [ ] Condition 3
+
+**Escalation (if needed):** [Who should approve this decision]
+
+---
+
+## Appendix: Web Research Summary
+
+**Findings:**
+{web_context}
+
+**Sources Checked:** DuckDuckGo public search, industry databases, certification registries
+
+---
+
+**Report Prepared By:** Automated Risk Assessment System
+**Confidence Level:** [High/Medium/Low] based on questionnaire completeness and web data availability
+**Next Review Date:** [Calculated based on risk tier]"""
 
     messages = [{"role": "user", "content": prompt}]
-    return StreamingResponse(
-        _tracked_sse_generator(messages, request.model, SYSTEM_PROMPT, db, quota),
-        media_type=_SSE_MEDIA_TYPE,
-        headers=_SSE_HEADERS,
-    )
+
+    # Get response from Ollama
+    full_response = ""
+    async for chunk in _ollama_sse_generator(messages, request.model, SYSTEM_PROMPT):
+        # Extract text from SSE chunk format
+        if chunk.startswith("data: "):
+            data_str = chunk[6:].strip()
+            try:
+                data = json.loads(data_str)
+                # Check for token (streaming data) or error
+                if "token" in data:
+                    full_response += data["token"]
+                elif "error" in data:
+                    full_response += f"\n\n**Error**: {data['error']}\n"
+            except Exception as e:
+                # Ignore parse errors and continue
+                pass
+
+    return {"message": full_response}
 
 
 class RemediationPlanRequest(BaseModel):

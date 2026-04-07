@@ -245,6 +245,8 @@ export interface Vendor extends BaseEntity {
   risk_score?: number;
   primary_contact_name?: string;
   primary_contact_email?: string;
+  services_provided?: string;
+  description?: string;
 }
 
 // ─── Dashboard ───────────────────────────────
@@ -298,6 +300,7 @@ export interface ControlAssessmentDetail extends BaseEntity {
   not_applicable_justification?: string;
   ai_confidence?: number;
   cross_framework_coverage: CrosswalkMapping[];
+  is_mandatory?: boolean;
 }
 
 export interface GapDetail {

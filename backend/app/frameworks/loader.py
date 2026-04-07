@@ -45,8 +45,14 @@ async def load_framework_from_file(db: AsyncSession, yaml_path: Path) -> int:
         data = yaml.safe_load(f)
 
     framework_data = data.get("framework", {})
+    name = framework_data.get("name")
     short_name = framework_data.get("short_name")
     version = framework_data.get("version", "1.0")
+
+    # Skip if required fields are missing
+    if not name or not short_name:
+        logger.warning("Skipping framework — missing required fields", file=str(yaml_path), name=name, short_name=short_name)
+        return 0
 
     # Check if framework already exists
     result = await db.execute(
@@ -102,6 +108,7 @@ async def load_framework_from_file(db: AsyncSession, yaml_path: Path) -> int:
                 sort_order=i,
                 mapped_controls=ctrl_data.get("mapped_controls", []),
                 tags=ctrl_data.get("tags", []),
+                is_mandatory=ctrl_data.get("mandatory", False),
             )
             db.add(control)
             await db.flush()
@@ -109,6 +116,7 @@ async def load_framework_from_file(db: AsyncSession, yaml_path: Path) -> int:
             control.title = ctrl_data.get("title", control.title)
             control.description = ctrl_data.get("description", control.description)
             control.mapped_controls = ctrl_data.get("mapped_controls", control.mapped_controls)
+            control.is_mandatory = ctrl_data.get("mandatory", control.is_mandatory)
 
         # Load requirements
         for req_data in ctrl_data.get("requirements", []):

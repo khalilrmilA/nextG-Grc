@@ -423,6 +423,11 @@ function ResultsTab({
                       <span className="text-sm font-medium text-gray-800 truncate">
                         {ca.control_title}
                       </span>
+                      {ca.is_mandatory && (
+                        <span className="text-xs font-semibold text-red-700 bg-red-50 border border-red-200 px-1.5 py-0.5 rounded">
+                          Mandatory
+                        </span>
+                      )}
                       {ca.control_category && (
                         <span className="text-xs text-gray-400 bg-gray-50 px-1.5 py-0.5 rounded">
                           {ca.control_category}
@@ -507,8 +512,13 @@ function ResultsTab({
                       <option value="implemented">Compliant</option>
                       <option value="partially_implemented">Partial</option>
                       <option value="not_implemented">Gap</option>
-                      <option value="not_applicable">N/A</option>
+                      {!ca.is_mandatory && <option value="not_applicable">N/A</option>}
                     </select>
+                    {ca.is_mandatory ? (
+                      <span className="text-xs text-red-600">N/A not allowed — mandatory control</span>
+                    ) : (
+                      <span className="text-xs text-gray-400 italic">(is_mandatory={String(ca.is_mandatory)})</span>
+                    )}
                     {saving === ca.id && <Loader2 className="w-3.5 h-3.5 animate-spin text-gray-400" />}
                     {overrides[ca.id] && (
                       <span className="text-xs text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded">manually overridden</span>
@@ -696,6 +706,10 @@ export default function AssessmentDetailPage() {
     if (!assessmentId) return;
     complianceApi.getAssessment(assessmentId)
       .then((data) => {
+        // Debug: log first control to see what fields we're getting
+        if (data.control_assessments.length > 0) {
+          console.log("First control received:", JSON.stringify(data.control_assessments[0], null, 2));
+        }
         setAssessment(data);
         setGaps(data.gaps);
         if (data.control_assessments.length > 0) setActiveTab("results");
