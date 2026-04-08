@@ -70,7 +70,9 @@ function AddVendorModal({ onClose, onSaved }: { readonly onClose: () => void; re
     status: "active", risk_score: 10, dpa: false,
     contract_expiry: "", services: "", website: "", notes: "",
   });
+  const [contractFile, setContractFile] = useState<File | null>(null);
   const [error, setError] = useState("");
+  const [uploading, setUploading] = useState(false);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -79,6 +81,8 @@ function AddVendorModal({ onClose, onSaved }: { readonly onClose: () => void; re
 
     try {
       setError("");
+      setUploading(true);
+
       const newVendor = await vendorsApi.create({
         name: form.name.trim(),
         industry: form.industry,
@@ -92,11 +96,18 @@ function AddVendorModal({ onClose, onSaved }: { readonly onClose: () => void; re
         website: form.website.trim() || undefined,
       } as any);
 
+      // Upload contract if provided
+      if (contractFile) {
+        await vendorsApi.uploadContract(newVendor.id, contractFile);
+      }
+
       onSaved(newVendor);
       onClose();
     } catch (err) {
       setError(`Failed to create 3rd party. Please try again. ${err instanceof Error ? err.message : ''}`);
       console.error(err);
+    } finally {
+      setUploading(false);
     }
   }
 
@@ -199,14 +210,38 @@ function AddVendorModal({ onClose, onSaved }: { readonly onClose: () => void; re
               value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} />
           </div>
 
+          <div>
+            <label htmlFor="v-contract" className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Upload Contract (Optional)</label>
+            <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 text-center cursor-pointer hover:border-blue-400 hover:bg-blue-50 transition-colors"
+              onClick={() => document.getElementById("v-contract")?.click()}>
+              <input id="v-contract" type="file" accept=".pdf,.txt,.doc,.docx" className="hidden"
+                onChange={e => setContractFile(e.target.files?.[0] || null)} />
+              <p className="text-sm text-gray-600">
+                {contractFile ? (
+                  <>✓ <strong>{contractFile.name}</strong> selected</>
+                ) : (
+                  <>Click to upload contract (PDF, TXT, or DOC)</>
+                )}
+              </p>
+              <p className="text-xs text-gray-400 mt-1">AI will automatically review the contract</p>
+            </div>
+          </div>
+
           <div className="flex gap-3 pt-2">
-            <button type="button" onClick={onClose}
-              className="flex-1 py-2.5 rounded-lg border border-gray-200 text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors">
+            <button type="button" onClick={onClose} disabled={uploading}
+              className="flex-1 py-2.5 rounded-lg border border-gray-200 text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors disabled:opacity-50">
               {t("common.cancel")}
             </button>
-            <button type="submit"
-              className="flex-1 py-2.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium transition-colors">
-              {t("vendors.add_vendor_submit")}
+            <button type="submit" disabled={uploading}
+              className="flex-1 py-2.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium transition-colors disabled:opacity-50 flex items-center justify-center gap-2">
+              {uploading ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Uploading...
+                </>
+              ) : (
+                t("vendors.add_vendor_submit")
+              )}
             </button>
           </div>
         </form>

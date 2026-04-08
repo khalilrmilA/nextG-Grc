@@ -421,6 +421,14 @@ export const vendorsApi = {
       },
     };
   },
+
+  uploadContract: async (vendorId: string, file: File) => {
+    const formData = new FormData();
+    formData.append("contract_file", file);
+    return apiClient.post(`/vendors/${vendorId}/upload-contract`, formData, {
+      headers: { "Content-Type": "multipart/form-data" },
+    }).then((r) => r.data);
+  },
 };
 
 // ─── Dashboard ───────────────────────────────

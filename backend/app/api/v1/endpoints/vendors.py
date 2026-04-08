@@ -1,15 +1,17 @@
 """Third-Party Risk Management (TPRM) — Vendor endpoints."""
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from pydantic import BaseModel
 from datetime import datetime
 import json
+import os
+from pathlib import Path
 
 from app.core.database import get_db
 from app.api.v1.dependencies.auth import get_current_user, get_tenant_id
 from app.models.user import User
-from app.models.vendor import Vendor, VendorRiskTier, VendorStatus
+from app.models.vendor import Vendor, VendorRiskTier, VendorStatus, VendorContract
 from app.core.config import settings
 
 router = APIRouter()
@@ -72,6 +74,19 @@ class VendorAnalysisResponse(BaseModel):
     analysis: str  # The AI-generated analysis
     web_search_results: list[dict] | None = None
     updated_at: datetime
+
+
+class VendorContractResponse(BaseModel):
+    """Response for uploaded contract."""
+    id: str
+    vendor_id: str
+    file_name: str
+    file_size: int | None
+    ai_review: str | None
+    review_status: str
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
 
 
 # ── Endpoints ───────────────────────────────────────────────────────────────
@@ -484,3 +499,165 @@ Format response in clear markdown with proper tables and sections."""
             status_code=500,
             detail=error_msg
         )
+
+
+@router.post("/{vendor_id}/upload-contract", response_model=VendorContractResponse)
+async def upload_vendor_contract(
+    vendor_id: str,
+    contract_file: UploadFile = File(...),
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(get_current_user),
+    tenant_id: str = Depends(get_tenant_id),
+):
+    """Upload a contract for a vendor and trigger AI review."""
+    # Get vendor
+    result = await db.execute(
+        select(Vendor).where(
+            Vendor.id == vendor_id,
+            Vendor.tenant_id == tenant_id,
+        )
+    )
+    vendor = result.scalar_one_or_none()
+
+    if not vendor:
+        raise HTTPException(status_code=404, detail="Vendor not found")
+
+    # Create upload directory if it doesn't exist
+    upload_dir = Path("uploads/contracts")
+    upload_dir.mkdir(parents=True, exist_ok=True)
+
+    # Save file
+    file_path = upload_dir / f"{vendor_id}_{contract_file.filename}"
+    try:
+        content = await contract_file.read()
+        with open(file_path, "wb") as f:
+            f.write(content)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"File upload failed: {str(e)}")
+
+    # Extract text from PDF or read as text
+    extracted_text = ""
+    try:
+        if contract_file.filename.endswith(".pdf"):
+            import PyPDF2
+            with open(file_path, "rb") as f:
+                reader = PyPDF2.PdfReader(f)
+                extracted_text = "\n".join([page.extract_text() for page in reader.pages])
+        else:
+            # For .txt files
+            with open(file_path, "r", encoding="utf-8") as f:
+                extracted_text = f.read()
+    except Exception as e:
+        print(f"Text extraction failed: {e}")
+        extracted_text = ""
+
+    # Create contract record
+    contract = VendorContract(
+        vendor_id=vendor_id,
+        file_name=contract_file.filename,
+        file_path=str(file_path),
+        file_size=len(content),
+        extracted_text=extracted_text,
+        review_status="pending",
+    )
+
+    await db.add(contract)
+    await db.flush()
+    await db.commit()
+    await db.refresh(contract)
+
+    # Trigger AI review (async)
+    import asyncio
+    asyncio.create_task(analyze_contract_async(contract.id, extracted_text, vendor.name, db))
+
+    return VendorContractResponse.model_validate(contract)
+
+
+async def analyze_contract_async(contract_id: str, extracted_text: str, vendor_name: str, db: AsyncSession):
+    """Analyze contract with AI (background task)."""
+    try:
+        import httpx
+
+        prompt = f"""You are a legal and compliance expert reviewing a vendor contract. Analyze the following contract and provide a comprehensive review focusing on risk and compliance aspects.
+
+VENDOR: {vendor_name}
+
+CONTRACT TEXT:
+{extracted_text[:5000]}  {('...' if len(extracted_text) > 5000 else '')}
+
+Please provide a detailed review with these sections:
+
+## Executive Summary
+[Brief overview of key contract terms and risk level]
+
+## Key Findings
+- Critical issues (if any)
+- Important terms and conditions
+- Risk factors identified
+
+## Data Protection & Privacy
+- Data handling obligations
+- GDPR/Privacy compliance
+- Data breach notification requirements
+
+## Liability & Insurance
+- Indemnification clauses
+- Limitation of liability
+- Insurance requirements
+- Termination clauses
+
+## Compliance & Standards
+- Required certifications (ISO, SOC2, etc)
+- Audit rights
+- Compliance obligations
+
+## Recommendations
+- Items requiring negotiation
+- Missing clauses to add
+- Risk mitigation measures
+
+## Overall Risk Assessment
+[LOW/MEDIUM/HIGH/CRITICAL] - with justification"""
+
+        # Call Ollama for contract analysis
+        base_url = settings.OLLAMA_BASE_URL.rstrip("/")
+        ollama_url = f"{base_url}/api/chat"
+
+        payload = {
+            "model": settings.OLLAMA_CHAT_MODEL,
+            "stream": False,
+            "messages": [{"role": "user", "content": prompt}],
+        }
+
+        async with httpx.AsyncClient(timeout=300.0) as client:
+            resp = await client.post(ollama_url, json=payload)
+            if resp.status_code == 200:
+                data = resp.json()
+                if "message" in data and "content" in data["message"]:
+                    ai_review = data["message"]["content"]
+                else:
+                    ai_review = "Analysis completed but response format unexpected"
+            else:
+                ai_review = f"Ollama error {resp.status_code}"
+
+        # Update contract with AI review
+        result = await db.execute(
+            select(VendorContract).where(VendorContract.id == contract_id)
+        )
+        contract = result.scalar_one_or_none()
+        if contract:
+            contract.ai_review = ai_review
+            contract.review_status = "completed"
+            await db.commit()
+
+    except Exception as e:
+        print(f"Contract analysis error: {e}")
+        # Update status to error
+        result = await db.execute(
+            select(VendorContract).where(VendorContract.id == contract_id)
+        )
+        contract = result.scalar_one_or_none()
+        if contract:
+            contract.review_status = "error"
+            contract.ai_review = f"Analysis failed: {str(e)}"
+            await db.commit()

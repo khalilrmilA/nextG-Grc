@@ -74,6 +74,9 @@ class Vendor(Base):
     assessments: Mapped[list["VendorAssessment"]] = relationship(
         "VendorAssessment", back_populates="vendor"
     )
+    contracts: Mapped[list["VendorContract"]] = relationship(
+        "VendorContract", back_populates="vendor"
+    )
     risks: Mapped[list["VendorRisk"]] = relationship(
         "VendorRisk", back_populates="vendor"
     )
@@ -101,6 +104,23 @@ class VendorAssessment(Base):
     findings: Mapped[list] = mapped_column(JSON, default=list)
 
     vendor: Mapped["Vendor"] = relationship("Vendor", back_populates="assessments")
+
+
+class VendorContract(Base):
+    """Contract document associated with a vendor."""
+    __tablename__ = "vendor_contracts"
+
+    vendor_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("vendors.id"), nullable=False, index=True
+    )
+    file_name: Mapped[str] = mapped_column(String(500), nullable=False)
+    file_path: Mapped[str] = mapped_column(String(1000), nullable=False)
+    file_size: Mapped[int] = mapped_column(nullable=True)
+    extracted_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+    ai_review: Mapped[str | None] = mapped_column(Text, nullable=True)
+    review_status: Mapped[str] = mapped_column(String(50), default="pending")  # pending, completed, error
+
+    vendor: Mapped["Vendor"] = relationship("Vendor", back_populates="contracts")
 
 
 class VendorRisk(Base):
