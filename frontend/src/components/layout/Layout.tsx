@@ -15,7 +15,7 @@ import {
   ClipboardList, FileText, Building2, LogOut, Shield,
   ChevronRight, Bell, Settings, HelpCircle, Lock,
   Crown, Briefcase, X, Trash2, Wand2,
-  AlertCircle, Info, ShieldAlert, ClipboardCheck,
+  AlertCircle, Info, ShieldAlert, ClipboardCheck, RefreshCw,
 } from "lucide-react";
 
 const NAV_GROUPS = [
@@ -35,6 +35,7 @@ const NAV_GROUPS = [
       { to: "/policies", icon: FileText,      label: "Policies",       module: "policies" },
       { to: "/policy-generator", icon: Wand2, label: "Doc Generator",  module: "policy-generator" },
       { to: "/vendors",  icon: Building2,     label: "3rd Parties (TPRM)", module: "vendors"  },
+      { to: "/reports",  icon: ClipboardCheck, label: "Reports",       module: "reports"  },
     ],
   },
 ];
@@ -52,6 +53,7 @@ const PAGE_LABELS: Record<string, string> = {
   policies:          "Policies",
   "policy-generator": "Doc Generator",
   vendors:           "3rd Parties",
+  reports:    "Reports",
   settings:   "Settings",
   help:       "Help & Support",
 };
@@ -159,6 +161,11 @@ function NotificationBell() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["notifications"] }),
   });
 
+  const checkDeadlines = useMutation({
+    mutationFn: () => notificationsApi.checkDeadlines(),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["notifications"] }),
+  });
+
   // Close dropdown when clicking outside
   useEffect(() => {
     function handleClick(e: MouseEvent) {
@@ -204,6 +211,15 @@ function NotificationBell() {
               )}
             </div>
             <div className="flex items-center gap-1">
+              <button
+                type="button"
+                onClick={() => checkDeadlines.mutate()}
+                disabled={checkDeadlines.isPending}
+                className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors disabled:opacity-50"
+                title="Check deadlines now"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${checkDeadlines.isPending ? "animate-spin" : ""}`} />
+              </button>
               {unreadCount > 0 && !isError && (
                 <button
                   type="button"

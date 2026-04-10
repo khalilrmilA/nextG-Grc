@@ -80,6 +80,10 @@ class Risk(Base):
     # Linked assets
     linked_assets: Mapped[list] = mapped_column(JSON, default=list)
 
+    # Review scheduling
+    next_review_date: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    last_reviewed_at: Mapped[str | None] = mapped_column(String(30), nullable=True)
+
     # Tags
     tags: Mapped[list] = mapped_column(JSON, default=list)
 

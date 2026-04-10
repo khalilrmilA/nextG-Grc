@@ -174,6 +174,23 @@ async def clear_all_notifications(
     )
 
 
+@router.post("/check-deadlines", status_code=status.HTTP_200_OK)
+async def check_deadlines_and_generate(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Run all deadline/threshold checks and generate notifications.
+    Can be called manually or by a scheduled task.
+    """
+    from app.services.notification_generator import run_all_checks
+    results = await run_all_checks(db)
+    return {
+        "status": "success",
+        "notifications_created": results,
+    }
+
+
 # ── Preference management ─────────────────────────────────────────────────────
 
 @router.get("/preferences", response_model=list[PreferenceOut])

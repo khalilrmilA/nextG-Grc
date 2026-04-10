@@ -106,6 +106,16 @@ class VendorAssessment(Base):
     vendor: Mapped["Vendor"] = relationship("Vendor", back_populates="assessments")
 
 
+class ContractValidationStatus(str, enum.Enum):
+    """Validation workflow states for contracts."""
+    PENDING_AI = "pending_ai"              # Just uploaded, waiting for AI
+    AI_REVIEWED = "ai_reviewed"            # AI review complete, waiting for CISO
+    PENDING_CISO = "pending_ciso"          # Under CISO review
+    APPROVED = "approved"                  # CISO approved
+    REJECTED = "rejected"                  # CISO rejected
+    SENT_TO_VENDOR = "sent_to_vendor"      # Sent back to vendor after approval
+
+
 class VendorContract(Base):
     """Contract document associated with a vendor."""
     __tablename__ = "vendor_contracts"
@@ -119,6 +129,18 @@ class VendorContract(Base):
     extracted_text: Mapped[str | None] = mapped_column(Text, nullable=True)
     ai_review: Mapped[str | None] = mapped_column(Text, nullable=True)
     review_status: Mapped[str] = mapped_column(String(50), default="pending")  # pending, completed, error
+
+    # Validation workflow fields
+    validation_status: Mapped[str] = mapped_column(
+        String(50), default=ContractValidationStatus.PENDING_AI.value
+    )
+    ciso_reviewer_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("users.id"), nullable=True
+    )
+    ciso_comments: Mapped[str | None] = mapped_column(Text, nullable=True)
+    ciso_reviewed_at: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    sent_to_vendor_at: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    version: Mapped[int] = mapped_column(default=1)
 
     vendor: Mapped["Vendor"] = relationship("Vendor", back_populates="contracts")
 

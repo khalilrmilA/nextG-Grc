@@ -18,6 +18,7 @@ from app.api.v1.endpoints import (
     notifications,
     auditor_portal,
     admin,
+    reports,
 )
 
 api_router = APIRouter()
@@ -39,3 +40,4 @@ api_router.include_router(ai.router, prefix="/ai", tags=["AI Assistant"])
 api_router.include_router(notifications.router, prefix="/notifications", tags=["Notifications"])
 api_router.include_router(auditor_portal.router, prefix="/auditor-portal", tags=["Auditor Portal"])
 api_router.include_router(admin.router, prefix="/admin", tags=["Super Admin"])
+api_router.include_router(reports.router, prefix="/reports", tags=["Reports"])

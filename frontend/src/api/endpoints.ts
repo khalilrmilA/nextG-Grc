@@ -119,6 +119,36 @@ export const frameworksApi = {
     apiClient
       .get(`/frameworks/${frameworkId}/controls/${controlId}/crosswalk`)
       .then((r) => r.data),
+
+  // Custom Framework Builder
+  browseControls: (frameworkIds?: string[]) => {
+    const params = frameworkIds && frameworkIds.length > 0 ? { framework_ids: frameworkIds.join(",") } : {};
+    return apiClient.get("/frameworks/builder/browse-controls", { params }).then((r) => r.data);
+  },
+
+  getAISuggestions: (data: {
+    industry: string;
+    region?: string;
+    use_case?: string;
+    selected_control_ids?: string[];
+  }) => apiClient.post("/frameworks/builder/ai-suggestions", data).then((r) => r.data),
+
+  buildCustom: (data: {
+    name: string;
+    short_name: string;
+    version?: string;
+    description?: string;
+    issuing_body?: string;
+    applicable_regions?: string[];
+    applicable_industries?: string[];
+    controls: Array<{
+      control_id: string;
+      title: string;
+      description?: string;
+      category?: string;
+      source_framework?: string;
+    }>;
+  }) => apiClient.post<Framework>("/frameworks/builder/create", data).then((r) => r.data),
 };
 
 // ─── Risks ───────────────────────────────────
@@ -429,6 +459,37 @@ export const vendorsApi = {
       headers: { "Content-Type": "multipart/form-data" },
     }).then((r) => r.data);
   },
+
+  // Contract validation workflow
+  listContractsPendingReview: () =>
+    apiClient.get("/vendors/contracts/pending-review").then((r) => r.data),
+
+  listVendorContracts: (vendorId: string) =>
+    apiClient.get(`/vendors/${vendorId}/contracts`).then((r) => r.data),
+
+  getContract: (contractId: string) =>
+    apiClient.get(`/vendors/contracts/${contractId}`).then((r) => r.data),
+
+  cisoReviewContract: (contractId: string, action: "approve" | "reject", comments?: string) =>
+    apiClient.post(`/vendors/contracts/${contractId}/ciso-review`, {
+      action,
+      comments,
+    }).then((r) => r.data),
+
+  sendContractToVendor: (contractId: string) =>
+    apiClient.post(`/vendors/contracts/${contractId}/send-to-vendor`).then((r) => r.data),
+
+  // Risk cartography
+  getRiskCartography: (vendorId: string) =>
+    apiClient.get(`/vendors/${vendorId}/cartography`).then((r) => r.data),
+
+  // Prescreen questionnaire (AI analysis BEFORE saving vendor)
+  prescreenQuestionnaire: (data: {
+    vendor_name: string;
+    vendor_industry?: string;
+    vendor_country?: string;
+    responses: Record<string, string>;
+  }) => apiClient.post("/vendors/prescreen", data).then((r) => r.data),
 };
 
 // ─── Dashboard ───────────────────────────────
@@ -476,6 +537,40 @@ export const notificationsApi = {
     apiClient
       .put<NotificationPreference[]>("/notifications/preferences", { preferences })
       .then((r) => r.data),
+
+  checkDeadlines: () =>
+    apiClient.post("/notifications/check-deadlines").then((r) => r.data),
+};
+
+// ─── Reports ─────────────────────────────────
+
+export const reportsApi = {
+  listTypes: () => apiClient.get("/reports/types").then((r) => r.data),
+
+  download: async (reportType: string) => {
+    const response = await apiClient.get(`/reports/${reportType}/generate`, {
+      responseType: "blob",
+    });
+    // Create blob URL and trigger download
+    const blob = new Blob([response.data], { type: "application/pdf" });
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    const date = new Date().toISOString().split("T")[0];
+    link.href = url;
+    link.download = `${reportType}_report_${date}.pdf`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    window.URL.revokeObjectURL(url);
+  },
+
+  preview: async (reportType: string): Promise<string> => {
+    const response = await apiClient.get(`/reports/${reportType}/preview`, {
+      responseType: "blob",
+    });
+    const blob = new Blob([response.data], { type: "application/pdf" });
+    return window.URL.createObjectURL(blob);
+  },
 };
 
 // ─── Auditor Portal ───────────────────────────

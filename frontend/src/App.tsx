@@ -20,6 +20,9 @@ import CustomFrameworkPage from "./pages/CustomFrameworkPage";
 import AuditsPage from "./pages/AuditsPage";
 import PoliciesPage from "./pages/PoliciesPage";
 import VendorsPage from "./pages/VendorsPage";
+import ContractReviewPage from "./pages/ContractReviewPage";
+import ReportsPage from "./pages/ReportsPage";
+import FrameworkBuilderPage from "./pages/FrameworkBuilderPage";
 import CheatSheetPage from "./pages/CheatSheetPage";
 import SettingsPage from "./pages/SettingsPage";
 import HelpPage from "./pages/HelpPage";
@@ -110,10 +113,13 @@ export default function App() {
         <Route path="compliance/:assessmentId/traceability" element={<PrivateRoute requiredModule="compliance"><TraceabilityPage /></PrivateRoute>} />
         <Route path="frameworks" element={<PrivateRoute requiredModule="frameworks"><FrameworksPage /></PrivateRoute>} />
         <Route path="frameworks/custom/new" element={<PrivateRoute requiredModule="frameworks"><CustomFrameworkPage /></PrivateRoute>} />
+        <Route path="frameworks/builder" element={<PrivateRoute requiredModule="frameworks"><FrameworkBuilderPage /></PrivateRoute>} />
         <Route path="audits" element={<PrivateRoute requiredModule="audits"><AuditsPage /></PrivateRoute>} />
         <Route path="policies" element={<PrivateRoute requiredModule="policies"><PoliciesPage /></PrivateRoute>} />
         <Route path="policy-generator" element={<PrivateRoute requiredModule="policy-generator"><PolicyGeneratorPage /></PrivateRoute>} />
         <Route path="vendors" element={<PrivateRoute requiredModule="vendors"><VendorsPage /></PrivateRoute>} />
+        <Route path="vendors/contract-review" element={<PrivateRoute requiredModule="vendors"><ContractReviewPage /></PrivateRoute>} />
+        <Route path="reports" element={<ReportsPage />} />
         <Route path="cheat" element={<CheatSheetPage />} />
         <Route path="settings" element={<SettingsPage />} />
         <Route path="help" element={<HelpPage />} />

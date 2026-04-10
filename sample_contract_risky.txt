@@ -1,0 +1,37 @@
+SERVICE AGREEMENT
+
+Date: April 2026
+
+Parties:
+- QuickHost LLC (Provider)
+- Acme Corporation (Customer)
+
+1. SERVICES
+Provider will give hosting services to Customer.
+
+2. FEES
+Customer pays $2,000 per month.
+
+3. DATA
+Provider will store Customer's data on their servers.
+Provider may share data with partners as needed for business purposes.
+
+4. SECURITY
+Provider will try to keep data secure.
+
+5. LIABILITY
+Provider is not liable for any damages, losses, or issues.
+Customer uses the service at their own risk.
+
+6. TERMINATION
+Either party can cancel anytime with 7 days notice.
+After cancellation, data may or may not be deleted at Provider's discretion.
+
+7. CHANGES
+Provider may change these terms at any time without notice.
+
+8. GOVERNING LAW
+This agreement is governed by the laws of an undisclosed jurisdiction.
+
+Signed: _____________
+Date: _______________

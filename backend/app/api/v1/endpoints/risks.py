@@ -25,6 +25,7 @@ class RiskCreate(BaseModel):
     tags: list[str] = []
     linked_controls: list[str] = []
     linked_assets: list[str] = []
+    next_review_date: str | None = None
 
 
 class RiskUpdate(BaseModel):
@@ -40,6 +41,7 @@ class RiskUpdate(BaseModel):
     severity: RiskSeverity | None = None
     tags: list[str] | None = None
     linked_controls: list[str] | None = None
+    next_review_date: str | None = None
 
 
 class RiskResponse(BaseModel):
@@ -60,6 +62,8 @@ class RiskResponse(BaseModel):
     tags: list
     linked_controls: list
     linked_assets: list
+    next_review_date: str | None
+    last_reviewed_at: str | None
     created_at: datetime
     updated_at: datetime
 

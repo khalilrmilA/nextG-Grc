@@ -78,6 +78,243 @@ async def list_frameworks(
     return responses
 
 
+# ── Custom Framework Builder Endpoints (must come BEFORE /{framework_id}) ──
+
+class BrowseControlsResponse(BaseModel):
+    """Controls grouped by source framework."""
+    framework_id: str
+    framework_name: str
+    framework_short_name: str
+    controls: list[ControlResponse]
+
+
+class AISuggestionsRequest(BaseModel):
+    """Request AI to suggest controls based on industry/region/use case."""
+    industry: str
+    region: str | None = None
+    use_case: str | None = None
+    selected_control_ids: list[str] = []
+
+
+class AISuggestion(BaseModel):
+    """A single AI control suggestion."""
+    title: str
+    description: str
+    category: str
+    rationale: str
+    priority: str
+
+
+class AISuggestionsResponse(BaseModel):
+    """AI-generated control suggestions."""
+    suggestions: list[AISuggestion]
+    rationale: str
+
+
+class CustomControlInput(BaseModel):
+    """A control to include in the custom framework."""
+    control_id: str
+    title: str
+    description: str | None = None
+    category: str | None = None
+    source_framework: str | None = None
+
+
+class BuildCustomFrameworkRequest(BaseModel):
+    """Request to build a custom framework from selected controls."""
+    name: str
+    short_name: str
+    version: str = "1.0"
+    description: str | None = None
+    issuing_body: str | None = None
+    applicable_regions: list[str] = []
+    applicable_industries: list[str] = []
+    controls: list[CustomControlInput]
+
+
+@router.get("/builder/browse-controls", response_model=list[BrowseControlsResponse])
+async def browse_controls_by_framework(
+    framework_ids: str | None = None,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    """Browse controls from one or more existing frameworks."""
+    if framework_ids:
+        ids_list = [i.strip() for i in framework_ids.split(",") if i.strip()]
+        fw_result = await db.execute(
+            select(Framework).where(Framework.id.in_(ids_list))
+        )
+    else:
+        fw_result = await db.execute(
+            select(Framework).where(Framework.is_builtin == True).order_by(Framework.name)  # noqa: E712
+        )
+    frameworks = fw_result.scalars().all()
+
+    result = []
+    for fw in frameworks:
+        controls_result = await db.execute(
+            select(FrameworkControl)
+            .where(FrameworkControl.framework_id == fw.id)
+            .order_by(FrameworkControl.sort_order)
+        )
+        controls = list(controls_result.scalars().all())
+        result.append(BrowseControlsResponse(
+            framework_id=fw.id,
+            framework_name=fw.name,
+            framework_short_name=fw.short_name,
+            controls=[ControlResponse.model_validate(c) for c in controls],
+        ))
+
+    return result
+
+
+@router.post("/builder/ai-suggestions", response_model=AISuggestionsResponse)
+async def get_ai_control_suggestions(
+    body: AISuggestionsRequest,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    """Get AI-suggested controls based on industry, region, and use case."""
+    import httpx
+    import json as json_lib
+    from app.core.config import settings
+
+    selected_context = ""
+    if body.selected_control_ids:
+        ctrl_result = await db.execute(
+            select(FrameworkControl).where(FrameworkControl.id.in_(body.selected_control_ids))
+        )
+        selected = list(ctrl_result.scalars().all())
+        selected_context = f"\n\nALREADY SELECTED CONTROLS ({len(selected)}):\n"
+        for c in selected[:30]:
+            selected_context += f"- {c.control_id}: {c.title}\n"
+
+    prompt = f"""You are a senior compliance consultant helping build a custom compliance framework.
+
+CONTEXT:
+- Industry: {body.industry}
+- Region: {body.region or 'Global'}
+- Use Case: {body.use_case or 'General security and compliance'}
+{selected_context}
+
+TASK:
+Suggest 8-12 essential compliance controls tailored to this industry and region.
+Avoid suggesting controls similar to those already selected.
+Focus on practical, implementable controls that address common gaps.
+
+Return ONLY valid JSON in this exact format:
+
+{{
+  "suggestions": [
+    {{
+      "title": "Control title",
+      "description": "Clear, actionable description (1-2 sentences)",
+      "category": "Access Control | Data Protection | Incident Response | Risk Management | Compliance | Operations | Vendor Management | Other",
+      "rationale": "Why this control is important for this industry/region",
+      "priority": "high | medium | low"
+    }}
+  ],
+  "rationale": "Overall explanation of why these controls were chosen"
+}}"""
+
+    base_url = settings.OLLAMA_BASE_URL.rstrip("/")
+    ollama_url = f"{base_url}/api/chat"
+    payload = {
+        "model": settings.OLLAMA_CHAT_MODEL,
+        "stream": False,
+        "format": "json",
+        "messages": [{"role": "user", "content": prompt}],
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=300.0) as client:
+            resp = await client.post(ollama_url, json=payload)
+            if resp.status_code != 200:
+                raise HTTPException(status_code=500, detail=f"Ollama error {resp.status_code}")
+            data = resp.json()
+            ai_text = data.get("message", {}).get("content", "")
+
+        try:
+            ai_result = json_lib.loads(ai_text)
+        except json_lib.JSONDecodeError:
+            import re
+            match = re.search(r'\{[\s\S]*\}', ai_text)
+            if match:
+                ai_result = json_lib.loads(match.group())
+            else:
+                raise HTTPException(status_code=500, detail="AI returned invalid format")
+
+        return AISuggestionsResponse(
+            suggestions=[AISuggestion(**s) for s in ai_result.get("suggestions", [])],
+            rationale=ai_result.get("rationale", ""),
+        )
+
+    except httpx.RequestError as e:
+        raise HTTPException(status_code=503, detail=f"Ollama unavailable: {str(e)}")
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"AI suggestions failed: {str(e)}")
+
+
+@router.post("/builder/create", response_model=FrameworkResponse, status_code=status.HTTP_201_CREATED)
+async def build_custom_framework(
+    body: BuildCustomFrameworkRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_roles(UserRole.TENANT_ADMIN, UserRole.CISO)),
+    tenant_id: str = Depends(get_tenant_id),
+):
+    """Create a new custom framework with the provided list of controls."""
+    if not body.controls:
+        raise HTTPException(status_code=400, detail="At least one control is required")
+
+    fw = Framework(
+        name=body.name,
+        short_name=body.short_name,
+        version=body.version,
+        description=body.description or f"Custom framework with {len(body.controls)} controls",
+        issuing_body=body.issuing_body or "Custom",
+        applicable_regions=body.applicable_regions,
+        applicable_industries=body.applicable_industries,
+        is_builtin=False,
+        tenant_id=tenant_id,
+        status=FrameworkStatus.ACTIVE,
+    )
+    db.add(fw)
+    await db.flush()
+
+    for idx, ctrl_input in enumerate(body.controls):
+        category_value = None
+        if ctrl_input.category:
+            cat_upper = ctrl_input.category.upper().replace(" ", "_").replace("&", "AND")
+            if cat_upper in _VALID_CATEGORIES:
+                category_value = cat_upper
+
+        control = FrameworkControl(
+            framework_id=fw.id,
+            control_id=ctrl_input.control_id,
+            title=ctrl_input.title,
+            description=ctrl_input.description,
+            category=category_value,
+            sort_order=idx,
+            mapped_controls=[],
+            tags=[ctrl_input.source_framework] if ctrl_input.source_framework else [],
+        )
+        db.add(control)
+
+    await db.commit()
+    await db.refresh(fw)
+
+    try:
+        notify_framework_new.delay(fw.id, body.name)
+    except Exception:
+        pass
+
+    resp = FrameworkResponse.model_validate(fw)
+    resp.control_count = len(body.controls)
+    return resp
+
+
 @router.get("/{framework_id}", response_model=FrameworkResponse)
 async def get_framework(
     framework_id: str,
@@ -367,3 +604,5 @@ async def add_requirement(
     db.add(req)
     await db.flush()
     return {"id": req.id, "control_id": req.control_id, "text": req.requirement_text, "level": req.requirement_level}
+
+

@@ -1,0 +1,720 @@
+/**
+ * FrameworkBuilderPage — Build custom compliance frameworks by:
+ * 1. Selecting controls from existing frameworks (mix-and-match)
+ * 2. Getting AI suggestions tailored to industry/region
+ * 3. Adding custom controls manually
+ * 4. Saving as a tenant-owned framework
+ */
+import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
+import {
+  BookOpen, Sparkles, Plus, Check, X, ChevronRight, ChevronDown, Trash2,
+  Search, Loader2, Save, ArrowLeft, AlertCircle, Lightbulb, Library, Wand2,
+} from "lucide-react";
+import { frameworksApi } from "@/api/endpoints";
+
+interface Control {
+  id: string;
+  control_id: string;
+  title: string;
+  description: string | null;
+  category: string | null;
+  framework_id: string;
+}
+
+interface FrameworkBrowse {
+  framework_id: string;
+  framework_name: string;
+  framework_short_name: string;
+  controls: Control[];
+}
+
+interface AISuggestion {
+  title: string;
+  description: string;
+  category: string;
+  rationale: string;
+  priority: string;
+}
+
+interface SelectedControl {
+  control_id: string;
+  title: string;
+  description?: string;
+  category?: string;
+  source_framework?: string;
+  source_id?: string;  // ID of source control (to deduplicate)
+}
+
+const STEPS = ["info", "browse", "ai", "review"] as const;
+type Step = typeof STEPS[number];
+
+export default function FrameworkBuilderPage() {
+  const navigate = useNavigate();
+  const [step, setStep] = useState<Step>("info");
+
+  // Form state
+  const [name, setName] = useState("");
+  const [shortName, setShortName] = useState("");
+  const [version, setVersion] = useState("1.0");
+  const [description, setDescription] = useState("");
+  const [industry, setIndustry] = useState("Technology");
+  const [region, setRegion] = useState("Global");
+
+  // Browse state
+  const [frameworks, setFrameworks] = useState<FrameworkBrowse[]>([]);
+  const [loadingFrameworks, setLoadingFrameworks] = useState(false);
+  const [expandedFramework, setExpandedFramework] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
+
+  // AI state
+  const [aiSuggestions, setAiSuggestions] = useState<AISuggestion[]>([]);
+  const [aiRationale, setAiRationale] = useState("");
+  const [loadingAi, setLoadingAi] = useState(false);
+
+  // Selected controls
+  const [selected, setSelected] = useState<SelectedControl[]>([]);
+
+  // Save state
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+
+  // Load frameworks when entering browse step
+  useEffect(() => {
+    if (step === "browse" && frameworks.length === 0) {
+      loadFrameworks();
+    }
+  }, [step]);
+
+  async function loadFrameworks() {
+    try {
+      setLoadingFrameworks(true);
+      const data = await frameworksApi.browseControls();
+      setFrameworks(data || []);
+    } catch (err) {
+      console.error("Failed to load frameworks:", err);
+    } finally {
+      setLoadingFrameworks(false);
+    }
+  }
+
+  async function loadAISuggestions() {
+    try {
+      setLoadingAi(true);
+      setError("");
+      const result = await frameworksApi.getAISuggestions({
+        industry,
+        region,
+        use_case: description,
+        selected_control_ids: selected.filter(c => c.source_id).map(c => c.source_id!),
+      }) as { suggestions: AISuggestion[]; rationale: string };
+      setAiSuggestions(result.suggestions || []);
+      setAiRationale(result.rationale || "");
+    } catch (err) {
+      console.error("AI suggestions failed:", err);
+      setError("AI suggestions failed. Make sure Ollama is running.");
+    } finally {
+      setLoadingAi(false);
+    }
+  }
+
+  function isControlSelected(controlId: string): boolean {
+    return selected.some(c => c.source_id === controlId);
+  }
+
+  function toggleControl(control: Control, frameworkName: string) {
+    if (isControlSelected(control.id)) {
+      setSelected(s => s.filter(c => c.source_id !== control.id));
+    } else {
+      setSelected(s => [
+        ...s,
+        {
+          control_id: control.control_id,
+          title: control.title,
+          description: control.description || undefined,
+          category: control.category || undefined,
+          source_framework: frameworkName,
+          source_id: control.id,
+        },
+      ]);
+    }
+  }
+
+  function getFrameworkSelectionState(fw: FrameworkBrowse): "none" | "some" | "all" {
+    if (fw.controls.length === 0) return "none";
+    const selectedCount = fw.controls.filter(c => isControlSelected(c.id)).length;
+    if (selectedCount === 0) return "none";
+    if (selectedCount === fw.controls.length) return "all";
+    return "some";
+  }
+
+  function toggleFramework(fw: FrameworkBrowse, e: React.MouseEvent) {
+    e.stopPropagation();
+    const state = getFrameworkSelectionState(fw);
+    if (state === "all") {
+      // Deselect all controls from this framework
+      const idsToRemove = new Set(fw.controls.map(c => c.id));
+      setSelected(s => s.filter(c => !c.source_id || !idsToRemove.has(c.source_id)));
+    } else {
+      // Select all controls from this framework (preserving already-selected, no duplicates)
+      const alreadySelectedIds = new Set(selected.map(c => c.source_id).filter(Boolean));
+      const newOnes: SelectedControl[] = fw.controls
+        .filter(c => !alreadySelectedIds.has(c.id))
+        .map(c => ({
+          control_id: c.control_id,
+          title: c.title,
+          description: c.description || undefined,
+          category: c.category || undefined,
+          source_framework: fw.framework_short_name,
+          source_id: c.id,
+        }));
+      setSelected(s => [...s, ...newOnes]);
+    }
+  }
+
+  function isAISuggestionSelected(title: string): boolean {
+    return selected.some(c => c.title === title && c.source_framework === "AI");
+  }
+
+  function toggleAISuggestion(suggestion: AISuggestion) {
+    if (isAISuggestionSelected(suggestion.title)) {
+      setSelected(s => s.filter(c => !(c.title === suggestion.title && c.source_framework === "AI")));
+    } else {
+      // Generate a control_id from title
+      const ctrlId = "AI-" + suggestion.title.replace(/[^A-Za-z0-9]+/g, "").slice(0, 8).toUpperCase();
+      setSelected(s => [
+        ...s,
+        {
+          control_id: ctrlId,
+          title: suggestion.title,
+          description: suggestion.description,
+          category: suggestion.category,
+          source_framework: "AI",
+        },
+      ]);
+    }
+  }
+
+  function removeSelected(idx: number) {
+    setSelected(s => s.filter((_, i) => i !== idx));
+  }
+
+  async function handleSave() {
+    if (!name.trim() || !shortName.trim()) {
+      setError("Name and short name are required");
+      return;
+    }
+    if (selected.length === 0) {
+      setError("Select at least one control");
+      return;
+    }
+
+    try {
+      setSaving(true);
+      setError("");
+      await frameworksApi.buildCustom({
+        name: name.trim(),
+        short_name: shortName.trim(),
+        version,
+        description: description || undefined,
+        applicable_industries: [industry],
+        applicable_regions: [region],
+        controls: selected.map(c => ({
+          control_id: c.control_id,
+          title: c.title,
+          description: c.description,
+          category: c.category,
+          source_framework: c.source_framework,
+        })),
+      });
+      navigate("/frameworks");
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Unknown error";
+      setError(`Failed to save: ${msg}`);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function nextStep() {
+    setError("");
+    const currentIdx = STEPS.indexOf(step);
+    if (currentIdx < STEPS.length - 1) {
+      setStep(STEPS[currentIdx + 1]);
+    }
+  }
+
+  function prevStep() {
+    const currentIdx = STEPS.indexOf(step);
+    if (currentIdx > 0) {
+      setStep(STEPS[currentIdx - 1]);
+    }
+  }
+
+  // Filter frameworks by search
+  const filteredFrameworks = frameworks.map(fw => ({
+    ...fw,
+    controls: search
+      ? fw.controls.filter(c =>
+          c.title.toLowerCase().includes(search.toLowerCase()) ||
+          c.control_id.toLowerCase().includes(search.toLowerCase())
+        )
+      : fw.controls,
+  }));
+
+  return (
+    <div className="p-8 max-w-7xl space-y-6">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <button
+            onClick={() => navigate("/frameworks")}
+            className="text-sm text-gray-500 hover:text-gray-700 flex items-center gap-1 mb-2"
+          >
+            <ArrowLeft className="w-4 h-4" /> Back to Frameworks
+          </button>
+          <h1 className="text-2xl font-bold text-gray-900">Custom Framework Builder</h1>
+          <p className="text-gray-500 text-sm mt-1">Mix and match controls from existing frameworks + AI suggestions</p>
+        </div>
+        <div className="flex items-center gap-2 bg-blue-50 border border-blue-100 rounded-xl px-3 py-2">
+          <Library className="w-4 h-4 text-blue-600" />
+          <span className="text-sm font-semibold text-blue-900">{selected.length} controls selected</span>
+        </div>
+      </div>
+
+      {/* Step Indicators */}
+      <div className="bg-white border border-gray-100 rounded-xl p-4">
+        <div className="flex items-center justify-between">
+          {STEPS.map((s, idx) => {
+            const isActive = step === s;
+            const isPast = STEPS.indexOf(step) > idx;
+            const labels: Record<Step, string> = {
+              info: "1. Framework Info",
+              browse: "2. Browse Controls",
+              ai: "3. AI Suggestions",
+              review: "4. Review & Save",
+            };
+            return (
+              <div key={s} className="flex items-center flex-1">
+                <button
+                  onClick={() => setStep(s)}
+                  className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                    isActive
+                      ? "bg-blue-600 text-white"
+                      : isPast
+                      ? "text-blue-600 hover:bg-blue-50"
+                      : "text-gray-400"
+                  }`}
+                >
+                  <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs ${
+                    isActive ? "bg-white text-blue-600" : isPast ? "bg-blue-100" : "bg-gray-100"
+                  }`}>
+                    {isPast ? <Check className="w-3 h-3" /> : idx + 1}
+                  </span>
+                  {labels[s]}
+                </button>
+                {idx < STEPS.length - 1 && (
+                  <div className={`flex-1 h-0.5 mx-2 ${isPast ? "bg-blue-300" : "bg-gray-200"}`} />
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {error && (
+        <div className="bg-red-50 border border-red-200 rounded-xl p-3 flex items-start gap-2">
+          <AlertCircle className="w-4 h-4 text-red-600 flex-shrink-0 mt-0.5" />
+          <p className="text-sm text-red-700">{error}</p>
+        </div>
+      )}
+
+      {/* STEP 1: INFO */}
+      {step === "info" && (
+        <div className="bg-white rounded-2xl border border-gray-100 p-6 space-y-4">
+          <h2 className="text-lg font-semibold text-gray-900 mb-2">Framework Information</h2>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Framework Name *</label>
+              <input
+                type="text"
+                value={name}
+                onChange={e => setName(e.target.value)}
+                placeholder="My Custom Compliance Framework"
+                className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Short Name *</label>
+              <input
+                type="text"
+                value={shortName}
+                onChange={e => setShortName(e.target.value.toUpperCase())}
+                placeholder="CUSTOM-2026"
+                maxLength={20}
+                className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 uppercase"
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-3 gap-4">
+            <div>
+              <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Version</label>
+              <input
+                type="text"
+                value={version}
+                onChange={e => setVersion(e.target.value)}
+                className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Industry</label>
+              <select
+                value={industry}
+                onChange={e => setIndustry(e.target.value)}
+                className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+              >
+                <option>Technology</option>
+                <option>Financial Services</option>
+                <option>Healthcare</option>
+                <option>Retail</option>
+                <option>Manufacturing</option>
+                <option>Government</option>
+                <option>Education</option>
+                <option>Telecommunications</option>
+                <option>Energy</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Region</label>
+              <select
+                value={region}
+                onChange={e => setRegion(e.target.value)}
+                className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+              >
+                <option>Global</option>
+                <option>USA</option>
+                <option>European Union</option>
+                <option>UK</option>
+                <option>Asia Pacific</option>
+                <option>MENA</option>
+                <option>Latin America</option>
+                <option>Africa</option>
+              </select>
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Description / Use Case</label>
+            <textarea
+              rows={3}
+              value={description}
+              onChange={e => setDescription(e.target.value)}
+              placeholder="Describe what this framework will be used for. AI will use this context for suggestions."
+              className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+            />
+          </div>
+        </div>
+      )}
+
+      {/* STEP 2: BROWSE CONTROLS */}
+      {step === "browse" && (
+        <div className="bg-white rounded-2xl border border-gray-100 p-6 space-y-4">
+          <div className="flex items-center justify-between">
+            <h2 className="text-lg font-semibold text-gray-900">Browse Controls from Existing Frameworks</h2>
+            <div className="relative">
+              <Search className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
+              <input
+                type="text"
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+                placeholder="Search controls..."
+                className="pl-9 pr-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+          </div>
+
+          {loadingFrameworks ? (
+            <div className="text-center py-12">
+              <Loader2 className="w-6 h-6 animate-spin text-blue-500 mx-auto" />
+            </div>
+          ) : (
+            <div className="space-y-2 max-h-[60vh] overflow-y-auto">
+              {filteredFrameworks.map(fw => {
+                const isExpanded = expandedFramework === fw.framework_id;
+                const selectedFromFw = fw.controls.filter(c => isControlSelected(c.id)).length;
+                const fwState = getFrameworkSelectionState(fw);
+                return (
+                  <div key={fw.framework_id} className="border border-gray-200 rounded-lg">
+                    <div className="w-full px-4 py-3 flex items-center justify-between hover:bg-gray-50 transition-colors">
+                      <div className="flex items-center gap-3 flex-1">
+                        {/* Framework-level checkbox (select all controls) */}
+                        <button
+                          type="button"
+                          onClick={(e) => toggleFramework(fw, e)}
+                          className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-colors flex-shrink-0 ${
+                            fwState === "all"
+                              ? "bg-blue-600 border-blue-600"
+                              : fwState === "some"
+                              ? "bg-blue-100 border-blue-600"
+                              : "border-gray-300 hover:border-blue-400"
+                          }`}
+                          title={fwState === "all" ? "Deselect all" : "Select all controls in this framework"}
+                        >
+                          {fwState === "all" && <Check className="w-3.5 h-3.5 text-white" />}
+                          {fwState === "some" && <div className="w-2 h-0.5 bg-blue-600 rounded"></div>}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setExpandedFramework(isExpanded ? null : fw.framework_id)}
+                          className="flex items-center gap-3 flex-1 text-left"
+                        >
+                          <BookOpen className="w-5 h-5 text-blue-600" />
+                          <div>
+                            <p className="text-sm font-semibold text-gray-900">{fw.framework_name}</p>
+                            <p className="text-xs text-gray-500">
+                              {fw.controls.length} controls · <span className={selectedFromFw > 0 ? "text-blue-600 font-semibold" : ""}>{selectedFromFw} selected</span>
+                            </p>
+                          </div>
+                        </button>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setExpandedFramework(isExpanded ? null : fw.framework_id)}
+                        className="p-1 hover:bg-gray-100 rounded"
+                      >
+                        {isExpanded ? <ChevronDown className="w-4 h-4 text-gray-400" /> : <ChevronRight className="w-4 h-4 text-gray-400" />}
+                      </button>
+                    </div>
+                    {isExpanded && (
+                      <div className="border-t border-gray-100 p-3 space-y-1.5 max-h-96 overflow-y-auto">
+                        {fw.controls.length === 0 ? (
+                          <p className="text-xs text-gray-500 text-center py-4">No controls found</p>
+                        ) : (
+                          fw.controls.map(ctrl => {
+                            const isSel = isControlSelected(ctrl.id);
+                            return (
+                              <button
+                                key={ctrl.id}
+                                onClick={() => toggleControl(ctrl, fw.framework_short_name)}
+                                className={`w-full text-left p-2.5 rounded-lg transition-colors flex items-start gap-2.5 ${
+                                  isSel ? "bg-blue-50 border border-blue-200" : "hover:bg-gray-50 border border-transparent"
+                                }`}
+                              >
+                                <div className={`w-4 h-4 rounded border-2 flex-shrink-0 mt-0.5 flex items-center justify-center ${
+                                  isSel ? "bg-blue-600 border-blue-600" : "border-gray-300"
+                                }`}>
+                                  {isSel && <Check className="w-3 h-3 text-white" />}
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-xs font-mono font-semibold text-gray-600">{ctrl.control_id}</span>
+                                    {ctrl.category && (
+                                      <span className="text-[10px] text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded">{ctrl.category}</span>
+                                    )}
+                                  </div>
+                                  <p className="text-xs text-gray-900 mt-0.5">{ctrl.title}</p>
+                                  {ctrl.description && (
+                                    <p className="text-[11px] text-gray-500 mt-0.5 line-clamp-2">{ctrl.description}</p>
+                                  )}
+                                </div>
+                              </button>
+                            );
+                          })
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* STEP 3: AI SUGGESTIONS */}
+      {step === "ai" && (
+        <div className="bg-white rounded-2xl border border-gray-100 p-6 space-y-4">
+          <div className="flex items-center justify-between">
+            <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+              <Sparkles className="w-5 h-5 text-purple-600" />
+              AI Control Suggestions
+            </h2>
+            <button
+              onClick={loadAISuggestions}
+              disabled={loadingAi}
+              className="flex items-center gap-2 px-4 py-2 rounded-lg bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white text-sm font-medium transition-colors disabled:opacity-50"
+            >
+              {loadingAi ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  AI Thinking...
+                </>
+              ) : (
+                <>
+                  <Wand2 className="w-4 h-4" />
+                  {aiSuggestions.length > 0 ? "Refresh Suggestions" : "Get AI Suggestions"}
+                </>
+              )}
+            </button>
+          </div>
+
+          {aiSuggestions.length === 0 && !loadingAi && (
+            <div className="bg-blue-50 border border-blue-100 rounded-xl p-6 text-center">
+              <Lightbulb className="w-10 h-10 text-blue-600 mx-auto mb-3" />
+              <p className="text-sm font-semibold text-blue-900">Get AI-powered control suggestions</p>
+              <p className="text-xs text-blue-700 mt-1">
+                Based on your industry ({industry}), region ({region}), and use case
+              </p>
+            </div>
+          )}
+
+          {aiRationale && (
+            <div className="bg-purple-50 border border-purple-100 rounded-xl p-3">
+              <p className="text-xs text-purple-900"><strong>AI Rationale:</strong> {aiRationale}</p>
+            </div>
+          )}
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            {aiSuggestions.map((sug, i) => {
+              const isSel = isAISuggestionSelected(sug.title);
+              const priorityColor = sug.priority === "high" ? "bg-red-100 text-red-700" :
+                                    sug.priority === "medium" ? "bg-yellow-100 text-yellow-700" :
+                                    "bg-green-100 text-green-700";
+              return (
+                <button
+                  key={i}
+                  onClick={() => toggleAISuggestion(sug)}
+                  className={`text-left p-3 rounded-xl border transition-all ${
+                    isSel ? "bg-blue-50 border-blue-300 ring-2 ring-blue-200" : "border-gray-200 hover:border-blue-200"
+                  }`}
+                >
+                  <div className="flex items-start justify-between gap-2 mb-2">
+                    <div className="flex items-center gap-2">
+                      <div className={`w-4 h-4 rounded border-2 flex-shrink-0 flex items-center justify-center ${
+                        isSel ? "bg-blue-600 border-blue-600" : "border-gray-300"
+                      }`}>
+                        {isSel && <Check className="w-3 h-3 text-white" />}
+                      </div>
+                      <span className={`text-[10px] font-bold uppercase px-1.5 py-0.5 rounded ${priorityColor}`}>{sug.priority}</span>
+                    </div>
+                    <span className="text-[10px] text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded">{sug.category}</span>
+                  </div>
+                  <h4 className="text-sm font-semibold text-gray-900">{sug.title}</h4>
+                  <p className="text-xs text-gray-600 mt-1">{sug.description}</p>
+                  <p className="text-[11px] text-gray-500 mt-2 italic">💡 {sug.rationale}</p>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* STEP 4: REVIEW & SAVE */}
+      {step === "review" && (
+        <div className="bg-white rounded-2xl border border-gray-100 p-6 space-y-4">
+          <h2 className="text-lg font-semibold text-gray-900">Review Your Custom Framework</h2>
+
+          <div className="grid grid-cols-2 gap-4 bg-gray-50 rounded-xl p-4">
+            <div>
+              <p className="text-xs text-gray-500 uppercase">Name</p>
+              <p className="text-sm font-semibold text-gray-900">{name || "(unnamed)"}</p>
+            </div>
+            <div>
+              <p className="text-xs text-gray-500 uppercase">Short Name</p>
+              <p className="text-sm font-semibold text-gray-900">{shortName || "-"}</p>
+            </div>
+            <div>
+              <p className="text-xs text-gray-500 uppercase">Version</p>
+              <p className="text-sm font-semibold text-gray-900">{version}</p>
+            </div>
+            <div>
+              <p className="text-xs text-gray-500 uppercase">Total Controls</p>
+              <p className="text-sm font-semibold text-blue-600">{selected.length}</p>
+            </div>
+            <div>
+              <p className="text-xs text-gray-500 uppercase">Industry</p>
+              <p className="text-sm font-semibold text-gray-900">{industry}</p>
+            </div>
+            <div>
+              <p className="text-xs text-gray-500 uppercase">Region</p>
+              <p className="text-sm font-semibold text-gray-900">{region}</p>
+            </div>
+          </div>
+
+          <div>
+            <h3 className="text-sm font-semibold text-gray-900 mb-2">Selected Controls ({selected.length})</h3>
+            <div className="space-y-1.5 max-h-96 overflow-y-auto">
+              {selected.length === 0 ? (
+                <p className="text-sm text-gray-500 text-center py-8">No controls selected. Go back to add some.</p>
+              ) : (
+                selected.map((c, i) => (
+                  <div key={i} className="flex items-start justify-between gap-2 p-2.5 bg-gray-50 rounded-lg border border-gray-100">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-mono font-semibold text-gray-700">{c.control_id}</span>
+                        {c.source_framework && (
+                          <span className={`text-[10px] px-1.5 py-0.5 rounded ${
+                            c.source_framework === "AI" ? "bg-purple-100 text-purple-700" : "bg-blue-100 text-blue-700"
+                          }`}>
+                            {c.source_framework}
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-xs text-gray-900 mt-0.5">{c.title}</p>
+                    </div>
+                    <button
+                      onClick={() => removeSelected(i)}
+                      className="text-red-500 hover:bg-red-50 p-1 rounded"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Navigation Buttons */}
+      <div className="flex items-center justify-between pt-2">
+        <button
+          onClick={prevStep}
+          disabled={step === "info"}
+          className="px-4 py-2 rounded-lg border border-gray-200 text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+        >
+          ← Previous
+        </button>
+
+        {step !== "review" ? (
+          <button
+            onClick={nextStep}
+            className="flex items-center gap-2 px-5 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium transition-colors"
+          >
+            Next →
+          </button>
+        ) : (
+          <button
+            onClick={handleSave}
+            disabled={saving || selected.length === 0}
+            className="flex items-center gap-2 px-5 py-2 rounded-lg bg-green-600 hover:bg-green-700 text-white text-sm font-medium transition-colors disabled:opacity-50"
+          >
+            {saving ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                Saving...
+              </>
+            ) : (
+              <>
+                <Save className="w-4 h-4" />
+                Save Framework
+              </>
+            )}
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
