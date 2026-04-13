@@ -21,6 +21,10 @@ from app.api.v1.endpoints import (
     reports,
     data_io,
     activity_log,
+    trust_center,
+    incidents,
+    webhooks,
+    regulatory,
 )
 
 api_router = APIRouter()
@@ -45,3 +49,7 @@ api_router.include_router(admin.router, prefix="/admin", tags=["Super Admin"])
 api_router.include_router(reports.router, prefix="/reports", tags=["Reports"])
 api_router.include_router(data_io.router, prefix="/data", tags=["Data Import/Export"])
 api_router.include_router(activity_log.router, prefix="/activity-log", tags=["Activity Log"])
+api_router.include_router(trust_center.router, prefix="/trust-center", tags=["Trust Center"])
+api_router.include_router(incidents.router, prefix="/incidents", tags=["Incident Management"])
+api_router.include_router(webhooks.router, prefix="/webhooks", tags=["Webhooks"])
+api_router.include_router(regulatory.router, prefix="/regulatory", tags=["Regulatory Updates"])

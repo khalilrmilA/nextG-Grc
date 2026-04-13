@@ -17,6 +17,8 @@ from app.models.policy import Policy, PolicyVersion, PolicyAttestation
 from app.models.vendor import Vendor, VendorAssessment, VendorRisk, VendorContract
 from app.models.asset import Asset
 from app.models.activity_log import ActivityLog
+from app.models.incident import Incident
+from app.models.regulatory_update import RegulatoryUpdate
 from app.models.subscription import Subscription, SubscriptionTier
 from app.models.notification import (
     Notification, NotificationPreference, NotificationType,
@@ -36,6 +38,8 @@ __all__ = [
     "Vendor", "VendorAssessment", "VendorRisk", "VendorContract",
     "Asset",
     "ActivityLog",
+    "Incident",
+    "RegulatoryUpdate",
     "Subscription", "SubscriptionTier",
     "Notification", "NotificationPreference", "NotificationType",
     "NotificationChannel", "NotificationStatus",

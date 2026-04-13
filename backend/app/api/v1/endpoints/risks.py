@@ -226,3 +226,101 @@ async def get_risk_heatmap(
             for severity in RiskSeverity
         },
     }
+
+
+# ── Risk Quantification ──────────────────────────────────────────────────
+
+class RiskQuantInput(BaseModel):
+    risk_id: str
+    annual_loss_min: float  # Minimum expected annual loss ($)
+    annual_loss_max: float  # Maximum expected annual loss ($)
+    annual_loss_most_likely: float  # Most likely annual loss ($)
+    probability_percent: float = 50.0  # Probability of occurrence (0-100)
+    control_effectiveness: float = 50.0  # How effective existing controls are (0-100)
+
+class RiskQuantResult(BaseModel):
+    risk_id: str
+    risk_title: str
+    annualized_loss_expectancy: float  # ALE
+    single_loss_expectancy: float  # SLE
+    annual_rate_of_occurrence: float  # ARO
+    residual_ale: float  # After controls
+    risk_reduction: float  # ALE - Residual ALE
+    percentile_90: float  # 90th percentile loss (Monte Carlo)
+    percentile_95: float  # 95th percentile loss
+    simulations: int
+    distribution: list[dict]  # Histogram buckets for chart
+
+
+@router.post("/quantify", response_model=RiskQuantResult)
+async def quantify_risk(
+    body: RiskQuantInput,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(get_current_user),
+    tenant_id: str = Depends(get_tenant_id),
+):
+    """Run Monte Carlo simulation for financial risk quantification."""
+    import random
+
+    # Get the risk
+    result = await db.execute(select(Risk).where(Risk.id == body.risk_id, Risk.tenant_id == tenant_id))
+    risk = result.scalar_one_or_none()
+    if not risk:
+        raise HTTPException(status_code=404, detail="Risk not found")
+
+    # Monte Carlo parameters
+    num_simulations = 10000
+    aro = body.probability_percent / 100.0  # Annual Rate of Occurrence
+    control_eff = body.control_effectiveness / 100.0
+
+    # Run Monte Carlo using PERT distribution (triangular approximation)
+    losses = []
+    for _ in range(num_simulations):
+        # Generate loss amount using triangular distribution
+        loss = random.triangular(body.annual_loss_min, body.annual_loss_max, body.annual_loss_most_likely)
+        # Apply occurrence probability
+        occurs = random.random() < aro
+        if occurs:
+            losses.append(loss)
+        else:
+            losses.append(0.0)
+
+    # Calculate statistics
+    losses.sort()
+    total_losses = [l for l in losses if l > 0]
+    ale = sum(losses) / num_simulations  # Average annual loss
+    sle = body.annual_loss_most_likely  # Single Loss Expectancy
+    residual_ale = ale * (1 - control_eff)
+    p90 = losses[int(num_simulations * 0.90)]
+    p95 = losses[int(num_simulations * 0.95)]
+
+    # Build histogram (10 buckets)
+    if max(losses) > 0:
+        bucket_size = max(losses) / 10
+        distribution = []
+        for i in range(10):
+            lo = i * bucket_size
+            hi = (i + 1) * bucket_size
+            count = sum(1 for l in losses if lo <= l < hi)
+            distribution.append({
+                "range_low": round(lo, 2),
+                "range_high": round(hi, 2),
+                "count": count,
+                "percentage": round(count / num_simulations * 100, 1),
+            })
+    else:
+        distribution = [{"range_low": 0, "range_high": 0, "count": num_simulations, "percentage": 100}]
+
+    return RiskQuantResult(
+        risk_id=risk.id,
+        risk_title=risk.title,
+        annualized_loss_expectancy=round(ale, 2),
+        single_loss_expectancy=round(sle, 2),
+        annual_rate_of_occurrence=round(aro, 4),
+        residual_ale=round(residual_ale, 2),
+        risk_reduction=round(ale - residual_ale, 2),
+        percentile_90=round(p90, 2),
+        percentile_95=round(p95, 2),
+        simulations=num_simulations,
+        distribution=distribution,
+    )
