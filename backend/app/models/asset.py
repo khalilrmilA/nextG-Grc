@@ -54,6 +54,15 @@ class Asset(Base):
     contains_phi: Mapped[bool] = mapped_column(Boolean, default=False)
     contains_pci: Mapped[bool] = mapped_column(Boolean, default=False)
 
+    # Business value & DR objectives (inspired by CISO Assistant)
+    business_value: Mapped[str | None] = mapped_column(String(50), nullable=True)  # critical, high, medium, low
+    rto_seconds: Mapped[int | None] = mapped_column(nullable=True)  # Recovery Time Objective
+    rpo_seconds: Mapped[int | None] = mapped_column(nullable=True)  # Recovery Point Objective
+    mtd_seconds: Mapped[int | None] = mapped_column(nullable=True)  # Maximum Tolerable Downtime
+
+    # Security objectives (JSON: {"confidentiality": 3, "integrity": 3, "availability": 4})
+    security_objectives: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+
     # Tags
     tags: Mapped[list] = mapped_column(JSON, default=list)
 

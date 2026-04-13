@@ -704,3 +704,129 @@ export const traceabilityApi = {
       .get<TraceabilityMatrix>(`/compliance/assessments/${assessmentId}/traceability`)
       .then((r) => r.data),
 };
+
+// ─── Incidents ──────────────────────────────
+export const incidentsApi = {
+  list: (params?: { status_filter?: string; severity?: string }) =>
+    apiClient.get("/incidents", { params }).then((r) => r.data),
+  stats: () => apiClient.get("/incidents/stats").then((r) => r.data),
+  get: (id: string) => apiClient.get(`/incidents/${id}`).then((r) => r.data),
+  create: (data: Record<string, unknown>) => apiClient.post("/incidents", data).then((r) => r.data),
+  update: (id: string, data: Record<string, unknown>) => apiClient.patch(`/incidents/${id}`, data).then((r) => r.data),
+  delete: (id: string) => apiClient.delete(`/incidents/${id}`),
+};
+
+// ─── Vulnerabilities ────────────────────────
+export const vulnerabilitiesApi = {
+  list: (params?: { severity?: string; status_filter?: string }) =>
+    apiClient.get("/vulnerabilities", { params }).then((r) => r.data),
+  stats: () => apiClient.get("/vulnerabilities/stats").then((r) => r.data),
+  get: (id: string) => apiClient.get(`/vulnerabilities/${id}`).then((r) => r.data),
+  create: (data: Record<string, unknown>) => apiClient.post("/vulnerabilities", data).then((r) => r.data),
+  update: (id: string, data: Record<string, unknown>) => apiClient.patch(`/vulnerabilities/${id}`, data).then((r) => r.data),
+  delete: (id: string) => apiClient.delete(`/vulnerabilities/${id}`),
+};
+
+// ─── Threats ────────────────────────────────
+export const threatsApi = {
+  list: (params?: { category?: string }) =>
+    apiClient.get("/threats", { params }).then((r) => r.data),
+  create: (data: Record<string, unknown>) => apiClient.post("/threats", data).then((r) => r.data),
+  delete: (id: string) => apiClient.delete(`/threats/${id}`),
+};
+
+// ─── Risk Scenarios ─────────────────────────
+export const riskScenariosApi = {
+  list: (params?: { treatment?: string }) =>
+    apiClient.get("/risk-scenarios", { params }).then((r) => r.data),
+  get: (id: string) => apiClient.get(`/risk-scenarios/${id}`).then((r) => r.data),
+  create: (data: Record<string, unknown>) => apiClient.post("/risk-scenarios", data).then((r) => r.data),
+  update: (id: string, data: Record<string, unknown>) => apiClient.patch(`/risk-scenarios/${id}`, data).then((r) => r.data),
+  delete: (id: string) => apiClient.delete(`/risk-scenarios/${id}`),
+};
+
+// ─── Applied Controls ───────────────────────
+export const appliedControlsApi = {
+  list: (params?: { status?: string }) =>
+    apiClient.get("/applied-controls", { params }).then((r) => r.data),
+  get: (id: string) => apiClient.get(`/applied-controls/${id}`).then((r) => r.data),
+  create: (data: Record<string, unknown>) => apiClient.post("/applied-controls", data).then((r) => r.data),
+  update: (id: string, data: Record<string, unknown>) => apiClient.patch(`/applied-controls/${id}`, data).then((r) => r.data),
+  delete: (id: string) => apiClient.delete(`/applied-controls/${id}`),
+};
+
+// ─── Security Exceptions & Risk Acceptance ──
+export const securityApi = {
+  listExceptions: (params?: { status_filter?: string }) =>
+    apiClient.get("/security/exceptions", { params }).then((r) => r.data),
+  createException: (data: Record<string, unknown>) => apiClient.post("/security/exceptions", data).then((r) => r.data),
+  approveException: (id: string) => apiClient.patch(`/security/exceptions/${id}/approve`).then((r) => r.data),
+  rejectException: (id: string, reason?: string) => apiClient.patch(`/security/exceptions/${id}/reject?reason=${reason || ""}`).then((r) => r.data),
+  listAcceptances: () => apiClient.get("/security/acceptances").then((r) => r.data),
+  createAcceptance: (data: Record<string, unknown>) => apiClient.post("/security/acceptances", data).then((r) => r.data),
+  approveAcceptance: (id: string) => apiClient.patch(`/security/acceptances/${id}/approve`).then((r) => r.data),
+};
+
+// ─── Risk Matrices ──────────────────────────
+export const riskMatricesApi = {
+  list: () => apiClient.get("/risk-matrices").then((r) => r.data),
+  create: (data: Record<string, unknown>) => apiClient.post("/risk-matrices", data).then((r) => r.data),
+  delete: (id: string) => apiClient.delete(`/risk-matrices/${id}`),
+};
+
+// ─── Trust Center ───────────────────────────
+export const trustCenterApi = {
+  getConfig: () => apiClient.get("/trust-center/config").then((r) => r.data),
+  updateConfig: (data: Record<string, unknown>) => apiClient.put("/trust-center/config", data).then((r) => r.data),
+  getPublic: (slug: string) => apiClient.get(`/trust-center/public/${slug}`).then((r) => r.data),
+};
+
+// ─── Regulatory Updates ─────────────────────
+export const regulatoryApi = {
+  list: (params?: { status_filter?: string }) =>
+    apiClient.get("/regulatory", { params }).then((r) => r.data),
+  get: (id: string) => apiClient.get(`/regulatory/${id}`).then((r) => r.data),
+  create: (data: Record<string, unknown>) => apiClient.post("/regulatory", data).then((r) => r.data),
+  update: (id: string, data: Record<string, unknown>) => apiClient.patch(`/regulatory/${id}`, data).then((r) => r.data),
+  delete: (id: string) => apiClient.delete(`/regulatory/${id}`),
+};
+
+// ─── Activity Log ───────────────────────────
+export const activityLogApi = {
+  list: (params?: { entity_type?: string; action?: string; user_id?: string; limit?: number; offset?: number }) =>
+    apiClient.get("/activity-log", { params }).then((r) => r.data),
+};
+
+// ─── Webhooks ───────────────────────────────
+export const webhooksApi = {
+  listEvents: () => apiClient.get("/webhooks/events").then((r) => r.data),
+  list: () => apiClient.get("/webhooks").then((r) => r.data),
+  create: (data: Record<string, unknown>) => apiClient.post("/webhooks", data).then((r) => r.data),
+  delete: (id: string) => apiClient.delete(`/webhooks/${id}`),
+  test: (id: string) => apiClient.post(`/webhooks/${id}/test`).then((r) => r.data),
+};
+
+// ─── Data Import/Export ─────────────────────
+export const dataApi = {
+  exportCsv: async (module: string) => {
+    const resp = await apiClient.get(`/data/export/${module}`, { responseType: "blob" });
+    const blob = new Blob([resp.data], { type: "text/csv" });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${module}_export_${new Date().toISOString().split("T")[0]}.csv`;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    window.URL.revokeObjectURL(url);
+  },
+  importCsv: async (module: string, file: File) => {
+    const fd = new FormData();
+    fd.append("file", file);
+    return apiClient.post(`/data/import/${module}`, fd, { headers: { "Content-Type": "multipart/form-data" } }).then((r) => r.data);
+  },
+};
+
+// ─── Risk Quantification ────────────────────
+export const riskQuantApi = {
+  quantify: (data: { risk_id: string; annual_loss_min: number; annual_loss_max: number; annual_loss_most_likely: number; probability_percent: number; control_effectiveness: number }) =>
+    apiClient.post("/risks/quantify", data).then((r) => r.data),
+};

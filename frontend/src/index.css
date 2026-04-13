@@ -104,10 +104,54 @@
 .dark .text-gray-500 { color: hsl(var(--muted-foreground)); }
 .dark .text-gray-400 { color: hsl(215 15% 48%); }
 
-/* ── Scrollbar dark ── */
-.dark ::-webkit-scrollbar { width: 6px; height: 6px; }
-.dark ::-webkit-scrollbar-track { background: hsl(222 47% 10%); }
-.dark ::-webkit-scrollbar-thumb { background: hsl(222 47% 22%); border-radius: 3px; }
+/* ── Modern Scrollbar (all themes) ── */
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(150, 150, 160, 0.25);
+  border-radius: 10px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(150, 150, 160, 0.45);
+}
+/* Hide scrollbar until hover (sidebar, modals) */
+.overflow-y-auto,
+.overflow-y-scroll,
+.overflow-auto {
+  scrollbar-gutter: stable;
+}
+/* Firefox */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(150, 150, 160, 0.25) transparent;
+}
+
+/* ── Dark mode scrollbar ── */
+.dark ::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.12);
+}
+.dark ::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.25);
+}
+.dark * {
+  scrollbar-color: rgba(255, 255, 255, 0.12) transparent;
+}
+
+/* ── Sidebar scrollbar: invisible until hover ── */
+aside ::-webkit-scrollbar-thumb {
+  background: transparent;
+}
+aside:hover ::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.15);
+}
+aside:hover ::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
 
 /* ══════════════════════════════════════════════════════════════════════════
    RTL support for Arabic

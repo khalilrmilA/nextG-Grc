@@ -18,7 +18,14 @@ from app.models.vendor import Vendor, VendorAssessment, VendorRisk, VendorContra
 from app.models.asset import Asset
 from app.models.activity_log import ActivityLog
 from app.models.incident import Incident
+from app.models.incident_timeline import IncidentTimelineEntry
 from app.models.regulatory_update import RegulatoryUpdate
+from app.models.threat import Threat
+from app.models.vulnerability import Vulnerability
+from app.models.risk_scenario import RiskScenario
+from app.models.applied_control import AppliedControl
+from app.models.security_exception import SecurityException, RiskAcceptance
+from app.models.risk_matrix import RiskMatrix
 from app.models.subscription import Subscription, SubscriptionTier
 from app.models.notification import (
     Notification, NotificationPreference, NotificationType,
@@ -38,8 +45,10 @@ __all__ = [
     "Vendor", "VendorAssessment", "VendorRisk", "VendorContract",
     "Asset",
     "ActivityLog",
-    "Incident",
+    "Incident", "IncidentTimelineEntry",
     "RegulatoryUpdate",
+    "Threat", "Vulnerability", "RiskScenario",
+    "AppliedControl", "SecurityException", "RiskAcceptance", "RiskMatrix",
     "Subscription", "SubscriptionTier",
     "Notification", "NotificationPreference", "NotificationType",
     "NotificationChannel", "NotificationStatus",

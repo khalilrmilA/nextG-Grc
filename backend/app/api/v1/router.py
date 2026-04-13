@@ -25,6 +25,12 @@ from app.api.v1.endpoints import (
     incidents,
     webhooks,
     regulatory,
+    threats,
+    vulnerabilities,
+    risk_scenarios,
+    applied_controls,
+    security_exceptions,
+    risk_matrices,
 )
 
 api_router = APIRouter()
@@ -53,3 +59,9 @@ api_router.include_router(trust_center.router, prefix="/trust-center", tags=["Tr
 api_router.include_router(incidents.router, prefix="/incidents", tags=["Incident Management"])
 api_router.include_router(webhooks.router, prefix="/webhooks", tags=["Webhooks"])
 api_router.include_router(regulatory.router, prefix="/regulatory", tags=["Regulatory Updates"])
+api_router.include_router(threats.router, prefix="/threats", tags=["Threat Library"])
+api_router.include_router(vulnerabilities.router, prefix="/vulnerabilities", tags=["Vulnerability Management"])
+api_router.include_router(risk_scenarios.router, prefix="/risk-scenarios", tags=["Risk Scenarios"])
+api_router.include_router(applied_controls.router, prefix="/applied-controls", tags=["Applied Controls"])
+api_router.include_router(security_exceptions.router, prefix="/security", tags=["Security Exceptions & Risk Acceptance"])
+api_router.include_router(risk_matrices.router, prefix="/risk-matrices", tags=["Risk Matrices"])

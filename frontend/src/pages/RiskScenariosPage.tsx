@@ -1,0 +1,252 @@
+import { useState, useEffect } from "react";
+import { Plus, Search, X, Loader2, Filter, Target, TrendingDown } from "lucide-react";
+import { riskScenariosApi } from "@/api/endpoints";
+
+const TREATMENT_BADGE: Record<string, string> = {
+  mitigate: "bg-blue-100 text-blue-700 border-blue-200",
+  accept: "bg-green-100 text-green-700 border-green-200",
+  transfer: "bg-purple-100 text-purple-700 border-purple-200",
+  avoid: "bg-orange-100 text-orange-700 border-orange-200",
+  untreated: "bg-gray-100 text-gray-600 border-gray-200",
+};
+
+const RISK_LEVEL_BG: Record<string, string> = {
+  critical: "bg-red-100 text-red-700",
+  high: "bg-orange-100 text-orange-700",
+  medium: "bg-yellow-100 text-yellow-700",
+  low: "bg-green-100 text-green-700",
+};
+
+const TREATMENT_OPTIONS = ["mitigate", "accept", "transfer", "avoid", "untreated"];
+const SOK_OPTIONS = ["high", "medium", "low", "very_low"];
+
+function riskLevel(prob: number, impact: number): string {
+  const score = prob * impact;
+  if (score >= 20) return "critical";
+  if (score >= 12) return "high";
+  if (score >= 6) return "medium";
+  return "low";
+}
+
+export default function RiskScenariosPage() {
+  const [items, setItems] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [showModal, setShowModal] = useState(false);
+  const [search, setSearch] = useState("");
+  const [treatmentFilter, setTreatmentFilter] = useState("");
+  const [error, setError] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+
+  const [form, setForm] = useState({
+    name: "",
+    description: "",
+    treatment: "untreated",
+    current_probability: 3,
+    current_impact: 3,
+    target_probability: 1,
+    target_impact: 1,
+    threat_actor: "",
+    strength_of_knowledge: "medium",
+  });
+
+  async function load() {
+    try {
+      const params: any = {};
+      if (treatmentFilter) params.treatment = treatmentFilter;
+      const data = await riskScenariosApi.list(params);
+      setItems(Array.isArray(data) ? data : data.items || []);
+    } catch {
+      setItems([]);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    load();
+  }, [treatmentFilter]);
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!form.name.trim()) { setError("Name is required"); return; }
+    setSubmitting(true);
+    setError("");
+    try {
+      await riskScenariosApi.create(form);
+      setShowModal(false);
+      setForm({ name: "", description: "", treatment: "untreated", current_probability: 3, current_impact: 3, target_probability: 1, target_impact: 1, threat_actor: "", strength_of_knowledge: "medium" });
+      setLoading(true);
+      load();
+    } catch (err: any) {
+      setError(err?.response?.data?.detail || "Failed to create risk scenario");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  const filtered = items.filter((i) =>
+    i.name?.toLowerCase().includes(search.toLowerCase())
+  );
+
+  return (
+    <div className="p-8 max-w-7xl space-y-6">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Risk Scenarios</h1>
+          <p className="text-sm text-gray-500 mt-1">Define and assess risk scenarios with treatment plans</p>
+        </div>
+        <button
+          onClick={() => setShowModal(true)}
+          className="inline-flex items-center gap-2 bg-blue-600 text-white px-4 py-2.5 rounded-xl text-sm font-medium hover:bg-blue-700 transition-colors"
+        >
+          <Plus className="w-4 h-4" /> Add Scenario
+        </button>
+      </div>
+
+      {/* Filters */}
+      <div className="flex items-center gap-3">
+        <div className="relative flex-1 max-w-xs">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+          <input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search scenarios..."
+            className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+          />
+        </div>
+        <div className="flex items-center gap-2">
+          <Filter className="w-4 h-4 text-gray-400" />
+          <select value={treatmentFilter} onChange={(e) => setTreatmentFilter(e.target.value)} className="border border-gray-200 rounded-xl text-sm px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500">
+            <option value="">All Treatments</option>
+            {TREATMENT_OPTIONS.map((t) => <option key={t} value={t}>{t.charAt(0).toUpperCase() + t.slice(1)}</option>)}
+          </select>
+        </div>
+      </div>
+
+      {/* Table */}
+      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+        {loading ? (
+          <div className="flex items-center justify-center py-16">
+            <Loader2 className="w-6 h-6 animate-spin text-blue-500" />
+          </div>
+        ) : filtered.length === 0 ? (
+          <div className="text-center py-16 text-gray-400">No risk scenarios found</div>
+        ) : (
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-gray-100 bg-gray-50/50">
+                <th className="text-left px-6 py-3 font-medium text-gray-500">Name</th>
+                <th className="text-left px-6 py-3 font-medium text-gray-500">Treatment</th>
+                <th className="text-center px-6 py-3 font-medium text-gray-500">Probability</th>
+                <th className="text-center px-6 py-3 font-medium text-gray-500">Impact</th>
+                <th className="text-center px-6 py-3 font-medium text-gray-500">Current Risk</th>
+                <th className="text-center px-6 py-3 font-medium text-gray-500">Target Risk</th>
+                <th className="text-left px-6 py-3 font-medium text-gray-500">Threat Actor</th>
+                <th className="text-left px-6 py-3 font-medium text-gray-500">Knowledge</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.map((item: any) => {
+                const curLevel = item.current_risk_level || riskLevel(item.current_probability || 1, item.current_impact || 1);
+                const tgtLevel = item.target_risk_level || riskLevel(item.target_probability || 1, item.target_impact || 1);
+                return (
+                  <tr key={item.id} className="border-b border-gray-50 hover:bg-gray-50/50 transition-colors">
+                    <td className="px-6 py-4 font-medium text-gray-900">{item.name}</td>
+                    <td className="px-6 py-4">
+                      <span className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold border ${TREATMENT_BADGE[item.treatment] || "bg-gray-100 text-gray-600"}`}>
+                        {item.treatment}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 text-center text-gray-700">{item.current_probability}</td>
+                    <td className="px-6 py-4 text-center text-gray-700">{item.current_impact}</td>
+                    <td className="px-6 py-4 text-center">
+                      <span className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold ${RISK_LEVEL_BG[curLevel] || "bg-gray-100 text-gray-600"}`}>
+                        {curLevel}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 text-center">
+                      <span className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold ${RISK_LEVEL_BG[tgtLevel] || "bg-gray-100 text-gray-600"}`}>
+                        {tgtLevel}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 text-gray-600">{item.threat_actor || "-"}</td>
+                    <td className="px-6 py-4 text-gray-600">{item.strength_of_knowledge?.replace(/_/g, " ") || "-"}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        )}
+      </div>
+
+      {/* Create Modal */}
+      {showModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setShowModal(false)} />
+          <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-lg mx-4 p-6 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-lg font-semibold text-gray-900">Add Risk Scenario</h2>
+              <button onClick={() => setShowModal(false)} className="text-gray-400 hover:text-gray-600"><X className="w-5 h-5" /></button>
+            </div>
+            {error && <div className="mb-4 p-3 bg-red-50 text-red-700 rounded-xl text-sm">{error}</div>}
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Name *</label>
+                <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
+                <textarea value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} rows={3} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Treatment</label>
+                  <select value={form.treatment} onChange={(e) => setForm({ ...form, treatment: e.target.value })} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    {TREATMENT_OPTIONS.map((t) => <option key={t} value={t}>{t.charAt(0).toUpperCase() + t.slice(1)}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Strength of Knowledge</label>
+                  <select value={form.strength_of_knowledge} onChange={(e) => setForm({ ...form, strength_of_knowledge: e.target.value })} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    {SOK_OPTIONS.map((s) => <option key={s} value={s}>{s.replace(/_/g, " ")}</option>)}
+                  </select>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Current Probability (1-5)</label>
+                  <input type="number" min={1} max={5} value={form.current_probability} onChange={(e) => setForm({ ...form, current_probability: parseInt(e.target.value) || 1 })} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Current Impact (1-5)</label>
+                  <input type="number" min={1} max={5} value={form.current_impact} onChange={(e) => setForm({ ...form, current_impact: parseInt(e.target.value) || 1 })} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Target Probability (1-5)</label>
+                  <input type="number" min={1} max={5} value={form.target_probability} onChange={(e) => setForm({ ...form, target_probability: parseInt(e.target.value) || 1 })} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Target Impact (1-5)</label>
+                  <input type="number" min={1} max={5} value={form.target_impact} onChange={(e) => setForm({ ...form, target_impact: parseInt(e.target.value) || 1 })} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Threat Actor</label>
+                <input value={form.threat_actor} onChange={(e) => setForm({ ...form, threat_actor: e.target.value })} placeholder="e.g. Nation-state, Insider" className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              </div>
+              <div className="flex justify-end gap-3 pt-2">
+                <button type="button" onClick={() => setShowModal(false)} className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800">Cancel</button>
+                <button type="submit" disabled={submitting} className="inline-flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-xl text-sm font-medium hover:bg-blue-700 disabled:opacity-50">
+                  {submitting && <Loader2 className="w-4 h-4 animate-spin" />} Add Scenario
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

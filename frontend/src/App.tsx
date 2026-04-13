@@ -29,6 +29,17 @@ import HelpPage from "./pages/HelpPage";
 import PolicyGeneratorPage from "./pages/PolicyGeneratorPage";
 import SuperAdminPage from "./pages/SuperAdminPage";
 import CompanyAdminPage from "./pages/CompanyAdminPage";
+import IncidentsPage from "./pages/IncidentsPage";
+import VulnerabilitiesPage from "./pages/VulnerabilitiesPage";
+import ThreatLibraryPage from "./pages/ThreatLibraryPage";
+import RiskScenariosPage from "./pages/RiskScenariosPage";
+import AppliedControlsPage from "./pages/AppliedControlsPage";
+import SecurityExceptionsPage from "./pages/SecurityExceptionsPage";
+import TrustCenterConfigPage from "./pages/TrustCenterConfigPage";
+import RegulatoryUpdatesPage from "./pages/RegulatoryUpdatesPage";
+import ActivityLogPage from "./pages/ActivityLogPage";
+import WebhooksPage from "./pages/WebhooksPage";
+import RiskQuantificationPage from "./pages/RiskQuantificationPage";
 
 function PrivateRoute({ children, requiredModule }: { readonly children: React.ReactNode; requiredModule?: string }) {
   const user = useAuthStore((u) => u);
@@ -120,6 +131,17 @@ export default function App() {
         <Route path="vendors" element={<PrivateRoute requiredModule="vendors"><VendorsPage /></PrivateRoute>} />
         <Route path="vendors/contract-review" element={<PrivateRoute requiredModule="vendors"><ContractReviewPage /></PrivateRoute>} />
         <Route path="reports" element={<ReportsPage />} />
+        <Route path="incidents" element={<IncidentsPage />} />
+        <Route path="vulnerabilities" element={<VulnerabilitiesPage />} />
+        <Route path="threats" element={<ThreatLibraryPage />} />
+        <Route path="risk-scenarios" element={<RiskScenariosPage />} />
+        <Route path="risk-quantification" element={<RiskQuantificationPage />} />
+        <Route path="applied-controls" element={<AppliedControlsPage />} />
+        <Route path="security-exceptions" element={<SecurityExceptionsPage />} />
+        <Route path="trust-center" element={<TrustCenterConfigPage />} />
+        <Route path="regulatory" element={<RegulatoryUpdatesPage />} />
+        <Route path="activity-log" element={<ActivityLogPage />} />
+        <Route path="webhooks" element={<WebhooksPage />} />
         <Route path="cheat" element={<CheatSheetPage />} />
         <Route path="settings" element={<SettingsPage />} />
         <Route path="help" element={<HelpPage />} />
