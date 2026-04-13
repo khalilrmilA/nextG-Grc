@@ -109,42 +109,110 @@
 .dark ::-webkit-scrollbar-track { background: hsl(222 47% 10%); }
 .dark ::-webkit-scrollbar-thumb { background: hsl(222 47% 22%); border-radius: 3px; }
 
-/* ── RTL support for Arabic ── */
+/* ══════════════════════════════════════════════════════════════════════════
+   RTL support for Arabic
+   Uses CSS logical properties so layout auto-flips with dir="rtl" on <html>
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/* Arabic font stack */
 [dir="rtl"] {
   font-family: 'Segoe UI', 'Tahoma', 'Arial', system-ui, sans-serif;
 }
 
-[dir="rtl"] .flex { flex-direction: row-reverse; }
-[dir="rtl"] .flex-row-reverse { flex-direction: row; }
-[dir="rtl"] .space-x-1 > * + * { margin-left: 0; margin-right: 0.25rem; }
-[dir="rtl"] .space-x-2 > * + * { margin-left: 0; margin-right: 0.5rem; }
-[dir="rtl"] .space-x-3 > * + * { margin-left: 0; margin-right: 0.75rem; }
-[dir="rtl"] .gap-1, [dir="rtl"] .gap-2, [dir="rtl"] .gap-3, [dir="rtl"] .gap-4 { direction: rtl; }
-[dir="rtl"] .ml-auto { margin-left: 0; margin-right: auto; }
-[dir="rtl"] .mr-auto { margin-right: 0; margin-left: auto; }
-[dir="rtl"] .pl-3 { padding-left: 0; padding-right: 0.75rem; }
-[dir="rtl"] .pr-3 { padding-right: 0; padding-left: 0.75rem; }
-[dir="rtl"] .pl-4 { padding-left: 0; padding-right: 1rem; }
-[dir="rtl"] .pr-4 { padding-right: 0; padding-left: 1rem; }
-[dir="rtl"] .pl-5 { padding-left: 0; padding-right: 1.25rem; }
-[dir="rtl"] .pr-5 { padding-right: 0; padding-left: 1.25rem; }
-[dir="rtl"] .text-left { text-align: right; }
-[dir="rtl"] .text-right { text-align: left; }
-[dir="rtl"] .rounded-l-xl { border-radius: 0 0.75rem 0.75rem 0; }
-[dir="rtl"] .rounded-r-xl { border-radius: 0.75rem 0 0 0.75rem; }
-[dir="rtl"] .border-l { border-left: 0; border-right-width: 1px; }
-[dir="rtl"] .border-r { border-right: 0; border-left-width: 1px; }
-[dir="rtl"] aside { order: 2; }
-[dir="rtl"] main { order: 1; }
+/* ── Global text alignment ── */
+[dir="rtl"] body {
+  text-align: right;
+}
 
-/* Sidebar flip for RTL */
-[dir="rtl"] .flex.h-screen { flex-direction: row-reverse; }
+/* ── Main app layout: sidebar on the right ── */
+[dir="rtl"] .flex.h-screen {
+  flex-direction: row-reverse;
+}
 
-/* Notification dropdown RTL */
-[dir="rtl"] .absolute.right-0 { right: auto; left: 0; }
+/* ── Sidebar itself stays LTR-ordered internally but appears on right ── */
+[dir="rtl"] aside {
+  border-left-width: 1px;
+  border-right-width: 0;
+}
 
-/* Input fields RTL */
-[dir="rtl"] input, [dir="rtl"] textarea, [dir="rtl"] select {
+/* ── Input fields: right-aligned text ── */
+[dir="rtl"] input,
+[dir="rtl"] textarea,
+[dir="rtl"] select {
   text-align: right;
   direction: rtl;
+}
+
+/* ── Dropdowns positioning ── */
+[dir="rtl"] .absolute.right-0 {
+  right: auto;
+  left: 0;
+}
+[dir="rtl"] .absolute.left-0 {
+  left: auto;
+  right: 0;
+}
+
+/* ── Margin/padding logical flips ── */
+[dir="rtl"] .ml-auto { margin-left: 0; margin-right: auto; }
+[dir="rtl"] .mr-auto { margin-right: 0; margin-left: auto; }
+[dir="rtl"] .ml-1 { margin-left: 0; margin-right: 0.25rem; }
+[dir="rtl"] .ml-2 { margin-left: 0; margin-right: 0.5rem; }
+[dir="rtl"] .ml-3 { margin-left: 0; margin-right: 0.75rem; }
+[dir="rtl"] .mr-1 { margin-right: 0; margin-left: 0.25rem; }
+[dir="rtl"] .mr-2 { margin-right: 0; margin-left: 0.5rem; }
+[dir="rtl"] .mr-3 { margin-right: 0; margin-left: 0.75rem; }
+
+/* ── space-x: flip child margins ── */
+[dir="rtl"] .space-x-1 > :not([hidden]) ~ :not([hidden]) { margin-left: 0; margin-right: 0.25rem; }
+[dir="rtl"] .space-x-2 > :not([hidden]) ~ :not([hidden]) { margin-left: 0; margin-right: 0.5rem; }
+[dir="rtl"] .space-x-3 > :not([hidden]) ~ :not([hidden]) { margin-left: 0; margin-right: 0.75rem; }
+[dir="rtl"] .space-x-4 > :not([hidden]) ~ :not([hidden]) { margin-left: 0; margin-right: 1rem; }
+
+/* ── Padding flips ── */
+[dir="rtl"] .pl-2 { padding-left: 0; padding-right: 0.5rem; }
+[dir="rtl"] .pl-3 { padding-left: 0; padding-right: 0.75rem; }
+[dir="rtl"] .pl-4 { padding-left: 0; padding-right: 1rem; }
+[dir="rtl"] .pl-5 { padding-left: 0; padding-right: 1.25rem; }
+[dir="rtl"] .pl-6 { padding-left: 0; padding-right: 1.5rem; }
+[dir="rtl"] .pl-8 { padding-left: 0; padding-right: 2rem; }
+[dir="rtl"] .pl-9 { padding-left: 0; padding-right: 2.25rem; }
+[dir="rtl"] .pr-2 { padding-right: 0; padding-left: 0.5rem; }
+[dir="rtl"] .pr-3 { padding-right: 0; padding-left: 0.75rem; }
+[dir="rtl"] .pr-4 { padding-right: 0; padding-left: 1rem; }
+[dir="rtl"] .pr-5 { padding-right: 0; padding-left: 1.25rem; }
+[dir="rtl"] .pr-6 { padding-right: 0; padding-left: 1.5rem; }
+[dir="rtl"] .pr-8 { padding-right: 0; padding-left: 2rem; }
+
+/* ── Text alignment flips ── */
+[dir="rtl"] .text-left { text-align: right; }
+[dir="rtl"] .text-right { text-align: left; }
+
+/* ── Border flips ── */
+[dir="rtl"] .border-l { border-left: 0; border-right-width: 1px; }
+[dir="rtl"] .border-r { border-right: 0; border-left-width: 1px; }
+[dir="rtl"] .border-l-2 { border-left: 0; border-right-width: 2px; }
+[dir="rtl"] .border-l-4 { border-left: 0; border-right-width: 4px; }
+[dir="rtl"] .rounded-l-xl { border-radius: 0 0.75rem 0.75rem 0; }
+[dir="rtl"] .rounded-r-xl { border-radius: 0.75rem 0 0 0.75rem; }
+[dir="rtl"] .rounded-l-2xl { border-radius: 0 1rem 1rem 0; }
+[dir="rtl"] .rounded-r-2xl { border-radius: 1rem 0 0 1rem; }
+
+/* ── Table header alignment ── */
+[dir="rtl"] th {
+  text-align: right;
+}
+
+/* ── Chevron/arrow icons flip ── */
+[dir="rtl"] .lucide-chevron-right {
+  transform: scaleX(-1);
+}
+[dir="rtl"] .lucide-arrow-right {
+  transform: scaleX(-1);
+}
+[dir="rtl"] .lucide-arrow-left {
+  transform: scaleX(-1);
+}
+[dir="rtl"] .lucide-external-link {
+  transform: scaleX(-1);
 }

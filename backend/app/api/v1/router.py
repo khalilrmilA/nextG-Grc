@@ -19,6 +19,8 @@ from app.api.v1.endpoints import (
     auditor_portal,
     admin,
     reports,
+    data_io,
+    activity_log,
 )
 
 api_router = APIRouter()
@@ -41,3 +43,5 @@ api_router.include_router(notifications.router, prefix="/notifications", tags=["
 api_router.include_router(auditor_portal.router, prefix="/auditor-portal", tags=["Auditor Portal"])
 api_router.include_router(admin.router, prefix="/admin", tags=["Super Admin"])
 api_router.include_router(reports.router, prefix="/reports", tags=["Reports"])
+api_router.include_router(data_io.router, prefix="/data", tags=["Data Import/Export"])
+api_router.include_router(activity_log.router, prefix="/activity-log", tags=["Activity Log"])

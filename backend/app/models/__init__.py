@@ -14,8 +14,9 @@ from app.models.action_item import ActionItem, ActionItemStatus, ActionItemPrior
 from app.models.auditor_assignment import AuditorAssignment
 from app.models.audit import Audit, AuditFinding, AuditEvidence
 from app.models.policy import Policy, PolicyVersion, PolicyAttestation
-from app.models.vendor import Vendor, VendorAssessment, VendorRisk
+from app.models.vendor import Vendor, VendorAssessment, VendorRisk, VendorContract
 from app.models.asset import Asset
+from app.models.activity_log import ActivityLog
 from app.models.subscription import Subscription, SubscriptionTier
 from app.models.notification import (
     Notification, NotificationPreference, NotificationType,
@@ -32,8 +33,9 @@ __all__ = [
     "AuditorAssignment",
     "Audit", "AuditFinding", "AuditEvidence",
     "Policy", "PolicyVersion", "PolicyAttestation",
-    "Vendor", "VendorAssessment", "VendorRisk",
+    "Vendor", "VendorAssessment", "VendorRisk", "VendorContract",
     "Asset",
+    "ActivityLog",
     "Subscription", "SubscriptionTier",
     "Notification", "NotificationPreference", "NotificationType",
     "NotificationChannel", "NotificationStatus",

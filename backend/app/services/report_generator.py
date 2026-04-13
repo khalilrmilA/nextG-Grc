@@ -1,27 +1,20 @@
 """
-Weekly PDF Report Generator — produces professional GRC reports in PDF format.
-
-Generates 5 types of reports:
-1. Executive Summary (overview of all modules)
-2. Risk Report (risk register + heatmap)
-3. Compliance Report (framework coverage + gaps)
-4. Vendor Risk Report (all 3rd parties + scores)
-5. Audit Report (findings + status)
+Weekly PDF Report Generator — professional GRC reports.
+Clean, corporate design inspired by Big 4 audit reports.
 """
 from datetime import datetime, timedelta
 from io import BytesIO
-from pathlib import Path
 
 from reportlab.lib import colors
-from reportlab.lib.pagesizes import letter, A4
+from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-from reportlab.lib.units import inch, cm
+from reportlab.lib.units import inch
 from reportlab.platypus import (
     SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle,
-    PageBreak, Image, KeepTogether,
+    KeepTogether, HRFlowable,
 )
-from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT, TA_JUSTIFY
-from sqlalchemy import select, func, and_
+from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
+from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.risk import Risk, RiskStatus, RiskSeverity
@@ -31,661 +24,419 @@ from app.models.audit import Audit, AuditFinding
 from app.models.tenant import Tenant
 
 
-# ── Brand colors ──────────────────────────────────────────────────────────
-BRAND_PRIMARY = colors.HexColor("#2563eb")  # blue-600
-BRAND_SECONDARY = colors.HexColor("#1e40af")  # blue-800
-BRAND_LIGHT = colors.HexColor("#eff6ff")  # blue-50
-TEXT_PRIMARY = colors.HexColor("#111827")  # gray-900
-TEXT_SECONDARY = colors.HexColor("#6b7280")  # gray-500
-BORDER_COLOR = colors.HexColor("#e5e7eb")  # gray-200
+# ── Colors ────────────────────────────────────────────────────────────────
+NAVY = colors.HexColor("#1a2332")
+DARK_BLUE = colors.HexColor("#1e3a5f")
+ACCENT = colors.HexColor("#2563eb")
+GRAY_900 = colors.HexColor("#111827")
+GRAY_700 = colors.HexColor("#374151")
+GRAY_500 = colors.HexColor("#6b7280")
+GRAY_300 = colors.HexColor("#d1d5db")
+GRAY_100 = colors.HexColor("#f3f4f6")
+WHITE = colors.white
+GREEN = colors.HexColor("#059669")
+RED = colors.HexColor("#dc2626")
+ORANGE = colors.HexColor("#d97706")
 
-SEVERITY_COLORS = {
-    "critical": colors.HexColor("#dc2626"),  # red-600
-    "high": colors.HexColor("#ea580c"),  # orange-600
-    "medium": colors.HexColor("#ca8a04"),  # yellow-600
-    "low": colors.HexColor("#16a34a"),  # green-600
-}
-
-
-def get_styles():
-    """Custom stylesheet for PDF reports."""
-    styles = getSampleStyleSheet()
-
-    styles.add(ParagraphStyle(
-        name="ReportTitle",
-        parent=styles["Title"],
-        fontSize=22,
-        textColor=BRAND_PRIMARY,
-        spaceAfter=8,
-        alignment=TA_LEFT,
-        fontName="Helvetica-Bold",
-    ))
-    styles.add(ParagraphStyle(
-        name="ReportSubtitle",
-        parent=styles["Normal"],
-        fontSize=11,
-        textColor=TEXT_SECONDARY,
-        spaceAfter=20,
-        alignment=TA_LEFT,
-    ))
-    styles.add(ParagraphStyle(
-        name="SectionHeader",
-        parent=styles["Heading2"],
-        fontSize=14,
-        textColor=BRAND_SECONDARY,
-        spaceBefore=18,
-        spaceAfter=8,
-        fontName="Helvetica-Bold",
-    ))
-    styles.add(ParagraphStyle(
-        name="SubHeader",
-        parent=styles["Heading3"],
-        fontSize=12,
-        textColor=TEXT_PRIMARY,
-        spaceBefore=12,
-        spaceAfter=6,
-        fontName="Helvetica-Bold",
-    ))
-    styles.add(ParagraphStyle(
-        name="BodyText2",
-        parent=styles["Normal"],
-        fontSize=10,
-        textColor=TEXT_PRIMARY,
-        leading=14,
-        alignment=TA_JUSTIFY,
-        spaceAfter=6,
-    ))
-    styles.add(ParagraphStyle(
-        name="Caption",
-        parent=styles["Normal"],
-        fontSize=8,
-        textColor=TEXT_SECONDARY,
-        alignment=TA_CENTER,
-    ))
-    return styles
+PAGE_W = A4[0] - 1.2 * inch  # usable width
 
 
-def build_header(styles, tenant_name: str, report_title: str, period_start: str, period_end: str):
-    """Build the header section of a report."""
-    elements = []
-    elements.append(Paragraph(f"<b>{tenant_name}</b>", styles["ReportSubtitle"]))
-    elements.append(Paragraph(report_title, styles["ReportTitle"]))
-    elements.append(Paragraph(
-        f"Weekly Report · {period_start} to {period_end}<br/>Generated: {datetime.utcnow().strftime('%B %d, %Y %H:%M UTC')}",
-        styles["ReportSubtitle"],
-    ))
-    # Blue line separator
-    elements.append(Table(
-        [[""]],
-        colWidths=[6.5 * inch],
-        rowHeights=[2],
-        style=TableStyle([
-            ("BACKGROUND", (0, 0), (-1, -1), BRAND_PRIMARY),
-            ("LEFTPADDING", (0, 0), (-1, -1), 0),
-            ("RIGHTPADDING", (0, 0), (-1, -1), 0),
-        ]),
-    ))
-    elements.append(Spacer(1, 0.2 * inch))
-    return elements
+def _styles():
+    s = getSampleStyleSheet()
+    s.add(ParagraphStyle("H1", fontName="Helvetica-Bold", fontSize=18, textColor=NAVY, spaceAfter=4, leading=22))
+    s.add(ParagraphStyle("H2", fontName="Helvetica-Bold", fontSize=12, textColor=DARK_BLUE, spaceBefore=16, spaceAfter=6, leading=15))
+    s.add(ParagraphStyle("H3", fontName="Helvetica-Bold", fontSize=10, textColor=GRAY_900, spaceBefore=10, spaceAfter=4))
+    s.add(ParagraphStyle("Body", fontName="Helvetica", fontSize=9, textColor=GRAY_700, leading=13, spaceAfter=4))
+    s.add(ParagraphStyle("Small", fontName="Helvetica", fontSize=7.5, textColor=GRAY_500, leading=10))
+    s.add(ParagraphStyle("Footer", fontName="Helvetica", fontSize=7, textColor=GRAY_500, alignment=TA_CENTER))
+    s.add(ParagraphStyle("KPIValue", fontName="Helvetica-Bold", fontSize=14, textColor=NAVY, alignment=TA_CENTER, leading=18))
+    s.add(ParagraphStyle("KPILabel", fontName="Helvetica", fontSize=7, textColor=GRAY_500, alignment=TA_CENTER, leading=10))
+    s.add(ParagraphStyle("MetaRight", fontName="Helvetica", fontSize=8, textColor=GRAY_500, alignment=TA_RIGHT, leading=11))
+    return s
 
 
-def build_kpi_row(kpis: list[dict]):
-    """Build a row of KPI boxes."""
-    data = []
-    row = []
-    for kpi in kpis:
-        cell = [
-            Paragraph(f"<font size='18' color='#2563eb'><b>{kpi['value']}</b></font>", getSampleStyleSheet()["Normal"]),
-            Paragraph(f"<font size='9' color='#6b7280'>{kpi['label']}</font>", getSampleStyleSheet()["Normal"]),
-        ]
-        row.append(cell)
-    data.append(row)
+# ── Reusable Components ───────────────────────────────────────────────────
 
-    col_width = 6.5 * inch / len(kpis)
-    table = Table(data, colWidths=[col_width] * len(kpis))
-    table.setStyle(TableStyle([
-        ("BACKGROUND", (0, 0), (-1, -1), BRAND_LIGHT),
-        ("BOX", (0, 0), (-1, -1), 1, BORDER_COLOR),
-        ("LINEBEFORE", (1, 0), (-1, -1), 1, BORDER_COLOR),
-        ("PADDING", (0, 0), (-1, -1), 12),
-        ("ALIGN", (0, 0), (-1, -1), "CENTER"),
-        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+def _header(st, org: str, title: str, start: str, end: str):
+    """Professional header with org name, title, and date range."""
+    els = []
+    # Top line
+    els.append(HRFlowable(width="100%", thickness=2, color=NAVY, spaceAfter=8))
+    # Two-column header: left = org + title, right = meta
+    left = Paragraph(
+        f"<font size='8' color='#6b7280'>{org.upper()}</font><br/>"
+        f"<font size='16' color='#1a2332'><b>{title}</b></font>",
+        st["Normal"],
+    )
+    right = Paragraph(
+        f"<font size='8' color='#6b7280'>Report Period</font><br/>"
+        f"<font size='9' color='#111827'><b>{start} — {end}</b></font><br/>"
+        f"<font size='7' color='#9ca3af'>Generated {datetime.utcnow().strftime('%d %b %Y, %H:%M UTC')}</font>",
+        st["MetaRight"],
+    )
+    t = Table([[left, right]], colWidths=[PAGE_W * 0.65, PAGE_W * 0.35])
+    t.setStyle(TableStyle([
+        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+        ("LEFTPADDING", (0, 0), (-1, -1), 0),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 0),
     ]))
-    return table
+    els.append(t)
+    els.append(Spacer(1, 4))
+    els.append(HRFlowable(width="100%", thickness=0.5, color=GRAY_300, spaceAfter=14))
+    return els
 
 
-def build_data_table(headers: list[str], rows: list[list], col_widths=None):
-    """Build a styled data table."""
+def _kpi_bar(kpis: list[dict]):
+    """Compact KPI bar — value over label, separated by thin lines."""
+    n = len(kpis)
+    if n == 0:
+        return Spacer(1, 1)
+
+    vals = []
+    labs = []
+    for kpi in kpis:
+        vals.append(Paragraph(f"<b>{kpi['value']}</b>", ParagraphStyle("_kv", fontName="Helvetica-Bold", fontSize=16, textColor=NAVY, alignment=TA_CENTER)))
+        labs.append(Paragraph(kpi["label"], ParagraphStyle("_kl", fontName="Helvetica", fontSize=7, textColor=GRAY_500, alignment=TA_CENTER)))
+
+    cw = PAGE_W / n
+    t = Table([vals, labs], colWidths=[cw] * n, rowHeights=[24, 12])
+    style_cmds = [
+        ("ALIGN", (0, 0), (-1, -1), "CENTER"),
+        ("VALIGN", (0, 0), (-1, 0), "BOTTOM"),
+        ("VALIGN", (0, 1), (-1, 1), "TOP"),
+        ("TOPPADDING", (0, 0), (-1, 0), 8),
+        ("BOTTOMPADDING", (0, 0), (-1, 0), 2),
+        ("TOPPADDING", (0, 1), (-1, 1), 2),
+        ("BOTTOMPADDING", (0, 1), (-1, 1), 8),
+        ("LINEBELOW", (0, -1), (-1, -1), 0.5, GRAY_300),
+        ("LINEABOVE", (0, 0), (-1, 0), 0.5, GRAY_300),
+    ]
+    # Vertical dividers between cells
+    for i in range(1, n):
+        style_cmds.append(("LINEBEFORE", (i, 0), (i, -1), 0.5, GRAY_300))
+    t.setStyle(TableStyle(style_cmds))
+    return t
+
+
+def _table(headers: list[str], rows: list[list], widths=None):
+    """Clean data table with subtle styling."""
+    if not rows:
+        return Paragraph("<i>No data available.</i>", ParagraphStyle("_nd", fontName="Helvetica-Oblique", fontSize=9, textColor=GRAY_500))
+
     data = [headers] + rows
-    if not col_widths:
-        col_widths = [6.5 * inch / len(headers)] * len(headers)
-    table = Table(data, colWidths=col_widths, repeatRows=1)
-    table.setStyle(TableStyle([
+    if not widths:
+        widths = [PAGE_W / len(headers)] * len(headers)
+
+    t = Table(data, colWidths=widths, repeatRows=1)
+    t.setStyle(TableStyle([
         # Header
-        ("BACKGROUND", (0, 0), (-1, 0), BRAND_PRIMARY),
-        ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+        ("BACKGROUND", (0, 0), (-1, 0), NAVY),
+        ("TEXTCOLOR", (0, 0), (-1, 0), WHITE),
         ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
-        ("FONTSIZE", (0, 0), (-1, 0), 9),
-        ("PADDING", (0, 0), (-1, 0), 8),
+        ("FONTSIZE", (0, 0), (-1, 0), 8),
+        ("TOPPADDING", (0, 0), (-1, 0), 6),
+        ("BOTTOMPADDING", (0, 0), (-1, 0), 6),
+        ("LEFTPADDING", (0, 0), (-1, 0), 8),
         # Body
         ("FONTNAME", (0, 1), (-1, -1), "Helvetica"),
         ("FONTSIZE", (0, 1), (-1, -1), 8),
-        ("TEXTCOLOR", (0, 1), (-1, -1), TEXT_PRIMARY),
-        ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#f9fafb")]),
-        ("PADDING", (0, 1), (-1, -1), 6),
+        ("TEXTCOLOR", (0, 1), (-1, -1), GRAY_700),
+        ("TOPPADDING", (0, 1), (-1, -1), 5),
+        ("BOTTOMPADDING", (0, 1), (-1, -1), 5),
+        ("LEFTPADDING", (0, 1), (-1, -1), 8),
+        ("ROWBACKGROUNDS", (0, 1), (-1, -1), [WHITE, GRAY_100]),
+        ("LINEBELOW", (0, 0), (-1, -1), 0.3, GRAY_300),
         ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-        ("GRID", (0, 0), (-1, -1), 0.5, BORDER_COLOR),
     ]))
-    return table
+    return t
 
 
-# ── Report generators ────────────────────────────────────────────────────────
+def _status_dot(status_text: str) -> str:
+    """Return a colored bullet + status text for use in Paragraph."""
+    c = "#059669" if status_text.lower() in ("active", "in progress", "completed", "implemented") else \
+        "#d97706" if status_text.lower() in ("draft", "pending", "onboarding") else \
+        "#dc2626" if status_text.lower() in ("overdue", "critical", "rejected") else "#6b7280"
+    return f"<font color='{c}'>&bull;</font> {status_text}"
 
-async def generate_executive_summary(db: AsyncSession, tenant_id: str, tenant_name: str) -> bytes:
-    """Generate the weekly Executive Summary PDF."""
-    buffer = BytesIO()
-    doc = SimpleDocTemplate(
-        buffer, pagesize=A4,
-        leftMargin=0.75 * inch, rightMargin=0.75 * inch,
-        topMargin=0.75 * inch, bottomMargin=0.75 * inch,
+
+def _footer():
+    """Confidentiality footer."""
+    return Paragraph(
+        "CONFIDENTIAL — This report is auto-generated by the GRC Platform. "
+        "Distribution is restricted to authorized personnel only.",
+        ParagraphStyle("_ft", fontName="Helvetica", fontSize=6.5, textColor=GRAY_500, alignment=TA_CENTER, spaceBefore=20),
     )
-    styles = get_styles()
-    elements = []
 
-    # Header
-    week_start = (datetime.utcnow() - timedelta(days=7)).strftime("%b %d, %Y")
-    week_end = datetime.utcnow().strftime("%b %d, %Y")
-    elements.extend(build_header(styles, tenant_name, "Executive Summary", week_start, week_end))
 
-    # Fetch KPI data
-    risks_result = await db.execute(
-        select(func.count(Risk.id)).where(Risk.tenant_id == tenant_id)
-    )
-    total_risks = risks_result.scalar() or 0
+def _section(st, title: str):
+    return Paragraph(title, st["H2"])
 
-    critical_risks_result = await db.execute(
-        select(func.count(Risk.id)).where(
-            Risk.tenant_id == tenant_id,
-            Risk.severity == RiskSeverity.CRITICAL,
-        )
-    )
-    critical_risks = critical_risks_result.scalar() or 0
 
-    vendors_result = await db.execute(
-        select(func.count(Vendor.id)).where(Vendor.tenant_id == tenant_id)
-    )
-    total_vendors = vendors_result.scalar() or 0
+# ── Report Generators ─────────────────────────────────────────────────────
 
-    assessments_result = await db.execute(
-        select(func.count(ComplianceAssessment.id)).where(
-            ComplianceAssessment.tenant_id == tenant_id
-        )
-    )
-    total_assessments = assessments_result.scalar() or 0
+async def generate_executive_summary(db: AsyncSession, tenant_id: str, org: str) -> bytes:
+    buf = BytesIO()
+    doc = SimpleDocTemplate(buf, pagesize=A4, leftMargin=0.6*inch, rightMargin=0.6*inch, topMargin=0.5*inch, bottomMargin=0.5*inch)
+    st = _styles()
+    els = []
+    ws = (datetime.utcnow() - timedelta(days=7)).strftime("%d %b %Y")
+    we = datetime.utcnow().strftime("%d %b %Y")
+    els.extend(_header(st, org, "Executive Summary", ws, we))
 
-    # KPI Row
-    elements.append(Paragraph("Key Performance Indicators", styles["SectionHeader"]))
-    elements.append(build_kpi_row([
-        {"value": str(total_risks), "label": "Total Risks"},
-        {"value": str(critical_risks), "label": "Critical Risks"},
-        {"value": str(total_vendors), "label": "3rd Parties"},
-        {"value": str(total_assessments), "label": "Assessments"},
+    # KPIs
+    total_risks = (await db.execute(select(func.count(Risk.id)).where(Risk.tenant_id == tenant_id))).scalar() or 0
+    critical_risks = (await db.execute(select(func.count(Risk.id)).where(Risk.tenant_id == tenant_id, Risk.severity == RiskSeverity.CRITICAL))).scalar() or 0
+    total_vendors = (await db.execute(select(func.count(Vendor.id)).where(Vendor.tenant_id == tenant_id))).scalar() or 0
+    total_assess = (await db.execute(select(func.count(ComplianceAssessment.id)).where(ComplianceAssessment.tenant_id == tenant_id))).scalar() or 0
+
+    els.append(_kpi_bar([
+        {"value": total_risks, "label": "Total Risks"},
+        {"value": critical_risks, "label": "Critical Risks"},
+        {"value": total_vendors, "label": "3rd Parties"},
+        {"value": total_assess, "label": "Assessments"},
     ]))
-    elements.append(Spacer(1, 0.2 * inch))
 
-    # Risks Overview
-    elements.append(Paragraph("Risk Overview", styles["SectionHeader"]))
-    risks_by_status = await db.execute(
-        select(Risk.status, func.count(Risk.id))
-        .where(Risk.tenant_id == tenant_id)
-        .group_by(Risk.status)
-    )
-    status_data = [(r[0].value if r[0] else "unknown", r[1]) for r in risks_by_status]
+    # Risk by status
+    els.append(_section(st, "Risk Overview"))
+    r = await db.execute(select(Risk.status, func.count(Risk.id)).where(Risk.tenant_id == tenant_id).group_by(Risk.status))
+    rows = [[s[0].value.replace("_", " ").title(), str(s[1])] for s in r]
+    els.append(_table(["Status", "Count"], rows, [PAGE_W * 0.65, PAGE_W * 0.35]))
 
-    if status_data:
-        rows = [[status.replace("_", " ").title(), str(count)] for status, count in status_data]
-        elements.append(build_data_table(["Status", "Count"], rows, col_widths=[4 * inch, 2.5 * inch]))
-    else:
-        elements.append(Paragraph("No risks registered yet.", styles["BodyText2"]))
-    elements.append(Spacer(1, 0.15 * inch))
+    # Compliance
+    els.append(_section(st, "Compliance Overview"))
+    assessments = list((await db.execute(select(ComplianceAssessment).where(ComplianceAssessment.tenant_id == tenant_id).limit(10))).scalars().all())
+    rows = []
+    for a in assessments:
+        s_val = a.status.value if hasattr(a.status, "value") else str(a.status)
+        score = f"{a.compliance_score:.0f}%" if a.compliance_score is not None else "—"
+        rows.append([a.name[:50] if a.name else "Unnamed", s_val.replace("_", " ").title(), score])
+    els.append(_table(["Assessment", "Status", "Score"], rows, [PAGE_W * 0.55, PAGE_W * 0.25, PAGE_W * 0.20]))
 
-    # Compliance Overview
-    elements.append(Paragraph("Compliance Overview", styles["SectionHeader"]))
-    assessments_result = await db.execute(
-        select(ComplianceAssessment).where(ComplianceAssessment.tenant_id == tenant_id).limit(5)
-    )
-    assessments = list(assessments_result.scalars().all())
-    if assessments:
-        rows = [
-            [
-                a.name[:40] if a.name else "Unnamed",
-                (a.status.value if hasattr(a.status, 'value') else str(a.status)).replace("_", " ").title(),
-                f"{a.compliance_score:.0f}%" if a.compliance_score is not None else "N/A",
-            ]
-            for a in assessments
-        ]
-        elements.append(build_data_table(
-            ["Assessment", "Status", "Score"],
-            rows,
-            col_widths=[3.5 * inch, 1.5 * inch, 1.5 * inch],
-        ))
-    else:
-        elements.append(Paragraph("No compliance assessments yet.", styles["BodyText2"]))
-    elements.append(Spacer(1, 0.15 * inch))
+    # Vendors
+    els.append(_section(st, "3rd Party Risk Summary"))
+    vr = await db.execute(select(Vendor.risk_tier, func.count(Vendor.id)).where(Vendor.tenant_id == tenant_id).group_by(Vendor.risk_tier))
+    rows = [[(t[0].value if hasattr(t[0], "value") else str(t[0])).title(), str(t[1])] for t in vr]
+    els.append(_table(["Risk Tier", "Count"], rows, [PAGE_W * 0.65, PAGE_W * 0.35]))
 
-    # Vendor Risk Summary
-    elements.append(Paragraph("3rd Party Risk Summary", styles["SectionHeader"]))
-    vendors_by_tier = await db.execute(
-        select(Vendor.risk_tier, func.count(Vendor.id))
-        .where(Vendor.tenant_id == tenant_id)
-        .group_by(Vendor.risk_tier)
-    )
-    tier_data = [(r[0].value if hasattr(r[0], 'value') else str(r[0]), r[1]) for r in vendors_by_tier]
-    if tier_data:
-        rows = [[tier.title(), str(count)] for tier, count in tier_data]
-        elements.append(build_data_table(["Risk Tier", "Count"], rows, col_widths=[4 * inch, 2.5 * inch]))
-    else:
-        elements.append(Paragraph("No vendors registered.", styles["BodyText2"]))
-
-    # Footer
-    elements.append(Spacer(1, 0.3 * inch))
-    elements.append(Paragraph(
-        "This report is auto-generated by the GRC Platform. For questions, contact your security team.",
-        styles["Caption"],
-    ))
-
-    doc.build(elements)
-    return buffer.getvalue()
+    els.append(_footer())
+    doc.build(els)
+    return buf.getvalue()
 
 
-async def generate_risk_report(db: AsyncSession, tenant_id: str, tenant_name: str) -> bytes:
-    """Generate the weekly Risk Report PDF."""
-    buffer = BytesIO()
-    doc = SimpleDocTemplate(buffer, pagesize=A4, leftMargin=0.75 * inch, rightMargin=0.75 * inch)
-    styles = get_styles()
-    elements = []
+async def generate_risk_report(db: AsyncSession, tenant_id: str, org: str) -> bytes:
+    buf = BytesIO()
+    doc = SimpleDocTemplate(buf, pagesize=A4, leftMargin=0.6*inch, rightMargin=0.6*inch, topMargin=0.5*inch, bottomMargin=0.5*inch)
+    st = _styles()
+    els = []
+    ws = (datetime.utcnow() - timedelta(days=7)).strftime("%d %b %Y")
+    we = datetime.utcnow().strftime("%d %b %Y")
+    els.extend(_header(st, org, "Risk Register Report", ws, we))
 
-    week_start = (datetime.utcnow() - timedelta(days=7)).strftime("%b %d, %Y")
-    week_end = datetime.utcnow().strftime("%b %d, %Y")
-    elements.extend(build_header(styles, tenant_name, "Risk Register Report", week_start, week_end))
-
-    # Summary stats
-    risks_result = await db.execute(
-        select(Risk).where(Risk.tenant_id == tenant_id).order_by(Risk.created_at.desc())
-    )
-    risks = list(risks_result.scalars().all())
-
-    severity_counts = {"critical": 0, "high": 0, "medium": 0, "low": 0}
+    risks = list((await db.execute(select(Risk).where(Risk.tenant_id == tenant_id).order_by(Risk.created_at.desc()))).scalars().all())
+    sev = {"critical": 0, "high": 0, "medium": 0, "low": 0}
     for r in risks:
         if r.severity:
-            sev = r.severity.value if hasattr(r.severity, 'value') else str(r.severity)
-            if sev in severity_counts:
-                severity_counts[sev] += 1
+            k = r.severity.value if hasattr(r.severity, "value") else str(r.severity)
+            if k in sev:
+                sev[k] += 1
 
-    elements.append(Paragraph("Risk Overview", styles["SectionHeader"]))
-    elements.append(build_kpi_row([
-        {"value": str(severity_counts["critical"]), "label": "Critical"},
-        {"value": str(severity_counts["high"]), "label": "High"},
-        {"value": str(severity_counts["medium"]), "label": "Medium"},
-        {"value": str(severity_counts["low"]), "label": "Low"},
+    els.append(_kpi_bar([
+        {"value": sev["critical"], "label": "Critical"},
+        {"value": sev["high"], "label": "High"},
+        {"value": sev["medium"], "label": "Medium"},
+        {"value": sev["low"], "label": "Low"},
     ]))
-    elements.append(Spacer(1, 0.2 * inch))
 
-    # Top 10 risks by score
-    elements.append(Paragraph("Top 10 Risks by Score", styles["SectionHeader"]))
-    scored_risks = [r for r in risks if r.likelihood and r.impact]
-    scored_risks.sort(key=lambda r: (r.likelihood or 0) * (r.impact or 0), reverse=True)
-    top_risks = scored_risks[:10]
-
-    if top_risks:
-        rows = []
-        for r in top_risks:
-            score = (r.likelihood or 0) * (r.impact or 0)
-            sev = (r.severity.value if hasattr(r.severity, 'value') else str(r.severity or "-")).title()
-            status = (r.status.value if hasattr(r.status, 'value') else str(r.status or "-")).replace("_", " ").title()
-            rows.append([
-                r.title[:45] + ("..." if len(r.title) > 45 else ""),
-                r.risk_category[:20] if r.risk_category else "-",
-                f"{score:.1f}",
-                sev,
-                status,
-            ])
-        elements.append(build_data_table(
-            ["Title", "Category", "Score", "Severity", "Status"],
-            rows,
-            col_widths=[2.5 * inch, 1.3 * inch, 0.7 * inch, 0.9 * inch, 1.1 * inch],
-        ))
-    else:
-        elements.append(Paragraph("No scored risks available.", styles["BodyText2"]))
-
-    elements.append(Spacer(1, 0.2 * inch))
+    els.append(_section(st, "Top Risks by Inherent Score"))
+    scored = sorted([r for r in risks if r.likelihood and r.impact], key=lambda r: (r.likelihood or 0) * (r.impact or 0), reverse=True)[:10]
+    rows = []
+    for r in scored:
+        score = (r.likelihood or 0) * (r.impact or 0)
+        sev_v = (r.severity.value if hasattr(r.severity, "value") else str(r.severity or "—")).title()
+        st_v = (r.status.value if hasattr(r.status, "value") else str(r.status or "—")).replace("_", " ").title()
+        rows.append([r.title[:50], r.risk_category[:20] if r.risk_category else "—", f"{score:.1f}", sev_v, st_v])
+    els.append(_table(
+        ["Title", "Category", "Score", "Severity", "Status"],
+        rows,
+        [PAGE_W * 0.32, PAGE_W * 0.18, PAGE_W * 0.12, PAGE_W * 0.16, PAGE_W * 0.22],
+    ))
 
     # Overdue reviews
-    elements.append(Paragraph("Risks Needing Review", styles["SectionHeader"]))
+    els.append(_section(st, "Upcoming & Overdue Reviews"))
     today = datetime.utcnow().date()
-    overdue_risks = []
+    overdue = []
     for r in risks:
         if not r.next_review_date:
             continue
         try:
-            review_date = datetime.fromisoformat(r.next_review_date).date()
-            days = (review_date - today).days
+            d = datetime.fromisoformat(r.next_review_date).date()
+            days = (d - today).days
             if days <= 14:
-                overdue_risks.append((r, days))
+                label = f"OVERDUE ({abs(days)}d)" if days < 0 else (f"TODAY" if days == 0 else f"In {days} days")
+                overdue.append([r.title[:50], r.next_review_date, label])
         except (ValueError, TypeError):
             continue
+    els.append(_table(["Risk", "Review Date", "Status"], overdue, [PAGE_W * 0.50, PAGE_W * 0.25, PAGE_W * 0.25]))
 
-    if overdue_risks:
-        overdue_risks.sort(key=lambda x: x[1])
-        rows = []
-        for r, days in overdue_risks[:15]:
-            status_label = "OVERDUE" if days < 0 else ("DUE TODAY" if days == 0 else f"{days} days")
-            rows.append([
-                r.title[:50] + ("..." if len(r.title) > 50 else ""),
-                r.next_review_date or "-",
-                status_label,
-            ])
-        elements.append(build_data_table(
-            ["Risk", "Review Date", "Status"],
-            rows,
-            col_widths=[3.5 * inch, 1.5 * inch, 1.5 * inch],
-        ))
-    else:
-        elements.append(Paragraph("No risks due for review in the next 14 days.", styles["BodyText2"]))
-
-    doc.build(elements)
-    return buffer.getvalue()
+    els.append(_footer())
+    doc.build(els)
+    return buf.getvalue()
 
 
-async def generate_vendor_report(db: AsyncSession, tenant_id: str, tenant_name: str) -> bytes:
-    """Generate the weekly Vendor Risk Report PDF."""
-    buffer = BytesIO()
-    doc = SimpleDocTemplate(buffer, pagesize=A4, leftMargin=0.75 * inch, rightMargin=0.75 * inch)
-    styles = get_styles()
-    elements = []
+async def generate_vendor_report(db: AsyncSession, tenant_id: str, org: str) -> bytes:
+    buf = BytesIO()
+    doc = SimpleDocTemplate(buf, pagesize=A4, leftMargin=0.6*inch, rightMargin=0.6*inch, topMargin=0.5*inch, bottomMargin=0.5*inch)
+    st = _styles()
+    els = []
+    ws = (datetime.utcnow() - timedelta(days=7)).strftime("%d %b %Y")
+    we = datetime.utcnow().strftime("%d %b %Y")
+    els.extend(_header(st, org, "3rd Party Risk Report", ws, we))
 
-    week_start = (datetime.utcnow() - timedelta(days=7)).strftime("%b %d, %Y")
-    week_end = datetime.utcnow().strftime("%b %d, %Y")
-    elements.extend(build_header(styles, tenant_name, "3rd Party Risk Report", week_start, week_end))
-
-    # Fetch vendors
-    result = await db.execute(
-        select(Vendor).where(Vendor.tenant_id == tenant_id).order_by(Vendor.risk_score.desc().nulls_last())
-    )
-    vendors = list(result.scalars().all())
-
-    tier_counts = {"critical": 0, "high": 0, "medium": 0, "low": 0}
-    dpa_missing = 0
+    vendors = list((await db.execute(select(Vendor).where(Vendor.tenant_id == tenant_id).order_by(Vendor.risk_score.desc().nulls_last()))).scalars().all())
+    tiers = {"critical": 0, "high": 0, "medium": 0, "low": 0}
+    no_dpa = 0
     for v in vendors:
-        tier = v.risk_tier.value if hasattr(v.risk_tier, 'value') else str(v.risk_tier)
-        if tier in tier_counts:
-            tier_counts[tier] += 1
+        tier = v.risk_tier.value if hasattr(v.risk_tier, "value") else str(v.risk_tier)
+        if tier in tiers:
+            tiers[tier] += 1
         if not v.has_data_processing_agreement:
-            dpa_missing += 1
+            no_dpa += 1
 
-    # KPIs
-    elements.append(Paragraph("3rd Party Overview", styles["SectionHeader"]))
-    elements.append(build_kpi_row([
-        {"value": str(len(vendors)), "label": "Total 3rd Parties"},
-        {"value": str(tier_counts["critical"] + tier_counts["high"]), "label": "High Risk"},
-        {"value": str(dpa_missing), "label": "Missing DPA"},
-        {"value": str(tier_counts["critical"]), "label": "Critical Tier"},
+    els.append(_kpi_bar([
+        {"value": len(vendors), "label": "Total Vendors"},
+        {"value": tiers["critical"] + tiers["high"], "label": "High / Critical"},
+        {"value": no_dpa, "label": "Missing DPA"},
     ]))
-    elements.append(Spacer(1, 0.2 * inch))
 
-    # Top risky vendors
-    elements.append(Paragraph("Top 10 Vendors by Risk Score", styles["SectionHeader"]))
-    top_vendors = [v for v in vendors if v.risk_score is not None][:10]
-    if top_vendors:
-        rows = []
-        for v in top_vendors:
-            tier = (v.risk_tier.value if hasattr(v.risk_tier, 'value') else str(v.risk_tier)).title()
-            status = (v.status.value if hasattr(v.status, 'value') else str(v.status)).replace("_", " ").title()
-            dpa = "✓" if v.has_data_processing_agreement else "✗"
-            rows.append([
-                v.name[:30] + ("..." if len(v.name) > 30 else ""),
-                v.industry[:20] if v.industry else "-",
-                tier,
-                f"{v.risk_score:.1f}" if v.risk_score else "-",
-                dpa,
-                status,
-            ])
-        elements.append(build_data_table(
-            ["Name", "Industry", "Tier", "Score", "DPA", "Status"],
-            rows,
-            col_widths=[1.8 * inch, 1.4 * inch, 0.8 * inch, 0.7 * inch, 0.5 * inch, 1.3 * inch],
-        ))
-    else:
-        elements.append(Paragraph("No vendors with risk scores.", styles["BodyText2"]))
+    els.append(_section(st, "Vendor Risk Register"))
+    rows = []
+    for v in vendors[:15]:
+        tier = (v.risk_tier.value if hasattr(v.risk_tier, "value") else str(v.risk_tier)).title()
+        status = (v.status.value if hasattr(v.status, "value") else str(v.status)).replace("_", " ").title()
+        score = f"{v.risk_score:.0f}" if v.risk_score else "—"
+        dpa = "Yes" if v.has_data_processing_agreement else "No"
+        rows.append([v.name[:30], v.industry[:20] if v.industry else "—", tier, score, dpa, status])
+    els.append(_table(
+        ["Vendor", "Industry", "Tier", "Score", "DPA", "Status"],
+        rows,
+        [PAGE_W * 0.22, PAGE_W * 0.20, PAGE_W * 0.12, PAGE_W * 0.10, PAGE_W * 0.10, PAGE_W * 0.16],
+    ))
 
-    elements.append(Spacer(1, 0.2 * inch))
-
-    # Contracts pending review
-    elements.append(Paragraph("Contracts Pending CISO Review", styles["SectionHeader"]))
-    contracts_result = await db.execute(
-        select(VendorContract)
-        .join(Vendor, VendorContract.vendor_id == Vendor.id)
-        .where(
+    # Pending contracts
+    els.append(_section(st, "Contracts Pending Review"))
+    contracts = list((await db.execute(
+        select(VendorContract).join(Vendor).where(
             Vendor.tenant_id == tenant_id,
-            VendorContract.validation_status.in_([
-                ContractValidationStatus.AI_REVIEWED.value,
-                ContractValidationStatus.PENDING_CISO.value,
-            ])
+            VendorContract.validation_status.in_([ContractValidationStatus.AI_REVIEWED.value, ContractValidationStatus.PENDING_CISO.value]),
         )
-    )
-    pending_contracts = list(contracts_result.scalars().all())
-    if pending_contracts:
-        rows = []
-        for c in pending_contracts[:10]:
-            # Get vendor name
-            v_result = await db.execute(select(Vendor).where(Vendor.id == c.vendor_id))
-            v = v_result.scalar_one_or_none()
-            v_name = v.name if v else "Unknown"
-            rows.append([
-                v_name[:30],
-                c.file_name[:30],
-                f"v{c.version}",
-                c.created_at.strftime("%Y-%m-%d") if c.created_at else "-",
-            ])
-        elements.append(build_data_table(
-            ["Vendor", "File", "Version", "Uploaded"],
-            rows,
-            col_widths=[2 * inch, 2.5 * inch, 0.8 * inch, 1.2 * inch],
-        ))
-    else:
-        elements.append(Paragraph("No contracts pending review.", styles["BodyText2"]))
+    )).scalars().all())
+    rows = []
+    for c in contracts[:10]:
+        vr = (await db.execute(select(Vendor).where(Vendor.id == c.vendor_id))).scalar_one_or_none()
+        rows.append([(vr.name if vr else "—")[:30], c.file_name[:30], f"v{c.version}", c.created_at.strftime("%Y-%m-%d") if c.created_at else "—"])
+    els.append(_table(["Vendor", "Contract", "Ver.", "Uploaded"], rows, [PAGE_W * 0.25, PAGE_W * 0.35, PAGE_W * 0.10, PAGE_W * 0.20]))
 
-    # Missing DPA alert
-    if dpa_missing > 0:
-        elements.append(Spacer(1, 0.2 * inch))
-        elements.append(Paragraph("Compliance Alert: Missing DPAs", styles["SectionHeader"]))
-        missing_dpa_vendors = [v for v in vendors if not v.has_data_processing_agreement][:10]
-        rows = [[v.name[:40], v.industry[:25] if v.industry else "-"] for v in missing_dpa_vendors]
-        elements.append(build_data_table(
-            ["Vendor", "Industry"],
-            rows,
-            col_widths=[3.5 * inch, 3 * inch],
-        ))
+    # Missing DPA
+    if no_dpa > 0:
+        els.append(_section(st, "Vendors Missing Data Processing Agreement"))
+        rows = [[v.name[:40], v.industry[:25] if v.industry else "—"] for v in vendors if not v.has_data_processing_agreement][:10]
+        els.append(_table(["Vendor", "Industry"], rows, [PAGE_W * 0.55, PAGE_W * 0.45]))
 
-    doc.build(elements)
-    return buffer.getvalue()
+    els.append(_footer())
+    doc.build(els)
+    return buf.getvalue()
 
 
-async def generate_compliance_report(db: AsyncSession, tenant_id: str, tenant_name: str) -> bytes:
-    """Generate the weekly Compliance Report PDF."""
-    buffer = BytesIO()
-    doc = SimpleDocTemplate(buffer, pagesize=A4, leftMargin=0.75 * inch, rightMargin=0.75 * inch)
-    styles = get_styles()
-    elements = []
+async def generate_compliance_report(db: AsyncSession, tenant_id: str, org: str) -> bytes:
+    buf = BytesIO()
+    doc = SimpleDocTemplate(buf, pagesize=A4, leftMargin=0.6*inch, rightMargin=0.6*inch, topMargin=0.5*inch, bottomMargin=0.5*inch)
+    st = _styles()
+    els = []
+    ws = (datetime.utcnow() - timedelta(days=7)).strftime("%d %b %Y")
+    we = datetime.utcnow().strftime("%d %b %Y")
+    els.extend(_header(st, org, "Compliance Status Report", ws, we))
 
-    week_start = (datetime.utcnow() - timedelta(days=7)).strftime("%b %d, %Y")
-    week_end = datetime.utcnow().strftime("%b %d, %Y")
-    elements.extend(build_header(styles, tenant_name, "Compliance Status Report", week_start, week_end))
+    assessments = list((await db.execute(select(ComplianceAssessment).where(ComplianceAssessment.tenant_id == tenant_id))).scalars().all())
+    scores = [a.compliance_score for a in assessments if a.compliance_score is not None]
+    avg = f"{sum(scores) / len(scores):.0f}%" if scores else "—"
 
-    # Assessments
-    result = await db.execute(
-        select(ComplianceAssessment).where(ComplianceAssessment.tenant_id == tenant_id)
-    )
-    assessments = list(result.scalars().all())
-
-    avg_score = 0
-    if assessments:
-        scores = [a.compliance_score for a in assessments if a.compliance_score is not None]
-        avg_score = sum(scores) / len(scores) if scores else 0
-
-    # Gaps
-    gaps_result = await db.execute(
-        select(ComplianceGap)
-        .join(ComplianceAssessment, ComplianceGap.assessment_id == ComplianceAssessment.id)
-        .where(ComplianceAssessment.tenant_id == tenant_id)
-    )
-    gaps = list(gaps_result.scalars().all())
-    critical_gaps = len([g for g in gaps if g.severity == "critical"])
+    gaps = list((await db.execute(select(ComplianceGap).join(ComplianceAssessment).where(ComplianceAssessment.tenant_id == tenant_id))).scalars().all())
+    crit_gaps = len([g for g in gaps if g.severity == "critical"])
     high_gaps = len([g for g in gaps if g.severity == "high"])
 
-    # KPIs
-    elements.append(Paragraph("Compliance Overview", styles["SectionHeader"]))
-    elements.append(build_kpi_row([
-        {"value": str(len(assessments)), "label": "Assessments"},
-        {"value": f"{avg_score:.0f}%", "label": "Avg Score"},
-        {"value": str(critical_gaps), "label": "Critical Gaps"},
-        {"value": str(high_gaps), "label": "High Gaps"},
+    els.append(_kpi_bar([
+        {"value": len(assessments), "label": "Assessments"},
+        {"value": avg, "label": "Avg. Score"},
+        {"value": crit_gaps, "label": "Critical Gaps"},
+        {"value": high_gaps, "label": "High Gaps"},
     ]))
-    elements.append(Spacer(1, 0.2 * inch))
 
-    # Assessment status
-    elements.append(Paragraph("Assessment Status", styles["SectionHeader"]))
-    if assessments:
-        rows = []
-        for a in assessments[:15]:
-            status = (a.status.value if hasattr(a.status, 'value') else str(a.status)).replace("_", " ").title()
-            score = f"{a.compliance_score:.0f}%" if a.compliance_score is not None else "N/A"
-            rows.append([
-                (a.name or "Unnamed")[:40],
-                status,
-                score,
-                a.created_at.strftime("%Y-%m-%d") if a.created_at else "-",
-            ])
-        elements.append(build_data_table(
-            ["Assessment", "Status", "Score", "Created"],
-            rows,
-            col_widths=[2.8 * inch, 1.5 * inch, 1 * inch, 1.2 * inch],
-        ))
-    else:
-        elements.append(Paragraph("No compliance assessments yet.", styles["BodyText2"]))
+    els.append(_section(st, "Assessment Status"))
+    rows = []
+    for a in assessments[:15]:
+        s_val = (a.status.value if hasattr(a.status, "value") else str(a.status)).replace("_", " ").title()
+        score = f"{a.compliance_score:.0f}%" if a.compliance_score is not None else "—"
+        rows.append([a.name[:45] if a.name else "Unnamed", s_val, score, a.created_at.strftime("%Y-%m-%d") if a.created_at else "—"])
+    els.append(_table(["Assessment", "Status", "Score", "Created"], rows, [PAGE_W * 0.42, PAGE_W * 0.20, PAGE_W * 0.15, PAGE_W * 0.18]))
 
-    elements.append(Spacer(1, 0.2 * inch))
+    els.append(_section(st, "Critical & High Gaps"))
+    gap_rows = []
+    for g in sorted([g for g in gaps if g.severity in ("critical", "high")], key=lambda g: 0 if g.severity == "critical" else 1)[:15]:
+        gap_rows.append([g.control_id[:15] if g.control_id else "—", g.severity.title(), (g.gap_description or "—")[:80]])
+    els.append(_table(["Control", "Severity", "Description"], gap_rows, [PAGE_W * 0.15, PAGE_W * 0.15, PAGE_W * 0.65]))
 
-    # Top gaps
-    elements.append(Paragraph("Top Compliance Gaps", styles["SectionHeader"]))
-    critical_high_gaps = [g for g in gaps if g.severity in ["critical", "high"]]
-    critical_high_gaps.sort(key=lambda g: 0 if g.severity == "critical" else 1)
-    if critical_high_gaps:
-        rows = []
-        for g in critical_high_gaps[:15]:
-            rows.append([
-                g.control_id[:20] if g.control_id else "-",
-                g.severity.title() if g.severity else "-",
-                (g.gap_description or "-")[:80] + ("..." if g.gap_description and len(g.gap_description) > 80 else ""),
-            ])
-        elements.append(build_data_table(
-            ["Control", "Severity", "Description"],
-            rows,
-            col_widths=[1.2 * inch, 1 * inch, 4.3 * inch],
-        ))
-    else:
-        elements.append(Paragraph("No critical or high severity gaps identified.", styles["BodyText2"]))
-
-    doc.build(elements)
-    return buffer.getvalue()
+    els.append(_footer())
+    doc.build(els)
+    return buf.getvalue()
 
 
-async def generate_audit_report(db: AsyncSession, tenant_id: str, tenant_name: str) -> bytes:
-    """Generate the weekly Audit Report PDF."""
-    buffer = BytesIO()
-    doc = SimpleDocTemplate(buffer, pagesize=A4, leftMargin=0.75 * inch, rightMargin=0.75 * inch)
-    styles = get_styles()
-    elements = []
+async def generate_audit_report(db: AsyncSession, tenant_id: str, org: str) -> bytes:
+    buf = BytesIO()
+    doc = SimpleDocTemplate(buf, pagesize=A4, leftMargin=0.6*inch, rightMargin=0.6*inch, topMargin=0.5*inch, bottomMargin=0.5*inch)
+    st = _styles()
+    els = []
+    ws = (datetime.utcnow() - timedelta(days=7)).strftime("%d %b %Y")
+    we = datetime.utcnow().strftime("%d %b %Y")
+    els.extend(_header(st, org, "Audit Status Report", ws, we))
 
-    week_start = (datetime.utcnow() - timedelta(days=7)).strftime("%b %d, %Y")
-    week_end = datetime.utcnow().strftime("%b %d, %Y")
-    elements.extend(build_header(styles, tenant_name, "Audit Status Report", week_start, week_end))
+    audits = list((await db.execute(select(Audit).where(Audit.tenant_id == tenant_id))).scalars().all())
+    findings = list((await db.execute(select(AuditFinding).join(Audit).where(Audit.tenant_id == tenant_id))).scalars().all())
+    crit_f = len([f for f in findings if f.severity == "critical"])
+    high_f = len([f for f in findings if f.severity == "high"])
+    open_f = len([f for f in findings if f.status == "open"])
 
-    # Fetch audits
-    audits_result = await db.execute(
-        select(Audit).where(Audit.tenant_id == tenant_id)
-    )
-    audits = list(audits_result.scalars().all())
-
-    # Fetch findings
-    findings_result = await db.execute(
-        select(AuditFinding)
-        .join(Audit, AuditFinding.audit_id == Audit.id)
-        .where(Audit.tenant_id == tenant_id)
-    )
-    findings = list(findings_result.scalars().all())
-
-    # KPIs
-    critical_findings = len([f for f in findings if f.severity == "critical"])
-    high_findings = len([f for f in findings if f.severity == "high"])
-    open_findings = len([f for f in findings if f.status == "open"])
-
-    elements.append(Paragraph("Audit Overview", styles["SectionHeader"]))
-    elements.append(build_kpi_row([
-        {"value": str(len(audits)), "label": "Total Audits"},
-        {"value": str(len(findings)), "label": "Findings"},
-        {"value": str(critical_findings + high_findings), "label": "High/Critical"},
-        {"value": str(open_findings), "label": "Open"},
+    els.append(_kpi_bar([
+        {"value": len(audits), "label": "Total Audits"},
+        {"value": len(findings), "label": "Findings"},
+        {"value": crit_f + high_f, "label": "High / Critical"},
+        {"value": open_f, "label": "Open"},
     ]))
-    elements.append(Spacer(1, 0.2 * inch))
 
-    # Active audits
-    elements.append(Paragraph("Active Audits", styles["SectionHeader"]))
-    if audits:
-        rows = []
-        for a in audits[:10]:
-            audit_name = getattr(a, 'name', None) or getattr(a, 'title', None) or "Audit"
-            rows.append([
-                audit_name[:40],
-                (getattr(a, 'audit_type', None) or "-")[:15],
-                (str(getattr(a, 'status', '-'))).replace("_", " ").title()[:15],
-                a.created_at.strftime("%Y-%m-%d") if a.created_at else "-",
-            ])
-        elements.append(build_data_table(
-            ["Audit", "Type", "Status", "Started"],
-            rows,
-            col_widths=[2.8 * inch, 1.2 * inch, 1.3 * inch, 1.2 * inch],
-        ))
-    else:
-        elements.append(Paragraph("No active audits.", styles["BodyText2"]))
+    els.append(_section(st, "Active Audits"))
+    rows = []
+    for a in audits[:10]:
+        name = getattr(a, "title", None) or "Audit"
+        atype = (getattr(a, "audit_type", None) or "—")
+        atype = atype.value if hasattr(atype, "value") else str(atype)
+        stat = str(getattr(a, "status", "—"))
+        stat = stat.value if hasattr(stat, "value") else stat
+        rows.append([name[:40], atype[:15], stat.replace("_", " ").title(), a.created_at.strftime("%Y-%m-%d") if a.created_at else "—"])
+    els.append(_table(["Audit", "Type", "Status", "Started"], rows, [PAGE_W * 0.38, PAGE_W * 0.18, PAGE_W * 0.22, PAGE_W * 0.18]))
 
-    elements.append(Spacer(1, 0.2 * inch))
+    els.append(_section(st, "Critical & High Findings"))
+    f_rows = []
+    for f in [f for f in findings if f.severity in ("critical", "high")][:15]:
+        title = getattr(f, "title", "") or "—"
+        stat = str(getattr(f, "status", "—")).replace("_", " ").title()
+        f_rows.append([title[:50], (f.severity or "—").title(), stat])
+    els.append(_table(["Finding", "Severity", "Status"], f_rows, [PAGE_W * 0.55, PAGE_W * 0.20, PAGE_W * 0.20]))
 
-    # Top findings
-    elements.append(Paragraph("Critical & High Findings", styles["SectionHeader"]))
-    top_findings = [f for f in findings if f.severity in ["critical", "high"]]
-    if top_findings:
-        rows = []
-        for f in top_findings[:15]:
-            title = getattr(f, 'title', None) or getattr(f, 'description', '') or "-"
-            rows.append([
-                title[:50],
-                (f.severity or "-").title(),
-                (str(getattr(f, 'status', '-'))).replace("_", " ").title(),
-            ])
-        elements.append(build_data_table(
-            ["Finding", "Severity", "Status"],
-            rows,
-            col_widths=[4 * inch, 1 * inch, 1.5 * inch],
-        ))
-    else:
-        elements.append(Paragraph("No critical or high severity findings.", styles["BodyText2"]))
-
-    doc.build(elements)
-    return buffer.getvalue()
+    els.append(_footer())
+    doc.build(els)
+    return buf.getvalue()
 
 
-# ── Report dispatcher ────────────────────────────────────────────────────────
+# ── Dispatcher ────────────────────────────────────────────────────────────
 
 REPORT_GENERATORS = {
     "executive": generate_executive_summary,
@@ -696,14 +447,8 @@ REPORT_GENERATORS = {
 }
 
 
-async def generate_report(
-    report_type: str,
-    db: AsyncSession,
-    tenant_id: str,
-    tenant_name: str = "Organization",
-) -> bytes:
-    """Main dispatcher — generate a report of the specified type."""
-    generator = REPORT_GENERATORS.get(report_type)
-    if not generator:
-        raise ValueError(f"Unknown report type: {report_type}. Valid: {list(REPORT_GENERATORS.keys())}")
-    return await generator(db, tenant_id, tenant_name)
+async def generate_report(report_type: str, db: AsyncSession, tenant_id: str, tenant_name: str = "Organization") -> bytes:
+    gen = REPORT_GENERATORS.get(report_type)
+    if not gen:
+        raise ValueError(f"Unknown report type: {report_type}")
+    return await gen(db, tenant_id, tenant_name)
