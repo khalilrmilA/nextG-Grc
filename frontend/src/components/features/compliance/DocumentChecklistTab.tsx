@@ -1,41 +1,188 @@
 import { useState, useRef, useEffect } from "react";
-import { Upload, CheckCircle, XCircle, FileText, Loader2, RefreshCw } from "lucide-react";
+import {
+  Upload, CheckCircle, XCircle, FileText, Loader2, RefreshCw, Plus,
+  Eye, EyeOff, Trash2, Download,
+} from "lucide-react";
 import { complianceApi } from "@/api/endpoints";
-import type { DocumentChecklistResponse, MandatoryDocumentStatus } from "@/types";
+import type { DocumentChecklistResponse, MandatoryDocumentStatus, ChecklistUploadedDoc } from "@/types";
 
 interface Props {
   readonly assessmentId: string;
   readonly frameworkShortName: string;
 }
 
+// ─── Per-file action row ──────────────────────────────────────────────────────
+
+function DocFileRow({
+  doc,
+  onVisibilityToggled,
+  onDeleted,
+}: {
+  readonly doc: ChecklistUploadedDoc;
+  readonly onVisibilityToggled: (updated: ChecklistUploadedDoc) => void;
+  readonly onDeleted: (id: string) => void;
+}) {
+  const [toggling, setToggling] = useState(false);
+  const [toggleError, setToggleError] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+
+  async function handleToggle() {
+    setToggling(true);
+    setToggleError(false);
+    try {
+      const updated = await complianceApi.toggleDocumentVisibility(doc.id);
+      // toggleDocumentVisibility returns ChecklistDocItem — same shape as ChecklistUploadedDoc
+      onVisibilityToggled(updated as unknown as ChecklistUploadedDoc);
+    } catch {
+      setToggleError(true);
+      setTimeout(() => setToggleError(false), 3000);
+    } finally {
+      setToggling(false);
+    }
+  }
+
+  async function handleDelete() {
+    if (!confirm(`Delete "${doc.file_name}"?`)) return;
+    setDeleting(true);
+    try {
+      await complianceApi.deleteDocument(doc.id);
+      onDeleted(doc.id);
+    } catch {
+      setDeleting(false);
+    }
+  }
+
+  async function handleOpen() {
+    const url = complianceApi.downloadDocumentUrl(doc.id);
+    const stored = localStorage.getItem("grc_user_v2");
+    const token = stored ? (JSON.parse(stored)?.accessToken ?? "") : "";
+    try {
+      const res = await fetch(url, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      if (!res.ok) return;
+      const blob = await res.blob();
+      const objUrl = URL.createObjectURL(blob);
+      window.open(objUrl, "_blank");
+    } catch {
+      // ignore
+    }
+  }
+
+  if (deleting) return null;
+
+  const eyeBtn = toggling
+    ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+    : doc.is_visible_to_auditor
+      ? <Eye className="w-3.5 h-3.5" />
+      : <EyeOff className="w-3.5 h-3.5" />;
+
+  return (
+    <div className={`flex items-center gap-2 rounded-lg px-3 py-2 border ${
+      toggleError
+        ? "bg-red-50 border-red-200"
+        : "bg-green-50 border-green-100"
+    }`}>
+      <FileText className="w-3.5 h-3.5 text-green-600 flex-shrink-0" />
+      <span className="text-xs text-green-800 truncate flex-1 max-w-[150px]">{doc.file_name}</span>
+      {toggleError && (
+        <span className="text-xs text-red-600 flex-shrink-0">Save failed</span>
+      )}
+      <div className="flex items-center gap-1 flex-shrink-0">
+        <button
+          onClick={handleOpen}
+          title="View file"
+          className="p-1 rounded hover:bg-green-100 text-green-600 transition-colors"
+        >
+          <Download className="w-3.5 h-3.5" />
+        </button>
+        <button
+          onClick={handleToggle}
+          disabled={toggling}
+          title={doc.is_visible_to_auditor ? "Hide from auditor" : "Show to auditor"}
+          className={`p-1 rounded transition-colors ${
+            doc.is_visible_to_auditor
+              ? "text-blue-600 hover:bg-blue-50"
+              : "text-gray-400 hover:bg-gray-100"
+          }`}
+        >
+          {eyeBtn}
+        </button>
+        <button
+          onClick={handleDelete}
+          title="Delete file"
+          className="p-1 rounded hover:bg-red-50 text-red-400 hover:text-red-600 transition-colors"
+        >
+          <Trash2 className="w-3.5 h-3.5" />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ─── Per-clause row ───────────────────────────────────────────────────────────
+
 function ClauseRow({
   item,
   assessmentId,
   onUploaded,
+  onVisibilityToggled,
+  onDeleted,
 }: {
   readonly item: MandatoryDocumentStatus;
   readonly assessmentId: string;
-  readonly onUploaded: (key: string) => void;
+  readonly onUploaded: (key: string, newDoc: ChecklistUploadedDoc) => void;
+  readonly onVisibilityToggled: (key: string, updated: ChecklistUploadedDoc) => void;
+  readonly onDeleted: (key: string, docId: string) => void;
 }) {
   const [uploading, setUploading] = useState(false);
+  const [uploadingCount, setUploadingCount] = useState(0);
   const [error, setError] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
 
-  async function handleFile(file: File) {
-    setUploading(true);
+  async function handleFiles(files: FileList | File[]) {
+    const fileArr = Array.from(files);
+    if (!fileArr.length) return;
+    setUploadingCount(fileArr.length);
     setError("");
-    try {
-      await complianceApi.uploadDocument(assessmentId, file);
-      onUploaded(item.document_type_key);
-    } catch {
-      setError("Upload failed");
-    } finally {
-      setUploading(false);
+    for (const file of fileArr) {
+      setUploading(true);
+      try {
+        const result = await complianceApi.uploadDocument(assessmentId, file, item.document_type_key);
+        // Backend now returns is_visible_to_auditor and file_path in UploadedDocumentResponse
+        const newDoc: ChecklistUploadedDoc = {
+          id: result.id,
+          file_name: result.file_name,
+          file_path: (result as unknown as { file_path?: string | null }).file_path ?? null,
+          content_type: result.content_type ?? null,
+          file_size_bytes: result.file_size_bytes ?? null,
+          is_visible_to_auditor: (result as unknown as { is_visible_to_auditor?: boolean }).is_visible_to_auditor ?? true,
+          created_at: result.created_at,
+        };
+        onUploaded(item.document_type_key, newDoc);
+      } catch {
+        setError("One or more uploads failed");
+      }
     }
+    setUploading(false);
+    setUploadingCount(0);
   }
 
+  const docs = item.uploaded_documents ?? [];
+
+  const uploadBtnLabel = (() => {
+    if (uploading) return uploadingCount > 1 ? `Uploading ${uploadingCount} files…` : "Uploading…";
+    return docs.length > 0 ? "Add More" : "Upload";
+  })();
+
+  const uploadBtnIcon = uploading
+    ? <Loader2 className="w-3 h-3 animate-spin" />
+    : docs.length > 0
+      ? <Plus className="w-3 h-3" />
+      : <Upload className="w-3 h-3" />;
+
   return (
-    <tr className="hover:bg-gray-50 transition-colors">
+    <tr className="hover:bg-gray-50 transition-colors align-top">
       <td className="px-4 py-3 text-xs font-mono text-gray-500 whitespace-nowrap">{item.clause_ref}</td>
       <td className="px-4 py-3">
         <p className="text-sm text-gray-800 font-medium">{item.document_name}</p>
@@ -54,7 +201,7 @@ function ClauseRow({
         {item.is_uploaded ? (
           <span className="inline-flex items-center gap-1 text-xs font-medium text-green-700 bg-green-50 px-2 py-0.5 rounded-full">
             <CheckCircle className="w-3 h-3" />
-            Uploaded
+            {docs.length > 1 ? `${docs.length} files` : "Uploaded"}
           </span>
         ) : (
           <span className="inline-flex items-center gap-1 text-xs font-medium text-gray-400 bg-gray-50 px-2 py-0.5 rounded-full">
@@ -63,47 +210,55 @@ function ClauseRow({
           </span>
         )}
       </td>
-      <td className="px-4 py-3 text-right">
-        {item.is_uploaded ? (
-          <div className="flex items-center justify-end gap-2">
-            {item.uploaded_document && (
-              <span className="text-xs text-gray-400 truncate max-w-[120px]">
-                {item.uploaded_document.file_name}
-              </span>
-            )}
-            <button
-              onClick={() => inputRef.current?.click()}
-              className="text-xs text-blue-600 hover:underline"
-            >
-              Replace
-            </button>
-          </div>
-        ) : (
+      <td className="px-4 py-3">
+        <div className="flex flex-col gap-1.5 items-end">
+          {docs.length > 0 && (
+            <div className="w-full space-y-1">
+              {docs.map((d) => (
+                <DocFileRow
+                  key={d.id}
+                  doc={d}
+                  onVisibilityToggled={(updated) => onVisibilityToggled(item.document_type_key, updated)}
+                  onDeleted={(id) => onDeleted(item.document_type_key, id)}
+                />
+              ))}
+            </div>
+          )}
+
           <button
             onClick={() => inputRef.current?.click()}
             disabled={uploading}
-            className="inline-flex items-center gap-1.5 text-xs font-medium bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white px-3 py-1.5 rounded-lg transition-colors"
+            className={`inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg transition-colors disabled:opacity-50 ${
+              docs.length > 0
+                ? "bg-gray-100 hover:bg-gray-200 text-gray-700 border border-gray-200"
+                : "bg-blue-600 hover:bg-blue-700 text-white"
+            }`}
           >
-            {uploading ? (
-              <Loader2 className="w-3 h-3 animate-spin" />
-            ) : (
-              <Upload className="w-3 h-3" />
-            )}
-            {uploading ? "Uploading…" : "Upload"}
+            {uploadBtnIcon}
+            {uploadBtnLabel}
           </button>
-        )}
-        <input
-          ref={inputRef}
-          type="file"
-          accept=".pdf,.docx,.txt"
-          className="hidden"
-          onChange={(e) => e.target.files?.[0] && handleFile(e.target.files[0])}
-        />
-        {error && <p className="text-xs text-red-500 mt-1">{error}</p>}
+
+          <input
+            ref={inputRef}
+            type="file"
+            accept=".pdf,.docx,.txt,.png,.jpg,.jpeg"
+            multiple
+            className="hidden"
+            onChange={(e) => {
+              if (e.target.files?.length) {
+                handleFiles(e.target.files);
+                e.target.value = "";
+              }
+            }}
+          />
+          {error && <p className="text-xs text-red-500">{error}</p>}
+        </div>
       </td>
     </tr>
   );
 }
+
+// ─── Main component ───────────────────────────────────────────────────────────
 
 export default function DocumentChecklistTab({ assessmentId, frameworkShortName }: Props) {
   const [checklist, setChecklist] = useState<DocumentChecklistResponse | null>(null);
@@ -126,16 +281,53 @@ export default function DocumentChecklistTab({ assessmentId, frameworkShortName 
 
   useEffect(() => { load(); }, [assessmentId]);
 
-  function handleUploaded(key: string) {
+  function handleUploaded(key: string, newDoc: ChecklistUploadedDoc) {
+    setChecklist((prev) => {
+      if (!prev) return prev;
+      const wasUploaded = prev.items.find(i => i.document_type_key === key)?.is_uploaded;
+      return {
+        ...prev,
+        uploaded: wasUploaded ? prev.uploaded : prev.uploaded + 1,
+        items: prev.items.map((item) => {
+          if (item.document_type_key !== key) return item;
+          return {
+            ...item,
+            is_uploaded: true,
+            uploaded_documents: [...(item.uploaded_documents ?? []), newDoc],
+          };
+        }),
+      };
+    });
+  }
+
+  function handleVisibilityToggled(key: string, updated: ChecklistUploadedDoc) {
     setChecklist((prev) => {
       if (!prev) return prev;
       return {
         ...prev,
-        uploaded: prev.uploaded + 1,
-        items: prev.items.map((item) =>
-          item.document_type_key === key ? { ...item, is_uploaded: true } : item
-        ),
+        items: prev.items.map((item) => {
+          if (item.document_type_key !== key) return item;
+          return {
+            ...item,
+            uploaded_documents: (item.uploaded_documents ?? []).map((d) =>
+              d.id === updated.id ? updated : d
+            ),
+          };
+        }),
       };
+    });
+  }
+
+  function handleDeleted(key: string, docId: string) {
+    setChecklist((prev) => {
+      if (!prev) return prev;
+      const newItems = prev.items.map((item) => {
+        if (item.document_type_key !== key) return item;
+        const remaining = (item.uploaded_documents ?? []).filter(d => d.id !== docId);
+        return { ...item, is_uploaded: remaining.length > 0, uploaded_documents: remaining };
+      });
+      const newUploaded = newItems.filter(i => i.is_uploaded).length;
+      return { ...prev, uploaded: newUploaded, items: newItems };
     });
   }
 
@@ -169,6 +361,9 @@ export default function DocumentChecklistTab({ assessmentId, frameworkShortName 
 
   const missingMandatory = checklist.items.filter((i) => i.is_mandatory && !i.is_uploaded);
 
+  const pctColor = pct >= 80 ? "text-green-600" : pct >= 50 ? "text-yellow-600" : "text-red-600";
+  const barColor = pct >= 80 ? "bg-green-500" : pct >= 50 ? "bg-yellow-400" : "bg-red-400";
+
   return (
     <div className="space-y-5">
       {/* Progress header */}
@@ -183,15 +378,13 @@ export default function DocumentChecklistTab({ assessmentId, frameworkShortName 
             </p>
           </div>
           <div className="text-right">
-            <p className={`text-2xl font-bold ${pct >= 80 ? "text-green-600" : pct >= 50 ? "text-yellow-600" : "text-red-600"}`}>
-              {pct}%
-            </p>
+            <p className={`text-2xl font-bold ${pctColor}`}>{pct}%</p>
             <p className="text-xs text-gray-400">complete</p>
           </div>
         </div>
         <div className="h-2.5 rounded-full bg-gray-100 overflow-hidden">
           <div
-            className={`h-full rounded-full transition-all duration-500 ${pct >= 80 ? "bg-green-500" : pct >= 50 ? "bg-yellow-400" : "bg-red-400"}`}
+            className={`h-full rounded-full transition-all duration-500 ${barColor}`}
             style={{ width: `${pct}%` }}
           />
         </div>
@@ -210,10 +403,18 @@ export default function DocumentChecklistTab({ assessmentId, frameworkShortName 
         )}
       </div>
 
+      {/* Legend */}
+      <div className="flex items-center gap-4 px-1 text-xs text-gray-500">
+        <span className="flex items-center gap-1"><Eye className="w-3.5 h-3.5 text-blue-500" /> Visible to auditor</span>
+        <span className="flex items-center gap-1"><EyeOff className="w-3.5 h-3.5 text-gray-400" /> Hidden from auditor</span>
+        <span className="flex items-center gap-1"><Download className="w-3.5 h-3.5 text-green-600" /> View / Download</span>
+      </div>
+
       {/* Filter tabs */}
       <div className="flex gap-2">
         {(["all", "missing", "uploaded"] as const).map((f) => {
           const counts = { all: checklist.total, missing: checklist.total - checklist.uploaded, uploaded: checklist.uploaded };
+          const label = f === "all" ? "All" : f === "missing" ? "Missing" : "Uploaded";
           return (
             <button
               key={f}
@@ -224,7 +425,7 @@ export default function DocumentChecklistTab({ assessmentId, frameworkShortName 
                   : "bg-white text-gray-600 border-gray-200 hover:bg-gray-50"
               }`}
             >
-              {f === "all" ? "All" : f === "missing" ? "Missing" : "Uploaded"}
+              {label}
               <span className="ml-1.5 opacity-70">{counts[f]}</span>
             </button>
           );
@@ -247,7 +448,7 @@ export default function DocumentChecklistTab({ assessmentId, frameworkShortName 
                   <th className="px-4 py-2.5 text-xs font-semibold text-gray-500 uppercase tracking-wide">Document</th>
                   <th className="px-4 py-2.5 text-xs font-semibold text-gray-500 uppercase tracking-wide text-center">Type</th>
                   <th className="px-4 py-2.5 text-xs font-semibold text-gray-500 uppercase tracking-wide text-center">Status</th>
-                  <th className="px-4 py-2.5 text-xs font-semibold text-gray-500 uppercase tracking-wide text-right">Action</th>
+                  <th className="px-4 py-2.5 text-xs font-semibold text-gray-500 uppercase tracking-wide text-right">Files & Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
@@ -257,6 +458,8 @@ export default function DocumentChecklistTab({ assessmentId, frameworkShortName 
                     item={item}
                     assessmentId={assessmentId}
                     onUploaded={handleUploaded}
+                    onVisibilityToggled={handleVisibilityToggled}
+                    onDeleted={handleDeleted}
                   />
                 ))}
               </tbody>

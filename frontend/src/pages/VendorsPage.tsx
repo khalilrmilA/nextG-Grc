@@ -1,10 +1,10 @@
 import { useState, useEffect } from "react";
 import { useTranslation } from "react-i18next";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { Building2, Plus, Globe, AlertTriangle, Search, ShieldCheck, ShieldX, X, ChevronRight, Calendar, ExternalLink, Sparkles, Loader2, FileCheck, Map as MapIcon } from "lucide-react";
 import VendorAIModal from "../components/ai/VendorAIModal";
 import VendorRiskCartography from "../components/vendor/VendorRiskCartography";
-import { vendorsApi } from "@/api/endpoints";
+import { vendorsApi, contractCollabApi } from "@/api/endpoints";
 
 interface VendorEntry {
   id: string;
@@ -557,15 +557,29 @@ const CONTRACT_STATUS_LABELS: Record<string, { label: string; color: string }> =
   approved: { label: "Approved", color: "bg-green-100 text-green-700" },
   rejected: { label: "Rejected", color: "bg-red-100 text-red-700" },
   sent_to_vendor: { label: "Sent to Vendor", color: "bg-purple-100 text-purple-700" },
+  signed: { label: "Signed Agreement", color: "bg-emerald-100 text-emerald-800" },
 };
 
 function VendorDetailModal({ vendor, onClose, onRunAI }: { readonly vendor: VendorEntry; readonly onClose: () => void; readonly onRunAI: () => void }) {
   const { t } = useTranslation();
+  const navigate = useNavigate();
   const tier   = vendor.risk_tier as Tier;
   const status = vendor.status as Status;
   const [contracts, setContracts] = useState<ContractItem[]>([]);
   const [loadingContracts, setLoadingContracts] = useState(true);
   const [activeTab, setActiveTab] = useState<"overview" | "cartography">("overview");
+  const [startingCollab, setStartingCollab] = useState<string | null>(null);
+
+  const startCollaboration = async (contractId: string) => {
+    setStartingCollab(contractId);
+    try {
+      const collab = await contractCollabApi.create(contractId);
+      onClose();
+      navigate(`/vendors/collaboration/${collab.id}`);
+    } finally {
+      setStartingCollab(null);
+    }
+  };
 
   useEffect(() => {
     async function loadContracts() {
@@ -752,6 +766,18 @@ function VendorDetailModal({ vendor, onClose, onRunAI }: { readonly vendor: Vend
                         <div className="mt-2 text-xs text-gray-600 bg-yellow-50 border border-yellow-100 rounded p-2">
                           <strong>CISO:</strong> {contract.ciso_comments}
                         </div>
+                      )}
+                      {/* Start Collaboration button — available once AI has reviewed */}
+                      {["ai_reviewed", "approved", "sent_to_vendor"].includes(contract.validation_status) && (
+                        <button
+                          onClick={() => startCollaboration(contract.id)}
+                          disabled={startingCollab === contract.id}
+                          className="mt-2 w-full flex items-center justify-center gap-1.5 py-1.5 text-xs font-medium rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-50 transition-colors"
+                        >
+                          {startingCollab === contract.id
+                            ? <><Loader2 className="w-3 h-3 animate-spin" /> Opening…</>
+                            : <><ExternalLink className="w-3 h-3" /> Start Collaboration with Vendor</>}
+                        </button>
                       )}
                     </div>
                   );

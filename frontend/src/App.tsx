@@ -40,6 +40,8 @@ import RegulatoryUpdatesPage from "./pages/RegulatoryUpdatesPage";
 import ActivityLogPage from "./pages/ActivityLogPage";
 import WebhooksPage from "./pages/WebhooksPage";
 import RiskQuantificationPage from "./pages/RiskQuantificationPage";
+import ContractCollaborationPage from "./pages/ContractCollaborationPage";
+import VendorCollaborationPage from "./pages/VendorCollaborationPage";
 
 function PrivateRoute({ children, requiredModule }: { readonly children: React.ReactNode; requiredModule?: string }) {
   const user = useAuthStore((u) => u);
@@ -85,6 +87,7 @@ function SuperAdminRoute({ children }: { readonly children: React.ReactNode }) {
 export default function App() {
   return (
     <Routes>
+      <Route path="/vendor-collab/:shareToken" element={<VendorCollaborationPage />} />
       <Route path="/landing" element={<LandingPage />} />
       <Route path="/login" element={<LoginPage />} />
       <Route path="/register" element={<RegisterPage />} />
@@ -130,6 +133,7 @@ export default function App() {
         <Route path="policy-generator" element={<PrivateRoute requiredModule="policy-generator"><PolicyGeneratorPage /></PrivateRoute>} />
         <Route path="vendors" element={<PrivateRoute requiredModule="vendors"><VendorsPage /></PrivateRoute>} />
         <Route path="vendors/contract-review" element={<PrivateRoute requiredModule="vendors"><ContractReviewPage /></PrivateRoute>} />
+        <Route path="vendors/collaboration/:collabId" element={<PrivateRoute requiredModule="vendors"><ContractCollaborationPage /></PrivateRoute>} />
         <Route path="reports" element={<ReportsPage />} />
         <Route path="incidents" element={<IncidentsPage />} />
         <Route path="vulnerabilities" element={<VulnerabilitiesPage />} />

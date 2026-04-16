@@ -2,288 +2,296 @@
 
 ## Quick Start
 
-This is a **full-stack GRC (Governance, Risk & Compliance) SaaS platform** with FastAPI backend + React frontend.
-
-### Running the App
+Full-stack GRC (Governance, Risk & Compliance) SaaS platform: FastAPI backend + React frontend.
 
 ```bash
 # Terminal 1: Backend (port 8000)
-cd backend
-python -m venv venv
-source venv/bin/activate  # or `venv\Scripts\activate` on Windows
-pip install -r requirements.txt
-uvicorn app.main:app --reload --port 8000
+cd backend && python -m uvicorn app.main:app --reload --port 8000
 
 # Terminal 2: Frontend (port 4000)
-cd frontend
-npm install
-npm run dev -- --port 4000
+cd frontend && npm run dev -- --port 4000
 ```
 
-**Login at http://localhost:4000 with:**
-- Admin: `admin@demo.com` / `demo123`
-- User: `ciso@demo.com` / `demo123`
-- Auditor: `auditor@demo.com` / `demo123`
-- Super Admin: `superadmin@platform.com` / `super123`
+**Login:** `admin@demo.com` / `demo123` | `ciso@demo.com` / `demo123` | `auditor@demo.com` / `demo123` | `superadmin@platform.com` / `super123`
 
 ---
 
 ## Architecture
 
-### Tech Stack
-- **Backend**: FastAPI (Python 3.12+) + SQLAlchemy ORM + SQLite (dev)
+- **Backend**: FastAPI (Python 3.12+) + SQLAlchemy ORM + SQLite (dev) / PostgreSQL (prod)
 - **Frontend**: React 18 + TypeScript + Tailwind CSS + shadcn/ui
-- **Database**: SQLite for dev, PostgreSQL for prod
-- **i18n**: react-i18next (en, fr, ar locales)
+- **AI**: Ollama (local, `http://localhost:11434`, model `deepseek-v3.1:671b-cloud`) — NOT Anthropic API
+- **i18n**: react-i18next (en, fr, ar with full RTL support)
 - **Auth**: JWT + role-based access control
+- **Reports**: ReportLab PDF generation
 
-### Key Directories
+---
+
+## Platform Stats
+
+| Metric | Count |
+|--------|-------|
+| **Frontend Pages** | 37 |
+| **Backend API Routes** | 188 |
+| **Backend Modules** | 29 |
+| **Data Models** | 28+ |
+| **Frameworks** | 76 built-in |
+| **Languages** | 3 (EN, FR, AR) |
+
+---
+
+## Backend Structure
 
 ```
 backend/
   app/
-    core/          # Config, database, security, seed data
-    models/        # SQLAlchemy ORM models
+    core/           # Config, database, security, seed data
+    models/         # 28+ SQLAlchemy ORM models
     api/v1/
-      endpoints/   # Route handlers (risks, compliance, audits, etc)
-    frameworks/    # YAML loader for compliance frameworks
-    workers/       # Celery tasks (not active in dev)
+      endpoints/    # 29 route handler files
+      dependencies/ # Auth helpers (get_current_user, get_tenant_id)
+    services/       # report_generator, notification_generator, email_service
+    frameworks/     # YAML loader for compliance frameworks
+    templates/      # Email templates (Jinja2)
+```
 
-frontend/
-  src/
-    pages/         # Page components (Dashboard, Risks, Compliance, etc)
-    components/    # Reusable UI (Layout, forms, tables, etc)
-    api/           # HTTP client + endpoint functions
-    types/         # TypeScript interfaces
-    store/         # Auth state management
-    locales/       # i18n translation files (en.ts, fr.ts, ar.ts)
-    context/       # React context (FrameworkContext)
+### All API Endpoint Files (29)
 
-frameworks/        # YAML files for 8 compliance frameworks (ISO 27001, SOC 2, NIST, GDPR, etc)
-  iso/
-  nist/
-  gdpr/
-  ...
+| File | Prefix | Purpose |
+|------|--------|---------|
+| `auth.py` | `/auth` | Login, register, refresh, profile |
+| `ai.py` | `/ai` | AI streaming, policy generation, vendor analysis |
+| `ai_access.py` | `/ai-access` | AI quota management (currently disabled) |
+| `risks.py` | `/risks` | Risk CRUD, heatmap, **Monte Carlo quantification** |
+| `risk_scenarios.py` | `/risk-scenarios` | Threat→Vuln→Asset→Control chains |
+| `risk_matrices.py` | `/risk-matrices` | Custom probability/impact scales (JSON) |
+| `compliance.py` | `/compliance` | Assessments, controls, gaps, cross-framework |
+| `frameworks.py` | `/frameworks` | List/CRUD frameworks, **custom builder with AI** |
+| `audits.py` | `/audits` | Full audit lifecycle + findings CRUD |
+| `policies.py` | `/policies` | Policy CRUD + versioning + attestations |
+| `vendors.py` | `/vendors` | TPRM: vendors, contracts, cartography, prescreen AI |
+| `assets.py` | `/assets` | IT asset inventory + stats |
+| `incidents.py` | `/incidents` | Security incident tracking + stats |
+| `vulnerabilities.py` | `/vulnerabilities` | CVE tracking, CVSS, remediation |
+| `threats.py` | `/threats` | Threat library (builtin + custom) |
+| `applied_controls.py` | `/applied-controls` | Controls with cost/effort/progress tracking |
+| `security_exceptions.py` | `/security` | Security exceptions + risk acceptances |
+| `trust_center.py` | `/trust-center` | Public compliance page (no auth for public) |
+| `regulatory.py` | `/regulatory` | Regulatory change tracking |
+| `notifications.py` | `/notifications` | In-app alerts + deadline checker |
+| `reports.py` | `/reports` | 5 PDF report types (weekly) |
+| `data_io.py` | `/data` | CSV export (6 modules) + import (3 modules) |
+| `activity_log.py` | `/activity-log` | Audit trail of all user actions |
+| `webhooks.py` | `/webhooks` | Outbound webhook management + test |
+| `dashboard.py` | `/dashboard` | KPIs, framework overview |
+| `users.py` | `/users` | User management |
+| `tenants.py` | `/tenants` | Tenant settings + modules |
+| `subscriptions.py` | `/subscriptions` | Plans, limits, billing |
+| `admin.py` | `/admin` | Super admin operations |
+| `auditor_portal.py` | `/auditor-portal` | Auditor-specific views |
+
+### All Data Models (28+)
+
+| Model | Table | Key Fields |
+|-------|-------|------------|
+| `User` | users | email, role, tenant_id, is_active |
+| `Tenant` | tenants | name, slug, features, settings, selected_framework_ids |
+| `Framework` | frameworks | name, short_name, version, is_builtin |
+| `FrameworkControl` | framework_controls | control_id, title, category, mapped_controls |
+| `Risk` | risks | title, likelihood, impact, severity, next_review_date |
+| `RiskScenario` | risk_scenarios | threat_ids, vulnerability_ids, asset_ids, applied_control_ids, current/target probability/impact |
+| `RiskMatrix` | risk_matrices | JSON definition (configurable scales) |
+| `ComplianceAssessment` | compliance_assessments | framework_id, status, compliance_score |
+| `ControlAssessment` | control_assessments | status, ai_confidence, justification |
+| `ComplianceGap` | compliance_gaps | control_id, severity, remediation_steps |
+| `Audit` | audits | title, audit_type, status, lead_auditor_id |
+| `AuditFinding` | audit_findings | severity, status, remediation_owner_id |
+| `Policy` | policies | title, status, linked_controls, review_frequency |
+| `PolicyVersion` | policy_versions | version_number, content, is_current |
+| `PolicyAttestation` | policy_attestations | user_id, status, acknowledged_at |
+| `Vendor` | vendors | name, risk_tier, risk_score, contract_expiry |
+| `VendorContract` | vendor_contracts | file_name, ai_review, validation_status (workflow) |
+| `Asset` | assets | asset_type, criticality, RTO/RPO/MTD, security_objectives |
+| `Incident` | incidents | category, severity, status, financial_impact, breach_notification |
+| `Vulnerability` | vulnerabilities | ref_id (CVE), cvss_score, severity, status |
+| `Threat` | threats | ref_id, category, mitre_ids, is_builtin |
+| `AppliedControl` | applied_controls | status, progress%, cost, effort, eta, expiration |
+| `SecurityException` | security_exceptions | justification, approval workflow, expiration |
+| `RiskAcceptance` | risk_acceptances | justification, approver, expiration |
+| `RegulatoryUpdate` | regulatory_updates | source, impact, deadline, affected_frameworks |
+| `Notification` | notifications | type, status, title, message |
+| `ActivityLog` | activity_logs | user_id, action, entity_type, details |
+| `Subscription` | subscriptions | tier, status, limits |
+
+---
+
+## Frontend Structure
+
+```
+frontend/src/
+  pages/            # 37 page components
+  components/       # Reusable UI (layout, modals, vendor, notifications)
+  api/              # HTTP client (endpoints.ts) with 15+ API objects
+  types/            # TypeScript interfaces
+  store/            # Zustand auth state
+  locales/          # i18n (en.ts, fr.ts, ar.ts)
+  context/          # FrameworkContext
+```
+
+### All Pages (37) with Routes
+
+| Page | Route | Sidebar Group |
+|------|-------|---------------|
+| DashboardPage | `/dashboard` | Core |
+| RisksPage | `/risks` | Core |
+| RiskScenariosPage | `/risk-scenarios` | Core |
+| CompliancePage | `/compliance` | Core |
+| AssessmentDetailPage | `/compliance/:id` | Core |
+| RemediationPlannerPage | `/compliance/.../remediation-plan` | Core |
+| TraceabilityPage | `/compliance/:id/traceability` | Core |
+| FrameworksPage | `/frameworks` | Core |
+| CustomFrameworkPage | `/frameworks/custom/new` | Core |
+| FrameworkBuilderPage | `/frameworks/builder` | Core |
+| IncidentsPage | `/incidents` | Security |
+| VulnerabilitiesPage | `/vulnerabilities` | Security |
+| ThreatLibraryPage | `/threats` | Security |
+| AppliedControlsPage | `/applied-controls` | Security |
+| SecurityExceptionsPage | `/security-exceptions` | Security |
+| AuditsPage | `/audits` | Operations |
+| PoliciesPage | `/policies` | Operations |
+| PolicyGeneratorPage | `/policy-generator` | Operations |
+| VendorsPage | `/vendors` | Operations |
+| ContractReviewPage | `/vendors/contract-review` | Operations |
+| ReportsPage | `/reports` | Operations |
+| RegulatoryUpdatesPage | `/regulatory` | Governance |
+| TrustCenterConfigPage | `/trust-center` | Governance |
+| RiskQuantificationPage | `/risk-quantification` | Governance |
+| ActivityLogPage | `/activity-log` | Governance |
+| WebhooksPage | `/webhooks` | Governance |
+| SettingsPage | `/settings` | Footer |
+| HelpPage | `/help` | Footer |
+| CheatSheetPage | `/cheat` | — |
+| LoginPage | `/login` | Auth |
+| RegisterPage | `/register` | Auth |
+| LandingPage | `/landing` | Public |
+| SuperAdminPage | `/super-admin` | Admin |
+| CompanyAdminPage | `/company-admin` | Admin |
+| AuditorPortalPage | `/auditor/portal` | Auditor |
+| AuditChecklistPage | `/auditor/portal/:id` | Auditor |
+| AuditReportPage | `/auditor/portal/:id/report` | Auditor |
+
+### Sidebar Navigation (4 groups)
+
+```
+CORE:       Dashboard, Risk Register, Risk Scenarios, Compliance, Frameworks
+SECURITY:   Incidents, Vulnerabilities, Threat Library, Applied Controls, Exceptions & Waivers
+OPERATIONS: Audits, Policies, Doc Generator, 3rd Parties (TPRM), Reports
+GOVERNANCE: Regulatory Updates, Trust Center, Risk Quantification, Activity Log, Webhooks
 ```
 
 ---
 
 ## User Roles & Access
 
-| Role | Org | Access | Portal |
-|------|-----|--------|--------|
-| `super_admin` | Platform Owner | All users across all tenants, manage frameworks | `/super-admin` |
-| `admin` | Company Owner | Full app access + manage auditors | `/dashboard` (full nav) + `/company-admin` |
-| `user` | Company Staff | Full app access (dashboard, risks, compliance, etc) | `/dashboard` (full nav) |
-| `auditor` | Company Auditor | Only assigned audits + company documents | `/auditor/portal` |
-
-### Route Guards
-- Auditors cannot access `/dashboard`, `/doc-generator`, etc → redirects to `/auditor/portal`
-- Super admin cannot access main app → redirects to `/super-admin`
-- All other roles get full navigation
+| Role | Portal | Access |
+|------|--------|--------|
+| `super_admin` | `/super-admin` | Platform-wide user/tenant management |
+| `tenant_admin` | `/dashboard` + `/company-admin` | Full app + auditor management |
+| `ciso` | `/dashboard` | Full app + notifications for reviews |
+| `user` | `/dashboard` | Full app access |
+| `auditor` | `/auditor/portal` | Assigned audits + company documents only |
 
 ---
 
 ## Key Features
 
-### 1. **Risk Management** (`/risks`)
-- Register risks by category (technical, operational, strategic)
-- Assign severity + probability
-- Track treatment plans
-- Mock data: 1 example risk (when backend offline)
-
-### 2. **Compliance Assessments** (`/compliance`)
-- Upload policy docs + auto-analyze with AI (Ollama)
-- Assess controls: Compliant / Partial / Gap / N/A
-- **Justifications** — add text explanation + file attachment for each control
-- **Override status** — manually change control status with reason
-- **Gap Report** — AI-identified gaps + remediation steps
-- **Cross-Framework** — run analysis to see which frameworks you already cover (ISO, NIST, SOC 2, etc)
-
-### 3. **Policy Generator** (`/policy-generator`)
-- AI generates security policy documents (Information Security Policy, Access Control Policy, etc)
-- Select target frameworks + pick specific controls
-- Customizable org details (industry, size, jurisdiction)
-- Auto-populates from framework selection on Frameworks page
-
-### 4. **Frameworks** (`/frameworks`)
-- Browse 8+ built-in frameworks (ISO 27001, SOC 2, NIST CSF, GDPR, HIPAA, PCI DSS, CIS Controls, etc)
-- **Click any framework card** → side drawer shows all controls grouped by category
-- Checkbox select controls → **"Use in Doc Generator"** button pre-populates doc generator
-- View control IDs, titles, descriptions, tags
-
-### 5. **Super Admin Panel** (`/super-admin`)
-- **Users Tab**: Manage all users across all tenants. Change roles (user/auditor only). Toggle active/inactive
-- **Access Control Tab**: Enable/disable modules per tenant
-- **Frameworks Tab**: Upload custom frameworks as PDF
-- **Settings Tab**: Profile, Security, Notifications, Platform Info
-
-### 6. **Company Admin Panel** (`/company-admin`)
-- Create auditors by name, email, password
-- Toggle auditor active/inactive
-- Delete auditors
-- View stats: total, active, inactive
-
-### 7. **Auditor Portal** (`/auditor/portal`)
-- Show assigned audit assessments with progress bars
-- Company documents list (all published policies)
-- Stats: assignments, controls reviewed, pending
-
----
-
-## Data Flow Examples
-
-### Example 1: Running Compliance Analysis
-1. User uploads policy document to assessment
-2. **"Analyze"** button → calls `POST /compliance/assessments/{id}/analyze`
-3. Backend extracts text + runs Ollama AI against 118+ controls
-4. Creates `ControlAssessment` records with status + confidence
-5. Computes `cross_framework_summary` (which frameworks are covered)
-6. Frontend reloads assessment → displays Results tab with control cards
-7. User can justify/override each control status
-
-### Example 2: Policy Generation
-1. User clicks framework card → control picker modal opens
-2. Selects 5 controls → "Use in Doc Generator"
-3. `sessionStorage` captures selected controls + framework
-4. Frontend pre-fills doc generator form
-5. User fills in org details → AI generates policy document
-6. Selected controls appear in AI prompt as context
-
-### Example 3: Cross-Framework Discovery
-1. User completes ISO 27001 compliance assessment
-2. Opens Cross-Framework tab → **"Run Analysis"** button
-3. Backend computes which other frameworks are covered based on mapped controls
-4. Shows: "SOC 2: 75%", "NIST CSF: 62%", "GDPR: 81%" with recommendations
-5. User sees "Ready to certify" badge for frameworks ≥75% covered
-
----
-
-## Important Notes for Future Devs
-
-### Frontend i18n
-- **All pages have been wired for translations** using react-i18next
-- Locale files: `frontend/src/locales/en.ts`, `fr.ts`, `ar.ts` (473 keys each)
-- Use `const { t } = useTranslation()` in components → `t("key.path")`
-- Language switcher in top right of all pages
-
-### Mock Data
-- Removed heavy mock data — **each page shows only 1 example item** when backend is offline
-- Risks: 1 risk, Audits: 1 audit, Policies: 1 policy, Vendors: 1 vendor
-- Cross-framework: shows "Run Analysis" button when empty
-
-### Backend Database
-- SQLite for dev (file: `backend/grc.db`)
-- Frameworks loaded on startup from YAML files in `/frameworks`
-- Crosswalk mappings (`mapped_controls`) come from YAML → stored in DB
-- `_compute_cross_framework_coverage()` aggregates coverage from control assessments
-
-### Frameworks YAML Structure
-```yaml
-# frameworks/iso/iso-27001-2022.yaml
-controls:
-  - control_id: "A.5.1"
-    title: "Information Security Policies"
-    description: "..."
-    category: "Policies and procedures"
-    mapped_controls:
-      - framework: "SOC 2"
-        control: "CC6.1"
-      - framework: "NIST CSF"
-        control: "PR.AC-1"
-```
-
-### Auth Model
-- JWT tokens stored in localStorage
-- `useAuthStore()` hook for React components
-- `authSession` object for imperative access
-- Super admin bypasses role checks in `require_roles()` decorator
-
-### Common Patterns
-
-**Protected Routes:**
-```tsx
-// Auditors only → /auditor/portal
-// Super admin only → /super-admin
-// Everyone else → /dashboard
-```
-
-**API Calls with Error Fallback:**
-```tsx
-try {
-  const data = await api.fetch()
-} catch {
-  // Shows mock data or empty state
-}
-```
-
-**Component Props Pattern:**
-```tsx
-<Card
-  data={data}
-  onUpdate={handler}
-  isLoading={loading}
-  className="..."
-/>
-```
-
----
-
-## Database Models
-
-### Core
-- `User` — email, role (super_admin/admin/user/auditor), tenant_id, first/last name
-- `Tenant` — organization name, slug, enabled_modules
-- `Framework` — name, short_name, version, control_count, is_builtin
-- `FrameworkControl` — control_id, title, description, category, mapped_controls (JSON)
+### Risk Management
+- Risk register with likelihood x impact scoring (5x5 heatmap)
+- **Risk Scenarios**: Threat → Vulnerability → Asset → Control chains
+- **Risk Quantification**: Monte Carlo simulation (10K iterations), ALE/SLE/P90/P95
+- **Custom Risk Matrices**: JSON-configurable scales (3x3, 5x5, custom)
+- **Risk Acceptance**: Formal approval workflow with justification + expiry
 
 ### Compliance
-- `ComplianceAssessment` — framework_id, status, compliance_score, control_assessments, gaps
-- `ControlAssessment` — assessment_id, control_id, status, notes, ai_confidence, justification
-- `ComplianceGap` — control_id, gap_description, severity, remediation_steps
+- Multi-framework assessments (76 built-in frameworks)
+- AI-powered control analysis (batch Ollama processing)
+- Cross-framework coverage analysis
+- Gap identification with remediation steps
+- Evidence upload with justification per control
 
-### Audit
-- `AuditAssignment` — auditor_id, assessment_id, status, controls_verified
-- `AuditChecklist` — task_id, audit_id, is_completed
+### 3rd Party Risk (TPRM)
+- Vendor CRUD with risk tiers (critical/high/medium/low)
+- **Contract upload** → AI review → **CISO approval workflow** → Send to vendor
+- **Risk Cartography**: 6-dimension heatmap per vendor
+- **AI Prescreen Questionnaire**: 15 questions analyzed by AI before saving
+- Contract versioning and validation status tracking
 
-### Other
-- `Policy` — title, policy_type, status, version, tenant_id
-- `Vendor` — name, industry, risk_tier, questionnaire responses
-- `UploadedDocument` — assessment_id, file_name, extracted_text
+### Security
+- **Incident Management**: 10 categories, 6 statuses, timeline, breach notification
+- **Vulnerability Management**: CVE tracking, CVSS scores, remediation tracking
+- **Threat Library**: Preloaded catalog with MITRE ATT&CK IDs
+- **Applied Controls**: Cost, effort, progress %, ETA, expiration tracking
+- **Security Exceptions**: Formal waivers with approval/reject + compensating controls
+
+### Governance
+- **Regulatory Change Tracking**: Monitor regulation updates with deadlines
+- **Trust Center**: Public-facing compliance page (configurable)
+- **Activity Log**: Full audit trail of all user actions
+- **Webhooks**: 20+ event types, test ping, outbound notifications
+- **Weekly PDF Reports**: 5 types (Executive, Risk, Compliance, Vendor, Audit)
+
+### Document Generator
+- 29 document types in 4 categories (Foundation, Security, Procedures, Plans)
+- AI-powered with Ollama streaming
+- Organization context: industry, size, country, frameworks
+- Control picker from any framework
+- **Save as Draft / Approve & Save** → creates Policy record with version
+
+### Data Import/Export
+- CSV export: risks, vendors, assets, audits, policies, compliance
+- CSV import: risks, vendors, assets (with error reporting)
+
+### Notifications
+- In-app notification bell with unread count
+- **Check Deadlines** button scans for:
+  - Contract expiry (90/60/30/7/0 days)
+  - Risk review overdue
+  - Contracts pending CISO review
+  - Compliance gaps (critical/high)
+- Email service (SMTP) with templates for all alert types
 
 ---
 
-## Common Debugging
+## Important Dev Notes
 
-### Frontend: Nothing shows after button click
-- Check browser console (F12) for errors
-- Check network tab — did API call succeed?
-- If backend offline, does component have mock data fallback?
-- Check sessionStorage for cross-framework control data
+### AI Integration
+- **ALWAYS use Ollama** (http://localhost:11434), NEVER Anthropic API
+- Model: `deepseek-v3.1:671b-cloud` (configurable in config.py)
+- AI access gate is **disabled** (AiGate just passes children through)
+- Config: `OLLAMA_BASE_URL`, `OLLAMA_CHAT_MODEL` in `backend/app/core/config.py`
 
-### Backend: Analysis takes forever
-- Ollama might be slow or not running
-- Check logs: `uvicorn app.main:app --reload`
-- For dev: analysis is synchronous, may take 1–5 minutes
+### Known Patterns
+- All endpoints use `get_current_user` + `get_tenant_id` for multi-tenant isolation
+- Pydantic response schemas use `model_config = {"from_attributes": True}`
+- Frontend API client in `frontend/src/api/endpoints.ts` with 15+ API objects
+- Pages use `p-8 max-w-7xl space-y-6` wrapper for consistent layout
+- Modals use `fixed inset-0 z-50 bg-black/40 backdrop-blur-sm`
+- Status badges use `rounded-full px-2.5 py-0.5 text-xs font-semibold`
 
-### Framework controls not showing in cross-framework
-- Frameworks must be loaded on startup: check logs for "Loaded X controls from Y frameworks"
-- YAML files must have `mapped_controls` field
-- Run analysis: `POST /compliance/assessments/{id}/analyze`
+### Database
+- SQLite for dev: `backend/grc_dev.db`
+- Tables auto-created on startup via `Base.metadata.create_all()`
+- New columns on existing tables need manual `ALTER TABLE` migration
 
-### Auditor can't see company documents
-- Check `policiesApi.list()` endpoint returns tenant-filtered results
-- Auditor should see all policies for their tenant
+### RTL Support (Arabic)
+- `dir="rtl"` set on `<html>` via `applyDirection()` in `i18n/index.ts`
+- CSS rules in `frontend/src/index.css` handle sidebar flip, margin/padding, text alignment
+- Do NOT use blanket `.flex { flex-direction: row-reverse }` — it breaks layouts
 
----
-
-## Next Steps for New Features
-
-1. **Add new page?** Create `frontend/src/pages/NewPage.tsx` + add route in `App.tsx`
-2. **Add new API endpoint?** Create new file in `backend/app/api/v1/endpoints/` + register in router
-3. **Add new data model?** Define in `backend/app/models/` + run Alembic migration (or create table on startup)
-4. **Add new i18n keys?** Add to all three locales (`en.ts`, `fr.ts`, `ar.ts`) + use `t("key")`
-5. **Add role permissions?** Update `require_roles()` in endpoint + `PrivateRoute` in frontend
+### Frameworks
+- 76 frameworks loaded in DB (ISO, NIST, SOC2, GDPR, PCI, HIPAA, DORA, NIS2, AI Act, MITRE ATT&CK, etc.)
+- YAML files in `frameworks/` directory (11 files, rest loaded via seed/API)
+- Cross-walk mappings via `mapped_controls` JSON field
 
 ---
 
@@ -291,35 +299,18 @@ try {
 
 ```bash
 # Backend
-uvicorn app.main:app --reload          # Start with hot reload
-python -c "from app.frameworks.loader import load_all_frameworks; import asyncio; ..." # Reload frameworks
+cd backend && python -m uvicorn app.main:app --reload --port 8000
+python -m py_compile app/api/v1/endpoints/FILE.py   # Check syntax
 
 # Frontend
-npm run dev                             # Start dev server
-npm run build                           # Production build
-npm run type-check                      # Check TypeScript errors
+cd frontend && npm run dev -- --port 4000
+cd frontend && npm run build                         # Production build
 
-# Git
-git log --oneline -10                   # Recent commits
-git status                              # What changed
+# API Docs (interactive)
+http://localhost:8000/docs
+
+# Test endpoints
+curl -s -X POST http://localhost:8000/api/v1/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"email":"admin@demo.com","password":"demo123"}'
 ```
-
----
-
-## Project Stats
-
-- **Backend**: ~2,500 lines (FastAPI + SQLAlchemy)
-- **Frontend**: ~15,000+ lines (React + TypeScript)
-- **Frameworks**: 8 built-in frameworks (ISO 27001, SOC 2, NIST, GDPR, HIPAA, PCI DSS, CIS, NIS2, etc)
-- **Controls**: 800+ total controls across all frameworks
-- **Languages**: English, French, Arabic (i18n complete)
-
----
-
-## Contact / Questions
-
-- Check the codebase comments (marked with `//` or `"""`)
-- Read existing similar features for patterns
-- Use git log to see how features were built
-
-Happy coding! 🚀

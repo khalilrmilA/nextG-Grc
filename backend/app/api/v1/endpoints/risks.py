@@ -8,11 +8,14 @@ from typing import Any
 
 from app.core.database import get_db
 from app.models.risk import Risk, RiskStatus, RiskSeverity, RiskTreatment, RiskTreatmentOption
+from app.models.risk_scenario import RiskScenario
 from app.models.user import UserRole
 from app.api.v1.dependencies import get_current_user, require_roles, get_tenant_id, PaginationParams
 from app.models.user import User
 
 router = APIRouter()
+
+_RISK_NOT_FOUND = "Risk not found"
 
 
 class RiskCreate(BaseModel):
@@ -157,7 +160,7 @@ async def get_risk(
     )
     risk = result.scalar_one_or_none()
     if not risk:
-        raise HTTPException(status_code=404, detail="Risk not found")
+        raise HTTPException(status_code=404, detail=_RISK_NOT_FOUND)
     return RiskResponse.model_validate(risk)
 
 
@@ -174,7 +177,7 @@ async def update_risk(
     )
     risk = result.scalar_one_or_none()
     if not risk:
-        raise HTTPException(status_code=404, detail="Risk not found")
+        raise HTTPException(status_code=404, detail=_RISK_NOT_FOUND)
 
     for field, value in body.model_dump(exclude_none=True).items():
         setattr(risk, field, value)
@@ -194,7 +197,7 @@ async def delete_risk(
     )
     risk = result.scalar_one_or_none()
     if not risk:
-        raise HTTPException(status_code=404, detail="Risk not found")
+        raise HTTPException(status_code=404, detail=_RISK_NOT_FOUND)
     await db.delete(risk)
 
 
@@ -241,15 +244,15 @@ class RiskQuantInput(BaseModel):
 class RiskQuantResult(BaseModel):
     risk_id: str
     risk_title: str
-    annualized_loss_expectancy: float  # ALE
-    single_loss_expectancy: float  # SLE
-    annual_rate_of_occurrence: float  # ARO
-    residual_ale: float  # After controls
-    risk_reduction: float  # ALE - Residual ALE
-    percentile_90: float  # 90th percentile loss (Monte Carlo)
-    percentile_95: float  # 95th percentile loss
+    ale: float           # Annualized Loss Expectancy
+    sle: float           # Single Loss Expectancy
+    aro: float           # Annual Rate of Occurrence
+    residual_ale: float  # ALE after controls
+    risk_reduction: float
+    p90: float           # 90th percentile
+    p95: float           # 95th percentile
     simulations: int
-    distribution: list[dict]  # Histogram buckets for chart
+    distribution: list[dict]
 
 
 @router.post("/quantify", response_model=RiskQuantResult)
@@ -259,14 +262,20 @@ async def quantify_risk(
     _: User = Depends(get_current_user),
     tenant_id: str = Depends(get_tenant_id),
 ):
-    """Run Monte Carlo simulation for financial risk quantification."""
+    """Run Monte Carlo simulation for financial risk quantification (Risk or Risk Scenario)."""
     import random
 
-    # Get the risk
-    result = await db.execute(select(Risk).where(Risk.id == body.risk_id, Risk.tenant_id == tenant_id))
-    risk = result.scalar_one_or_none()
+    # Try Risk first, then RiskScenario
+    risk_result = await db.execute(select(Risk).where(Risk.id == body.risk_id, Risk.tenant_id == tenant_id))
+    risk = risk_result.scalar_one_or_none()
+
+    display_title: str = risk.title if risk else ""  # overwritten below if scenario
     if not risk:
-        raise HTTPException(status_code=404, detail="Risk not found")
+        sc_result = await db.execute(select(RiskScenario).where(RiskScenario.id == body.risk_id, RiskScenario.tenant_id == tenant_id))
+        scenario = sc_result.scalar_one_or_none()
+        if not scenario:
+            raise HTTPException(status_code=404, detail="Risk or Scenario not found")
+        display_title = getattr(scenario, "name", None) or getattr(scenario, "title", None) or f"Scenario {scenario.id[:8]}"
 
     # Monte Carlo parameters
     num_simulations = 10000
@@ -303,24 +312,24 @@ async def quantify_risk(
             hi = (i + 1) * bucket_size
             count = sum(1 for l in losses if lo <= l < hi)
             distribution.append({
-                "range_low": round(lo, 2),
-                "range_high": round(hi, 2),
+                "range_min": round(lo, 2),
+                "range_max": round(hi, 2),
                 "count": count,
                 "percentage": round(count / num_simulations * 100, 1),
             })
     else:
-        distribution = [{"range_low": 0, "range_high": 0, "count": num_simulations, "percentage": 100}]
+        distribution = [{"range_min": 0, "range_max": 0, "count": num_simulations, "percentage": 100}]
 
     return RiskQuantResult(
-        risk_id=risk.id,
-        risk_title=risk.title,
-        annualized_loss_expectancy=round(ale, 2),
-        single_loss_expectancy=round(sle, 2),
-        annual_rate_of_occurrence=round(aro, 4),
+        risk_id=body.risk_id,
+        risk_title=display_title,
+        ale=round(ale, 2),
+        sle=round(sle, 2),
+        aro=round(aro, 4),
         residual_ale=round(residual_ale, 2),
         risk_reduction=round(ale - residual_ale, 2),
-        percentile_90=round(p90, 2),
-        percentile_95=round(p95, 2),
+        p90=round(p90, 2),
+        p95=round(p95, 2),
         simulations=num_simulations,
         distribution=distribution,
     )

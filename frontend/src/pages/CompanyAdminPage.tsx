@@ -5,7 +5,7 @@ import { usersApi } from "../api/endpoints";
 import {
   UserPlus, Trash2, ToggleLeft, ToggleRight,
   Loader2, AlertCircle, CheckCircle, Eye, EyeOff, X,
-  ClipboardList,
+  ClipboardList, Layers,
 } from "lucide-react";
 
 interface Auditor {
@@ -142,6 +142,99 @@ function CreateAuditorModal({
   );
 }
 
+// ── Assign Frameworks Modal ───────────────────────────────────────────────────
+
+function AssignFrameworksModal({ auditor, onClose }: { readonly auditor: Auditor; readonly onClose: () => void }) {
+  const [assessments, setAssessments] = useState<{id: string; name: string; framework_name: string}[]>([]);
+  const [assignments, setAssignments] = useState<{assignment_id: string; assessment_id: string}[]>([]);
+  const [saving, setSaving] = useState(false);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    Promise.all([
+      import('../api/endpoints').then(m => m.complianceApi.listAssessments()),
+      import('../api/endpoints').then(m => m.usersApi.listAssignments()),
+    ]).then(([assesssResp, assigns]) => {
+      const assesssList = (assesssResp as { items?: unknown[] }).items ?? (Array.isArray(assesssResp) ? assesssResp : []);
+      setAssessments((assesssList as Array<{id: string; name?: string; framework_name?: string; framework_id?: string}>).map(a => ({
+        id: a.id,
+        name: a.name || 'Assessment',
+        framework_name: a.framework_name || a.framework_id || '',
+      })));
+      const auditorAssigns = (assigns as Array<{id: string; auditor_id: string; assessment_id: string}>).filter(a => a.auditor_id === auditor.id);
+      setAssignments(auditorAssigns.map(a => ({ assignment_id: a.id, assessment_id: a.assessment_id || '' })));
+      setSelected(new Set(auditorAssigns.map(a => a.assessment_id || '')));
+    }).catch(() => {});
+  }, [auditor.id]);
+
+  async function handleSave() {
+    setSaving(true);
+    const { usersApi } = await import('../api/endpoints');
+    try {
+      // Assign newly selected
+      for (const assessId of selected) {
+        const alreadyAssigned = assignments.find(a => a.assessment_id === assessId);
+        if (!alreadyAssigned) {
+          await usersApi.assignAuditor(auditor.id, assessId);
+        }
+      }
+      // Unassign deselected
+      for (const a of assignments) {
+        if (!selected.has(a.assessment_id)) {
+          await usersApi.unassignAuditor(a.assignment_id);
+        }
+      }
+      onClose();
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
+      <div className="bg-white rounded-xl shadow-2xl w-full max-w-md max-h-[80vh] flex flex-col">
+        <div className="flex items-center justify-between px-5 py-4 border-b">
+          <h2 className="font-semibold text-gray-900">Assign Frameworks — {auditor.first_name} {auditor.last_name}</h2>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-700"><X className="w-5 h-5" /></button>
+        </div>
+        <p className="px-5 py-2 text-xs text-gray-500 border-b bg-gray-50">Select the compliance assessments this auditor can access.</p>
+        <div className="flex-1 overflow-y-auto px-5 py-3 space-y-2">
+          {assessments.length === 0 ? (
+            <p className="text-sm text-gray-400 text-center py-4">No assessments found. Create a compliance assessment first.</p>
+          ) : assessments.map(a => (
+            <label key={a.id} className="flex items-center gap-3 p-2.5 rounded-lg border cursor-pointer hover:bg-gray-50">
+              <input
+                type="checkbox"
+                checked={selected.has(a.id)}
+                onChange={e => {
+                  setSelected(prev => {
+                    const next = new Set(prev);
+                    e.target.checked ? next.add(a.id) : next.delete(a.id);
+                    return next;
+                  });
+                }}
+                className="w-4 h-4 accent-blue-600"
+              />
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium text-gray-800 truncate">{a.framework_name}</p>
+                <p className="text-xs text-gray-400 truncate">{a.name}</p>
+              </div>
+            </label>
+          ))}
+        </div>
+        <div className="px-5 py-4 border-t flex justify-end gap-2">
+          <button onClick={onClose} className="px-4 py-2 text-sm text-gray-600 border rounded-lg hover:bg-gray-50">Cancel</button>
+          <button onClick={handleSave} disabled={saving}
+            className="flex items-center gap-1.5 px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50">
+            {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+            {saving ? "Saving…" : "Save Assignments"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Main Page ─────────────────────────────────────────────────────────────────
 
 export default function CompanyAdminPage() {
@@ -151,20 +244,21 @@ export default function CompanyAdminPage() {
   const [showModal, setShowModal] = useState(false);
   const [busy, setBusy]         = useState<string | null>(null);
   const [isDemo, setIsDemo]     = useState(false);
+  const [assigningAuditor, setAssigningAuditor] = useState<Auditor | null>(null);
 
   if (!user || user.role !== "admin") return <Navigate to="/dashboard" replace />;
 
   useEffect(() => {
     import("../api/endpoints").then(({ usersApi: api }) => {
       api.listUsers()
-        .then((data: { id: string; name: string; email: string; role: string }[]) => {
+        .then((data) => {
           const auditors = data
             .filter((u) => u.role === "auditor" || u.role === "AUDITOR")
             .map((u) => ({
               id: u.id,
               email: u.email,
-              first_name: u.name.split(" ")[0],
-              last_name: u.name.split(" ").slice(1).join(" ") || "-",
+              first_name: u.first_name,
+              last_name: u.last_name,
               role: u.role,
               is_active: true,
             }));
@@ -255,7 +349,7 @@ export default function CompanyAdminPage() {
           <table className="w-full text-sm">
             <thead className="bg-gray-50 border-b border-gray-200">
               <tr>
-                {["Auditor", "Email", "Status", "Actions"].map(h => (
+                {["Auditor", "Email", "Status", "Frameworks", "Actions"].map(h => (
                   <th key={h} className="px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">{h}</th>
                 ))}
               </tr>
@@ -288,6 +382,17 @@ export default function CompanyAdminPage() {
                   <td className="px-5 py-3.5">
                     <button
                       type="button"
+                      onClick={() => setAssigningAuditor(a)}
+                      className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors"
+                      title="Manage framework assignments"
+                    >
+                      <Layers className="w-3.5 h-3.5" />
+                      Manage
+                    </button>
+                  </td>
+                  <td className="px-5 py-3.5">
+                    <button
+                      type="button"
                       onClick={() => deleteAuditor(a.id)}
                       disabled={busy === a.id}
                       className="p-1.5 rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors"
@@ -307,6 +412,12 @@ export default function CompanyAdminPage() {
         <CreateAuditorModal
           onClose={() => setShowModal(false)}
           onCreated={a => setAuditors(prev => [a, ...prev])}
+        />
+      )}
+      {assigningAuditor && (
+        <AssignFrameworksModal
+          auditor={assigningAuditor}
+          onClose={() => setAssigningAuditor(null)}
         />
       )}
     </div>

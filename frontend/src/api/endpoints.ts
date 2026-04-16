@@ -172,6 +172,26 @@ export const risksApi = {
 
 // ─── Compliance ──────────────────────────────
 
+export interface EvidenceItem {
+  id: string;
+  file_name: string | null;
+  file_path: string | null;
+  file_size_bytes: number | null;
+  content_type: string | null;
+  is_visible_to_auditor: boolean;
+  created_at: string;
+}
+
+export interface ChecklistDocItem {
+  id: string;
+  file_name: string;
+  file_path: string | null;
+  file_size_bytes: number | null;
+  content_type: string | null;
+  is_visible_to_auditor: boolean;
+  created_at: string;
+}
+
 export const complianceApi = {
   listAssessments: (params?: { page?: number; page_size?: number }) =>
     apiClient
@@ -192,9 +212,10 @@ export const complianceApi = {
   getResults: (id: string) =>
     apiClient.get<AssessmentDetail>(`/compliance/assessments/${id}/results`).then((r) => r.data),
 
-  uploadDocument: (assessmentId: string, file: File) => {
+  uploadDocument: (assessmentId: string, file: File, documentTypeKey?: string) => {
     const formData = new FormData();
     formData.append("file", file);
+    if (documentTypeKey) formData.append("document_type_key", documentTypeKey);
     return apiClient
       .post<UploadedDocument>(`/compliance/assessments/${assessmentId}/documents`, formData, {
         headers: { "Content-Type": "multipart/form-data" },
@@ -246,13 +267,35 @@ export const complianceApi = {
     const formData = new FormData();
     formData.append("file", file);
     return apiClient
-      .post<{ id: string; file_name: string; file_size_bytes: number; content_type: string }>(
+      .post<EvidenceItem>(
         `/compliance/control-assessments/${controlAssessmentId}/evidence`,
         formData,
         { headers: { "Content-Type": "multipart/form-data" } }
       )
       .then((r) => r.data);
   },
+
+  listControlEvidence: (controlAssessmentId: string) =>
+    apiClient.get<EvidenceItem[]>(`/compliance/control-assessments/${controlAssessmentId}/evidence`).then(r => r.data),
+
+  toggleEvidenceVisibility: (evidenceId: string) =>
+    apiClient.patch<EvidenceItem>(`/compliance/evidence/${evidenceId}/visibility`).then(r => r.data),
+
+  deleteEvidence: (evidenceId: string) =>
+    apiClient.delete(`/compliance/evidence/${evidenceId}`),
+
+  downloadEvidenceUrl: (evidenceId: string) =>
+    `/api/v1/compliance/evidence/${evidenceId}/download`,
+
+  // ── Checklist document management ──────────────────────────────────────────
+  downloadDocumentUrl: (docId: string) =>
+    `${API_BASE}/compliance/documents/${docId}/download`,
+
+  toggleDocumentVisibility: (docId: string) =>
+    apiClient.patch<ChecklistDocItem>(`/compliance/documents/${docId}/visibility`).then(r => r.data),
+
+  deleteDocument: (docId: string) =>
+    apiClient.delete(`/compliance/documents/${docId}`),
 };
 
 // ─── Custom Framework Builder ─────────────────
@@ -588,6 +631,15 @@ export interface AuditorAssignment {
   reference_document_ids: string[];
 }
 
+export interface AuditChecklistLinkedDoc {
+  id: string;
+  file_name: string;
+  document_name: string | null;
+  clause_ref: string | null;
+  content_type: string | null;
+  file_size_bytes: number | null;
+}
+
 export interface AuditChecklistControl {
   control_assessment_id: string;
   control_identifier: string;
@@ -598,11 +650,24 @@ export interface AuditChecklistControl {
   company_notes?: string;
   implementation_notes?: string;
   auditor_notes?: string;
+  linked_checklist_documents?: AuditChecklistLinkedDoc[];
+}
+
+export interface AuditChecklistDocument {
+  id: string;
+  file_name: string;
+  document_type_key: string | null;
+  clause_ref: string | null;
+  document_name: string | null;
+  content_type: string | null;
+  file_size_bytes: number | null;
+  created_at: string;
 }
 
 export interface AuditChecklist {
   assessment_id: string;
   controls: AuditChecklistControl[];
+  documents: AuditChecklistDocument[];
 }
 
 export const auditorPortalApi = {
@@ -639,18 +704,40 @@ export const auditorPortalApi = {
 
 // ─── Users ────────────────────────────────────
 
+export interface AuditorUser {
+  id: string;
+  email: string;
+  first_name: string;
+  last_name: string;
+  role: string;
+  is_active: boolean;
+}
+
+export interface AuditorAssignmentRecord {
+  id: string;
+  auditor_id: string;
+  auditor_email: string;
+  auditor_name: string;
+  assessment_id: string;
+  assessment_name: string;
+  is_active: boolean;
+}
+
 export const usersApi = {
   listUsers: () =>
     apiClient
-      .get<{ id: string; name: string; email: string; role: string }[]>("/users")
+      .get<{ id: string; first_name: string; last_name: string; email: string; role: string }[]>("/users")
       .then((r) => r.data),
+
+  listAuditors: () =>
+    apiClient.get<AuditorUser[]>("/users/auditors").then((r) => r.data),
 
   createAuditor: (data: { name: string; email: string; password: string }) => {
     const parts = data.name.trim().split(" ");
     const first_name = parts[0];
     const last_name = parts.slice(1).join(" ") || "-";
     return apiClient
-      .post<{ id: string; email: string; role: string }>("/users/auditors", {
+      .post<AuditorUser>("/users/auditors", {
         first_name,
         last_name,
         email: data.email,
@@ -658,6 +745,15 @@ export const usersApi = {
       })
       .then((r) => r.data);
   },
+
+  listAssignments: () =>
+    apiClient.get<AuditorAssignmentRecord[]>("/users/auditors/assignments").then((r) => r.data),
+
+  assignAuditor: (auditor_id: string, assessment_id: string) =>
+    apiClient.post<AuditorAssignmentRecord>("/users/auditors/assign", { auditor_id, assessment_id }).then((r) => r.data),
+
+  unassignAuditor: (assignment_id: string) =>
+    apiClient.delete(`/users/auditors/assignments/${assignment_id}`),
 };
 
 // ─── Traceability Matrix ──────────────────────
@@ -733,6 +829,14 @@ export const threatsApi = {
     apiClient.get("/threats", { params }).then((r) => r.data),
   create: (data: Record<string, unknown>) => apiClient.post("/threats", data).then((r) => r.data),
   delete: (id: string) => apiClient.delete(`/threats/${id}`),
+  importMitre: () =>
+    apiClient.post("/threats/import-mitre").then((r) => r.data as { imported: number; skipped: number; message: string }),
+  fetchNews: () =>
+    apiClient.post("/threats/fetch-news").then((r) => r.data as { created: number; skipped: number; message: string; names: string[] }),
+  listPending: () =>
+    apiClient.get("/threats/pending").then((r) => r.data),
+  approve: (id: string) => apiClient.post(`/threats/${id}/approve`).then((r) => r.data),
+  reject: (id: string) => apiClient.delete(`/threats/${id}/reject`),
 };
 
 // ─── Risk Scenarios ─────────────────────────
@@ -789,6 +893,10 @@ export const regulatoryApi = {
   create: (data: Record<string, unknown>) => apiClient.post("/regulatory", data).then((r) => r.data),
   update: (id: string, data: Record<string, unknown>) => apiClient.patch(`/regulatory/${id}`, data).then((r) => r.data),
   delete: (id: string) => apiClient.delete(`/regulatory/${id}`),
+  fetchNews: () =>
+    apiClient.post("/regulatory/fetch-news").then((r) => r.data as { created: number; skipped: number; message: string; titles: string[] }),
+  approve: (id: string) => apiClient.post(`/regulatory/${id}/approve`).then((r) => r.data),
+  reject: (id: string) => apiClient.delete(`/regulatory/${id}/reject`),
 };
 
 // ─── Activity Log ───────────────────────────
@@ -823,6 +931,92 @@ export const dataApi = {
     fd.append("file", file);
     return apiClient.post(`/data/import/${module}`, fd, { headers: { "Content-Type": "multipart/form-data" } }).then((r) => r.data);
   },
+};
+
+// ─── Contract Collaboration ─────────────────
+
+export interface CollabData {
+  id: string;
+  vendor_id: string;
+  vendor_name: string;
+  contract_id: string;
+  status: string;
+  contract_text: string | null;
+  ai_suggestions: string | null;
+  action_plan: string | null;
+  share_token: string;
+  share_expires_at: string | null;
+  vendor_email: string | null;
+  agreed_at: string | null;
+  agreed_by_internal: boolean;
+  agreed_by_vendor: boolean;
+  plan_finalized_at: string | null;
+  agreement_document: string | null;
+  ciso_signed_at: string | null;
+  ciso_signature: string | null;
+  vendor_signed_at: string | null;
+  vendor_signature: string | null;
+  signed_contract_id: string | null;
+  created_at: string;
+  ai_review?: string | null;
+}
+
+export interface CollabMessage {
+  id: string;
+  collaboration_id: string;
+  sender_type: "internal" | "vendor";
+  sender_name: string;
+  message: string;
+  created_at: string;
+}
+
+export const contractCollabApi = {
+  // ── Internal (authenticated) ────────────────────────────────────────────
+  create: (contractId: string, vendorEmail?: string) =>
+    apiClient.post<CollabData>("/contract-collab", { contract_id: contractId, vendor_email: vendorEmail, share_days: 30 }).then(r => r.data),
+
+  get: (collabId: string) =>
+    apiClient.get<CollabData>(`/contract-collab/${collabId}`).then(r => r.data),
+
+  updateContent: (collabId: string, data: { contract_text?: string; ai_suggestions?: string; action_plan?: string }) =>
+    apiClient.put<CollabData>(`/contract-collab/${collabId}/content`, data).then(r => r.data),
+
+  sendMessage: (collabId: string, data: { message: string; sender_name?: string }) =>
+    apiClient.post<CollabMessage>(`/contract-collab/${collabId}/messages`, data).then(r => r.data),
+
+  getMessages: (collabId: string) =>
+    apiClient.get<CollabMessage[]>(`/contract-collab/${collabId}/messages`).then(r => r.data),
+
+  agree: (collabId: string) =>
+    apiClient.post<CollabData>(`/contract-collab/${collabId}/agree`).then(r => r.data),
+
+  finalizePlan: (collabId: string, deadlines: { id: string; deadline: string }[]) =>
+    apiClient.post<CollabData>(`/contract-collab/${collabId}/finalize-plan`, { deadlines }).then(r => r.data),
+
+  // ── Vendor (token-based, public) ────────────────────────────────────────
+  vendorGet: (shareToken: string) =>
+    apiClient.get<CollabData>(`/contract-collab/vendor/${shareToken}`).then(r => r.data),
+
+  vendorUpdateContent: (shareToken: string, data: { contract_text?: string }) =>
+    apiClient.put<CollabData>(`/contract-collab/vendor/${shareToken}/content`, data).then(r => r.data),
+
+  vendorSendMessage: (shareToken: string, data: { message: string; sender_name?: string }) =>
+    apiClient.post<CollabMessage>(`/contract-collab/vendor/${shareToken}/messages`, data).then(r => r.data),
+
+  vendorGetMessages: (shareToken: string) =>
+    apiClient.get<CollabMessage[]>(`/contract-collab/vendor/${shareToken}/messages`).then(r => r.data),
+
+  vendorAgree: (shareToken: string) =>
+    apiClient.post<CollabData>(`/contract-collab/vendor/${shareToken}/agree`).then(r => r.data),
+
+  vendorUpdateActionItem: (shareToken: string, itemId: string, done: boolean) =>
+    apiClient.post<CollabData>(`/contract-collab/vendor/${shareToken}/action-item`, { item_id: itemId, done }).then(r => r.data),
+
+  sign: (collabId: string, signature: string) =>
+    apiClient.post<CollabData>(`/contract-collab/${collabId}/sign`, { signature }).then(r => r.data),
+
+  vendorSign: (shareToken: string, signature: string) =>
+    apiClient.post<CollabData>(`/contract-collab/vendor/${shareToken}/sign`, { signature }).then(r => r.data),
 };
 
 // ─── Risk Quantification ────────────────────

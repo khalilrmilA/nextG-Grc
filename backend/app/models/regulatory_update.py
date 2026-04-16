@@ -13,6 +13,7 @@ class UpdateImpact(str, enum.Enum):
     INFORMATIONAL = "informational"
 
 class UpdateStatus(str, enum.Enum):
+    PENDING_APPROVAL = "pending_approval"
     NEW = "new"
     UNDER_REVIEW = "under_review"
     ACTION_REQUIRED = "action_required"

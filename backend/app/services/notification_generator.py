@@ -7,7 +7,9 @@ Handles:
 - Vendor contract expiry (30/60/90 day warnings)
 - Compliance gaps and control issues
 - Contract pending CISO review
+- Action plan item deadlines within 10 days (collaboration)
 """
+import json
 from datetime import datetime, timedelta
 from sqlalchemy import select, and_
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -17,15 +19,23 @@ from app.models.user import User, UserRole
 from app.models.risk import Risk
 from app.models.vendor import Vendor, VendorContract, ContractValidationStatus
 from app.models.compliance import ComplianceGap
+from app.models.contract_collaboration import ContractCollaboration
 
 
 async def get_recipients_for_tenant(db: AsyncSession, tenant_id: str) -> list[User]:
-    """Get users who should receive CISO-type notifications (CISO, admin roles)."""
+    """Get users who should receive CISO-type notifications (CISO, admin roles).
+    Roles are stored as uppercase enum names in the DB (e.g. 'CISO', 'TENANT_ADMIN').
+    """
+    from sqlalchemy import or_
+    from sqlalchemy import String, cast
     result = await db.execute(
         select(User).where(
             User.tenant_id == tenant_id,
-            User.role.in_([UserRole.CISO, UserRole.TENANT_ADMIN, UserRole.RISK_MANAGER, UserRole.COMPLIANCE_MANAGER]),
             User.is_active == True,  # noqa: E712
+            or_(
+                cast(User.role, String).in_(["CISO", "TENANT_ADMIN", "RISK_MANAGER", "COMPLIANCE_MANAGER"]),
+                User.role.in_([UserRole.CISO, UserRole.TENANT_ADMIN, UserRole.RISK_MANAGER, UserRole.COMPLIANCE_MANAGER]),
+            )
         )
     )
     return list(result.scalars().all())
@@ -308,6 +318,88 @@ async def check_compliance_gaps(db: AsyncSession) -> int:
     return created
 
 
+async def check_action_plan_deadlines(db: AsyncSession) -> int:
+    """Notify CISO when action plan items are within 10 days of deadline and not yet done."""
+    created = 0
+    today = datetime.utcnow().date()
+
+    # Only check active collaborations that have a finalized plan
+    result = await db.execute(
+        select(ContractCollaboration).where(
+            ContractCollaboration.status == "active",
+            ContractCollaboration.plan_finalized_at.isnot(None),
+            ContractCollaboration.action_plan.isnot(None),
+        )
+    )
+    collabs = result.scalars().all()
+
+    for collab in collabs:
+        try:
+            plan: list[dict] = json.loads(collab.action_plan or "[]")
+        except (json.JSONDecodeError, TypeError):
+            continue
+
+        for item in plan:
+            if item.get("done"):
+                continue  # already completed
+
+            deadline_str = item.get("deadline")
+            if not deadline_str:
+                continue
+
+            try:
+                deadline = datetime.fromisoformat(deadline_str).date()
+            except (ValueError, TypeError):
+                continue
+
+            days_remaining = (deadline - today).days
+            # Notify only when ≤ 10 days remain (and not already overdue by more than 30 days)
+            if days_remaining > 10 or days_remaining < -30:
+                continue
+
+            action_text = item.get("action", "Action item")[:80]
+            entity_id = f"{collab.id}_{item.get('id', '')}"
+
+            if days_remaining < 0:
+                severity = "critical"
+                title = f"Action plan item OVERDUE: {collab.vendor_name}"
+                message = (
+                    f"Item '{action_text}' was due {abs(days_remaining)} day(s) ago "
+                    f"and is still incomplete. Check with {collab.vendor_name}."
+                )
+            elif days_remaining == 0:
+                severity = "high"
+                title = f"Action plan item due TODAY: {collab.vendor_name}"
+                message = f"Item '{action_text}' is due today. Verify with {collab.vendor_name}."
+            else:
+                severity = "high"
+                title = f"Action plan deadline in {days_remaining} day(s): {collab.vendor_name}"
+                message = (
+                    f"Item '{action_text}' deadline is in {days_remaining} day(s). "
+                    f"Follow up with {collab.vendor_name} to confirm progress."
+                )
+
+            recipients = await get_recipients_for_tenant(db, collab.tenant_id)
+            # Only notify CISO / admins
+            cisos = [u for u in recipients if u.role in (UserRole.CISO, UserRole.TENANT_ADMIN)]
+            for user in cisos:
+                if not await notification_exists(db, user.id, NotificationType.VENDOR_ALERT, entity_id, within_days=3):
+                    await create_notification(
+                        db,
+                        user=user,
+                        notif_type=NotificationType.VENDOR_ALERT,
+                        title=title,
+                        message=message,
+                        entity_id=entity_id,
+                        entity_type="action_plan_item",
+                        link=f"/vendors/collaboration/{collab.id}",
+                        severity=severity,
+                    )
+                    created += 1
+
+    return created
+
+
 async def run_all_checks(db: AsyncSession) -> dict:
     """Run all notification checks and return a summary."""
     results = {
@@ -315,6 +407,7 @@ async def run_all_checks(db: AsyncSession) -> dict:
         "risk_reviews": 0,
         "ciso_contracts": 0,
         "compliance_gaps": 0,
+        "action_plan_deadlines": 0,
     }
 
     try:
@@ -336,6 +429,11 @@ async def run_all_checks(db: AsyncSession) -> dict:
         results["compliance_gaps"] = await check_compliance_gaps(db)
     except Exception as e:
         print(f"Compliance gaps check failed: {e}")
+
+    try:
+        results["action_plan_deadlines"] = await check_action_plan_deadlines(db)
+    except Exception as e:
+        print(f"Action plan deadline check failed: {e}")
 
     await db.commit()
     results["total"] = sum(results.values())

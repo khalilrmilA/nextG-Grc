@@ -9,15 +9,28 @@ import {
   Play,
   Target,
 } from "lucide-react";
-import { riskQuantApi, risksApi } from "@/api/endpoints";
+import { riskQuantApi, risksApi, riskScenariosApi } from "@/api/endpoints";
 
 function fmtDollar(value: number | null | undefined): string {
   if (value == null) return "$0";
   return "$" + value.toLocaleString("en-US", { maximumFractionDigits: 0 });
 }
 
+// Map 1-5 impact scale to rough dollar ranges
+function impactToDollars(impact: number): { min: number; likely: number; max: number } {
+  const scale: Record<number, { min: number; likely: number; max: number }> = {
+    1: { min: 1000,    likely: 5000,    max: 25000 },
+    2: { min: 10000,   likely: 50000,   max: 150000 },
+    3: { min: 50000,   likely: 200000,  max: 500000 },
+    4: { min: 200000,  likely: 750000,  max: 2000000 },
+    5: { min: 500000,  likely: 2000000, max: 10000000 },
+  };
+  return scale[impact] ?? { min: 10000, likely: 100000, max: 500000 };
+}
+
 export default function RiskQuantificationPage() {
-  const [risks, setRisks] = useState<any[]>([]);
+  const [risks, setRisks]         = useState<any[]>([]);
+  const [scenarios, setScenarios] = useState<any[]>([]);
   const [loadingRisks, setLoadingRisks] = useState(true);
   const [running, setRunning] = useState(false);
   const [error, setError] = useState("");
@@ -32,22 +45,60 @@ export default function RiskQuantificationPage() {
     control_effectiveness: 60,
   });
 
-  useEffect(() => {
-    loadRisks();
-  }, []);
+  useEffect(() => { loadAll(); }, []);
 
-  async function loadRisks() {
+  async function loadAll() {
     try {
-      const data = await risksApi.list();
-      const items = Array.isArray(data) ? data : data.items || [];
-      setRisks(items);
-      if (items.length > 0 && !form.risk_id) {
-        setForm((prev) => ({ ...prev, risk_id: items[0].id }));
-      }
+      const [riskData, scenarioData] = await Promise.all([
+        risksApi.list({ page_size: 20 }),
+        riskScenariosApi.list(),
+      ]);
+      const riskItems = Array.isArray(riskData) ? riskData : (riskData as any).items || [];
+      const scenarioItems = Array.isArray(scenarioData) ? scenarioData : (scenarioData as { items?: any[] }).items || [];
+      setRisks(riskItems);
+      setScenarios(scenarioItems);
     } catch {
       setRisks([]);
+      setScenarios([]);
     } finally {
       setLoadingRisks(false);
+    }
+  }
+
+  function handleSelectChange(value: string) {
+    if (!value) { setForm((f) => ({ ...f, risk_id: "" })); return; }
+
+    // Check if it's a scenario (prefixed with "scenario:")
+    if (value.startsWith("scenario:")) {
+      const sid = value.replace("scenario:", "");
+      const scenario = scenarios.find((s) => s.id === sid);
+      if (scenario) {
+        const prob = (scenario.current_probability ?? 3) * 20; // 1-5 → 20-100%
+        const dollars = impactToDollars(scenario.current_impact ?? 3);
+        setForm({
+          risk_id: sid,
+          annual_loss_min: dollars.min,
+          annual_loss_most_likely: dollars.likely,
+          annual_loss_max: dollars.max,
+          probability_percent: Math.min(Math.max(prob, 5), 95),
+          control_effectiveness: 60,
+        });
+      }
+    } else {
+      // It's a regular risk
+      const risk = risks.find((r) => r.id === value);
+      if (risk) {
+        const prob = (risk.likelihood ?? 3) * 20;
+        const dollars = impactToDollars(risk.impact ?? 3);
+        setForm({
+          risk_id: value,
+          annual_loss_min: dollars.min,
+          annual_loss_most_likely: dollars.likely,
+          annual_loss_max: dollars.max,
+          probability_percent: Math.min(Math.max(prob, 5), 95),
+          control_effectiveness: 60,
+        });
+      }
     }
   }
 
@@ -107,26 +158,50 @@ export default function RiskQuantificationPage() {
           )}
 
           <div className="space-y-5">
-            {/* Risk Selector */}
+            {/* Risk / Scenario Selector */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Select Risk</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Select Risk or Scenario
+              </label>
               {loadingRisks ? (
                 <div className="flex items-center gap-2 text-gray-400 text-sm">
-                  <Loader2 className="w-4 h-4 animate-spin" /> Loading risks...
+                  <Loader2 className="w-4 h-4 animate-spin" /> Loading...
                 </div>
               ) : (
                 <select
-                  value={form.risk_id}
-                  onChange={(e) => setForm({ ...form, risk_id: e.target.value })}
+                  value={
+                    scenarios.some((s) => s.id === form.risk_id)
+                      ? `scenario:${form.risk_id}`
+                      : form.risk_id
+                  }
+                  onChange={(e) => handleSelectChange(e.target.value)}
                   className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                 >
-                  <option value="">-- Select a risk --</option>
-                  {risks.map((r: any) => (
-                    <option key={r.id} value={r.id}>
-                      {r.title || r.name}
-                    </option>
-                  ))}
+                  <option value="">-- Select a risk or scenario --</option>
+                  {risks.length > 0 && (
+                    <optgroup label={`Risks (${risks.length})`}>
+                      {risks.map((r: any) => (
+                        <option key={r.id} value={r.id}>
+                          [{r.severity?.toUpperCase() ?? "—"}] {r.title || r.name}
+                        </option>
+                      ))}
+                    </optgroup>
+                  )}
+                  {scenarios.length > 0 && (
+                    <optgroup label={`Risk Scenarios (${scenarios.length})`}>
+                      {scenarios.map((s: any) => (
+                        <option key={s.id} value={`scenario:${s.id}`}>
+                          {s.name || s.title || `Scenario ${s.id.slice(0, 8)}`}
+                        </option>
+                      ))}
+                    </optgroup>
+                  )}
                 </select>
+              )}
+              {form.risk_id && (
+                <p className="text-xs text-gray-400 mt-1">
+                  Loss values pre-filled from risk data — adjust as needed
+                </p>
               )}
             </div>
 

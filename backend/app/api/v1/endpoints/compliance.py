@@ -7,9 +7,9 @@ from datetime import datetime
 from pathlib import Path
 
 import requests
-from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, UploadFile, status
+from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, UploadFile, status
 from pydantic import BaseModel
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select, update as sa_update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.v1.dependencies.auth import get_current_user, get_tenant_id, require_roles
@@ -53,18 +53,33 @@ class ControlAssessmentUpdate(BaseModel):
 class UploadedDocumentResponse(BaseModel):
     id: str
     file_name: str
+    file_path: str | None = None
     file_size_bytes: int | None = None
     content_type: str | None = None
+    is_visible_to_auditor: bool = True
     created_at: datetime
 
     model_config = {"from_attributes": True}
 
 
+class LinkedChecklistDocument(BaseModel):
+    """A Document Checklist upload that automatically covers a control's clause."""
+    id: str
+    file_name: str
+    document_name: str | None = None
+    clause_ref: str | None = None
+    document_type_key: str | None = None
+    file_size_bytes: int | None = None
+    content_type: str | None = None
+
+
 class EvidenceResponse(BaseModel):
     id: str
     file_name: str | None = None
+    file_path: str | None = None
     file_size_bytes: int | None = None
     content_type: str | None = None
+    is_visible_to_auditor: bool = True
     created_at: datetime
 
     model_config = {"from_attributes": True}
@@ -85,6 +100,7 @@ class ControlAssessmentResponse(BaseModel):
     ai_confidence: float | None = None
     cross_framework_coverage: list[dict] = []
     is_mandatory: bool = False
+    linked_checklist_documents: list[LinkedChecklistDocument] = []
 
     model_config = {"from_attributes": True, "populate_by_name": True}
 
@@ -362,11 +378,34 @@ async def _build_assessment_detail(
     """Build full AssessmentDetailResponse with all nested data."""
     fw_result = await db.execute(select(Framework).where(Framework.id == assessment.framework_id))
     framework = fw_result.scalar_one_or_none()
+    framework_short_name = framework.short_name if framework else ""
 
     docs_result = await db.execute(
         select(UploadedDocument).where(UploadedDocument.assessment_id == assessment.id)
     )
     docs = docs_result.scalars().all()
+
+    # Load mandatory document metadata so we can resolve clause_refs for checklist uploads
+    md_result = await db.execute(
+        select(MandatoryDocument).where(MandatoryDocument.framework_short_name == framework_short_name)
+    )
+    md_by_key: dict[str, MandatoryDocument] = {md.document_type_key: md for md in md_result.scalars().all()}
+
+    # Build clause_ref → [LinkedChecklistDocument] map (only checklist uploads, not AI analysis uploads)
+    clause_doc_map: dict[str, list[LinkedChecklistDocument]] = {}
+    for d in docs:
+        if d.document_type_key and d.document_type_key in md_by_key:
+            md = md_by_key[d.document_type_key]
+            linked = LinkedChecklistDocument(
+                id=d.id,
+                file_name=d.file_name,
+                document_name=md.document_name,
+                clause_ref=md.clause_ref,
+                document_type_key=d.document_type_key,
+                file_size_bytes=d.file_size_bytes,
+                content_type=d.content_type,
+            )
+            clause_doc_map.setdefault(md.clause_ref, []).append(linked)
 
     ca_result = await db.execute(
         select(ControlAssessment).where(ControlAssessment.assessment_id == assessment.id)
@@ -379,12 +418,22 @@ async def _build_assessment_detail(
     controls = ctrl_result.scalars().all()
     controls_map: dict[str, FrameworkControl] = {c.id: c for c in controls}
 
-    ca_responses = [
-        ControlAssessmentResponse(
+    ca_responses = []
+    for ca in cas:
+        cid = controls_map[ca.control_id].control_id if ca.control_id in controls_map else ca.control_id
+
+        # Match checklist docs by clause: exact match ("4.1" → "4.1") or parent clause
+        # ("4.1" → "4.1.1", "4.1.2") so uploading one doc covers all child controls
+        linked_docs: list[LinkedChecklistDocument] = []
+        for clause_ref, doc_list in clause_doc_map.items():
+            if cid == clause_ref or cid.startswith(clause_ref + "."):
+                linked_docs.extend(doc_list)
+
+        ca_responses.append(ControlAssessmentResponse(
             id=ca.id,
             assessment_id=ca.assessment_id,
             control_id=ca.control_id,
-            control_identifier=(controls_map[ca.control_id].control_id if ca.control_id in controls_map else ca.control_id),
+            control_identifier=cid,
             control_title=(controls_map[ca.control_id].title if ca.control_id in controls_map else ""),
             control_category=(controls_map[ca.control_id].category if ca.control_id in controls_map else None),
             control_description=(controls_map[ca.control_id].description if ca.control_id in controls_map else None),
@@ -398,9 +447,8 @@ async def _build_assessment_detail(
                 else []
             ) or [],
             is_mandatory=(controls_map[ca.control_id].is_mandatory if ca.control_id in controls_map else False),
-        )
-        for ca in cas
-    ]
+            linked_checklist_documents=linked_docs,
+        ))
 
     gap_result = await db.execute(
         select(ComplianceGap).where(
@@ -579,18 +627,20 @@ async def upload_document(
     assessment_id: str,
     background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
+    document_type_key: str | None = Form(default=None),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_roles(UserRole.TENANT_ADMIN, UserRole.SUPER_ADMIN)),
     tenant_id: str = Depends(get_tenant_id),
 ) -> UploadedDocumentResponse:
     """Upload a document to an assessment for compliance analysis."""
-    result = await db.execute(
+    assessment_result = await db.execute(
         select(ComplianceAssessment).where(
             ComplianceAssessment.id == assessment_id,
             ComplianceAssessment.tenant_id == tenant_id,
         )
     )
-    if not result.scalar_one_or_none():
+    assessment = assessment_result.scalar_one_or_none()
+    if not assessment:
         raise HTTPException(status_code=404, detail="Assessment not found")
 
     content_type = file.content_type or ""
@@ -629,9 +679,44 @@ async def upload_document(
         file_size_bytes=len(file_bytes),
         extracted_text=extracted,
         uploaded_by_id=current_user.id,
+        document_type_key=document_type_key,  # pre-assign if provided by the UI
     )
     db.add(doc)
     await db.flush()
+
+    # Auto-update matching control statuses when a checklist document is uploaded.
+    # A document uploaded for clause "4.1" automatically promotes any not_started or
+    # not_implemented controls under clause "4.1", "4.1.1", "4.1.2", etc.
+    if document_type_key:
+        md_result = await db.execute(
+            select(MandatoryDocument).where(MandatoryDocument.document_type_key == document_type_key)
+        )
+        md = md_result.scalar_one_or_none()
+        if md and md.clause_ref:
+            clause_ref = md.clause_ref
+            ctrl_result = await db.execute(
+                select(FrameworkControl).where(
+                    FrameworkControl.framework_id == assessment.framework_id,
+                    or_(
+                        FrameworkControl.control_id == clause_ref,
+                        FrameworkControl.control_id.like(f"{clause_ref}.%"),
+                    ),
+                )
+            )
+            matching_ctrl_ids = [c.id for c in ctrl_result.scalars().all()]
+            if matching_ctrl_ids:
+                await db.execute(
+                    sa_update(ControlAssessment)
+                    .where(
+                        ControlAssessment.assessment_id == assessment_id,
+                        ControlAssessment.control_id.in_(matching_ctrl_ids),
+                        ControlAssessment.status.in_([
+                            ControlStatus.NOT_STARTED,
+                            ControlStatus.NOT_IMPLEMENTED,
+                        ]),
+                    )
+                    .values(status=ControlStatus.PARTIALLY_IMPLEMENTED)
+                )
 
     # Fire-and-forget: detect which ISO 27001 clauses this document covers
     if extracted:
@@ -640,8 +725,10 @@ async def upload_document(
     return UploadedDocumentResponse(
         id=doc.id,
         file_name=doc.file_name,
+        file_path=doc.file_path,
         file_size_bytes=doc.file_size_bytes,
         content_type=doc.content_type,
+        is_visible_to_auditor=True,
         created_at=doc.created_at,
     )
 
@@ -921,14 +1008,15 @@ async def get_document_checklist(
         select(UploadedDocument).where(UploadedDocument.assessment_id == assessment_id)
     )).scalars().all()
 
-    # Match by document_type_key
-    uploaded_by_key: dict[str, UploadedDocument] = {
-        d.document_type_key: d for d in uploaded if d.document_type_key
-    }
+    # Match by document_type_key — collect ALL docs per key (multiple files per row)
+    uploaded_by_key: dict[str, list[UploadedDocument]] = {}
+    for d in uploaded:
+        if d.document_type_key:
+            uploaded_by_key.setdefault(d.document_type_key, []).append(d)
 
     items = []
     for md in mandatory_docs:
-        uploaded_doc = uploaded_by_key.get(md.document_type_key)
+        docs_for_row = uploaded_by_key.get(md.document_type_key, [])
         items.append({
             "mandatory_document_id": md.id,
             "clause_ref": md.clause_ref,
@@ -936,12 +1024,26 @@ async def get_document_checklist(
             "document_type_key": md.document_type_key,
             "is_mandatory": md.is_mandatory,
             "description": md.description,
-            "is_uploaded": uploaded_doc is not None,
+            "is_uploaded": len(docs_for_row) > 0,
+            # legacy single-doc field (first doc) for backward compat
             "uploaded_document": {
-                "id": uploaded_doc.id,
-                "file_name": uploaded_doc.file_name,
-                "ai_analysis_summary": uploaded_doc.ai_analysis_summary,
-            } if uploaded_doc else None,
+                "id": docs_for_row[0].id,
+                "file_name": docs_for_row[0].file_name,
+                "ai_analysis_summary": docs_for_row[0].ai_analysis_summary,
+            } if docs_for_row else None,
+            # All files for this row
+            "uploaded_documents": [
+                {
+                    "id": d.id,
+                    "file_name": d.file_name,
+                    "file_path": d.file_path,
+                    "content_type": d.content_type,
+                    "file_size_bytes": d.file_size_bytes,
+                    "is_visible_to_auditor": bool(d.is_visible_to_auditor) if d.is_visible_to_auditor is not None else True,
+                    "created_at": d.created_at.isoformat() if hasattr(d.created_at, "isoformat") else str(d.created_at),
+                }
+                for d in docs_for_row
+            ],
         })
 
     uploaded_count = sum(1 for i in items if i["is_uploaded"])
@@ -1271,9 +1373,11 @@ async def upload_control_evidence(
         name=file.filename or safe_name,
         evidence_type=EvidenceType.DOCUMENT,
         file_name=file.filename or safe_name,
+        file_path=rel_path,
         file_size_bytes=len(file_bytes),
         content_type=content_type,
         uploaded_by_id=current_user.id,
+        is_visible_to_auditor=True,
     )
     db.add(evidence)
     await db.flush()
@@ -1281,7 +1385,211 @@ async def upload_control_evidence(
     return EvidenceResponse(
         id=evidence.id,
         file_name=evidence.file_name,
+        file_path=evidence.file_path,
         file_size_bytes=evidence.file_size_bytes,
         content_type=evidence.content_type,
+        is_visible_to_auditor=evidence.is_visible_to_auditor,
         created_at=evidence.created_at,
     )
+
+
+@router.get("/control-assessments/{control_assessment_id}/evidence", response_model=list[EvidenceResponse])
+async def list_control_evidence(
+    control_assessment_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    tenant_id: str = Depends(get_tenant_id),
+):
+    """List all evidence files for a control assessment."""
+    result = await db.execute(
+        select(Evidence).where(Evidence.control_assessment_id == control_assessment_id)
+        .order_by(Evidence.created_at)
+    )
+    items = result.scalars().all()
+    return [EvidenceResponse(
+        id=e.id,
+        file_name=e.file_name,
+        file_path=e.file_path,
+        file_size_bytes=e.file_size_bytes,
+        content_type=e.content_type,
+        is_visible_to_auditor=e.is_visible_to_auditor if e.is_visible_to_auditor is not None else True,
+        created_at=e.created_at,
+    ) for e in items]
+
+
+@router.patch("/evidence/{evidence_id}/visibility", response_model=EvidenceResponse)
+async def toggle_evidence_visibility(
+    evidence_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    tenant_id: str = Depends(get_tenant_id),
+):
+    """Toggle whether an evidence file is visible to auditors."""
+    result = await db.execute(
+        select(Evidence).where(Evidence.id == evidence_id, Evidence.tenant_id == tenant_id)
+    )
+    evidence = result.scalar_one_or_none()
+    if not evidence:
+        raise HTTPException(status_code=404, detail="Evidence not found")
+    current_val = evidence.is_visible_to_auditor if evidence.is_visible_to_auditor is not None else True
+    evidence.is_visible_to_auditor = not current_val
+    await db.commit()
+    await db.refresh(evidence)
+    return EvidenceResponse(
+        id=evidence.id,
+        file_name=evidence.file_name,
+        file_path=evidence.file_path,
+        file_size_bytes=evidence.file_size_bytes,
+        content_type=evidence.content_type,
+        is_visible_to_auditor=evidence.is_visible_to_auditor,
+        created_at=evidence.created_at,
+    )
+
+
+@router.delete("/evidence/{evidence_id}", status_code=204)
+async def delete_evidence(
+    evidence_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    tenant_id: str = Depends(get_tenant_id),
+):
+    """Delete an evidence file."""
+    result = await db.execute(
+        select(Evidence).where(Evidence.id == evidence_id, Evidence.tenant_id == tenant_id)
+    )
+    evidence = result.scalar_one_or_none()
+    if not evidence:
+        raise HTTPException(status_code=404, detail="Evidence not found")
+    # Delete physical file if it exists
+    if evidence.file_path:
+        from pathlib import Path as _Path
+        full = _Path(settings.UPLOADS_DIR) / evidence.file_path
+        if full.exists():
+            full.unlink(missing_ok=True)
+    await db.delete(evidence)
+    await db.commit()
+
+
+@router.get("/evidence/{evidence_id}/download")
+async def download_evidence(
+    evidence_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    tenant_id: str = Depends(get_tenant_id),
+):
+    """Download/view an evidence file."""
+    from fastapi.responses import FileResponse
+    from pathlib import Path as _Path
+    result = await db.execute(
+        select(Evidence).where(Evidence.id == evidence_id, Evidence.tenant_id == tenant_id)
+    )
+    evidence = result.scalar_one_or_none()
+    if not evidence or not evidence.file_path:
+        raise HTTPException(status_code=404, detail="File not found")
+    full = _Path(settings.UPLOADS_DIR) / evidence.file_path
+    if not full.exists():
+        raise HTTPException(status_code=404, detail="File not found on disk")
+    return FileResponse(
+        path=str(full),
+        filename=evidence.file_name or "evidence",
+        media_type=evidence.content_type or "application/octet-stream",
+    )
+
+
+# ─── Uploaded Document (checklist) management ──────────────────────────────────
+
+
+@router.get("/documents/{doc_id}/download")
+async def download_uploaded_document(
+    doc_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    tenant_id: str = Depends(get_tenant_id),
+):
+    """Download/view an uploaded checklist document."""
+    from fastapi.responses import FileResponse as _FR
+    from pathlib import Path as _Path2
+    result = await db.execute(
+        select(UploadedDocument).where(
+            UploadedDocument.id == doc_id,
+            UploadedDocument.tenant_id == tenant_id,
+        )
+    )
+    doc = result.scalar_one_or_none()
+    if not doc or not doc.file_path:
+        raise HTTPException(status_code=404, detail="Document not found")
+    full = _Path2(settings.UPLOADS_DIR) / doc.file_path
+    if not full.exists():
+        raise HTTPException(status_code=404, detail="File not found on disk")
+    return _FR(
+        path=str(full),
+        filename=doc.file_name or "document",
+        media_type=doc.content_type or "application/octet-stream",
+    )
+
+
+@router.patch("/documents/{doc_id}/visibility", response_model=UploadedDocumentResponse)
+async def toggle_document_visibility(
+    doc_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    tenant_id: str = Depends(get_tenant_id),
+):
+    """Toggle whether a checklist document is visible to auditors."""
+    result = await db.execute(
+        select(UploadedDocument).where(
+            UploadedDocument.id == doc_id,
+            UploadedDocument.tenant_id == tenant_id,
+        )
+    )
+    doc = result.scalar_one_or_none()
+    if not doc:
+        raise HTTPException(status_code=404, detail="Document not found")
+    current_val = bool(doc.is_visible_to_auditor) if doc.is_visible_to_auditor is not None else True
+    new_val = not current_val
+    # Use a direct UPDATE to guarantee the write reaches SQLite regardless of ORM dirty-tracking
+    await db.execute(
+        sa_update(UploadedDocument)
+        .where(UploadedDocument.id == doc.id)
+        .values(is_visible_to_auditor=new_val)
+    )
+    await db.commit()
+    # Re-fetch to return the persisted value
+    result2 = await db.execute(
+        select(UploadedDocument).where(UploadedDocument.id == doc.id)
+    )
+    doc = result2.scalar_one()
+    return UploadedDocumentResponse(
+        id=doc.id,
+        file_name=doc.file_name,
+        file_path=doc.file_path,
+        file_size_bytes=doc.file_size_bytes,
+        content_type=doc.content_type,
+        is_visible_to_auditor=bool(doc.is_visible_to_auditor) if doc.is_visible_to_auditor is not None else new_val,
+        created_at=doc.created_at,
+    )
+
+
+@router.delete("/documents/{doc_id}", status_code=204)
+async def delete_uploaded_document(
+    doc_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    tenant_id: str = Depends(get_tenant_id),
+):
+    """Delete a checklist document."""
+    result = await db.execute(
+        select(UploadedDocument).where(
+            UploadedDocument.id == doc_id,
+            UploadedDocument.tenant_id == tenant_id,
+        )
+    )
+    doc = result.scalar_one_or_none()
+    if not doc:
+        raise HTTPException(status_code=404, detail="Document not found")
+    if doc.file_path:
+        from pathlib import Path as _Path3
+        full = _Path3(settings.UPLOADS_DIR) / doc.file_path
+        full.unlink(missing_ok=True)
+    await db.delete(doc)
+    await db.commit()

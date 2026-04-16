@@ -1,6 +1,11 @@
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from functools import lru_cache
 from typing import Literal
+from pathlib import Path
+
+# Resolve the DB path relative to this file so it always points to
+# backend/grc_dev.db regardless of which directory uvicorn is launched from.
+_BACKEND_DIR = Path(__file__).resolve().parent.parent.parent  # backend/
 
 
 class Settings(BaseSettings):
@@ -20,8 +25,8 @@ class Settings(BaseSettings):
     API_V1_PREFIX: str = "/api/v1"
     ALLOWED_ORIGINS: list[str] = ["http://localhost:3000", "http://localhost:3001", "http://localhost:4000", "http://localhost:4001", "http://localhost:5173"]
 
-    # Database — defaults to SQLite for zero-setup local dev
-    DATABASE_URL: str = "sqlite+aiosqlite:///./grc_dev.db"
+    # Database — absolute path so it resolves correctly regardless of CWD
+    DATABASE_URL: str = f"sqlite+aiosqlite:///{_BACKEND_DIR / 'grc_dev.db'}"
     DATABASE_POOL_SIZE: int = 20
     DATABASE_MAX_OVERFLOW: int = 40
 
@@ -75,6 +80,9 @@ class Settings(BaseSettings):
     OLLAMA_BASE_URL: str = "http://localhost:11434"
     OLLAMA_CHAT_MODEL: str = "deepseek-v3.1:671b-cloud"
     OLLAMA_ANALYSIS_BATCH_SIZE: int = 25
+
+    # Threat Intelligence
+    OPENSOURCEMALWARE: str = ""   # opensourcemalware.com API key
 
     # Feature Flags
     ENABLE_AI_COPILOT: bool = False

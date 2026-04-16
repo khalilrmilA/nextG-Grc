@@ -153,6 +153,11 @@ class Evidence(Base):
     valid_from: Mapped[str | None] = mapped_column(String(20), nullable=True)
     valid_until: Mapped[str | None] = mapped_column(String(20), nullable=True)
 
+    # Local file path (relative to UPLOADS_DIR)
+    file_path: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+    # Auditor can see this file
+    is_visible_to_auditor: Mapped[bool] = mapped_column(Boolean, default=True)
+
     uploaded_by_id: Mapped[str | None] = mapped_column(
         String(36), ForeignKey("users.id"), nullable=True
     )
@@ -217,6 +222,7 @@ class UploadedDocument(Base):
     uploaded_by_id: Mapped[str | None] = mapped_column(
         String(36), ForeignKey("users.id"), nullable=True
     )
+    is_visible_to_auditor: Mapped[bool] = mapped_column(Boolean, default=True)
 
     assessment: Mapped["ComplianceAssessment"] = relationship(
         "ComplianceAssessment", back_populates="uploaded_documents"

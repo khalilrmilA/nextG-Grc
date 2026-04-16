@@ -11,6 +11,11 @@ import {
   ExternalLink,
   Calendar,
   AlertCircle,
+  Sparkles,
+  CheckCircle2,
+  ThumbsUp,
+  ThumbsDown,
+  Clock,
 } from "lucide-react";
 import { regulatoryApi } from "@/api/endpoints";
 
@@ -46,6 +51,9 @@ export default function RegulatoryUpdatesPage() {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [fetching, setFetching] = useState(false);
+  const [fetchResult, setFetchResult] = useState<{ created: number; message: string } | null>(null);
+  const [approving, setApproving] = useState<string | null>(null);
 
   const [form, setForm] = useState({
     title: "",
@@ -74,6 +82,43 @@ export default function RegulatoryUpdatesPage() {
   useEffect(() => {
     load();
   }, [statusFilter]);
+
+  async function handleApprove(id: string) {
+    setApproving(id);
+    try {
+      await regulatoryApi.approve(id);
+      load();
+    } finally {
+      setApproving(null);
+    }
+  }
+
+  async function handleReject(id: string) {
+    setApproving(id);
+    try {
+      await regulatoryApi.reject(id);
+      load();
+    } finally {
+      setApproving(null);
+    }
+  }
+
+  async function handleFetchNews() {
+    setFetching(true);
+    setFetchResult(null);
+    try {
+      const result = await regulatoryApi.fetchNews();
+      setFetchResult({ created: result.created, message: result.message });
+      if (result.created > 0) {
+        setLoading(true);
+        load();
+      }
+    } catch {
+      setFetchResult({ created: 0, message: "Failed to fetch news. Make sure the backend is running." });
+    } finally {
+      setFetching(false);
+    }
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -110,10 +155,12 @@ export default function RegulatoryUpdatesPage() {
     }
   }
 
+  const pending = items.filter((i) => i.status === "pending_approval");
   const filtered = items.filter(
     (i) =>
-      i.title?.toLowerCase().includes(search.toLowerCase()) ||
-      i.regulation_name?.toLowerCase().includes(search.toLowerCase())
+      i.status !== "pending_approval" &&
+      (i.title?.toLowerCase().includes(search.toLowerCase()) ||
+        i.regulation_name?.toLowerCase().includes(search.toLowerCase()))
   );
 
   return (
@@ -126,13 +173,118 @@ export default function RegulatoryUpdatesPage() {
             Track regulatory changes and their impact on your organization
           </p>
         </div>
-        <button
-          onClick={() => setShowModal(true)}
-          className="inline-flex items-center gap-2 bg-blue-600 text-white px-4 py-2.5 rounded-xl text-sm font-medium hover:bg-blue-700 transition-colors"
-        >
-          <Plus className="w-4 h-4" /> Add Update
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={handleFetchNews}
+            disabled={fetching}
+            className="inline-flex items-center gap-2 bg-purple-600 text-white px-4 py-2.5 rounded-xl text-sm font-medium hover:bg-purple-700 disabled:opacity-60 transition-colors"
+          >
+            {fetching ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <Sparkles className="w-4 h-4" />
+            )}
+            {fetching ? "Fetching..." : "Fetch Latest (AI)"}
+          </button>
+          <button
+            onClick={() => setShowModal(true)}
+            className="inline-flex items-center gap-2 bg-blue-600 text-white px-4 py-2.5 rounded-xl text-sm font-medium hover:bg-blue-700 transition-colors"
+          >
+            <Plus className="w-4 h-4" /> Add Update
+          </button>
+        </div>
       </div>
+
+      {fetchResult && (() => {
+        const updateWord = fetchResult.created === 1 ? "update" : "updates";
+        return (
+        <div
+          className={`flex items-start gap-3 px-4 py-3 rounded-xl text-sm border ${
+            fetchResult.created > 0
+              ? "bg-green-50 border-green-200 text-green-800"
+              : "bg-gray-50 border-gray-200 text-gray-600"
+          }`}
+        >
+          <CheckCircle2 className="w-4 h-4 mt-0.5 shrink-0" />
+          <div className="flex-1">
+            <span className="font-medium">
+              {fetchResult.created > 0
+                ? `${fetchResult.created} ${updateWord} ready for review`
+                : "No new proposals"}
+            </span>
+            <span className="ml-2 text-xs opacity-75">{fetchResult.message}</span>
+          </div>
+          <button onClick={() => setFetchResult(null)} className="opacity-50 hover:opacity-100">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+        );
+      })()}
+
+      {/* Pending Approval Queue */}
+      {pending.length > 0 && (
+        <div className="bg-white rounded-2xl border border-amber-200 shadow-sm overflow-hidden">
+          <div className="flex items-center gap-2 px-6 py-4 border-b border-amber-100 bg-amber-50/60">
+            <Clock className="w-4 h-4 text-amber-600" />
+            <h2 className="font-semibold text-amber-900 text-sm">
+              AI Proposals — Pending Your Review ({pending.length})
+            </h2>
+            <span className="ml-auto text-xs text-amber-600">
+              Review each item and approve or reject
+            </span>
+          </div>
+          <div className="divide-y divide-gray-50">
+            {pending.map((item: any) => (
+              <div key={item.id} className="flex items-start gap-4 px-6 py-4 hover:bg-gray-50/40 transition-colors">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="font-medium text-sm text-gray-900">{item.title}</span>
+                    {item.impact && (
+                      <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-semibold border ${IMPACT_BADGE[item.impact] || "bg-gray-100 text-gray-600"}`}>
+                        {item.impact}
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-3 mt-1 text-xs text-gray-400">
+                    {item.source && <span>{item.source}</span>}
+                    {item.regulation_name && <span className="font-medium text-blue-600">{item.regulation_name}</span>}
+                    {item.affected_frameworks?.length > 0 && (
+                      <span>{item.affected_frameworks.join(", ")}</span>
+                    )}
+                  </div>
+                  {item.description && (
+                    <p className="text-xs text-gray-500 mt-1 line-clamp-2">{item.description}</p>
+                  )}
+                  {item.url && (
+                    <a href={item.url} target="_blank" rel="noreferrer"
+                      className="inline-flex items-center gap-1 text-xs text-blue-500 hover:underline mt-1">
+                      <ExternalLink className="w-3 h-3" /> View source
+                    </a>
+                  )}
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <button
+                    onClick={() => handleApprove(item.id)}
+                    disabled={approving === item.id}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-green-600 text-white text-xs font-medium rounded-lg hover:bg-green-700 disabled:opacity-50 transition-colors"
+                  >
+                    {approving === item.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <ThumbsUp className="w-3 h-3" />}
+                    Approve
+                  </button>
+                  <button
+                    onClick={() => handleReject(item.id)}
+                    disabled={approving === item.id}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border border-red-200 text-red-600 text-xs font-medium rounded-lg hover:bg-red-50 disabled:opacity-50 transition-colors"
+                  >
+                    {approving === item.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <ThumbsDown className="w-3 h-3" />}
+                    Reject
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Stats */}
       <div className="grid grid-cols-5 gap-4">

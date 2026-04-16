@@ -15,6 +15,7 @@ from app.models.auditor_assignment import AuditorAssignment
 from app.models.audit import Audit, AuditFinding, AuditEvidence
 from app.models.policy import Policy, PolicyVersion, PolicyAttestation
 from app.models.vendor import Vendor, VendorAssessment, VendorRisk, VendorContract
+from app.models.contract_collaboration import ContractCollaboration, ContractMessage
 from app.models.asset import Asset
 from app.models.activity_log import ActivityLog
 from app.models.incident import Incident

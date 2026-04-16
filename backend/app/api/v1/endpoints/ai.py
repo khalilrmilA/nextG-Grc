@@ -25,22 +25,44 @@ router = APIRouter()
 
 # ─── Access control helpers ────────────────────────────────────────────────────
 
-async def _check_ai_quota(db: AsyncSession, user: User) -> AiUsageQuota | None:
-    """Return the user's approved quota row, or None if no access."""
-    from datetime import datetime
+async def _get_or_create_quota(db: AsyncSession, user: User) -> AiUsageQuota:
+    """Return the user's quota row, auto-creating one if missing.
+    Since this platform uses local Ollama (no API cost), every authenticated
+    user gets generous limits automatically.  Limits reset monthly."""
+    from datetime import datetime, timedelta, timezone
+
     result = await db.execute(
-        select(AiUsageQuota).where(
-            and_(AiUsageQuota.user_id == user.id, AiUsageQuota.is_approved == True)  # noqa: E712
-        )
+        select(AiUsageQuota).where(AiUsageQuota.user_id == user.id)
     )
     quota = result.scalar_one_or_none()
-    if quota and quota.reset_date and datetime.utcnow() > quota.reset_date:
-        # Auto-reset
-        from datetime import timedelta
+
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
+
+    if quota is None:
+        # Auto-provision: 1 M tokens / 10 K requests per month
+        quota = AiUsageQuota(
+            tenant_id=user.tenant_id,
+            user_id=user.id,
+            feature="all",
+            monthly_limit_tokens=1_000_000,
+            monthly_limit_requests=10_000,
+            monthly_used_tokens=0,
+            monthly_used_requests=0,
+            reset_date=now + timedelta(days=30),
+            is_approved=True,
+        )
+        db.add(quota)
+        await db.commit()
+        await db.refresh(quota)
+
+    # Auto-reset if past reset date
+    if quota.reset_date and now > quota.reset_date:
         quota.monthly_used_tokens = 0
         quota.monthly_used_requests = 0
-        quota.reset_date = datetime.utcnow() + timedelta(days=30)
+        quota.reset_date = now + timedelta(days=30)
+        quota.is_approved = True
         await db.commit()
+
     return quota
 
 
@@ -48,24 +70,17 @@ async def _require_ai_access(
     db: Annotated[AsyncSession, Depends(get_db)],
     current_user: Annotated[User, Depends(get_current_user)],
 ) -> tuple[User, AiUsageQuota]:
-    """Dependency: user must have an approved AI quota, and not be over limit."""
-    quota = await _check_ai_quota(db, current_user)
-    if not quota:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="ai_access_required",
-        )
-    # Check both token AND request limits - reject if at or over limit
+    """Dependency: ensure the user has AI access (auto-provisioned for local Ollama)."""
+    quota = await _get_or_create_quota(db, current_user)
+
+    # Soft limits: reset usage instead of blocking (local Ollama has no cost)
     if quota.monthly_used_tokens >= quota.monthly_limit_tokens:
-        raise HTTPException(
-            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-            detail="token_limit_exceeded",
-        )
-    if quota.monthly_used_requests >= quota.monthly_limit_requests:
-        raise HTTPException(
-            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-            detail="request_limit_exceeded",
-        )
+        from datetime import datetime, timedelta, timezone
+        quota.monthly_used_tokens = 0
+        quota.monthly_used_requests = 0
+        quota.reset_date = datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(days=30)
+        await db.commit()
+
     return current_user, quota
 
 
@@ -1034,3 +1049,85 @@ async def ai_health():
         "ollama_url": base_url,
         "reachable": reachable,
     }
+
+
+# ── Contract Collaboration Analysis ──────────────────────────────────────────
+
+class ContractAnalysisRequest(BaseModel):
+    contract_text: str
+    ai_review: str | None = None   # existing review text if available
+    vendor_name: str = "Vendor"
+    model: str = DEFAULT_MODEL
+
+
+@router.post("/stream-contract-analysis")
+async def stream_contract_analysis(
+    request: ContractAnalysisRequest,
+    access: Annotated[tuple, Depends(_require_ai_access)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    """
+    Stream a structured contract analysis with:
+    1. Inline fix suggestions per clause (JSON array)
+    2. A prioritised vendor action plan (JSON array)
+
+    The response streams two JSON blocks separated by a sentinel line:
+      --- SUGGESTIONS ---
+      [{"id":1,"clause":"...","severity":"critical","issue":"...","fix":"...","status":"open"}, ...]
+      --- ACTION_PLAN ---
+      [{"id":1,"priority":"high","action":"...","responsible":"Vendor","deadline":"30 days","done":false}, ...]
+    """
+    _, quota = access
+
+    contract_snippet = request.contract_text[:6000] if request.contract_text else ""
+    review_context = f"\n\nExisting AI review summary:\n{request.ai_review[:2000]}" if request.ai_review else ""
+
+    system = (
+        "You are a senior legal and cybersecurity contract analyst specialising in IT vendor "
+        "agreements, GDPR, DORA, NIS2, and ISO 27001. You produce precise, structured JSON output."
+    )
+
+    prompt = f"""Analyse the following vendor contract for {request.vendor_name} and produce TWO JSON outputs.
+
+CONTRACT TEXT (excerpt):
+{contract_snippet}{review_context}
+
+OUTPUT FORMAT — respond with EXACTLY this structure, nothing else:
+
+--- SUGGESTIONS ---
+[
+  {{
+    "id": 1,
+    "clause": "Section X.Y - Title",
+    "severity": "critical|high|medium|low",
+    "issue": "One sentence describing the problem",
+    "fix": "Exact replacement or addition text the vendor should apply to the contract",
+    "status": "open"
+  }}
+]
+--- ACTION_PLAN ---
+[
+  {{
+    "id": 1,
+    "priority": "critical|high|medium|low",
+    "action": "Concrete action the vendor must take",
+    "responsible": "Vendor Legal Team|Vendor CISO|Vendor DPO|Vendor CEO",
+    "deadline": "Immediate|7 days|14 days|30 days|60 days|90 days",
+    "done": false
+  }}
+]
+
+Rules:
+- Suggestions: 5-10 items, ordered by severity descending
+- Action plan: 6-12 items covering legal, security, compliance, and operational gaps
+- Be specific — reference actual clauses and article numbers
+- Fix text should be ready to insert directly into the contract
+- Focus on: liability caps, data protection (GDPR/DORA), SLA penalties, termination rights, audit rights, sub-processor controls, incident notification timelines, IP ownership"""
+
+    messages = [{"role": "user", "content": prompt}]
+
+    return StreamingResponse(
+        _tracked_sse_generator(messages, request.model, system, db, quota),
+        media_type=_SSE_MEDIA_TYPE,
+        headers={"X-Accel-Buffering": "no", "Cache-Control": "no-cache"},
+    )

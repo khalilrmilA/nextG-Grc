@@ -4,10 +4,11 @@ import {
   ArrowLeft, Upload, FileText, Play, Loader2,
   CheckCircle, XCircle, AlertTriangle, MinusCircle,
   ChevronDown, ChevronUp, Sparkles, Globe, GitBranch,
-  Download, Table2,
+  Download, Table2, Eye, EyeOff, Trash2, ExternalLink,
 } from "lucide-react";
-import { complianceApi } from "@/api/endpoints";
-import type { AssessmentDetail, GapDetail, ControlAssessmentDetail } from "@/types";
+import { complianceApi, type EvidenceItem } from "@/api/endpoints";
+import { apiClient } from "@/api/client";
+import type { AssessmentDetail, GapDetail, ControlAssessmentDetail, LinkedChecklistDocument } from "@/types";
 import PolicyGeneratorModal from "@/components/features/compliance/PolicyGeneratorModal";
 import DocumentChecklistTab from "@/components/features/compliance/DocumentChecklistTab";
 import GapReportTab from "@/components/features/compliance/GapReportTab";
@@ -201,7 +202,9 @@ function ResultsTab({
   const [justifications, setJustifications] = useState<Record<string, string>>({});
   const [savedJustifications, setSavedJustifications] = useState<Record<string, boolean>>({});
   const [uploadingEvidence, setUploadingEvidence] = useState<string | null>(null);
-  const [uploadedFiles, setUploadedFiles] = useState<Record<string, string[]>>({});
+  const [evidenceMap, setEvidenceMap] = useState<Record<string, EvidenceItem[]>>({});
+  const [deletingEvidence, setDeletingEvidence] = useState<string | null>(null);
+  const [togglingVisibility, setTogglingVisibility] = useState<string | null>(null);
   const justificationTimeouts = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
 
   async function handleStatusOverride(caId: string, currentStatus: string, newStatus: string) {
@@ -244,22 +247,65 @@ function ResultsTab({
     setUploadingEvidence(caId);
     try {
       const result = await complianceApi.uploadControlEvidence(caId, file);
-      setUploadedFiles((prev) => ({
+      setEvidenceMap(prev => ({
         ...prev,
-        [caId]: [...(prev[caId] ?? []), result.file_name || file.name],
+        [caId]: [...(prev[caId] ?? []), result],
       }));
     } catch {/* silent */} finally {
       setUploadingEvidence(null);
     }
   }
 
+  async function handleDeleteEvidence(caId: string, evidenceId: string) {
+    setDeletingEvidence(evidenceId);
+    try {
+      await complianceApi.deleteEvidence(evidenceId);
+      setEvidenceMap(prev => ({
+        ...prev,
+        [caId]: (prev[caId] ?? []).filter(e => e.id !== evidenceId),
+      }));
+    } catch {/* silent */} finally {
+      setDeletingEvidence(null);
+    }
+  }
+
+  async function handleToggleVisibility(caId: string, evidenceId: string) {
+    setTogglingVisibility(evidenceId);
+    try {
+      const updated = await complianceApi.toggleEvidenceVisibility(evidenceId);
+      setEvidenceMap(prev => ({
+        ...prev,
+        [caId]: (prev[caId] ?? []).map(e => e.id === evidenceId ? updated : e),
+      }));
+    } catch {/* silent */} finally {
+      setTogglingVisibility(null);
+    }
+  }
+
+  async function openEvidence(evidenceId: string) {
+    try {
+      const response = await apiClient.get(`/compliance/evidence/${evidenceId}/download`, { responseType: "blob" });
+      const url = URL.createObjectURL(response.data);
+      window.open(url, "_blank");
+    } catch {/* silent */}
+  }
+
+  async function openChecklistDoc(docId: string) {
+    const url = complianceApi.downloadDocumentUrl(docId);
+    const stored = localStorage.getItem("grc_user_v2");
+    const token = stored ? (JSON.parse(stored)?.accessToken ?? "") : "";
+    try {
+      const res = await fetch(url, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
+      if (!res.ok) return;
+      window.open(URL.createObjectURL(await res.blob()), "_blank");
+    } catch {/* silent */}
+  }
+
   function handleEvidenceDrop(caId: string, e: React.DragEvent<HTMLDivElement>) {
     e.preventDefault();
     e.stopPropagation();
-    const files = e.dataTransfer.files;
-    if (files.length > 0) {
-      handleEvidenceUpload(caId, files[0]);
-    }
+    const files = Array.from(e.dataTransfer.files);
+    files.forEach(f => handleEvidenceUpload(caId, f));
   }
 
   const cas = assessment.control_assessments;
@@ -289,7 +335,17 @@ function ResultsTab({
   function toggleExpand(id: string) {
     setExpanded((prev) => {
       const next = new Set(prev);
-      next.has(id) ? next.delete(id) : next.add(id);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+        // Load evidence if not already loaded
+        if (!evidenceMap[id]) {
+          complianceApi.listControlEvidence(id).then(items => {
+            setEvidenceMap(prev => ({ ...prev, [id]: items }));
+          }).catch(() => {});
+        }
+      }
       return next;
     });
   }
@@ -586,9 +642,10 @@ function ResultsTab({
                             type="file"
                             id={`evidence-input-${ca.id}`}
                             accept=".pdf,.docx,.txt,.png,.jpg,.jpeg"
+                            multiple
                             onChange={(e) => {
-                              if (e.target.files && e.target.files[0]) {
-                                handleEvidenceUpload(ca.id, e.target.files[0]);
+                              if (e.target.files) {
+                                Array.from(e.target.files).forEach(f => handleEvidenceUpload(ca.id, f));
                               }
                               e.target.value = "";
                             }}
@@ -605,20 +662,81 @@ function ResultsTab({
                       </div>
                     </div>
 
-                    {/* Uploaded Files List - Green Theme */}
-                    {uploadedFiles[ca.id] && uploadedFiles[ca.id].length > 0 && (
+                    {/* Linked Document Checklist files - Teal Theme */}
+                    {(ca.linked_checklist_documents?.length ?? 0) > 0 && (
+                      <div className="bg-gradient-to-r from-teal-50 to-cyan-50 border-2 border-teal-200 rounded-lg p-2">
+                        <div className="flex items-center gap-1.5 mb-1">
+                          <div className="w-2 h-2 rounded-full bg-teal-600" />
+                          <span className="text-xs font-semibold text-teal-700 uppercase tracking-wide">Document Checklist</span>
+                          <span className="text-xs text-teal-500 font-normal ml-0.5">— auto-linked</span>
+                          <span className="ml-auto text-xs font-bold text-teal-600 bg-white px-1.5 py-0.5 rounded-full">{ca.linked_checklist_documents!.length}</span>
+                        </div>
+                        <div className="space-y-1">
+                          {ca.linked_checklist_documents!.map((doc: LinkedChecklistDocument) => (
+                            <div key={doc.id} className="flex items-center gap-1.5 text-xs bg-white/60 px-2 py-1 rounded">
+                              <FileText className="w-3.5 h-3.5 flex-shrink-0 text-teal-600" />
+                              <div className="flex-1 min-w-0">
+                                <span className="truncate font-medium text-teal-700 block">{doc.document_name ?? doc.file_name}</span>
+                                {doc.clause_ref && <span className="text-teal-400 text-xs">Clause {doc.clause_ref}</span>}
+                              </div>
+                              <button
+                                onClick={() => openChecklistDoc(doc.id)}
+                                className="text-blue-600 hover:text-blue-800 flex-shrink-0"
+                                title="View document"
+                              >
+                                <ExternalLink className="w-3 h-3" />
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Evidence Files - Green Theme */}
+                    {(evidenceMap[ca.id]?.length > 0) && (
                       <div className="bg-gradient-to-r from-green-50 to-emerald-50 border-2 border-green-200 rounded-lg p-2">
                         <div className="flex items-center gap-1.5 mb-1">
                           <div className="w-2 h-2 rounded-full bg-green-600" />
-                          <span className="text-xs font-semibold text-green-700 uppercase tracking-wide">Uploaded</span>
-                          <span className="ml-auto text-xs font-bold text-green-600 bg-white px-1.5 py-0.5 rounded-full">{uploadedFiles[ca.id].length}</span>
+                          <span className="text-xs font-semibold text-green-700 uppercase tracking-wide">Evidence Files</span>
+                          <span className="ml-auto text-xs font-bold text-green-600 bg-white px-1.5 py-0.5 rounded-full">{evidenceMap[ca.id].length}</span>
                         </div>
-                        <div className="space-y-0.5">
-                          {uploadedFiles[ca.id].map((fileName, i) => (
-                            <div key={i} className="flex items-center gap-1.5 text-xs text-green-700 bg-white/60 px-2 py-1 rounded">
+                        <div className="space-y-1">
+                          {evidenceMap[ca.id].map((ev) => (
+                            <div key={ev.id} className="flex items-center gap-1.5 text-xs bg-white/60 px-2 py-1 rounded">
                               <FileText className="w-3.5 h-3.5 flex-shrink-0 text-green-600" />
-                              <span className="truncate font-medium">{fileName}</span>
-                              <CheckCircle className="w-3 h-3 flex-shrink-0 text-green-600 ml-auto" />
+                              <span className="truncate font-medium text-green-700 flex-1">{ev.file_name}</span>
+                              {/* Download/view button */}
+                              <button
+                                onClick={() => openEvidence(ev.id)}
+                                className="text-blue-600 hover:text-blue-800 flex-shrink-0"
+                                title="View / Download"
+                              >
+                                <ExternalLink className="w-3 h-3" />
+                              </button>
+                              {/* Auditor visibility toggle */}
+                              <button
+                                onClick={() => handleToggleVisibility(ca.id, ev.id)}
+                                disabled={togglingVisibility === ev.id}
+                                title={ev.is_visible_to_auditor ? "Visible to auditor — click to hide" : "Hidden from auditor — click to show"}
+                                className={`flex-shrink-0 ${ev.is_visible_to_auditor ? "text-green-600" : "text-gray-400"}`}
+                              >
+                                {togglingVisibility === ev.id
+                                  ? <Loader2 className="w-3 h-3 animate-spin" />
+                                  : ev.is_visible_to_auditor
+                                    ? <Eye className="w-3 h-3" />
+                                    : <EyeOff className="w-3 h-3" />}
+                              </button>
+                              {/* Delete */}
+                              <button
+                                onClick={() => handleDeleteEvidence(ca.id, ev.id)}
+                                disabled={deletingEvidence === ev.id}
+                                title="Delete evidence"
+                                className="flex-shrink-0 text-red-400 hover:text-red-600"
+                              >
+                                {deletingEvidence === ev.id
+                                  ? <Loader2 className="w-3 h-3 animate-spin" />
+                                  : <Trash2 className="w-3 h-3" />}
+                              </button>
                             </div>
                           ))}
                         </div>

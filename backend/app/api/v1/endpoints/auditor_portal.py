@@ -13,8 +13,9 @@ import httpx
 from app.core.config import settings
 from app.core.database import get_db
 from app.models.user import User, UserRole
-from app.models.compliance import ComplianceAssessment, ControlAssessment, ControlStatus
+from app.models.compliance import ComplianceAssessment, ControlAssessment, ControlStatus, UploadedDocument
 from app.models.auditor_assignment import AuditorAssignment
+from app.models.mandatory_document import MandatoryDocument
 from app.models.framework import Framework, FrameworkControl
 from app.api.v1.dependencies import get_current_user, get_tenant_id
 from app.api.v1.dependencies.auth import require_roles
@@ -76,6 +77,67 @@ router = APIRouter()
 _NOT_ASSIGNED = "Not assigned to this assessment"
 _FINDINGS_KEYS = frozenset({"verified", "finding", "observation", "na", "unreviewed"})
 _AUDITOR_NOTE_RE = re.compile(r"\[AUDITOR:(\w+)\] ?(.*)", re.DOTALL)
+
+
+def _build_clause_doc_map(
+    visible_docs: list,
+    md_map: dict,
+) -> dict[str, list[dict]]:
+    """Map clause_ref → list of visible checklist document dicts."""
+    result: dict[str, list[dict]] = {}
+    for d in visible_docs:
+        if d.document_type_key and d.document_type_key in md_map:
+            md = md_map[d.document_type_key]
+            result.setdefault(md.clause_ref, []).append({
+                "id": d.id,
+                "file_name": d.file_name,
+                "document_name": md.document_name,
+                "clause_ref": md.clause_ref,
+                "content_type": d.content_type,
+                "file_size_bytes": d.file_size_bytes,
+            })
+    return result
+
+
+def _linked_docs_for_control(ctrl_id: str, clause_doc_map: dict[str, list[dict]]) -> list[dict]:
+    """Return all checklist documents whose clause covers the given control identifier."""
+    docs: list[dict] = []
+    for clause_ref, doc_list in clause_doc_map.items():
+        if ctrl_id == clause_ref or ctrl_id.startswith(clause_ref + "."):
+            docs.extend(doc_list)
+    return docs
+
+
+def _build_checklist_row(ca: Any, ctrl: Any, clause_doc_map: dict[str, list[dict]]) -> dict:
+    """Build a single checklist row dict for a control assessment."""
+    ctrl_id = ctrl.control_id if ctrl else ca.control_id
+    return {
+        "control_assessment_id": ca.id,
+        "control_identifier": ctrl_id,
+        "control_title": ctrl.title if ctrl else "",
+        "control_category": ctrl.category if ctrl else None,
+        "control_description": ctrl.description if ctrl else None,
+        "status": ca.status,
+        "company_notes": ca.notes,
+        "implementation_notes": ca.implementation_notes,
+        "auditor_notes": ca.not_applicable_justification,
+        "linked_checklist_documents": _linked_docs_for_control(ctrl_id, clause_doc_map),
+    }
+
+
+def _build_document_row(d: Any, md_map: dict) -> dict:
+    """Build a top-level document row dict for the auditor documents list."""
+    md = md_map.get(d.document_type_key) if d.document_type_key else None
+    return {
+        "id": d.id,
+        "file_name": d.file_name,
+        "document_type_key": d.document_type_key,
+        "clause_ref": md.clause_ref if md else None,
+        "document_name": md.document_name if md else d.file_name,
+        "content_type": d.content_type,
+        "file_size_bytes": d.file_size_bytes,
+        "created_at": d.created_at.isoformat() if hasattr(d.created_at, "isoformat") else str(d.created_at),
+    }
 
 
 def _build_findings(cas: list, ctrl_map: dict) -> dict[str, list[dict[str, Any]]]:
@@ -233,22 +295,33 @@ async def get_audit_checklist(
     controls = ctrl_result.scalars().all()
     ctrl_map = {c.id: c for c in controls}
 
-    checklist = []
-    for ca in cas:
-        ctrl = ctrl_map.get(ca.control_id)
-        checklist.append({
-            "control_assessment_id": ca.id,
-            "control_identifier": ctrl.control_id if ctrl else ca.control_id,
-            "control_title": ctrl.title if ctrl else "",
-            "control_category": ctrl.category if ctrl else None,
-            "control_description": ctrl.description if ctrl else None,
-            "status": ca.status,
-            "company_notes": ca.notes,
-            "implementation_notes": ca.implementation_notes,
-            "auditor_notes": ca.not_applicable_justification,  # reuse field for auditor notes
-        })
+    # Load mandatory document metadata and visible checklist uploads FIRST
+    # so we can attach linked documents to each control row.
+    fw_short_result = await db.execute(
+        select(Framework.short_name).where(Framework.id == assessment.framework_id)
+    )
+    fw_short = fw_short_result.scalar_one_or_none() or ""
 
-    return {"assessment_id": assessment_id, "controls": checklist}
+    md_result = await db.execute(
+        select(MandatoryDocument).where(MandatoryDocument.framework_short_name == fw_short)
+    )
+    md_map: dict[str, MandatoryDocument] = {md.document_type_key: md for md in md_result.scalars().all()}
+
+    # Only checklist documents that are marked visible to the auditor
+    docs_result = await db.execute(
+        select(UploadedDocument).where(
+            UploadedDocument.assessment_id == assessment_id,
+            UploadedDocument.is_visible_to_auditor == True,  # noqa: E712
+            UploadedDocument.document_type_key.isnot(None),
+        )
+    )
+    visible_docs = docs_result.scalars().all()
+
+    clause_doc_map = _build_clause_doc_map(visible_docs, md_map)
+    checklist = [_build_checklist_row(ca, ctrl_map.get(ca.control_id), clause_doc_map) for ca in cas]
+    documents = [_build_document_row(d, md_map) for d in visible_docs]
+
+    return {"assessment_id": assessment_id, "controls": checklist, "documents": documents}
 
 
 @router.patch("/control-assessments/{control_assessment_id}")

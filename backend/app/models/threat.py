@@ -32,4 +32,5 @@ class Threat(Base):
     affected_assets: Mapped[list] = mapped_column(JSON, default=list)  # asset types typically affected
     mitre_ids: Mapped[list] = mapped_column(JSON, default=list)  # MITRE ATT&CK technique IDs
     is_builtin: Mapped[bool] = mapped_column(Boolean, default=True)
+    is_pending: Mapped[bool] = mapped_column(Boolean, default=False)  # awaiting approval after AI fetch
     tenant_id: Mapped[str | None] = mapped_column(String(36), nullable=True)  # null = global/builtin

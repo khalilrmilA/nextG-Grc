@@ -2,7 +2,7 @@
  * NotificationBell — Bell icon in the header that shows a dropdown with notifications.
  * Shows unread count badge and lets users mark as read or navigate to the entity.
  */
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { Bell, Check, Trash2, AlertTriangle, Shield, FileText, TrendingDown, X, RefreshCw } from "lucide-react";
 import { notificationsApi } from "@/api/endpoints";
@@ -68,7 +68,7 @@ export default function NotificationBell() {
   const [checking, setChecking] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
-  async function loadNotifications() {
+  const loadNotifications = useCallback(async () => {
     try {
       setLoading(true);
       const data = await notificationsApi.list({ limit: 20 }) as NotificationListResponse;
@@ -81,14 +81,27 @@ export default function NotificationBell() {
     } finally {
       setLoading(false);
     }
-  }
+  }, []);
+
+  /** Lightweight unread-count poll — keeps the badge current without fetching the full list. */
+  const pollUnreadCount = useCallback(async () => {
+    try {
+      const data = await notificationsApi.list({ limit: 1 }) as NotificationListResponse;
+      setUnreadCount(data.unread_count || 0);
+    } catch { /* silent */ }
+  }, []);
 
   useEffect(() => {
     loadNotifications();
-    // Refresh every 60 seconds
-    const interval = setInterval(loadNotifications, 60000);
-    return () => clearInterval(interval);
-  }, []);
+    // Full refresh every 60 seconds
+    const fullInterval = setInterval(loadNotifications, 60_000);
+    // Unread-count badge refresh every 20 seconds (catches vendor chat messages quickly)
+    const countInterval = setInterval(pollUnreadCount, 20_000);
+    return () => {
+      clearInterval(fullInterval);
+      clearInterval(countInterval);
+    };
+  }, [loadNotifications, pollUnreadCount]);
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -161,7 +174,7 @@ export default function NotificationBell() {
   return (
     <div className="relative" ref={dropdownRef}>
       <button
-        onClick={() => setOpen(!open)}
+        onClick={() => { setOpen(prev => { if (!prev) { loadNotifications(); } return !prev; }); }}
         className="relative p-2 rounded-lg hover:bg-gray-100 transition-colors"
         aria-label="Notifications"
       >

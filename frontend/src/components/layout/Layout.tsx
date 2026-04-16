@@ -24,19 +24,8 @@ const NAV_GROUPS = [
     items: [
       { to: "/dashboard",        icon: LayoutDashboard, label: "Dashboard",         module: "dashboard"  },
       { to: "/risks",            icon: AlertTriangle,   label: "Risk Register",     module: "risks"      },
-      { to: "/risk-scenarios",   icon: ShieldAlert,     label: "Risk Scenarios",    module: "risks"      },
       { to: "/compliance",       icon: CheckSquare,     label: "Compliance",        module: "compliance" },
       { to: "/frameworks",       icon: BookOpen,        label: "Frameworks",        module: "frameworks" },
-    ],
-  },
-  {
-    label: "Security",
-    items: [
-      { to: "/incidents",            icon: ShieldAlert,    label: "Incidents",            module: "incidents" },
-      { to: "/vulnerabilities",      icon: AlertTriangle,  label: "Vulnerabilities",      module: "vulnerabilities" },
-      { to: "/threats",              icon: Shield,         label: "Threat Library",        module: "threats" },
-      { to: "/applied-controls",     icon: CheckSquare,    label: "Applied Controls",     module: "controls" },
-      { to: "/security-exceptions",  icon: Lock,           label: "Exceptions & Waivers", module: "security" },
     ],
   },
   {
@@ -47,16 +36,6 @@ const NAV_GROUPS = [
       { to: "/policy-generator", icon: Wand2,          label: "Doc Generator",       module: "policy-generator" },
       { to: "/vendors",          icon: Building2,      label: "3rd Parties (TPRM)",  module: "vendors"  },
       { to: "/reports",          icon: ClipboardCheck, label: "Reports",             module: "reports"  },
-    ],
-  },
-  {
-    label: "Governance",
-    items: [
-      { to: "/regulatory",          icon: BookOpen,       label: "Regulatory Updates",  module: "regulatory" },
-      { to: "/trust-center",        icon: Shield,         label: "Trust Center",        module: "trust-center" },
-      { to: "/risk-quantification", icon: AlertTriangle,  label: "Risk Quantification", module: "risks" },
-      { to: "/activity-log",        icon: ClipboardList,  label: "Activity Log",        module: "activity-log" },
-      { to: "/webhooks",            icon: Settings,       label: "Webhooks",            module: "webhooks" },
     ],
   },
 ];

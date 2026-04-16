@@ -287,6 +287,16 @@ export interface UploadedDocument {
   created_at: string;
 }
 
+export interface LinkedChecklistDocument {
+  id: string;
+  file_name: string;
+  document_name?: string | null;
+  clause_ref?: string | null;
+  document_type_key?: string | null;
+  file_size_bytes?: number | null;
+  content_type?: string | null;
+}
+
 export interface ControlAssessmentDetail extends BaseEntity {
   assessment_id: string;
   control_id: string;
@@ -301,6 +311,7 @@ export interface ControlAssessmentDetail extends BaseEntity {
   ai_confidence?: number;
   cross_framework_coverage: CrosswalkMapping[];
   is_mandatory?: boolean;
+  linked_checklist_documents?: LinkedChecklistDocument[];
 }
 
 export interface GapDetail {
@@ -319,6 +330,16 @@ export interface GapDetail {
   action_item_id?: string | null;
 }
 
+export interface ChecklistUploadedDoc {
+  id: string;
+  file_name: string;
+  file_path: string | null;
+  content_type: string | null;
+  file_size_bytes: number | null;
+  is_visible_to_auditor: boolean;
+  created_at: string;
+}
+
 export interface MandatoryDocumentStatus {
   document_type_key: string;
   clause_ref: string;
@@ -327,6 +348,7 @@ export interface MandatoryDocumentStatus {
   description?: string;
   sort_order: number;
   uploaded_document?: UploadedDocument | null;
+  uploaded_documents?: ChecklistUploadedDoc[];
   is_uploaded: boolean;
 }
 
