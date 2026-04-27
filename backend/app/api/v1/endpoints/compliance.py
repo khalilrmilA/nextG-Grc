@@ -338,37 +338,61 @@ def _schedule_clause_detection(doc_id: str, doc_text: str) -> None:
     t.start()
 
 
-def _compute_cross_framework_coverage(
-    control_assessments: list[ControlAssessment],
-    controls_map: dict[str, FrameworkControl],
+async def _compute_cross_framework_coverage(
+    db: AsyncSession,
+    assessment: "ComplianceAssessment",
 ) -> dict:
-    """Aggregate cross-framework coverage from mapped_controls on compliant/partial controls."""
-    coverage: dict[str, dict] = {}
+    """
+    Build cross-framework summary from the tenant's other active assessments.
+    Each entry shows: compliance_score, total controls, implemented count,
+    gap count, and assessment_id so the frontend can link to it.
+    """
+    other_assessments_result = await db.execute(
+        select(ComplianceAssessment).where(
+            ComplianceAssessment.tenant_id == assessment.tenant_id,
+            ComplianceAssessment.id != assessment.id,
+        )
+    )
+    other_assessments = other_assessments_result.scalars().all()
+
+    if not other_assessments:
+        return {}
+
+    fw_ids = [a.framework_id for a in other_assessments]
+    fws_result = await db.execute(select(Framework).where(Framework.id.in_(fw_ids)))
+    fw_map: dict[str, Framework] = {fw.id: fw for fw in fws_result.scalars().all()}
+
     covered_statuses = {ControlStatus.IMPLEMENTED, ControlStatus.PARTIALLY_IMPLEMENTED}
+    summary: dict[str, dict] = {}
 
-    for ca in control_assessments:
-        ctrl = controls_map.get(ca.control_id)
-        if not ctrl or not ctrl.mapped_controls:
+    for other in other_assessments:
+        fw = fw_map.get(other.framework_id)
+        if not fw:
             continue
-        is_covered = ca.status in covered_statuses
 
-        for mapping in ctrl.mapped_controls:
-            fw = mapping.get("framework")
-            ctrl_ref = mapping.get("control")
-            if not fw:
-                continue
-            if fw not in coverage:
-                coverage[fw] = {"covered": 0, "total_mapped": 0, "controls": []}
-            coverage[fw]["total_mapped"] += 1
-            if is_covered and ctrl_ref:
-                coverage[fw]["covered"] += 1
-                coverage[fw]["controls"].append(ctrl_ref)
+        cas_result = await db.execute(
+            select(ControlAssessment).where(ControlAssessment.assessment_id == other.id)
+        )
+        cas = cas_result.scalars().all()
+        total = len(cas)
+        covered = sum(1 for ca in cas if ca.status in covered_statuses)
+        gaps = sum(1 for ca in cas if ca.status == ControlStatus.NOT_IMPLEMENTED)
 
-    for fw_data in coverage.values():
-        total = fw_data["total_mapped"]
-        fw_data["percent"] = round(fw_data["covered"] / total * 100, 1) if total > 0 else 0.0
+        summary[fw.short_name] = {
+            "framework_name": fw.name,
+            "framework_short_name": fw.short_name,
+            "assessment_id": other.id,
+            "compliance_score": round(other.compliance_score or 0.0, 1),
+            "total": total,
+            "covered": covered,
+            "gaps": gaps,
+            "percent": round(covered / total * 100, 1) if total > 0 else 0.0,
+            # legacy fields kept for backward compat with old frontend rendering
+            "total_mapped": total,
+            "controls": [],
+        }
 
-    return coverage
+    return summary
 
 
 async def _build_assessment_detail(
@@ -501,7 +525,7 @@ async def _build_assessment_detail(
         ],
         control_assessments=ca_responses,
         gaps=gap_responses,
-        cross_framework_summary=_compute_cross_framework_coverage(cas, controls_map),
+        cross_framework_summary=await _compute_cross_framework_coverage(db, assessment),
     )
 
 
@@ -1046,11 +1070,91 @@ async def get_document_checklist(
             ],
         })
 
+    # Collect UploadedDocuments that don't match any mandatory document (e.g. stakeholder uploads)
+    matched_ids: set[str] = set()
+    for docs_list in uploaded_by_key.values():
+        for d in docs_list:
+            matched_ids.add(d.id)
+    other_uploads = [
+        {
+            "id": d.id,
+            "file_name": d.file_name,
+            "content_type": d.content_type,
+            "file_size_bytes": d.file_size_bytes,
+            "is_visible_to_auditor": bool(d.is_visible_to_auditor) if d.is_visible_to_auditor is not None else True,
+            "created_at": d.created_at.isoformat() if hasattr(d.created_at, "isoformat") else str(d.created_at),
+            "kind": "document",
+        }
+        for d in uploaded
+        if d.id not in matched_ids
+    ]
+
+    # Also include Evidence records uploaded directly to controls (via share links or manual upload)
+    # These exist in the evidence table only — load them via ControlAssessment join
+    cas = (await db.execute(
+        select(ControlAssessment).where(ControlAssessment.assessment_id == assessment_id)
+    )).scalars().all()
+    ca_ids = [ca.id for ca in cas]
+
+    if ca_ids:
+        # Build clause_ref lookup: ca.id → human-readable control_id (e.g. "4.1")
+        fc_ids = list({ca.control_id for ca in cas})
+        fcs = (await db.execute(
+            select(FrameworkControl).where(FrameworkControl.id.in_(fc_ids))
+        )).scalars().all()
+        fc_map: dict[str, str] = {fc.id: fc.control_id for fc in fcs}  # fc.id → clause_ref
+        ca_clause_map: dict[str, str] = {ca.id: fc_map.get(ca.control_id, "") for ca in cas}
+
+        # Build MandatoryDocument lookup: clause_ref → document_type_key
+        md_by_clause: dict[str, MandatoryDocument] = {md.clause_ref: md for md in mandatory_docs}
+
+        evidence_rows = (await db.execute(
+            select(Evidence).where(
+                Evidence.control_assessment_id.in_(ca_ids),
+                Evidence.is_visible_to_auditor == True,  # noqa: E712
+            )
+        )).scalars().all()
+
+        for ev in evidence_rows:
+            clause_ref = ca_clause_map.get(ev.control_assessment_id, "")
+            md = md_by_clause.get(clause_ref)
+            if md:
+                # Add evidence to the matching clause row's uploaded_documents list
+                ev_entry = {
+                    "id": ev.id,
+                    "file_name": ev.file_name or ev.name,
+                    "file_path": ev.file_path,
+                    "content_type": ev.content_type,
+                    "file_size_bytes": ev.file_size_bytes,
+                    "is_visible_to_auditor": bool(ev.is_visible_to_auditor),
+                    "created_at": ev.created_at.isoformat() if hasattr(ev.created_at, "isoformat") else str(ev.created_at),
+                    "kind": "evidence",
+                }
+                for item in items:
+                    if item["document_type_key"] == md.document_type_key:
+                        item["uploaded_documents"].append(ev_entry)
+                        item["is_uploaded"] = True
+                        if not item["uploaded_document"]:
+                            item["uploaded_document"] = {"id": ev.id, "file_name": ev.file_name or ev.name, "ai_analysis_summary": None}
+                        break
+            else:
+                # No clause match — add to other_uploads
+                other_uploads.append({
+                    "id": ev.id,
+                    "file_name": ev.file_name or ev.name,
+                    "content_type": ev.content_type,
+                    "file_size_bytes": ev.file_size_bytes,
+                    "is_visible_to_auditor": bool(ev.is_visible_to_auditor),
+                    "created_at": ev.created_at.isoformat() if hasattr(ev.created_at, "isoformat") else str(ev.created_at),
+                    "kind": "evidence",
+                })
+
     uploaded_count = sum(1 for i in items if i["is_uploaded"])
     return {
         "total": len(items),
         "uploaded": uploaded_count,
         "items": items,
+        "other_uploads": other_uploads,
     }
 
 
@@ -1592,4 +1696,133 @@ async def delete_uploaded_document(
         full = _Path3(settings.UPLOADS_DIR) / doc.file_path
         full.unlink(missing_ok=True)
     await db.delete(doc)
+    await db.commit()
+
+
+# ─── Stakeholder evidence upload share-links ──────────────────────────────────
+
+from app.models.evidence_upload_token import EvidenceUploadToken  # noqa: E402
+
+
+class ShareLinkCreate(BaseModel):
+    label: str | None = None
+    instructions: str | None = None
+    expires_at: datetime | None = None
+    max_uses: int | None = None
+
+
+class ShareLinkResponse(BaseModel):
+    id: str
+    token: str
+    label: str | None
+    instructions: str | None
+    expires_at: datetime | None
+    is_active: bool
+    max_uses: int | None
+    use_count: int
+    created_at: str
+    upload_url: str
+
+    model_config = {"from_attributes": True}
+
+
+@router.post("/control-assessments/{ca_id}/share-links", response_model=ShareLinkResponse, status_code=201)
+async def create_share_link(
+    ca_id: str,
+    body: ShareLinkCreate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    tenant_id: str = Depends(get_tenant_id),
+):
+    """Create a shareable upload link for a control assessment."""
+    ca = (await db.execute(
+        select(ControlAssessment).join(
+            ComplianceAssessment, ControlAssessment.assessment_id == ComplianceAssessment.id
+        ).where(
+            ControlAssessment.id == ca_id,
+            ComplianceAssessment.tenant_id == tenant_id,
+        )
+    )).scalar_one_or_none()
+    if not ca:
+        raise HTTPException(404, "Control assessment not found")
+
+    tok = EvidenceUploadToken(
+        id=str(uuid.uuid4()),
+        tenant_id=tenant_id,
+        control_assessment_id=ca_id,
+        created_by_id=current_user.id,
+        label=body.label,
+        instructions=body.instructions,
+        expires_at=body.expires_at,
+        max_uses=body.max_uses,
+    )
+    db.add(tok)
+    await db.commit()
+    await db.refresh(tok)
+
+    frontend_base = getattr(settings, "FRONTEND_BASE_URL", "http://localhost:4000")
+    return ShareLinkResponse(
+        id=tok.id,
+        token=tok.token,
+        label=tok.label,
+        instructions=tok.instructions,
+        expires_at=tok.expires_at,
+        is_active=tok.is_active,
+        max_uses=tok.max_uses,
+        use_count=tok.use_count,
+        created_at=tok.created_at.isoformat() if tok.created_at else "",
+        upload_url=f"{frontend_base}/upload/{tok.token}",
+    )
+
+
+@router.get("/control-assessments/{ca_id}/share-links", response_model=list[ShareLinkResponse])
+async def list_share_links(
+    ca_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    tenant_id: str = Depends(get_tenant_id),
+):
+    """List all share links for a control assessment."""
+    rows = (await db.execute(
+        select(EvidenceUploadToken).where(
+            EvidenceUploadToken.control_assessment_id == ca_id,
+            EvidenceUploadToken.tenant_id == tenant_id,
+        ).order_by(EvidenceUploadToken.created_at.desc())
+    )).scalars().all()
+
+    frontend_base = getattr(settings, "FRONTEND_BASE_URL", "http://localhost:4000")
+    return [
+        ShareLinkResponse(
+            id=r.id,
+            token=r.token,
+            label=r.label,
+            instructions=r.instructions,
+            expires_at=r.expires_at,
+            is_active=r.is_active,
+            max_uses=r.max_uses,
+            use_count=r.use_count,
+            created_at=r.created_at.isoformat() if r.created_at else "",
+            upload_url=f"{frontend_base}/upload/{r.token}",
+        )
+        for r in rows
+    ]
+
+
+@router.delete("/share-links/{link_id}", status_code=204)
+async def revoke_share_link(
+    link_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    tenant_id: str = Depends(get_tenant_id),
+):
+    """Revoke (delete) a share link."""
+    tok = (await db.execute(
+        select(EvidenceUploadToken).where(
+            EvidenceUploadToken.id == link_id,
+            EvidenceUploadToken.tenant_id == tenant_id,
+        )
+    )).scalar_one_or_none()
+    if not tok:
+        raise HTTPException(404, "Share link not found")
+    await db.delete(tok)
     await db.commit()

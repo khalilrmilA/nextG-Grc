@@ -8,7 +8,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import {
-  BookOpen, Sparkles, Plus, Check, X, ChevronRight, ChevronDown, Trash2,
+  BookOpen, Sparkles, Plus, Check, ChevronRight, ChevronDown, Trash2,
   Search, Loader2, Save, ArrowLeft, AlertCircle, Lightbulb, Library, Wand2,
 } from "lucide-react";
 import { frameworksApi } from "@/api/endpoints";
@@ -71,6 +71,11 @@ export default function FrameworkBuilderPage() {
   const [aiSuggestions, setAiSuggestions] = useState<AISuggestion[]>([]);
   const [aiRationale, setAiRationale] = useState("");
   const [loadingAi, setLoadingAi] = useState(false);
+  const [editingCategoryIdx, setEditingCategoryIdx] = useState<number | null>(null);
+
+  // Custom control form
+  const [showCustomForm, setShowCustomForm] = useState(false);
+  const [customCtrl, setCustomCtrl] = useState({ control_id: "", title: "", description: "", category: "" });
 
   // Selected controls
   const [selected, setSelected] = useState<SelectedControl[]>([]);
@@ -197,6 +202,36 @@ export default function FrameworkBuilderPage() {
 
   function removeSelected(idx: number) {
     setSelected(s => s.filter((_, i) => i !== idx));
+  }
+
+  function updateAISuggestionCategory(idx: number, category: string) {
+    setAiSuggestions(prev => prev.map((s, i) => i === idx ? { ...s, category } : s));
+    setEditingCategoryIdx(null);
+    // Also update in selected list if already selected
+    const sug = aiSuggestions[idx];
+    if (sug) {
+      setSelected(prev => prev.map(c =>
+        c.title === sug.title && c.source_framework === "AI" ? { ...c, category } : c
+      ));
+    }
+  }
+
+  function addCustomControl() {
+    if (!customCtrl.title.trim()) return;
+    const ctrlId = customCtrl.control_id.trim()
+      || ("CUSTOM-" + customCtrl.title.replace(/[^A-Za-z0-9]+/g, "").slice(0, 8).toUpperCase());
+    setSelected(prev => [
+      ...prev,
+      {
+        control_id: ctrlId,
+        title: customCtrl.title.trim(),
+        description: customCtrl.description.trim() || undefined,
+        category: customCtrl.category.trim() || undefined,
+        source_framework: "Custom",
+      },
+    ]);
+    setCustomCtrl({ control_id: "", title: "", description: "", category: "" });
+    setShowCustomForm(false);
   }
 
   async function handleSave() {
@@ -583,30 +618,132 @@ export default function FrameworkBuilderPage() {
                                     sug.priority === "medium" ? "bg-yellow-100 text-yellow-700" :
                                     "bg-green-100 text-green-700";
               return (
-                <button
+                <div
                   key={i}
-                  onClick={() => toggleAISuggestion(sug)}
                   className={`text-left p-3 rounded-xl border transition-all ${
                     isSel ? "bg-blue-50 border-blue-300 ring-2 ring-blue-200" : "border-gray-200 hover:border-blue-200"
                   }`}
                 >
                   <div className="flex items-start justify-between gap-2 mb-2">
                     <div className="flex items-center gap-2">
-                      <div className={`w-4 h-4 rounded border-2 flex-shrink-0 flex items-center justify-center ${
-                        isSel ? "bg-blue-600 border-blue-600" : "border-gray-300"
-                      }`}>
+                      <button
+                        type="button"
+                        onClick={() => toggleAISuggestion(sug)}
+                        className={`w-4 h-4 rounded border-2 flex-shrink-0 flex items-center justify-center ${
+                          isSel ? "bg-blue-600 border-blue-600" : "border-gray-300 hover:border-blue-400"
+                        }`}
+                      >
                         {isSel && <Check className="w-3 h-3 text-white" />}
-                      </div>
+                      </button>
                       <span className={`text-[10px] font-bold uppercase px-1.5 py-0.5 rounded ${priorityColor}`}>{sug.priority}</span>
                     </div>
-                    <span className="text-[10px] text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded">{sug.category}</span>
+                    {/* Editable category */}
+                    {editingCategoryIdx === i ? (
+                      <input
+                        autoFocus
+                        defaultValue={sug.category}
+                        onBlur={(e) => updateAISuggestionCategory(i, e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") updateAISuggestionCategory(i, (e.target as HTMLInputElement).value);
+                          if (e.key === "Escape") setEditingCategoryIdx(null);
+                        }}
+                        className="text-[10px] text-gray-700 bg-white border border-blue-300 rounded px-1.5 py-0.5 focus:outline-none focus:ring-1 focus:ring-blue-400 w-28"
+                        onClick={(e) => e.stopPropagation()}
+                      />
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); setEditingCategoryIdx(i); }}
+                        title="Click to edit category"
+                        className="text-[10px] text-gray-500 bg-gray-100 hover:bg-gray-200 px-1.5 py-0.5 rounded transition-colors"
+                      >
+                        {sug.category}
+                      </button>
+                    )}
                   </div>
-                  <h4 className="text-sm font-semibold text-gray-900">{sug.title}</h4>
-                  <p className="text-xs text-gray-600 mt-1">{sug.description}</p>
-                  <p className="text-[11px] text-gray-500 mt-2 italic">💡 {sug.rationale}</p>
-                </button>
+                  <button
+                    type="button"
+                    onClick={() => toggleAISuggestion(sug)}
+                    className="w-full text-left"
+                  >
+                    <h4 className="text-sm font-semibold text-gray-900">{sug.title}</h4>
+                    <p className="text-xs text-gray-600 mt-1">{sug.description}</p>
+                    <p className="text-[11px] text-gray-500 mt-2 italic">💡 {sug.rationale}</p>
+                  </button>
+                </div>
               );
             })}
+          </div>
+
+          {/* Custom Control Form */}
+          <div className="border-t border-gray-100 pt-4">
+            <div className="flex items-center justify-between mb-3">
+              <p className="text-sm font-semibold text-gray-700">Add Your Own Control</p>
+              <button
+                type="button"
+                onClick={() => setShowCustomForm(v => !v)}
+                className="flex items-center gap-1.5 text-xs font-medium text-blue-600 hover:text-blue-800 bg-blue-50 hover:bg-blue-100 px-3 py-1.5 rounded-lg transition-colors"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                {showCustomForm ? "Cancel" : "Add Custom Control"}
+              </button>
+            </div>
+
+            {showCustomForm && (
+              <div className="bg-gray-50 border border-gray-200 rounded-xl p-4 space-y-3">
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Control ID <span className="text-gray-400">(auto if blank)</span></label>
+                    <input
+                      type="text"
+                      value={customCtrl.control_id}
+                      onChange={e => setCustomCtrl(p => ({ ...p, control_id: e.target.value }))}
+                      placeholder="e.g. CUSTOM-01"
+                      className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Category</label>
+                    <input
+                      type="text"
+                      value={customCtrl.category}
+                      onChange={e => setCustomCtrl(p => ({ ...p, category: e.target.value }))}
+                      placeholder="e.g. Access Control"
+                      className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">Title *</label>
+                  <input
+                    type="text"
+                    value={customCtrl.title}
+                    onChange={e => setCustomCtrl(p => ({ ...p, title: e.target.value }))}
+                    placeholder="Control title..."
+                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">Description</label>
+                  <textarea
+                    rows={2}
+                    value={customCtrl.description}
+                    onChange={e => setCustomCtrl(p => ({ ...p, description: e.target.value }))}
+                    placeholder="What this control requires..."
+                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+                  />
+                </div>
+                <button
+                  type="button"
+                  onClick={addCustomControl}
+                  disabled={!customCtrl.title.trim()}
+                  className="flex items-center gap-1.5 text-sm font-medium bg-blue-600 hover:bg-blue-700 disabled:opacity-40 text-white px-4 py-2 rounded-lg transition-colors"
+                >
+                  <Plus className="w-4 h-4" />
+                  Add to Framework
+                </button>
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -652,14 +789,19 @@ export default function FrameworkBuilderPage() {
                 selected.map((c, i) => (
                   <div key={i} className="flex items-start justify-between gap-2 p-2.5 bg-gray-50 rounded-lg border border-gray-100">
                     <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 flex-wrap">
                         <span className="text-xs font-mono font-semibold text-gray-700">{c.control_id}</span>
                         {c.source_framework && (
                           <span className={`text-[10px] px-1.5 py-0.5 rounded ${
-                            c.source_framework === "AI" ? "bg-purple-100 text-purple-700" : "bg-blue-100 text-blue-700"
+                            c.source_framework === "AI"     ? "bg-purple-100 text-purple-700" :
+                            c.source_framework === "Custom" ? "bg-green-100 text-green-700"   :
+                            "bg-blue-100 text-blue-700"
                           }`}>
                             {c.source_framework}
                           </span>
+                        )}
+                        {c.category && (
+                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-gray-100 text-gray-600">{c.category}</span>
                         )}
                       </div>
                       <p className="text-xs text-gray-900 mt-0.5">{c.title}</p>

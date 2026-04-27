@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Plus, Search, X, Loader2, Filter, ShieldCheck, DollarSign, Calendar } from "lucide-react";
+import { Plus, Search, X, Loader2, Filter } from "lucide-react";
 import { appliedControlsApi } from "@/api/endpoints";
 
 const STATUS_BADGE: Record<string, string> = {

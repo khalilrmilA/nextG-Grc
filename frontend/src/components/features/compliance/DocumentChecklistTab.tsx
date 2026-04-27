@@ -53,7 +53,9 @@ function DocFileRow({
   }
 
   async function handleOpen() {
-    const url = complianceApi.downloadDocumentUrl(doc.id);
+    const url = doc.kind === "evidence"
+      ? complianceApi.downloadEvidenceUrl(doc.id)
+      : complianceApi.downloadDocumentUrl(doc.id);
     const stored = localStorage.getItem("grc_user_v2");
     const token = stored ? (JSON.parse(stored)?.accessToken ?? "") : "";
     try {
@@ -96,25 +98,29 @@ function DocFileRow({
         >
           <Download className="w-3.5 h-3.5" />
         </button>
-        <button
-          onClick={handleToggle}
-          disabled={toggling}
-          title={doc.is_visible_to_auditor ? "Hide from auditor" : "Show to auditor"}
-          className={`p-1 rounded transition-colors ${
-            doc.is_visible_to_auditor
-              ? "text-blue-600 hover:bg-blue-50"
-              : "text-gray-400 hover:bg-gray-100"
-          }`}
-        >
-          {eyeBtn}
-        </button>
-        <button
-          onClick={handleDelete}
-          title="Delete file"
-          className="p-1 rounded hover:bg-red-50 text-red-400 hover:text-red-600 transition-colors"
-        >
-          <Trash2 className="w-3.5 h-3.5" />
-        </button>
+        {doc.kind !== "evidence" && (
+          <>
+            <button
+              onClick={handleToggle}
+              disabled={toggling}
+              title={doc.is_visible_to_auditor ? "Hide from auditor" : "Show to auditor"}
+              className={`p-1 rounded transition-colors ${
+                doc.is_visible_to_auditor
+                  ? "text-blue-600 hover:bg-blue-50"
+                  : "text-gray-400 hover:bg-gray-100"
+              }`}
+            >
+              {eyeBtn}
+            </button>
+            <button
+              onClick={handleDelete}
+              title="Delete file"
+              className="p-1 rounded hover:bg-red-50 text-red-400 hover:text-red-600 transition-colors"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+            </button>
+          </>
+        )}
       </div>
     </div>
   );
@@ -467,6 +473,51 @@ export default function DocumentChecklistTab({ assessmentId, frameworkShortName 
           </div>
         )}
       </div>
+
+      {/* Stakeholder uploads — files received via share link that don't match a specific clause */}
+      {(checklist.other_uploads?.length ?? 0) > 0 && (
+        <div className="bg-white rounded-2xl border border-orange-100 overflow-hidden">
+          <div className="px-5 py-3 border-b border-orange-100 bg-orange-50 flex items-center gap-2">
+            <FileText className="w-4 h-4 text-orange-500" />
+            <h3 className="text-sm font-semibold text-orange-800">Stakeholder Uploads</h3>
+            <span className="text-xs text-orange-500 ml-1">
+              {checklist.other_uploads!.length} file{checklist.other_uploads!.length !== 1 ? "s" : ""} received via share link
+            </span>
+          </div>
+          <div className="divide-y divide-gray-50 px-5 py-3 space-y-1.5">
+            {checklist.other_uploads!.map((doc) => (
+              <div key={doc.id} className="flex items-center gap-2 rounded-lg px-3 py-2 border bg-green-50 border-green-100">
+                <FileText className="w-3.5 h-3.5 text-green-600 flex-shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <span className="text-xs text-green-800 truncate block">{doc.file_name}</span>
+                  {doc.file_size_bytes && (
+                    <span className="text-xs text-green-500">{(doc.file_size_bytes / 1024).toFixed(1)} KB</span>
+                  )}
+                </div>
+                <button
+                  onClick={async () => {
+                    const url = doc.kind === "evidence"
+                      ? complianceApi.downloadEvidenceUrl(doc.id)
+                      : complianceApi.downloadDocumentUrl(doc.id);
+                    const stored = localStorage.getItem("grc_user_v2");
+                    const token = stored ? (JSON.parse(stored)?.accessToken ?? "") : "";
+                    try {
+                      const res = await fetch(url, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
+                      if (!res.ok) return;
+                      const blob = await res.blob();
+                      window.open(URL.createObjectURL(blob), "_blank");
+                    } catch { /* ignore */ }
+                  }}
+                  title="View file"
+                  className="p-1 rounded hover:bg-green-100 text-green-600 transition-colors flex-shrink-0"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

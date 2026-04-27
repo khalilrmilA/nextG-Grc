@@ -1,0 +1,175 @@
+"""Public evidence upload endpoints — no auth required, uses share tokens."""
+import uuid
+from datetime import datetime, timezone
+from pathlib import Path
+
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from pydantic import BaseModel
+from sqlalchemy import select, update as sa_update
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.core.config import settings
+from app.core.database import get_db
+from app.models.compliance import ControlAssessment, Evidence, EvidenceType, UploadedDocument
+from app.models.evidence_upload_token import EvidenceUploadToken
+from app.models.framework import FrameworkControl
+from app.models.mandatory_document import MandatoryDocument
+
+router = APIRouter()
+
+ALLOWED_MIME = {
+    "application/pdf",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "text/plain",
+    "image/png",
+    "image/jpeg",
+    "image/jpg",
+}
+MAX_FILE_SIZE = 10 * 1024 * 1024  # 10 MB
+
+
+class ShareLinkInfo(BaseModel):
+    token: str
+    label: str | None
+    instructions: str | None
+    control_title: str | None
+    control_identifier: str | None
+    expires_at: str | None
+    max_uses: int | None
+    use_count: int
+    is_valid: bool
+
+
+@router.get("/evidence-upload/{token}", response_model=ShareLinkInfo)
+async def get_share_link_info(token: str, db: AsyncSession = Depends(get_db)):
+    """Get information about an upload share link (no auth)."""
+    tok = (await db.execute(
+        select(EvidenceUploadToken).where(EvidenceUploadToken.token == token)
+    )).scalar_one_or_none()
+
+    if not tok:
+        raise HTTPException(404, "Upload link not found")
+
+    # Resolve control info
+    ca = (await db.execute(
+        select(ControlAssessment).where(ControlAssessment.id == tok.control_assessment_id)
+    )).scalar_one_or_none()
+
+    ctrl_title = None
+    ctrl_id = None
+    if ca:
+        fc = (await db.execute(
+            select(FrameworkControl).where(FrameworkControl.id == ca.control_id)
+        )).scalar_one_or_none()
+        if fc:
+            ctrl_title = fc.title
+            ctrl_id = fc.control_id
+
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    is_expired = tok.expires_at is not None and tok.expires_at < now
+    is_maxed = tok.max_uses is not None and tok.use_count >= tok.max_uses
+
+    return ShareLinkInfo(
+        token=tok.token,
+        label=tok.label,
+        instructions=tok.instructions,
+        control_title=ctrl_title,
+        control_identifier=ctrl_id,
+        expires_at=tok.expires_at.isoformat() if tok.expires_at else None,
+        max_uses=tok.max_uses,
+        use_count=tok.use_count,
+        is_valid=tok.is_active and not is_expired and not is_maxed,
+    )
+
+
+@router.post("/evidence-upload/{token}")
+async def upload_evidence_via_token(
+    token: str,
+    file: UploadFile = File(...),
+    db: AsyncSession = Depends(get_db),
+):
+    """Upload evidence via share token (no auth)."""
+    tok = (await db.execute(
+        select(EvidenceUploadToken).where(EvidenceUploadToken.token == token)
+    )).scalar_one_or_none()
+    if not tok or not tok.is_active:
+        raise HTTPException(403, "Upload link is invalid or has been revoked")
+
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    if tok.expires_at and tok.expires_at < now:
+        raise HTTPException(403, "Upload link has expired")
+    if tok.max_uses is not None and tok.use_count >= tok.max_uses:
+        raise HTTPException(403, "Upload link has reached its maximum number of uses")
+
+    # Validate file
+    content = await file.read()
+    if len(content) > MAX_FILE_SIZE:
+        raise HTTPException(413, "File exceeds 10 MB limit")
+    if file.content_type not in ALLOWED_MIME:
+        raise HTTPException(415, "Unsupported file type. Use PDF, DOCX, TXT, or images.")
+
+    # Save file to uploads dir
+    uploads_dir = Path(settings.UPLOADS_DIR)
+    uploads_dir.mkdir(parents=True, exist_ok=True)
+    ext = Path(file.filename or "file").suffix
+    file_id = str(uuid.uuid4())
+    rel_path = f"evidence/{file_id}{ext}"
+    full_path = uploads_dir / rel_path
+    full_path.parent.mkdir(parents=True, exist_ok=True)
+    full_path.write_bytes(content)
+
+    # Create evidence record
+    evidence = Evidence(
+        id=file_id,
+        control_assessment_id=tok.control_assessment_id,
+        tenant_id=tok.tenant_id,
+        name=file.filename,
+        file_name=file.filename,
+        file_path=rel_path,
+        file_size_bytes=len(content),
+        content_type=file.content_type,
+        evidence_type=EvidenceType.DOCUMENT,
+        is_automated=False,
+        is_visible_to_auditor=True,
+        uploaded_by_id=None,
+    )
+    db.add(evidence)
+
+    # Also create an UploadedDocument so the file appears in the Document Checklist tab
+    ca = (await db.execute(
+        select(ControlAssessment).where(ControlAssessment.id == tok.control_assessment_id)
+    )).scalar_one_or_none()
+    if ca:
+        fc = (await db.execute(
+            select(FrameworkControl).where(FrameworkControl.id == ca.control_id)
+        )).scalar_one_or_none()
+        # Try to match against a MandatoryDocument by clause_ref = fc.control_id (human-readable)
+        doc_type_key = None
+        if fc:
+            md = (await db.execute(
+                select(MandatoryDocument).where(MandatoryDocument.clause_ref == fc.control_id)
+            )).scalar_one_or_none()
+            if md:
+                doc_type_key = md.document_type_key
+
+        db.add(UploadedDocument(
+            assessment_id=ca.assessment_id,
+            tenant_id=tok.tenant_id,
+            file_name=file.filename,
+            file_path=rel_path,
+            content_type=file.content_type,
+            file_size_bytes=len(content),
+            document_type_key=doc_type_key,
+            is_visible_to_auditor=True,
+            uploaded_by_id=None,
+        ))
+
+    # Increment use count
+    await db.execute(
+        sa_update(EvidenceUploadToken)
+        .where(EvidenceUploadToken.id == tok.id)
+        .values(use_count=tok.use_count + 1)
+    )
+    await db.commit()
+
+    return {"status": "uploaded", "file_name": file.filename, "evidence_id": file_id}

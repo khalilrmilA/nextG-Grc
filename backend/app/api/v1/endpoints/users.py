@@ -1,4 +1,5 @@
 """User management endpoints — create auditors, list tenant users."""
+from datetime import datetime
 from typing import Annotated
 from uuid import uuid4
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -23,6 +24,7 @@ class CreateAuditorRequest(BaseModel):
     first_name: str
     last_name: str
     temporary_password: str
+    expires_at: datetime | None = None
 
 
 class UserResponse(BaseModel):
@@ -32,6 +34,7 @@ class UserResponse(BaseModel):
     last_name: str
     role: str
     is_active: bool
+    expires_at: datetime | None = None
 
     model_config = {"from_attributes": True}
 
@@ -68,6 +71,7 @@ async def create_auditor(
         last_name=body.last_name,
         role=UserRole.AUDITOR,
         is_verified=True,
+        expires_at=body.expires_at,
     )
     db.add(auditor)
     await db.commit()

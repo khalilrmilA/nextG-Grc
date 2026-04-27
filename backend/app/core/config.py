@@ -75,6 +75,7 @@ class Settings(BaseSettings):
     # File uploads
     UPLOADS_DIR: str = "uploads"
     MAX_UPLOAD_SIZE_MB: int = 10
+    FRONTEND_BASE_URL: str = "http://localhost:4000"
 
     # Ollama (local AI)
     OLLAMA_BASE_URL: str = "http://localhost:11434"

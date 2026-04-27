@@ -486,8 +486,17 @@ export default function FrameworksPage() {
 
   const filtered = frameworks.filter(fw => {
     const meta = getMeta(fw.short_name);
-    const q = search.toLowerCase();
-    const matchSearch = !q || fw.name.toLowerCase().includes(q) || fw.short_name.toLowerCase().includes(q) || (meta.description.toLowerCase().includes(q));
+    const tokens = search.toLowerCase().split(/\s+/).filter(Boolean);
+    const searchFields = [
+      fw.name,
+      fw.short_name,
+      fw.description ?? "",
+      fw.issuing_body ?? "",
+      meta.description,
+      ...fw.applicable_industries,
+      ...fw.applicable_regions,
+    ].map(s => s.toLowerCase());
+    const matchSearch = tokens.length === 0 || tokens.every(t => searchFields.some(f => f.includes(t)));
     const matchCat    = category === "All" || meta.category === category;
     const matchRegion = region === "All"   || meta.regions.some(r => r.toLowerCase().includes(region.toLowerCase()));
     return matchSearch && matchCat && matchRegion;

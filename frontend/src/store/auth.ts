@@ -160,6 +160,12 @@ export const authSession = {
     writeStorage(null);
     _notify();
   },
+  patchUser(patch: Partial<AuthUser>) {
+    if (!_currentUser) return;
+    _currentUser = { ..._currentUser, ...patch };
+    writeStorage(_currentUser);
+    _notify();
+  },
   subscribe(fn: Listener): () => void {
     _listeners.add(fn);
     return () => _listeners.delete(fn);

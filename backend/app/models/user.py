@@ -1,7 +1,8 @@
 """User model with role-based access control."""
 import enum
+from datetime import datetime
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-from sqlalchemy import String, Boolean, ForeignKey, Enum as SAEnum
+from sqlalchemy import DateTime, String, Boolean, ForeignKey, Enum as SAEnum
 from app.core.database import Base
 
 
@@ -33,6 +34,7 @@ class User(Base):
     )
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     is_verified: Mapped[bool] = mapped_column(Boolean, default=False)
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
     # SSO
     keycloak_id: Mapped[str | None] = mapped_column(String(255), unique=True, nullable=True)

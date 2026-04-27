@@ -32,6 +32,7 @@ from app.api.v1.endpoints import (
     security_exceptions,
     risk_matrices,
     contract_collab,
+    public_upload,
 )
 
 api_router = APIRouter()
@@ -67,3 +68,4 @@ api_router.include_router(applied_controls.router, prefix="/applied-controls", t
 api_router.include_router(security_exceptions.router, prefix="/security", tags=["Security Exceptions & Risk Acceptance"])
 api_router.include_router(risk_matrices.router, prefix="/risk-matrices", tags=["Risk Matrices"])
 api_router.include_router(contract_collab.router, prefix="/contract-collab", tags=["Contract Collaboration"])
+api_router.include_router(public_upload.router, prefix="/public", tags=["Public Upload"])

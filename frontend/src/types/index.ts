@@ -338,6 +338,7 @@ export interface ChecklistUploadedDoc {
   file_size_bytes: number | null;
   is_visible_to_auditor: boolean;
   created_at: string;
+  kind?: "document" | "evidence";
 }
 
 export interface MandatoryDocumentStatus {
@@ -357,13 +358,21 @@ export interface DocumentChecklistResponse {
   total: number;
   uploaded: number;
   items: MandatoryDocumentStatus[];
+  other_uploads?: ChecklistUploadedDoc[];
 }
 
 export interface CrossFrameworkCoverage {
-  [frameworkName: string]: {
+  [frameworkShortName: string]: {
+    framework_name: string;
+    framework_short_name: string;
+    assessment_id: string;
+    compliance_score: number;
+    total: number;
     covered: number;
-    total_mapped: number;
+    gaps: number;
     percent: number;
+    // legacy fields
+    total_mapped: number;
     controls: string[];
   };
 }

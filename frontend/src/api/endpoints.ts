@@ -285,7 +285,7 @@ export const complianceApi = {
     apiClient.delete(`/compliance/evidence/${evidenceId}`),
 
   downloadEvidenceUrl: (evidenceId: string) =>
-    `/api/v1/compliance/evidence/${evidenceId}/download`,
+    `${API_BASE}/compliance/evidence/${evidenceId}/download`,
 
   // ── Checklist document management ──────────────────────────────────────────
   downloadDocumentUrl: (docId: string) =>
@@ -638,6 +638,7 @@ export interface AuditChecklistLinkedDoc {
   clause_ref: string | null;
   content_type: string | null;
   file_size_bytes: number | null;
+  is_evidence?: boolean;
 }
 
 export interface AuditChecklistControl {
@@ -662,6 +663,7 @@ export interface AuditChecklistDocument {
   content_type: string | null;
   file_size_bytes: number | null;
   created_at: string;
+  is_evidence?: boolean;
 }
 
 export interface AuditChecklist {
@@ -711,6 +713,7 @@ export interface AuditorUser {
   last_name: string;
   role: string;
   is_active: boolean;
+  expires_at?: string | null;
 }
 
 export interface AuditorAssignmentRecord {
@@ -732,7 +735,7 @@ export const usersApi = {
   listAuditors: () =>
     apiClient.get<AuditorUser[]>("/users/auditors").then((r) => r.data),
 
-  createAuditor: (data: { name: string; email: string; password: string }) => {
+  createAuditor: (data: { name: string; email: string; password: string; expires_at?: string | null }) => {
     const parts = data.name.trim().split(" ");
     const first_name = parts[0];
     const last_name = parts.slice(1).join(" ") || "-";
@@ -742,6 +745,7 @@ export const usersApi = {
         last_name,
         email: data.email,
         temporary_password: data.password,
+        expires_at: data.expires_at ?? null,
       })
       .then((r) => r.data);
   },
@@ -799,6 +803,52 @@ export const traceabilityApi = {
     apiClient
       .get<TraceabilityMatrix>(`/compliance/assessments/${assessmentId}/traceability`)
       .then((r) => r.data),
+};
+
+// ─── Share Links ─────────────────────────────
+
+export interface ShareLink {
+  id: string;
+  token: string;
+  label?: string | null;
+  instructions?: string | null;
+  expires_at?: string | null;
+  is_active: boolean;
+  max_uses?: number | null;
+  use_count: number;
+  upload_url: string;
+}
+
+export interface ShareLinkInfo {
+  token: string;
+  label?: string | null;
+  instructions?: string | null;
+  control_title?: string | null;
+  control_identifier?: string | null;
+  expires_at?: string | null;
+  max_uses?: number | null;
+  use_count: number;
+  is_valid: boolean;
+}
+
+export const shareLinksApi = {
+  create: (caId: string, data: { label?: string; instructions?: string; expires_at?: string | null; max_uses?: number | null }) =>
+    apiClient.post<ShareLink>(`/compliance/control-assessments/${caId}/share-links`, data).then(r => r.data),
+
+  list: (caId: string) =>
+    apiClient.get<ShareLink[]>(`/compliance/control-assessments/${caId}/share-links`).then(r => r.data),
+
+  revoke: (linkId: string) =>
+    apiClient.delete(`/compliance/share-links/${linkId}`),
+
+  getInfo: (token: string) =>
+    fetch(`${API_BASE}/public/evidence-upload/${token}`).then(r => r.json() as Promise<ShareLinkInfo>),
+
+  uploadFile: (token: string, file: File) => {
+    const form = new FormData();
+    form.append("file", file);
+    return fetch(`${API_BASE}/public/evidence-upload/${token}`, { method: "POST", body: form }).then(r => r.json());
+  },
 };
 
 // ─── Incidents ──────────────────────────────

@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Plus, Search, X, Loader2, Filter, ShieldOff, CheckCircle, XCircle, AlertTriangle } from "lucide-react";
+import { Plus, Search, X, Loader2, ShieldOff, CheckCircle, XCircle, AlertTriangle } from "lucide-react";
 import { securityApi } from "@/api/endpoints";
 
 const EXCEPTION_STATUS_BADGE: Record<string, string> = {

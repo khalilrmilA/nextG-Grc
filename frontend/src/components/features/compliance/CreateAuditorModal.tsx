@@ -8,7 +8,7 @@ interface Props {
 }
 
 export default function CreateAuditorModal({ onClose, onCreated }: Props) {
-  const [form, setForm] = useState({ name: "", email: "", password: "" });
+  const [form, setForm] = useState({ name: "", email: "", password: "", expires_at: "" });
   const [showPwd, setShowPwd] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
@@ -36,6 +36,7 @@ export default function CreateAuditorModal({ onClose, onCreated }: Props) {
         name: form.name.trim(),
         email: form.email.trim().toLowerCase(),
         password: form.password,
+        expires_at: form.expires_at ? new Date(form.expires_at).toISOString() : null,
       });
       setDone(true);
       setTimeout(() => {
@@ -119,10 +120,27 @@ export default function CreateAuditorModal({ onClose, onCreated }: Props) {
                 </p>
               </div>
 
+              <div>
+                <label htmlFor="auditor-expires-at" className="block text-xs font-medium text-gray-600 mb-1">
+                  Account Expiry Date <span className="text-gray-400 font-normal">(optional)</span>
+                </label>
+                <input
+                  id="auditor-expires-at"
+                  type="date"
+                  value={form.expires_at}
+                  onChange={(e) => setField("expires_at", e.target.value)}
+                  min={new Date().toISOString().split("T")[0]}
+                  className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
+                />
+                <p className="text-xs text-gray-400 mt-1">
+                  After this date the auditor's account will be automatically locked.
+                </p>
+              </div>
+
               <div className="bg-purple-50 border border-purple-100 rounded-xl p-3">
                 <p className="text-xs text-purple-700">
                   The auditor will have read-only access to assigned assessments. They cannot modify
-                  risks, policies, or compliance data — only record verdicts and notes.
+                  risks, policies, or compliance data.
                 </p>
               </div>
 

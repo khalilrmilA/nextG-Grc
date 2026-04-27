@@ -67,10 +67,7 @@ function getHeatmapColor(score: number): string {
   return "bg-green-500";
 }
 
-function getHeatmapOpacity(likelihood: number, impact: number, dimLikelihood: number, dimImpact: number): string {
-  if (likelihood === dimLikelihood && impact === dimImpact) return "opacity-100 ring-2 ring-gray-900";
-  return "opacity-20 hover:opacity-40";
-}
+
 
 export default function VendorRiskCartography({ vendorId }: { readonly vendorId: string }) {
   const [data, setData] = useState<CartographyData | null>(null);

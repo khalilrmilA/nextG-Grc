@@ -5,13 +5,15 @@ import {
   CheckCircle, XCircle, AlertTriangle, MinusCircle,
   ChevronDown, ChevronUp, Sparkles, Globe, GitBranch,
   Download, Table2, Eye, EyeOff, Trash2, ExternalLink,
+  Link2,
 } from "lucide-react";
 import { complianceApi, type EvidenceItem } from "@/api/endpoints";
-import { apiClient } from "@/api/client";
 import type { AssessmentDetail, GapDetail, ControlAssessmentDetail, LinkedChecklistDocument } from "@/types";
 import PolicyGeneratorModal from "@/components/features/compliance/PolicyGeneratorModal";
 import DocumentChecklistTab from "@/components/features/compliance/DocumentChecklistTab";
 import GapReportTab from "@/components/features/compliance/GapReportTab";
+import DocumentViewerModal, { type ViewableDoc } from "@/components/features/compliance/DocumentViewerModal";
+import ShareLinkModal from "@/components/features/compliance/ShareLinkModal";
 import { exportComplianceCSV, exportComplianceReport } from "@/utils/exportUtils";
 
 // ─── Status helpers ────────────────────────────────────────────────────────────
@@ -205,6 +207,8 @@ function ResultsTab({
   const [evidenceMap, setEvidenceMap] = useState<Record<string, EvidenceItem[]>>({});
   const [deletingEvidence, setDeletingEvidence] = useState<string | null>(null);
   const [togglingVisibility, setTogglingVisibility] = useState<string | null>(null);
+  const [viewingDoc, setViewingDoc] = useState<ViewableDoc | null>(null);
+  const [shareModalCa, setShareModalCa] = useState<ControlAssessmentDetail | null>(null);
   const justificationTimeouts = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
 
   async function handleStatusOverride(caId: string, currentStatus: string, newStatus: string) {
@@ -282,23 +286,25 @@ function ResultsTab({
     }
   }
 
-  async function openEvidence(evidenceId: string) {
-    try {
-      const response = await apiClient.get(`/compliance/evidence/${evidenceId}/download`, { responseType: "blob" });
-      const url = URL.createObjectURL(response.data);
-      window.open(url, "_blank");
-    } catch {/* silent */}
+  function openEvidence(ev: EvidenceItem) {
+    setViewingDoc({
+      id: ev.id,
+      fileName: ev.file_name ?? "evidence",
+      contentType: ev.content_type,
+      fileSizeBytes: ev.file_size_bytes,
+      fetchUrl: complianceApi.downloadEvidenceUrl(ev.id),
+    });
   }
 
-  async function openChecklistDoc(docId: string) {
-    const url = complianceApi.downloadDocumentUrl(docId);
-    const stored = localStorage.getItem("grc_user_v2");
-    const token = stored ? (JSON.parse(stored)?.accessToken ?? "") : "";
-    try {
-      const res = await fetch(url, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
-      if (!res.ok) return;
-      window.open(URL.createObjectURL(await res.blob()), "_blank");
-    } catch {/* silent */}
+  function openChecklistDoc(doc: LinkedChecklistDocument) {
+    setViewingDoc({
+      id: doc.id,
+      fileName: doc.file_name,
+      contentType: doc.content_type,
+      fileSizeBytes: doc.file_size_bytes,
+      subtitle: doc.clause_ref ? `Clause ${doc.clause_ref}` : undefined,
+      fetchUrl: complianceApi.downloadDocumentUrl(doc.id),
+    });
   }
 
   function handleEvidenceDrop(caId: string, e: React.DragEvent<HTMLDivElement>) {
@@ -352,6 +358,16 @@ function ResultsTab({
 
   return (
     <div className="space-y-5">
+      {viewingDoc && <DocumentViewerModal doc={viewingDoc} onClose={() => setViewingDoc(null)} />}
+      {shareModalCa && (
+        <ShareLinkModal
+          caId={shareModalCa.id}
+          controlTitle={shareModalCa.control_title}
+          controlId={shareModalCa.control_identifier}
+          onClose={() => setShareModalCa(null)}
+        />
+      )}
+
       {policyGap && (
         <PolicyGeneratorModal
           gap={policyGap}
@@ -515,6 +531,14 @@ function ResultsTab({
                       Generate policy
                     </button>
                   )}
+                  <button
+                    onClick={(e) => { e.stopPropagation(); setShareModalCa(ca); }}
+                    className="flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-500 hover:bg-orange-50 hover:text-orange-600 transition-colors"
+                    title="Share upload link with stakeholder"
+                  >
+                    <Link2 className="w-3 h-3" />
+                    Share
+                  </button>
                 </div>
               </div>
 
@@ -570,10 +594,8 @@ function ResultsTab({
                       <option value="not_implemented">Gap</option>
                       {!ca.is_mandatory && <option value="not_applicable">N/A</option>}
                     </select>
-                    {ca.is_mandatory ? (
+                    {ca.is_mandatory && (
                       <span className="text-xs text-red-600">N/A not allowed — mandatory control</span>
-                    ) : (
-                      <span className="text-xs text-gray-400 italic">(is_mandatory={String(ca.is_mandatory)})</span>
                     )}
                     {saving === ca.id && <Loader2 className="w-3.5 h-3.5 animate-spin text-gray-400" />}
                     {overrides[ca.id] && (
@@ -680,7 +702,7 @@ function ResultsTab({
                                 {doc.clause_ref && <span className="text-teal-400 text-xs">Clause {doc.clause_ref}</span>}
                               </div>
                               <button
-                                onClick={() => openChecklistDoc(doc.id)}
+                                onClick={() => openChecklistDoc(doc)}
                                 className="text-blue-600 hover:text-blue-800 flex-shrink-0"
                                 title="View document"
                               >
@@ -707,7 +729,7 @@ function ResultsTab({
                               <span className="truncate font-medium text-green-700 flex-1">{ev.file_name}</span>
                               {/* Download/view button */}
                               <button
-                                onClick={() => openEvidence(ev.id)}
+                                onClick={() => openEvidence(ev)}
                                 className="text-blue-600 hover:text-blue-800 flex-shrink-0"
                                 title="View / Download"
                               >
@@ -743,6 +765,7 @@ function ResultsTab({
                       </div>
                     )}
                   </div>
+
                 </div>
               )}
             </div>
@@ -760,6 +783,7 @@ function ResultsTab({
 // ─── Tab: Cross-Framework Coverage ────────────────────────────────────────────
 
 function CrossFrameworkTab({ assessment }: { readonly assessment: AssessmentDetail }) {
+  const navigate = useNavigate();
   const summary = assessment.cross_framework_summary;
   const entries = Object.entries(summary).sort((a, b) => b[1].percent - a[1].percent);
 
@@ -767,7 +791,8 @@ function CrossFrameworkTab({ assessment }: { readonly assessment: AssessmentDeta
     return (
       <div className="text-center py-16 text-gray-400 text-sm">
         <Globe className="w-10 h-10 mx-auto mb-3 opacity-30" />
-        No cross-framework mappings found. Run analysis first, or this framework may not have cross-walk data.
+        <p className="font-medium text-gray-500 mb-1">No other framework assessments found</p>
+        <p className="text-xs">Add more frameworks from the Dashboard to see cross-framework coverage here.</p>
       </div>
     );
   }
@@ -775,34 +800,50 @@ function CrossFrameworkTab({ assessment }: { readonly assessment: AssessmentDeta
   return (
     <div className="space-y-4">
       <p className="text-sm text-gray-500">
-        Based on your compliance against <strong>{assessment.framework_short_name}</strong>, here is the estimated coverage in other frameworks.
+        Compliance status across your other active framework assessments.
       </p>
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        {entries.map(([fw, data]) => (
-          <div key={fw} className="bg-white rounded-2xl border border-gray-100 p-5">
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="text-sm font-semibold text-gray-800">{fw}</h3>
-              <span className={`text-sm font-bold ${scoreColor(data.percent)}`}>{data.percent}%</span>
-            </div>
-            <div className="h-2 rounded-full bg-gray-100 overflow-hidden mb-2">
-              <div
-                className={`h-full rounded-full ${data.percent >= 80 ? "bg-green-500" : data.percent >= 60 ? "bg-yellow-400" : "bg-red-400"}`}
-                style={{ width: `${data.percent}%` }}
-              />
-            </div>
-            <p className="text-xs text-gray-500">{data.covered} of {data.total_mapped} mapped controls covered</p>
-            {data.controls.length > 0 && (
-              <div className="flex flex-wrap gap-1 mt-2">
-                {data.controls.slice(0, 8).map((c, i) => (
-                  <span key={i} className="text-xs bg-indigo-50 text-indigo-700 px-1.5 py-0.5 rounded font-mono">{c}</span>
-                ))}
-                {data.controls.length > 8 && (
-                  <span className="text-xs text-gray-400">+{data.controls.length - 8} more</span>
-                )}
+        {entries.map(([fw, data]) => {
+          const scoreClr = data.percent >= 75 ? "text-green-600" : data.percent >= 50 ? "text-yellow-600" : "text-red-600";
+          const barClr = data.percent >= 75 ? "bg-green-500" : data.percent >= 50 ? "bg-yellow-400" : "bg-red-400";
+          return (
+            <div
+              key={fw}
+              onClick={() => data.assessment_id && navigate(`/compliance/${data.assessment_id}`)}
+              className="bg-white rounded-2xl border border-gray-100 p-5 hover:border-blue-200 hover:shadow-sm transition-all cursor-pointer group"
+            >
+              <div className="flex items-start justify-between mb-3">
+                <div>
+                  <span className="text-xs font-mono font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded mb-1 inline-block">{fw}</span>
+                  <p className="text-sm font-semibold text-gray-800 leading-tight mt-1 line-clamp-1">
+                    {data.framework_name || fw}
+                  </p>
+                </div>
+                <span className={`text-xl font-bold ${scoreClr} flex-shrink-0 ml-3`}>{data.percent}%</span>
               </div>
-            )}
-          </div>
-        ))}
+              <div className="h-2 rounded-full bg-gray-100 overflow-hidden mb-3">
+                <div className={`h-full rounded-full transition-all ${barClr}`} style={{ width: `${data.percent}%` }} />
+              </div>
+              <div className="grid grid-cols-3 gap-2 text-center">
+                <div className="bg-gray-50 rounded-lg py-1.5">
+                  <p className="text-sm font-bold text-gray-800">{data.total}</p>
+                  <p className="text-xs text-gray-400">Controls</p>
+                </div>
+                <div className="bg-green-50 rounded-lg py-1.5">
+                  <p className="text-sm font-bold text-green-700">{data.covered}</p>
+                  <p className="text-xs text-green-500">Compliant</p>
+                </div>
+                <div className="bg-red-50 rounded-lg py-1.5">
+                  <p className="text-sm font-bold text-red-600">{data.gaps}</p>
+                  <p className="text-xs text-red-400">Gaps</p>
+                </div>
+              </div>
+              <p className="text-xs text-blue-500 mt-3 group-hover:text-blue-700 text-right">
+                Open assessment →
+              </p>
+            </div>
+          );
+        })}
       </div>
     </div>
   );
@@ -866,7 +907,7 @@ export default function AssessmentDetailPage() {
     { key: "checklist", label: "Document Checklist" },
     { key: "results",   label: `Results${hasResults ? ` (${assessment.control_assessments.length})` : ""}`, disabled: !hasResults },
     { key: "gapreport", label: `Gap Report${gapCount > 0 ? ` (${gapCount})` : ""}`, disabled: gapCount === 0 },
-    { key: "crossfw",   label: `Cross-Framework${Object.keys(assessment.cross_framework_summary).length > 0 ? ` (${Object.keys(assessment.cross_framework_summary).length})` : ""}`, disabled: !hasResults },
+    { key: "crossfw",   label: `Cross-Framework${Object.keys(assessment.cross_framework_summary).length > 0 ? ` (${Object.keys(assessment.cross_framework_summary).length})` : ""}` },
   ];
 
   return (

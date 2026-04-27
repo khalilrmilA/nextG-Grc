@@ -24,7 +24,6 @@ interface VendorEntry {
 }
 type Tier   = "critical" | "high" | "medium" | "low";
 type Status = "active" | "under_review" | "onboarding" | "offboarding" | "inactive";
-type RiskTier = Tier;
 
 const TIER_BADGE: Record<Tier, string> = {
   critical: "bg-red-100 text-red-700 border-red-200",
@@ -199,7 +198,7 @@ function AddVendorModal({ onClose, onSaved }: { readonly onClose: () => void; re
         await vendorsApi.uploadContract(newVendor.id, contractFile);
       }
 
-      onSaved(newVendor);
+      onSaved(newVendor as unknown as VendorEntry);
       onClose();
     } catch (err) {
       setError(`Failed to create 3rd party. Please try again. ${err instanceof Error ? err.message : ''}`);
@@ -668,7 +667,7 @@ function VendorDetailModal({ vendor, onClose, onRunAI }: { readonly vendor: Vend
           {/* Stats */}
           <div className="grid grid-cols-3 gap-3">
             <div className="bg-gray-50 rounded-xl p-3 text-center">
-              <p className={`text-xl font-bold ${riskScoreColor(vendor.risk_score)} rounded-lg px-2 inline-block`}>{vendor.risk_score}</p>
+              <p className={`text-xl font-bold ${riskScoreColor(vendor.risk_score ?? 0)} rounded-lg px-2 inline-block`}>{vendor.risk_score}</p>
               <p className="text-xs text-gray-400 mt-1">{t("vendors.risk_score_label")}</p>
             </div>
             <div className="bg-gray-50 rounded-xl p-3 text-center flex flex-col items-center justify-center">
@@ -805,7 +804,7 @@ function VendorDetailModal({ vendor, onClose, onRunAI }: { readonly vendor: Vend
 export default function VendorsPage() {
   const { t } = useTranslation();
   const [vendors, setVendors] = useState<VendorEntry[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [tierFilter, setTierFilter] = useState("all");
   const [showAdd, setShowAdd] = useState(false);
@@ -816,7 +815,7 @@ export default function VendorsPage() {
     const loadVendors = async () => {
       try {
         const response = await vendorsApi.list();
-        setVendors(response.items || []);
+        setVendors((response.items || []) as unknown as VendorEntry[]);
       } catch (err) {
         console.error("Failed to load vendors:", err);
         setVendors([]);
@@ -946,8 +945,8 @@ export default function VendorsPage() {
                 </td>
                 <td className="px-4 py-4 text-center">
                   <div className="flex items-center justify-center gap-1.5">
-                    {v.risk_score > 20 && <AlertTriangle className="w-3.5 h-3.5 text-red-500 flex-shrink-0" />}
-                    <span className={`text-sm font-bold px-2 py-0.5 rounded-lg ${riskScoreColor(v.risk_score)}`}>{v.risk_score}</span>
+                    {(v.risk_score ?? 0) > 20 && <AlertTriangle className="w-3.5 h-3.5 text-red-500 flex-shrink-0" />}
+                    <span className={`text-sm font-bold px-2 py-0.5 rounded-lg ${riskScoreColor(v.risk_score ?? 0)}`}>{v.risk_score}</span>
                   </div>
                 </td>
                 <td className="px-4 py-4 text-center">
@@ -987,8 +986,8 @@ export default function VendorsPage() {
         <VendorAIModal
           vendorId={aiVendor.id}
           vendorName={aiVendor.name}
-          vendorIndustry={aiVendor.industry}
-          vendorServices={aiVendor.services_provided}
+          vendorIndustry={aiVendor.industry ?? undefined}
+          vendorServices={aiVendor.services_provided ?? undefined}
           onClose={() => setAiVendor(null)}
         />
       )}

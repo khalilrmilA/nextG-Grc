@@ -4,7 +4,7 @@
  */
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
-import { Bell, Check, Trash2, AlertTriangle, Shield, FileText, TrendingDown, X, RefreshCw } from "lucide-react";
+import { Bell, Check, Trash2, AlertTriangle, Shield, FileText, TrendingDown, RefreshCw } from "lucide-react";
 import { notificationsApi } from "@/api/endpoints";
 
 interface Notification {

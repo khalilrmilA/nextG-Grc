@@ -15,6 +15,7 @@ interface Auditor {
   last_name: string;
   role: string;
   is_active: boolean;
+  expires_at?: string | null;
 }
 
 // ── Create Auditor Modal ───────────────────────────────────────────────────────
@@ -26,13 +27,14 @@ function CreateAuditorModal({
   readonly onClose: () => void;
   readonly onCreated: (a: Auditor) => void;
 }) {
-  const [name, setName]         = useState("");
-  const [email, setEmail]       = useState("");
-  const [password, setPassword] = useState("");
-  const [showPwd, setShowPwd]   = useState(false);
-  const [saving, setSaving]     = useState(false);
-  const [error, setError]       = useState("");
-  const [done, setDone]         = useState(false);
+  const [name, setName]           = useState("");
+  const [email, setEmail]         = useState("");
+  const [password, setPassword]   = useState("");
+  const [expiresAt, setExpiresAt] = useState("");
+  const [showPwd, setShowPwd]     = useState(false);
+  const [saving, setSaving]       = useState(false);
+  const [error, setError]         = useState("");
+  const [done, setDone]           = useState(false);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -41,16 +43,22 @@ function CreateAuditorModal({
     setSaving(true);
     setError("");
     try {
-      await usersApi.createAuditor({ name: name.trim(), email: email.trim().toLowerCase(), password });
+      const created = await usersApi.createAuditor({
+        name: name.trim(),
+        email: email.trim().toLowerCase(),
+        password,
+        expires_at: expiresAt ? new Date(expiresAt).toISOString() : null,
+      });
       setDone(true);
       setTimeout(() => {
         onCreated({
-          id: Date.now().toString(),
-          email: email.trim().toLowerCase(),
-          first_name: name.trim().split(" ")[0],
-          last_name: name.trim().split(" ").slice(1).join(" ") || "-",
+          id: created.id,
+          email: created.email,
+          first_name: created.first_name,
+          last_name: created.last_name,
           role: "auditor",
           is_active: true,
+          expires_at: created.expires_at ?? null,
         });
         onClose();
       }, 1200);
@@ -112,6 +120,21 @@ function CreateAuditorModal({
                   </button>
                 </div>
                 <p className="text-xs text-gray-400 mt-1">Share securely — the auditor should change it after first login.</p>
+              </div>
+
+              <div>
+                <label htmlFor="expires-at-admin" className="block text-xs font-medium text-gray-700 mb-1">
+                  Account Expiry <span className="text-gray-400 font-normal">(optional)</span>
+                </label>
+                <input
+                  id="expires-at-admin"
+                  type="date"
+                  value={expiresAt}
+                  onChange={e => setExpiresAt(e.target.value)}
+                  min={new Date().toISOString().split("T")[0]}
+                  className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+                <p className="text-xs text-gray-400 mt-1">Account will be locked automatically after this date.</p>
               </div>
 
               <div className="bg-blue-50 border border-blue-100 rounded-xl p-3">
@@ -261,6 +284,7 @@ export default function CompanyAdminPage() {
               last_name: u.last_name,
               role: u.role,
               is_active: true,
+              expires_at: (u as { expires_at?: string | null }).expires_at ?? null,
             }));
           setAuditors(auditors);
           setLoading(false);
@@ -349,7 +373,7 @@ export default function CompanyAdminPage() {
           <table className="w-full text-sm">
             <thead className="bg-gray-50 border-b border-gray-200">
               <tr>
-                {["Auditor", "Email", "Status", "Frameworks", "Actions"].map(h => (
+                {["Auditor", "Email", "Status", "Expiry", "Frameworks", "Actions"].map(h => (
                   <th key={h} className="px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">{h}</th>
                 ))}
               </tr>
@@ -378,6 +402,17 @@ export default function CompanyAdminPage() {
                         : <><ToggleLeft className="w-5 h-5 text-gray-400" /><span className="text-gray-500">Inactive</span></>
                       }
                     </button>
+                  </td>
+                  <td className="px-5 py-3.5">
+                    {a.expires_at ? (() => {
+                      const exp = new Date(a.expires_at);
+                      const isExpired = exp < new Date();
+                      return (
+                        <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${isExpired ? "bg-red-100 text-red-700" : "bg-amber-50 text-amber-700"}`}>
+                          {isExpired ? "Expired" : exp.toLocaleDateString()}
+                        </span>
+                      );
+                    })() : <span className="text-xs text-gray-400">—</span>}
                   </td>
                   <td className="px-5 py-3.5">
                     <button

@@ -32,6 +32,7 @@ from app.models.notification import (
     Notification, NotificationPreference, NotificationType,
     NotificationChannel, NotificationStatus,
 )
+from app.models.evidence_upload_token import EvidenceUploadToken
 
 __all__ = [
     "Tenant", "User", "UserRole",
@@ -53,4 +54,5 @@ __all__ = [
     "Subscription", "SubscriptionTier",
     "Notification", "NotificationPreference", "NotificationType",
     "NotificationChannel", "NotificationStatus",
+    "EvidenceUploadToken",
 ]

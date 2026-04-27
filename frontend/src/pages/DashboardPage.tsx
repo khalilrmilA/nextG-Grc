@@ -13,7 +13,7 @@ import {
   AlertCircle, LayoutDashboard, BookOpen, X, Loader2,
 } from "lucide-react";
 import { dashboardApi, frameworksApi, authApi, complianceApi } from "../api/endpoints";
-import { useAuthStore } from "../store/auth";
+import { useAuthStore, authSession } from "../store/auth";
 import type { DashboardSummary, Framework } from "../types";
 import ComplianceJourneyMap from "../components/features/compliance/ComplianceJourneyMap";
 import ReadinessScoreWidget from "../components/features/compliance/ReadinessScoreWidget";
@@ -576,19 +576,28 @@ function FrameworkManagementModal({
     if (!selectedId) return;
     setAdding(true);
     try {
-      // Add the new framework if not already in the list
-      const updatedFrameworks = currentFrameworkIds.includes(selectedId)
-        ? currentFrameworkIds
-        : [...currentFrameworkIds, selectedId];
+      // Always read the live store value — the prop may be stale if the user
+      // has already added a framework in this session without re-logging in.
+      const liveIds = authSession.getUser()?.selected_framework_ids ?? currentFrameworkIds;
+      const livePrimary = authSession.getUser()?.primary_framework_id ?? primaryFrameworkId;
 
-      // Update with the same primary framework (or the new one if primary not set)
-      const primaryId = primaryFrameworkId || selectedId;
+      const updatedFrameworks = liveIds.includes(selectedId)
+        ? liveIds
+        : [...liveIds, selectedId];
+      const primaryId = livePrimary || selectedId;
 
-      await authApi.updateSelectedFrameworks(primaryId, updatedFrameworks);
+      const profile = await authApi.updateSelectedFrameworks(primaryId, updatedFrameworks);
+
+      // Patch the auth store immediately so the next open of this modal
+      // sees the correct (up-to-date) list and doesn't overwrite previous adds.
+      authSession.patchUser({
+        selected_framework_ids: profile.selected_framework_ids ?? updatedFrameworks,
+        primary_framework_id: profile.primary_framework_id ?? primaryId,
+      });
 
       // Auto-create an assessment for the new framework if it doesn't exist
       const selectedFramework = allFrameworks.find((fw) => fw.id === selectedId);
-      if (selectedFramework && !currentFrameworkIds.includes(selectedId)) {
+      if (selectedFramework && !liveIds.includes(selectedId)) {
         try {
           await complianceApi.createAssessment({
             framework_id: selectedId,
@@ -598,15 +607,12 @@ function FrameworkManagementModal({
           });
         } catch (err) {
           console.error("Failed to auto-create assessment:", err);
-          // Don't fail the whole operation if assessment creation fails
         }
       }
 
-      // Invalidate dashboard queries to refresh data
       queryClient.invalidateQueries({ queryKey: ["dashboard"] });
       queryClient.invalidateQueries({ queryKey: ["compliance"] });
 
-      // Trigger callback to refresh
       onFrameworkAdded();
       onClose();
     } catch (err) {

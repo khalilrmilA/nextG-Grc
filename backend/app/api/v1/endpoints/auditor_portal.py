@@ -13,7 +13,7 @@ import httpx
 from app.core.config import settings
 from app.core.database import get_db
 from app.models.user import User, UserRole
-from app.models.compliance import ComplianceAssessment, ControlAssessment, ControlStatus, UploadedDocument
+from app.models.compliance import ComplianceAssessment, ControlAssessment, ControlStatus, UploadedDocument, Evidence
 from app.models.auditor_assignment import AuditorAssignment
 from app.models.mandatory_document import MandatoryDocument
 from app.models.framework import Framework, FrameworkControl
@@ -108,9 +108,20 @@ def _linked_docs_for_control(ctrl_id: str, clause_doc_map: dict[str, list[dict]]
     return docs
 
 
-def _build_checklist_row(ca: Any, ctrl: Any, clause_doc_map: dict[str, list[dict]]) -> dict:
+def _build_checklist_row(ca: Any, ctrl: Any, clause_doc_map: dict[str, list[dict]], ca_evidence: list | None = None) -> dict:
     """Build a single checklist row dict for a control assessment."""
     ctrl_id = ctrl.control_id if ctrl else ca.control_id
+    linked = _linked_docs_for_control(ctrl_id, clause_doc_map)
+    for ev in (ca_evidence or []):
+        linked.append({
+            "id": ev.id,
+            "file_name": ev.file_name or ev.name,
+            "document_name": ev.name,
+            "clause_ref": None,
+            "content_type": ev.content_type,
+            "file_size_bytes": ev.file_size_bytes,
+            "is_evidence": True,
+        })
     return {
         "control_assessment_id": ca.id,
         "control_identifier": ctrl_id,
@@ -121,7 +132,7 @@ def _build_checklist_row(ca: Any, ctrl: Any, clause_doc_map: dict[str, list[dict
         "company_notes": ca.notes,
         "implementation_notes": ca.implementation_notes,
         "auditor_notes": ca.not_applicable_justification,
-        "linked_checklist_documents": _linked_docs_for_control(ctrl_id, clause_doc_map),
+        "linked_checklist_documents": linked,
     }
 
 
@@ -317,9 +328,38 @@ async def get_audit_checklist(
     )
     visible_docs = docs_result.scalars().all()
 
+    # Load evidence uploaded directly to controls (e.g. via stakeholder share links)
+    ca_ids = [ca.id for ca in cas]
+    evidence_result = await db.execute(
+        select(Evidence).where(
+            Evidence.control_assessment_id.in_(ca_ids),
+            Evidence.is_visible_to_auditor == True,  # noqa: E712
+        )
+    )
+    all_evidence = evidence_result.scalars().all()
+    ca_evidence_map: dict[str, list] = {}
+    for ev in all_evidence:
+        ca_evidence_map.setdefault(ev.control_assessment_id, []).append(ev)
+
     clause_doc_map = _build_clause_doc_map(visible_docs, md_map)
-    checklist = [_build_checklist_row(ca, ctrl_map.get(ca.control_id), clause_doc_map) for ca in cas]
+    checklist = [
+        _build_checklist_row(ca, ctrl_map.get(ca.control_id), clause_doc_map, ca_evidence_map.get(ca.id))
+        for ca in cas
+    ]
     documents = [_build_document_row(d, md_map) for d in visible_docs]
+    # Also surface evidence files in the top-level documents panel
+    for ev in all_evidence:
+        documents.append({
+            "id": ev.id,
+            "file_name": ev.file_name or ev.name,
+            "document_type_key": None,
+            "clause_ref": None,
+            "document_name": ev.name,
+            "content_type": ev.content_type,
+            "file_size_bytes": ev.file_size_bytes,
+            "created_at": ev.created_at.isoformat() if hasattr(ev.created_at, "isoformat") else str(ev.created_at),
+            "is_evidence": True,
+        })
 
     return {"assessment_id": assessment_id, "controls": checklist, "documents": documents}
 

@@ -545,13 +545,13 @@ export default function PolicyGeneratorPage() {
     if (!selectedDoc) return;
     try {
       const content = editing ? editContent : output;
-      const category = DOCUMENT_CATEGORIES.find(c => c.docs.some(d => d.title === selectedDoc))?.label || "General";
+      const category = DOCUMENT_CATEGORIES.find(c => c.docs.some(d => d === selectedDoc))?.label || "General";
 
       await policiesApi.create({
         title: selectedDoc,
         description: `AI-generated ${selectedDoc} for ${form.org_name}. Industry: ${form.industry}. Frameworks: ${form.frameworks.join(", ") || "None"}.`,
         category,
-        linked_controls: selectedControls.map(c => c.control_id),
+        linked_controls: preselectedControls.map(c => c.control_id),
         content, // initial version content
       } as any);
 
@@ -566,14 +566,14 @@ export default function PolicyGeneratorPage() {
     if (!selectedDoc) return;
     try {
       const content = editing ? editContent : output;
-      const category = DOCUMENT_CATEGORIES.find(c => c.docs.some(d => d.title === selectedDoc))?.label || "General";
+      const category = DOCUMENT_CATEGORIES.find(c => c.docs.some(d => d === selectedDoc))?.label || "General";
 
       await policiesApi.create({
         title: selectedDoc,
         description: `AI-generated ${selectedDoc} for ${form.org_name}. Industry: ${form.industry}. Frameworks: ${form.frameworks.join(", ") || "None"}.`,
         category,
         status: "approved",
-        linked_controls: selectedControls.map(c => c.control_id),
+        linked_controls: preselectedControls.map(c => c.control_id),
         content, // initial version content
       } as any);
 

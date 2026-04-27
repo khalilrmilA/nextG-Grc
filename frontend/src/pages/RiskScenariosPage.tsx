@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Plus, Search, X, Loader2, Filter, Target, TrendingDown } from "lucide-react";
+import { Plus, Search, X, Loader2, Filter } from "lucide-react";
 import { riskScenariosApi } from "@/api/endpoints";
 
 const TREATMENT_BADGE: Record<string, string> = {

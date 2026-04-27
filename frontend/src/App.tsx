@@ -42,6 +42,7 @@ import WebhooksPage from "./pages/WebhooksPage";
 import RiskQuantificationPage from "./pages/RiskQuantificationPage";
 import ContractCollaborationPage from "./pages/ContractCollaborationPage";
 import VendorCollaborationPage from "./pages/VendorCollaborationPage";
+import EvidenceUploadPage from "./pages/EvidenceUploadPage";
 
 function PrivateRoute({ children, requiredModule }: { readonly children: React.ReactNode; requiredModule?: string }) {
   const user = useAuthStore((u) => u);
@@ -87,6 +88,7 @@ function SuperAdminRoute({ children }: { readonly children: React.ReactNode }) {
 export default function App() {
   return (
     <Routes>
+      <Route path="/upload/:token" element={<EvidenceUploadPage />} />
       <Route path="/vendor-collab/:shareToken" element={<VendorCollaborationPage />} />
       <Route path="/landing" element={<LandingPage />} />
       <Route path="/login" element={<LoginPage />} />
