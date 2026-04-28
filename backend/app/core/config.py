@@ -10,7 +10,9 @@ _BACKEND_DIR = Path(__file__).resolve().parent.parent.parent  # backend/
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
-        env_file=(".env.local", ".env.dev", ".env"),
+        # Order matters: pydantic-settings gives LATER files higher priority.
+        # .env.local should win for local dev (overrides docker-compose .env.dev).
+        env_file=(".env", ".env.dev", ".env.local"),
         env_file_encoding="utf-8",
         case_sensitive=False,
         extra="ignore",

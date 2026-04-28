@@ -410,6 +410,21 @@ class ControlUpdate(BaseModel):
     tags: list[str] | None = None
 
 
+class FrameworkUpdate(BaseModel):
+    name: str | None = None
+    short_name: str | None = None
+    version: str | None = None
+    description: str | None = None
+    issuing_body: str | None = None
+    applicable_regions: list[str] | None = None
+    applicable_industries: list[str] | None = None
+
+
+class CloneFrameworkRequest(BaseModel):
+    name: str | None = None
+    short_name: str | None = None
+
+
 class RequirementCreate(BaseModel):
     requirement_text: str
     level: str = "must"   # must / should / may
@@ -426,6 +441,118 @@ async def _get_tenant_framework(
     if fw.is_builtin or fw.tenant_id != tenant_id:
         raise HTTPException(status_code=403, detail="Cannot modify a built-in or another tenant's framework")
     return fw
+
+
+@router.post("/{framework_id}/clone", response_model=FrameworkResponse, status_code=status.HTTP_201_CREATED)
+async def clone_framework(
+    framework_id: str,
+    body: CloneFrameworkRequest = CloneFrameworkRequest(),
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_roles(UserRole.TENANT_ADMIN, UserRole.CISO)),
+    tenant_id: str = Depends(get_tenant_id),
+):
+    """Fork any framework (built-in or custom) into a tenant-owned editable copy.
+    Duplicates the framework metadata, all controls (preserving parent/child links),
+    and all requirements.
+    """
+    src_result = await db.execute(select(Framework).where(Framework.id == framework_id))
+    src = src_result.scalar_one_or_none()
+    if not src:
+        raise HTTPException(status_code=404, detail="Source framework not found")
+
+    new_fw = Framework(
+        name=body.name or f"{src.name} (Custom)",
+        short_name=body.short_name or f"{src.short_name}-CUSTOM",
+        version=src.version,
+        description=src.description,
+        issuing_body=src.issuing_body,
+        applicable_regions=list(src.applicable_regions or []),
+        applicable_industries=list(src.applicable_industries or []),
+        is_builtin=False,
+        tenant_id=tenant_id,
+        status=FrameworkStatus.ACTIVE,
+    )
+    db.add(new_fw)
+    await db.flush()
+
+    src_controls_result = await db.execute(
+        select(FrameworkControl)
+        .where(FrameworkControl.framework_id == src.id)
+        .order_by(FrameworkControl.sort_order)
+    )
+    src_controls = list(src_controls_result.scalars().all())
+
+    pairs: list[tuple[FrameworkControl, FrameworkControl]] = []
+    for src_ctrl in src_controls:
+        new_ctrl = FrameworkControl(
+            framework_id=new_fw.id,
+            control_id=src_ctrl.control_id,
+            title=src_ctrl.title,
+            description=src_ctrl.description,
+            guidance=src_ctrl.guidance,
+            category=src_ctrl.category,
+            parent_id=None,  # remap below
+            sort_order=src_ctrl.sort_order,
+            mapped_controls=list(src_ctrl.mapped_controls or []),
+            tags=list(src_ctrl.tags or []),
+            is_mandatory=src_ctrl.is_mandatory,
+        )
+        db.add(new_ctrl)
+        pairs.append((src_ctrl, new_ctrl))
+
+    await db.flush()
+    id_map = {src_ctrl.id: new_ctrl.id for src_ctrl, new_ctrl in pairs}
+    for src_ctrl, new_ctrl in pairs:
+        if src_ctrl.parent_id and src_ctrl.parent_id in id_map:
+            new_ctrl.parent_id = id_map[src_ctrl.parent_id]
+
+    if pairs:
+        src_ids = [s.id for s, _ in pairs]
+        reqs_result = await db.execute(
+            select(ControlRequirement).where(ControlRequirement.control_id.in_(src_ids))
+        )
+        for src_req in reqs_result.scalars().all():
+            db.add(ControlRequirement(
+                control_id=id_map[src_req.control_id],
+                requirement_text=src_req.requirement_text,
+                requirement_level=src_req.requirement_level,
+            ))
+
+    await db.commit()
+    await db.refresh(new_fw)
+
+    resp = FrameworkResponse.model_validate(new_fw)
+    resp.control_count = len(pairs)
+    return resp
+
+
+@router.patch("/{framework_id}", response_model=FrameworkResponse)
+async def update_framework(
+    framework_id: str,
+    body: FrameworkUpdate,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_roles(UserRole.TENANT_ADMIN, UserRole.CISO)),
+    tenant_id: str = Depends(get_tenant_id),
+):
+    """Update tenant-owned framework metadata (name, short_name, etc.)."""
+    fw = await _get_tenant_framework(db, framework_id, tenant_id)
+
+    if body.name is not None:                  fw.name = body.name
+    if body.short_name is not None:            fw.short_name = body.short_name
+    if body.version is not None:               fw.version = body.version
+    if body.description is not None:           fw.description = body.description
+    if body.issuing_body is not None:          fw.issuing_body = body.issuing_body
+    if body.applicable_regions is not None:    fw.applicable_regions = body.applicable_regions
+    if body.applicable_industries is not None: fw.applicable_industries = body.applicable_industries
+
+    await db.flush()
+
+    count_result = await db.execute(
+        select(func.count()).where(FrameworkControl.framework_id == framework_id)
+    )
+    resp = FrameworkResponse.model_validate(fw)
+    resp.control_count = count_result.scalar_one()
+    return resp
 
 
 @router.post("", response_model=FrameworkResponse, status_code=status.HTTP_201_CREATED)
@@ -453,8 +580,11 @@ async def create_framework(
     resp = FrameworkResponse.model_validate(fw)
     resp.control_count = 0
 
-    # Send notification to all users
-    notify_framework_new.delay(fw.id, body.name)
+    # Best-effort notification — broker may be unavailable in dev (no Redis).
+    try:
+        notify_framework_new.delay(fw.id, body.name)
+    except Exception:
+        pass
 
     return resp
 
@@ -533,8 +663,11 @@ async def update_control(
     )
     fw = fw_result.scalar_one_or_none()
     if fw:
-        # Send notification to all users that framework was updated
-        notify_framework_updated.delay(fw.id, fw.name)
+        # Best-effort notification — broker may be unavailable in dev (no Redis).
+        try:
+            notify_framework_updated.delay(fw.id, fw.name)
+        except Exception:
+            pass
 
     return ControlResponse.model_validate(control)
 

@@ -80,6 +80,22 @@ Added 4 specialized AI features powered by Ollama streaming SSE:
 3. **AI Audit Program Generator** (`AuditPlanModal.tsx`) — full audit plan with test steps, evidence requirements, fieldwork schedule — launched from Audit Detail modal
 4. **Vendor AI Risk Assessment** (`VendorAIModal.tsx`) — questionnaire-based risk scoring across 6 security domains with contract clause recommendations — launched from Vendor Detail modal
 
+### Session 6 — Framework Customization & One-Shot Setup
+- **Customize / Fork built-in frameworks**
+  - New `POST /frameworks/{id}/clone` endpoint — copies a built-in framework's metadata + every control + parent/child links + requirements into a new tenant-owned row (`is_builtin=False, tenant_id=<current>`).
+  - New `PATCH /frameworks/{id}` endpoint — rename / re-version / update description of any tenant-owned framework (returns 403 on built-in or other-tenant).
+  - **Customize** button on every built-in framework card and **Edit** button on every custom one (`FrameworksPage.tsx`).
+  - New **`EditFrameworkPage`** at `/frameworks/:id/edit` — edit framework metadata, inline-edit any control, delete controls, and add brand-new custom controls via a modal.
+  - End-to-end isolation: edits on the clone never touch the source built-in. Verified with a 12-step API test.
+- **One-shot setup for new machines**
+  - `setup.ps1` (project root) — installs Python 3.12, Node LTS, Ollama via `winget`, creates the backend venv, installs all deps from a new `backend/requirements.txt`, writes `.env` files. Idempotent.
+  - `start.ps1` — launches backend (8000) + frontend (4000) in two PowerShell windows.
+  - `backend/requirements.txt` — pip-installable mirror of `pyproject.toml`, so Poetry isn't required.
+- **Dev infra fixes**
+  - `backend/app/core/config.py` — corrected pydantic-settings env-file precedence so `.env.local` overrides `.env.dev` (Docker config) for local dev.
+  - Wrapped two unguarded Celery `.delay(...)` calls in `frameworks.py` (`update_control`, `create_framework`) in `try/except` so PATCH/POST endpoints don't return 500 when Redis isn't running locally.
+  - Added `argon2-cffi` to `requirements.txt` (was missing — `passlib` couldn't verify any password without it).
+
 ---
 
 ## Architecture Overview
@@ -144,7 +160,9 @@ All AI endpoints return **Server-Sent Events (SSE)**. The backend streams tokens
 ## Project Structure
 
 ```
-d:/GRC/
+<project-root>/
+├── setup.ps1                         # One-shot installer (Windows): Python + Node + Ollama + deps
+├── start.ps1                         # Launches backend + frontend in two PowerShell windows
 ├── backend/
 │   ├── app/
 │   │   ├── main.py                    # FastAPI app factory
@@ -213,8 +231,10 @@ d:/GRC/
 │   │   │   ├── RisksPage.tsx          # Risk register + heat map + AI panel
 │   │   │   ├── CompliancePage.tsx     # Assessment list
 │   │   │   ├── AssessmentDetailPage.tsx  # Upload/Analyze/Results/Cross-FW
-│   │   │   ├── FrameworksPage.tsx     # Framework catalog + custom frameworks
-│   │   │   ├── CustomFrameworkPage.tsx   # Build a custom framework
+│   │   │   ├── FrameworksPage.tsx     # Framework catalog + Customize/Edit buttons
+│   │   │   ├── CustomFrameworkPage.tsx   # Manual custom-framework builder
+│   │   │   ├── FrameworkBuilderPage.tsx  # AI-assisted custom-framework builder
+│   │   │   ├── EditFrameworkPage.tsx     # Edit a tenant-owned framework + its controls
 │   │   │   ├── AuditsPage.tsx         # Audit list + AI audit plan
 │   │   │   ├── PoliciesPage.tsx       # Policy library
 │   │   │   ├── VendorsPage.tsx        # Vendor register + AI risk assessment
@@ -280,9 +300,13 @@ d:/GRC/
 - Policy Generator modal: streams a complete ready-to-adopt policy document for any gap
 
 ### Framework Management (`/frameworks`)
-- Catalog view of 8+ built-in frameworks (ISO 27001, SOC 2, NIST CSF, GDPR, HIPAA, PCI DSS, NIST 800-53, CIS Controls)
+- Catalog view of **76 built-in frameworks** (ISO 27001/27002, SOC 2, NIST CSF 2.0, NIST 800-53, NIST AI-RMF, GDPR, HIPAA, PCI DSS, DORA, NIS2, CIS CSC v8, CMMC, SAMA-CSF, ANSSI-RGS, BSI C5, COBIT, OWASP ASVS, MITRE ATT&CK, AI Act, and many more — see the Frameworks page)
+- Filterable by category (Security / Privacy / Audit / Finance / Government / Healthcare / Regulation / AI / AppSec) and region (Global / Europe / USA / Middle East / Asia-Pacific)
+- **Customize button** on every built-in framework card → forks the framework + all its controls into a tenant-owned editable copy you can rename and modify freely (the source built-in is never touched and remains shared across tenants)
+- **Edit Framework page** (`/frameworks/:id/edit`) — rename, change short_name / version / description, inline-edit / delete any control, and add brand-new custom controls via a modal
+- **AI Framework Builder** (`/frameworks/builder`) — assemble a custom framework from controls picked across other frameworks, with AI suggestions tuned to your industry / region / use case
+- **Custom Framework Builder** (`/frameworks/custom/new`) — manual flow: metadata → controls → requirements (must / should / may)
 - View and delete custom frameworks created by your tenant
-- **Custom Framework Builder** (`/frameworks/custom/new`): add metadata (name, version, issuing body, regions), add controls (ID, title, category, description, guidance, tags), add requirements (text + must/should/may level)
 
 ### Audit Management (`/audits`)
 - Audit register with status tracking (Planning → Fieldwork → Review → Reporting → Closed)
@@ -373,12 +397,20 @@ All AI features stream responses in real time via **Server-Sent Events** from a 
 | POST | `/risks` | Create risk |
 | PATCH | `/risks/{id}` | Update risk |
 | DELETE | `/risks/{id}` | Delete risk |
-| GET | `/frameworks` | List frameworks for tenant |
+| GET | `/frameworks` | List frameworks for tenant (built-in + custom) |
+| GET | `/frameworks/{id}` | Framework metadata |
+| GET | `/frameworks/{id}/controls` | All controls for a framework |
 | POST | `/frameworks` | Create custom framework |
+| POST | `/frameworks/{id}/clone` | **Fork any framework into a tenant-owned editable copy** (copies metadata + every control + requirements) |
+| PATCH | `/frameworks/{id}` | Update tenant-owned framework metadata (name, short_name, version, description, regions, industries) |
 | DELETE | `/frameworks/{id}` | Delete custom framework |
 | POST | `/frameworks/{id}/controls` | Add control to custom framework |
 | PATCH | `/frameworks/{id}/controls/{cid}` | Update control |
 | DELETE | `/frameworks/{id}/controls/{cid}` | Delete control |
+| POST | `/frameworks/{id}/controls/{cid}/requirements` | Add requirement to a control (must / should / may) |
+| GET | `/frameworks/builder/browse-controls` | List controls grouped by source framework (for the AI builder) |
+| POST | `/frameworks/builder/ai-suggestions` | Get AI control suggestions tuned to industry / region / use case |
+| POST | `/frameworks/builder/create` | Build a custom framework from a list of selected controls |
 | POST | `/compliance/assessments` | Create compliance assessment |
 | GET | `/compliance/assessments` | List assessments (paginated) |
 | GET | `/compliance/assessments/{id}` | Full detail with results |
@@ -432,6 +464,24 @@ Tenant ──< Subscription
 
 ## How to Run — Development
 
+### Easiest path on Windows — one-shot setup
+
+The repo ships with two PowerShell scripts at the project root:
+
+```powershell
+# Installs Python 3.12 + Node LTS + Ollama via winget, creates the venv,
+# installs every backend + frontend dependency, writes the .env files. Idempotent.
+powershell -ExecutionPolicy Bypass -File .\setup.ps1
+
+# Launches backend (8000) and frontend (4000) in two new PowerShell windows.
+powershell -ExecutionPolicy Bypass -File .\start.ps1
+```
+
+If `npm` reports "execution of scripts is disabled on this system", run once:
+`Set-ExecutionPolicy -Scope CurrentUser RemoteSigned`.
+
+### Manual setup
+
 ### Prerequisites
 
 - Python 3.12 or higher
@@ -465,10 +515,10 @@ python -m venv .venv
 # On macOS/Linux:
 source .venv/bin/activate
 
-# Install dependencies
-pip install fastapi "uvicorn[standard]" sqlalchemy aiosqlite pydantic-settings \
-    "python-jose[cryptography]" "passlib[bcrypt]" httpx structlog \
-    python-multipart pypdf python-docx alembic pydantic
+# Install dependencies (preferred — uses the pinned requirements.txt)
+pip install -r requirements.txt
+# OR if you have Poetry:
+# poetry install
 
 # Seed the database (creates grc_dev.db with demo data)
 python -c "import asyncio; from startup import run_startup; asyncio.run(run_startup())"
@@ -518,7 +568,7 @@ Runs the full production-like stack: PostgreSQL, Redis, Backend, Frontend, Keycl
 ### Start all services
 
 ```bash
-# From the project root (d:/GRC):
+# From the project root:
 docker compose up --build
 
 # Detached mode (runs in background):
@@ -559,15 +609,18 @@ docker compose down -v
 
 ## Demo Credentials
 
-| Email | Password | Role | Description |
-|-------|----------|------|-------------|
-| `admin@demo.com` | `demo123` | Tenant Admin | Full access — can manage frameworks, users, settings |
-| `ciso@demo.com` | `demo123` | CISO | Full access to all security/compliance modules |
+| Email | Password | Role | Portal | Description |
+|-------|----------|------|--------|-------------|
+| `admin@demo.com` | `demo123` | Tenant Admin | `/dashboard` + `/company-admin` | Full app — frameworks, users, settings, auditor management |
+| `ciso@demo.com` | `demo123` | CISO | `/dashboard` | Full app + notifications for reviews & approvals |
+| `auditor@demo.com` | `demo123` | Auditor | `/auditor/portal` | Read-only view of assigned audits + company documents |
+| `superadmin@platform.com` | `super123` | Super Admin | `/super-admin` | Platform-wide tenant + user management |
 
-Both accounts belong to the **Acme Corp (Demo)** tenant which has pre-seeded:
-- ISO 27001:2022 framework with all 93 controls loaded
-- 7 demo risks with various severities and categories
-- 1 sample compliance assessment
+Tenant accounts belong to **Acme Corp (Demo)** which has pre-seeded:
+- 76 built-in compliance frameworks loaded in the catalog
+- Demo risks across various severities and categories
+- Sample compliance assessments
+- Demo vendor records, incidents, audits, and policies
 
 ---
 

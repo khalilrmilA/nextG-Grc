@@ -304,6 +304,12 @@ export const customFrameworkApi = {
   create: (data: FrameworkCreate) =>
     apiClient.post<Framework>("/frameworks", data).then((r) => r.data),
 
+  clone: (frameworkId: string, data?: { name?: string; short_name?: string }) =>
+    apiClient.post<Framework>(`/frameworks/${frameworkId}/clone`, data ?? {}).then((r) => r.data),
+
+  updateMeta: (frameworkId: string, data: Partial<FrameworkCreate>) =>
+    apiClient.patch<Framework>(`/frameworks/${frameworkId}`, data).then((r) => r.data),
+
   addControl: (frameworkId: string, data: ControlCreate) =>
     apiClient.post<FrameworkControl>(`/frameworks/${frameworkId}/controls`, data).then((r) => r.data),
 
