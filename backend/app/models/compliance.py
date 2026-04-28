@@ -162,6 +162,11 @@ class Evidence(Base):
         String(36), ForeignKey("users.id"), nullable=True
     )
 
+    # Cross-framework sharing: if set, this record is an auto-shared copy of the source evidence
+    shared_from_evidence_id: Mapped[str | None] = mapped_column(
+        String(36), nullable=True, index=True
+    )
+
     # Relationships
     control_assessment: Mapped["ControlAssessment"] = relationship(
         "ControlAssessment", back_populates="evidence"

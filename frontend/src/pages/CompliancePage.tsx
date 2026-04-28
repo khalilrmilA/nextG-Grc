@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate, Link } from "react-router-dom";
-import { CheckCircle, Clock, AlertCircle, XCircle, Plus, FileText, Loader2, X, FolderUp, Sparkles, BarChart3 } from "lucide-react";
+import { CheckCircle, Clock, AlertCircle, XCircle, Plus, FileText, Loader2, X, FolderUp, Sparkles, BarChart3, Trash2 } from "lucide-react";
 import { complianceApi, frameworksApi } from "@/api/endpoints";
 import type { AssessmentListItem, Framework } from "@/types";
 
@@ -158,6 +158,8 @@ export default function CompliancePage() {
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState("all");
   const [showModal, setShowModal] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
   useEffect(() => {
     Promise.all([
@@ -181,6 +183,17 @@ export default function CompliancePage() {
   function handleCreate(id: string) {
     setShowModal(false);
     navigate(`/compliance/${id}`);
+  }
+
+  async function handleDelete(id: string) {
+    setDeletingId(id);
+    try {
+      await complianceApi.deleteAssessment(id);
+      setAssessments(prev => prev.filter(a => a.id !== id));
+    } catch {/* silent */} finally {
+      setDeletingId(null);
+      setConfirmDeleteId(null);
+    }
   }
 
   if (loading) {
@@ -262,7 +275,7 @@ export default function CompliancePage() {
         {filtered.map((a) => (
           <div
             key={a.id}
-            onClick={() => navigate(`/compliance/${a.id}`)}
+            onClick={() => confirmDeleteId !== a.id && navigate(`/compliance/${a.id}`)}
             className="bg-white rounded-2xl border border-gray-100 p-6 shadow-sm hover:shadow-md hover:border-blue-200 transition-all cursor-pointer group"
           >
             <div className="flex items-start justify-between">
@@ -289,7 +302,37 @@ export default function CompliancePage() {
                   </span>
                 </div>
               </div>
-              <ScoreBadge score={a.compliance_score} />
+              <div className="flex items-center gap-3 flex-shrink-0 ml-3">
+                <ScoreBadge score={a.compliance_score} />
+                {a.status === "draft" && (
+                  confirmDeleteId === a.id ? (
+                    <div className="flex items-center gap-2" onClick={e => e.stopPropagation()}>
+                      <span className="text-xs text-red-600 font-medium">Delete?</span>
+                      <button
+                        onClick={() => handleDelete(a.id)}
+                        disabled={deletingId === a.id}
+                        className="text-xs bg-red-600 text-white px-2 py-1 rounded-lg hover:bg-red-700 disabled:opacity-50"
+                      >
+                        {deletingId === a.id ? <Loader2 className="w-3 h-3 animate-spin" /> : "Yes, delete"}
+                      </button>
+                      <button
+                        onClick={() => setConfirmDeleteId(null)}
+                        className="text-xs text-gray-500 hover:text-gray-700 px-2 py-1 rounded-lg border border-gray-200"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={e => { e.stopPropagation(); setConfirmDeleteId(a.id); }}
+                      title="Delete this draft assessment"
+                      className="opacity-0 group-hover:opacity-100 text-gray-400 hover:text-red-500 transition-all p-1.5 rounded-lg hover:bg-red-50"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  )
+                )}
+              </div>
             </div>
 
             {a.compliance_score != null && (

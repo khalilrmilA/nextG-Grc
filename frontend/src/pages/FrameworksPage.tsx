@@ -6,8 +6,9 @@ import {
   Loader2, Trash2, AlertCircle, RefreshCw, Filter,
   Shield, Lock, FileText, Heart, CreditCard, Cpu, Scale,
   X, ChevronDown, ChevronRight as ChevronRightIcon, CheckSquare, Square, Copy, Check,
+  Pencil, GitFork,
 } from "lucide-react";
-import { frameworksApi } from "@/api/endpoints";
+import { frameworksApi, customFrameworkApi } from "@/api/endpoints";
 import type { Framework, FrameworkControl } from "@/types";
 
 // ── Per-framework metadata (icon, category, region) ──────────────────────────
@@ -329,10 +330,14 @@ function FrameworkCard({
   fw,
   onDelete,
   onViewControls,
+  onCustomize,
+  onEdit,
 }: {
   readonly fw: Framework;
   readonly onDelete: (id: string) => void;
   readonly onViewControls: (fw: Framework) => void;
+  readonly onCustomize: (fw: Framework) => void;
+  readonly onEdit: (fw: Framework) => void;
 }) {
   const { t } = useTranslation();
   const meta = getMeta(fw.short_name);
@@ -341,6 +346,7 @@ function FrameworkCard({
   const isCustom = !fw.is_builtin;
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [customizing, setCustomizing] = useState(false);
 
   async function handleDelete() {
     setDeleting(true);
@@ -350,6 +356,17 @@ function FrameworkCard({
     } catch {
       setDeleting(false);
       setConfirmDelete(false);
+    }
+  }
+
+  async function handleCustomize(e: React.MouseEvent) {
+    e.stopPropagation();
+    setCustomizing(true);
+    try {
+      const cloned = await customFrameworkApi.clone(fw.id);
+      onCustomize(cloned);
+    } catch {
+      setCustomizing(false);
     }
   }
 
@@ -422,7 +439,28 @@ function FrameworkCard({
           <p className="text-lg font-bold text-gray-900">{fw.control_count ?? 0}</p>
           <p className="text-xs text-gray-400">{t("frameworks.controls")}</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap justify-end">
+          {isCustom ? (
+            <button
+              type="button"
+              onClick={() => onEdit(fw)}
+              className="flex items-center gap-1.5 text-xs font-semibold text-purple-600 hover:text-purple-700 bg-purple-50 hover:bg-purple-100 px-3 py-1.5 rounded-lg transition-all"
+              title="Edit this custom framework"
+            >
+              <Pencil className="w-3 h-3" /> Edit
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={handleCustomize}
+              disabled={customizing}
+              className="flex items-center gap-1.5 text-xs font-semibold text-purple-600 hover:text-purple-700 bg-purple-50 hover:bg-purple-100 disabled:opacity-50 px-3 py-1.5 rounded-lg transition-all"
+              title="Fork this framework into your own editable copy"
+            >
+              {customizing ? <Loader2 className="w-3 h-3 animate-spin" /> : <GitFork className="w-3 h-3" />}
+              {customizing ? "Forking…" : "Customize"}
+            </button>
+          )}
           {fw.control_count && fw.control_count > 0 ? (
             <button
               type="button"
@@ -476,6 +514,15 @@ export default function FrameworksPage() {
   function openDrawer(fw: Framework) {
     setDrawerFw(fw);
     setDrawerOpen(true);
+  }
+
+  function handleCustomized(cloned: Framework) {
+    setFrameworks(prev => [cloned, ...prev]);
+    navigate(`/frameworks/${cloned.id}/edit`);
+  }
+
+  function handleEdit(fw: Framework) {
+    navigate(`/frameworks/${fw.id}/edit`);
   }
 
   function handleUseInDocGen(fw: Framework, selected: FrameworkControl[]) {
@@ -632,7 +679,7 @@ export default function FrameworksPage() {
                 <span className="text-xs text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full">{customs.length}</span>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {customs.map(fw => <FrameworkCard key={fw.id} fw={fw} onDelete={handleDelete} onViewControls={openDrawer} />)}
+                {customs.map(fw => <FrameworkCard key={fw.id} fw={fw} onDelete={handleDelete} onViewControls={openDrawer} onCustomize={handleCustomized} onEdit={handleEdit} />)}
               </div>
             </section>
           )}
@@ -646,7 +693,7 @@ export default function FrameworksPage() {
                 <span className="text-xs text-green-600 bg-green-50 px-2 py-0.5 rounded-full font-medium">✓ Ready to use</span>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {builtins.map(fw => <FrameworkCard key={fw.id} fw={fw} onDelete={handleDelete} onViewControls={openDrawer} />)}
+                {builtins.map(fw => <FrameworkCard key={fw.id} fw={fw} onDelete={handleDelete} onViewControls={openDrawer} onCustomize={handleCustomized} onEdit={handleEdit} />)}
               </div>
             </section>
           )}
@@ -659,7 +706,7 @@ export default function FrameworksPage() {
                 <span className="text-xs text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full">{demo.length}</span>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {demo.map(fw => <FrameworkCard key={fw.id} fw={fw} onDelete={handleDelete} onViewControls={openDrawer} />)}
+                {demo.map(fw => <FrameworkCard key={fw.id} fw={fw} onDelete={handleDelete} onViewControls={openDrawer} onCustomize={handleCustomized} onEdit={handleEdit} />)}
               </div>
             </section>
           )}

@@ -209,6 +209,7 @@ function ResultsTab({
   const [togglingVisibility, setTogglingVisibility] = useState<string | null>(null);
   const [viewingDoc, setViewingDoc] = useState<ViewableDoc | null>(null);
   const [shareModalCa, setShareModalCa] = useState<ControlAssessmentDetail | null>(null);
+  const [evidenceSharedToast, setEvidenceSharedToast] = useState<{ fileName: string; count: number } | null>(null);
   const justificationTimeouts = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
 
   async function handleStatusOverride(caId: string, currentStatus: string, newStatus: string) {
@@ -255,6 +256,10 @@ function ResultsTab({
         ...prev,
         [caId]: [...(prev[caId] ?? []), result],
       }));
+      if ((result.shared_count ?? 0) > 0) {
+        setEvidenceSharedToast({ fileName: file.name, count: result.shared_count! });
+        setTimeout(() => setEvidenceSharedToast(null), 5000);
+      }
     } catch {/* silent */} finally {
       setUploadingEvidence(null);
     }
@@ -366,6 +371,20 @@ function ResultsTab({
           controlId={shareModalCa.control_identifier}
           onClose={() => setShareModalCa(null)}
         />
+      )}
+
+      {/* Cross-framework evidence sharing toast */}
+      {evidenceSharedToast && (
+        <div className="fixed bottom-6 right-6 z-50 bg-indigo-600 text-white rounded-xl shadow-lg px-5 py-3 flex items-center gap-3 max-w-sm animate-in slide-in-from-bottom-4">
+          <Globe className="w-5 h-5 flex-shrink-0" />
+          <div>
+            <p className="text-sm font-semibold">Evidence shared across frameworks</p>
+            <p className="text-xs text-indigo-200 mt-0.5">
+              "{evidenceSharedToast.fileName}" was automatically linked to {evidenceSharedToast.count} equivalent control{evidenceSharedToast.count !== 1 ? "s" : ""} in other frameworks.
+            </p>
+          </div>
+          <button onClick={() => setEvidenceSharedToast(null)} className="text-indigo-300 hover:text-white ml-1 flex-shrink-0">✕</button>
+        </div>
       )}
 
       {policyGap && (
@@ -727,6 +746,12 @@ function ResultsTab({
                             <div key={ev.id} className="flex items-center gap-1.5 text-xs bg-white/60 px-2 py-1 rounded">
                               <FileText className="w-3.5 h-3.5 flex-shrink-0 text-green-600" />
                               <span className="truncate font-medium text-green-700 flex-1">{ev.file_name}</span>
+                              {ev.is_shared && (
+                                <span title="Auto-shared from another framework" className="flex items-center gap-0.5 text-indigo-600 bg-indigo-50 rounded px-1 py-0.5 flex-shrink-0">
+                                  <Globe className="w-2.5 h-2.5" />
+                                  <span className="text-[10px] font-medium">Shared</span>
+                                </span>
+                              )}
                               {/* Download/view button */}
                               <button
                                 onClick={() => openEvidence(ev)}
@@ -799,6 +824,16 @@ function CrossFrameworkTab({ assessment }: { readonly assessment: AssessmentDeta
 
   return (
     <div className="space-y-4">
+      {/* Evidence sharing explanation */}
+      <div className="bg-indigo-50 border border-indigo-200 rounded-xl p-4 flex gap-3">
+        <Globe className="w-5 h-5 text-indigo-600 flex-shrink-0 mt-0.5" />
+        <div>
+          <p className="text-sm font-semibold text-indigo-800">Automatic Evidence Sharing</p>
+          <p className="text-xs text-indigo-600 mt-0.5">
+            When you upload a document to any control in this assessment, it is automatically shared to the equivalent controls in all other active framework assessments below — based on the cross-walk mappings (ISO 27001 ↔ SOC 2, NIST CSF, PCI DSS, etc.). Shared files appear with a <span className="inline-flex items-center gap-0.5 bg-white border border-indigo-200 rounded px-1 py-0.5 text-indigo-700 font-medium"><Globe className="w-2.5 h-2.5" /> Shared</span> badge in the Results tab.
+          </p>
+        </div>
+      </div>
       <p className="text-sm text-gray-500">
         Compliance status across your other active framework assessments.
       </p>

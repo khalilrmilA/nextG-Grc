@@ -1,12 +1,12 @@
 """Dashboard and analytics endpoints."""
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func
+from sqlalchemy import select, func, case
 from typing import Annotated
 
 from app.core.database import get_db
 from app.models.risk import Risk, RiskStatus, RiskSeverity
-from app.models.compliance import ComplianceAssessment, ControlAssessment, ControlStatus, ComplianceGap, UploadedDocument
+from app.models.compliance import ComplianceAssessment, ControlAssessment, ControlStatus, ComplianceGap, UploadedDocument, AssessmentStatus
 from app.models.audit import Audit, AuditFinding, FindingStatus
 from app.models.vendor import Vendor
 from app.models.policy import Policy, PolicyAttestation, AttestationStatus
@@ -201,11 +201,17 @@ async def get_frameworks_overview(
         if not fw:
             continue
 
-        # Most recent assessment for this framework
+        # Pick the best assessment for this framework on the dashboard:
+        #  1. Prefer non-draft (in_progress / completed) over draft, so a freshly
+        #     created empty draft doesn't hide an older assessment with real progress.
+        #  2. Among the preferred bucket, take the most recently updated one.
         a_result = await db.execute(
             select(ComplianceAssessment)
             .where(ComplianceAssessment.tenant_id == tenant_id, ComplianceAssessment.framework_id == fw_id)
-            .order_by(ComplianceAssessment.updated_at.desc())
+            .order_by(
+                case((ComplianceAssessment.status == AssessmentStatus.DRAFT, 1), else_=0),
+                ComplianceAssessment.updated_at.desc(),
+            )
             .limit(1)
         )
         assessment = a_result.scalar_one_or_none()

@@ -28,6 +28,7 @@ from app.models.compliance import (
 )
 from app.models.framework import Framework, FrameworkControl
 from app.models.mandatory_document import MandatoryDocument
+from app.models.tenant import Tenant
 from app.models.action_item import ActionItem, ActionItemPriority, ActionItemStatus
 from app.models.user import User, UserRole
 
@@ -81,6 +82,8 @@ class EvidenceResponse(BaseModel):
     content_type: str | None = None
     is_visible_to_auditor: bool = True
     created_at: datetime
+    shared_count: int = 0
+    is_shared: bool = False
 
     model_config = {"from_attributes": True}
 
@@ -539,7 +542,8 @@ async def create_assessment(
     current_user: User = Depends(require_roles(UserRole.TENANT_ADMIN, UserRole.SUPER_ADMIN)),
     tenant_id: str = Depends(get_tenant_id),
 ) -> AssessmentDetailResponse:
-    """Create a new compliance assessment."""
+    """Create a new compliance assessment. If an active assessment already exists for
+    this framework, the existing one is returned instead of creating a duplicate."""
     fw_result = await db.execute(
         select(Framework).where(
             Framework.id == body.framework_id,
@@ -548,6 +552,31 @@ async def create_assessment(
     )
     if not fw_result.scalar_one_or_none():
         raise HTTPException(status_code=404, detail="Framework not found")
+
+    # Return the existing active assessment rather than creating a duplicate.
+    # Priority: in_progress > under_review > draft (most recent of each).
+    from sqlalchemy import case as sa_case
+    existing_result = await db.execute(
+        select(ComplianceAssessment)
+        .where(
+            ComplianceAssessment.tenant_id == tenant_id,
+            ComplianceAssessment.framework_id == body.framework_id,
+            ComplianceAssessment.status != AssessmentStatus.ARCHIVED,
+        )
+        .order_by(
+            sa_case(
+                (ComplianceAssessment.status == AssessmentStatus.IN_PROGRESS, 0),
+                (ComplianceAssessment.status == AssessmentStatus.UNDER_REVIEW, 1),
+                (ComplianceAssessment.status == AssessmentStatus.COMPLETED, 2),
+                else_=3,
+            ),
+            ComplianceAssessment.updated_at.desc(),
+        )
+        .limit(1)
+    )
+    existing = existing_result.scalar_one_or_none()
+    if existing:
+        return await _build_assessment_detail(db, existing)
 
     assessment = ComplianceAssessment(
         tenant_id=tenant_id,
@@ -572,20 +601,54 @@ async def list_assessments(
     _: User = Depends(require_roles(UserRole.TENANT_ADMIN, UserRole.SUPER_ADMIN)),
     tenant_id: str = Depends(get_tenant_id),
 ) -> PaginatedAssessments:
-    """List all compliance assessments for the tenant."""
-    total_result = await db.execute(
-        select(func.count()).where(ComplianceAssessment.tenant_id == tenant_id)
-    )
-    total = total_result.scalar_one()
+    """List compliance assessments for the tenant, limited to selected frameworks."""
+    # Load tenant to get selected framework IDs
+    tenant_result = await db.execute(select(Tenant).where(Tenant.id == tenant_id))
+    tenant = tenant_result.scalar_one_or_none()
 
-    result = await db.execute(
+    # Build the set of framework IDs the tenant has selected on the dashboard
+    selected_fw_ids: list[str] | None = None
+    if tenant:
+        ids = set(tenant.selected_framework_ids or [])
+        if tenant.primary_framework_id:
+            ids.add(tenant.primary_framework_id)
+        if ids:
+            selected_fw_ids = list(ids)
+
+    base_filter = [ComplianceAssessment.tenant_id == tenant_id]
+    if selected_fw_ids:
+        base_filter.append(ComplianceAssessment.framework_id.in_(selected_fw_ids))
+
+    # Fetch all matching assessments, then keep only the best one per framework.
+    # Best = highest status priority (in_progress > under_review > completed > draft),
+    # then most recently updated within each status tier.
+    from sqlalchemy import case as sa_case
+    all_result = await db.execute(
         select(ComplianceAssessment)
-        .where(ComplianceAssessment.tenant_id == tenant_id)
-        .order_by(ComplianceAssessment.created_at.desc())
-        .offset(pagination.offset)
-        .limit(pagination.limit)
+        .where(*base_filter)
+        .order_by(
+            sa_case(
+                (ComplianceAssessment.status == AssessmentStatus.IN_PROGRESS, 0),
+                (ComplianceAssessment.status == AssessmentStatus.UNDER_REVIEW, 1),
+                (ComplianceAssessment.status == AssessmentStatus.COMPLETED, 2),
+                else_=3,
+            ),
+            ComplianceAssessment.updated_at.desc(),
+        )
     )
-    assessments = result.scalars().all()
+    all_assessments = all_result.scalars().all()
+
+    # Deduplicate: keep only the first (best) assessment per framework
+    seen_fw: set[str] = set()
+    deduped: list[ComplianceAssessment] = []
+    for a in all_assessments:
+        if a.framework_id not in seen_fw:
+            seen_fw.add(a.framework_id)
+            deduped.append(a)
+
+    total = len(deduped)
+    # Apply pagination on the deduped list
+    assessments = deduped[pagination.offset: pagination.offset + pagination.limit]
 
     fw_ids = list({a.framework_id for a in assessments})
     fw_result = await db.execute(select(Framework).where(Framework.id.in_(fw_ids)))
@@ -644,6 +707,31 @@ async def get_assessment(
     if not assessment:
         raise HTTPException(status_code=404, detail="Assessment not found")
     return await _build_assessment_detail(db, assessment)
+
+
+@router.delete("/assessments/{assessment_id}", status_code=204)
+async def delete_assessment(
+    assessment_id: str,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_roles(UserRole.TENANT_ADMIN, UserRole.SUPER_ADMIN)),
+    tenant_id: str = Depends(get_tenant_id),
+) -> None:
+    """Delete a compliance assessment. Only draft assessments can be deleted."""
+    result = await db.execute(
+        select(ComplianceAssessment).where(
+            ComplianceAssessment.id == assessment_id,
+            ComplianceAssessment.tenant_id == tenant_id,
+        )
+    )
+    assessment = result.scalar_one_or_none()
+    if not assessment:
+        raise HTTPException(status_code=404, detail="Assessment not found")
+    if assessment.status != AssessmentStatus.DRAFT:
+        raise HTTPException(
+            status_code=400,
+            detail="Only draft assessments can be deleted. Archive completed assessments instead."
+        )
+    await db.delete(assessment)
 
 
 @router.post("/assessments/{assessment_id}/documents", status_code=status.HTTP_201_CREATED)
@@ -1486,6 +1574,76 @@ async def upload_control_evidence(
     db.add(evidence)
     await db.flush()
 
+    # ── Cross-framework evidence propagation ──────────────────────────────────
+    # Find the FrameworkControl for this control assessment to read its mapped_controls.
+    shared_count = 0
+    try:
+        fc_result = await db.execute(
+            select(FrameworkControl).where(FrameworkControl.id == ca.control_id)
+        )
+        framework_control = fc_result.scalar_one_or_none()
+        if framework_control and framework_control.mapped_controls:
+            # mapped_controls = [{"framework": "NIST_CSF", "control": "PR.AC-1"}, ...]
+            mapped = framework_control.mapped_controls or []
+            if mapped:
+                # Collect (framework_short_name, control_id) pairs
+                fw_short_names = list({m["framework"] for m in mapped if "framework" in m})
+                ctrl_ids = list({m["control"] for m in mapped if "control" in m})
+
+                # Find Frameworks and FrameworkControls that match
+                fw_rows = (await db.execute(
+                    select(Framework).where(Framework.short_name.in_(fw_short_names))
+                )).scalars().all()
+                fw_id_to_short = {fw.id: fw.short_name for fw in fw_rows}
+
+                if fw_rows:
+                    matched_fcs = (await db.execute(
+                        select(FrameworkControl).where(
+                            FrameworkControl.framework_id.in_([fw.id for fw in fw_rows]),
+                            FrameworkControl.control_id.in_(ctrl_ids),
+                        )
+                    )).scalars().all()
+
+                    # Filter: only keep FrameworkControls whose (framework_short_name, control_id) is in the mapping
+                    mapping_set = {(m["framework"], m["control"]) for m in mapped if "framework" in m and "control" in m}
+                    valid_fc_ids = [
+                        fc.id for fc in matched_fcs
+                        if (fw_id_to_short.get(fc.framework_id, ""), fc.control_id) in mapping_set
+                    ]
+
+                    if valid_fc_ids:
+                        # Find ControlAssessments for those controls in other active tenant assessments
+                        target_cas = (await db.execute(
+                            select(ControlAssessment)
+                            .join(ComplianceAssessment, ControlAssessment.assessment_id == ComplianceAssessment.id)
+                            .where(
+                                ControlAssessment.control_id.in_(valid_fc_ids),
+                                ComplianceAssessment.tenant_id == tenant_id,
+                                ControlAssessment.assessment_id != ca.assessment_id,
+                            )
+                        )).scalars().all()
+
+                        for target_ca in target_cas:
+                            shared = Evidence(
+                                control_assessment_id=target_ca.id,
+                                tenant_id=tenant_id,
+                                name=evidence.name,
+                                evidence_type=EvidenceType.DOCUMENT,
+                                file_name=evidence.file_name,
+                                file_path=evidence.file_path,
+                                file_size_bytes=evidence.file_size_bytes,
+                                content_type=evidence.content_type,
+                                uploaded_by_id=current_user.id,
+                                is_visible_to_auditor=True,
+                                shared_from_evidence_id=evidence.id,
+                            )
+                            db.add(shared)
+                            shared_count += 1
+    except Exception:
+        # Propagation failure must never block the primary upload
+        pass
+    # ─────────────────────────────────────────────────────────────────────────
+
     return EvidenceResponse(
         id=evidence.id,
         file_name=evidence.file_name,
@@ -1494,6 +1652,7 @@ async def upload_control_evidence(
         content_type=evidence.content_type,
         is_visible_to_auditor=evidence.is_visible_to_auditor,
         created_at=evidence.created_at,
+        shared_count=shared_count,
     )
 
 
@@ -1518,6 +1677,7 @@ async def list_control_evidence(
         content_type=e.content_type,
         is_visible_to_auditor=e.is_visible_to_auditor if e.is_visible_to_auditor is not None else True,
         created_at=e.created_at,
+        is_shared=bool(e.shared_from_evidence_id),
     ) for e in items]
 
 

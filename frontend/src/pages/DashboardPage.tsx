@@ -717,6 +717,7 @@ function OverviewDashboard({
   onSelectFramework: (fwId: string) => void;
 }) {
   const { t } = useTranslation();
+  const navigate = useNavigate();
   const d = genericData ?? DEMO_DATA;
   const frameworks: any[] = overviewData?.frameworks ?? [];
   const [showFrameworkModal, setShowFrameworkModal] = useState(false);
@@ -751,7 +752,23 @@ function OverviewDashboard({
             <FrameworkOverviewCard
               key={fw.framework_id}
               fw={fw}
-              onSelect={() => onSelectFramework(fw.framework_id)}
+              onSelect={() => {
+                if (fw.has_assessment) {
+                  onSelectFramework(fw.framework_id);
+                } else {
+                  // No assessment yet — create one then navigate directly to it
+                  complianceApi.createAssessment({
+                    framework_id: fw.framework_id,
+                    name: `${fw.framework_short_name} Assessment`,
+                    description: `Compliance assessment for ${fw.framework_name}`,
+                    scope_description: `Assessment scope for ${fw.framework_short_name} framework`,
+                  }).then((a) => {
+                    navigate(`/compliance/${a.id}`);
+                  }).catch(() => {
+                    onSelectFramework(fw.framework_id);
+                  });
+                }
+              }}
             />
           ))}
           {/* Add framework card */}
@@ -810,9 +827,11 @@ function OverviewDashboard({
 
 export default function DashboardPage() {
   const { t } = useTranslation();
+  const navigate = useNavigate();
   const primaryFrameworkId = useAuthStore((u) => u?.primary_framework_id);
   // null = overview, string = drilled into a specific framework
   const [selectedFwId, setSelectedFwId] = useState<string | null>(null);
+  const [creatingAssessment, setCreatingAssessment] = useState(false);
 
   const { data: overviewData, isLoading: overviewLoading } = useQuery({
     queryKey: ["dashboard", "frameworks-overview"],
@@ -898,10 +917,30 @@ export default function DashboardPage() {
             <Shield className="w-10 h-10 text-blue-400 mx-auto mb-3" />
             <h2 className="font-semibold text-blue-900 mb-1">{t("dashboard.no_assessment_for_fw", { name: fwInfo?.framework_name })}</h2>
             <p className="text-blue-700 text-sm mb-4">{t("dashboard.create_assessment_desc")}</p>
-            <Link to="/compliance"
-              className="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold px-5 py-2.5 rounded-xl">
-              <Plus className="w-4 h-4" /> {t("dashboard.start_assessment")}
-            </Link>
+            <button
+              disabled={creatingAssessment}
+              onClick={async () => {
+                if (!selectedFwId || !fwInfo) return;
+                setCreatingAssessment(true);
+                try {
+                  const a = await complianceApi.createAssessment({
+                    framework_id: selectedFwId,
+                    name: `${fwInfo.framework_short_name} Assessment`,
+                    description: `Compliance assessment for ${fwInfo.framework_name}`,
+                    scope_description: `Assessment scope for ${fwInfo.framework_short_name} framework`,
+                  });
+                  navigate(`/compliance/${a.id}`);
+                } catch {
+                  navigate("/compliance");
+                } finally {
+                  setCreatingAssessment(false);
+                }
+              }}
+              className="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white font-semibold px-5 py-2.5 rounded-xl"
+            >
+              {creatingAssessment ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
+              {creatingAssessment ? "Setting up..." : t("dashboard.start_assessment")}
+            </button>
           </div>
         )}
       </div>

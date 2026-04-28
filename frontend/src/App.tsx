@@ -17,6 +17,7 @@ import AuditReportPage from "./pages/AuditReportPage";
 import TraceabilityPage from "./pages/TraceabilityPage";
 import FrameworksPage from "./pages/FrameworksPage";
 import CustomFrameworkPage from "./pages/CustomFrameworkPage";
+import EditFrameworkPage from "./pages/EditFrameworkPage";
 import AuditsPage from "./pages/AuditsPage";
 import PoliciesPage from "./pages/PoliciesPage";
 import VendorsPage from "./pages/VendorsPage";
@@ -130,6 +131,7 @@ export default function App() {
         <Route path="frameworks" element={<PrivateRoute requiredModule="frameworks"><FrameworksPage /></PrivateRoute>} />
         <Route path="frameworks/custom/new" element={<PrivateRoute requiredModule="frameworks"><CustomFrameworkPage /></PrivateRoute>} />
         <Route path="frameworks/builder" element={<PrivateRoute requiredModule="frameworks"><FrameworkBuilderPage /></PrivateRoute>} />
+        <Route path="frameworks/:id/edit" element={<PrivateRoute requiredModule="frameworks"><EditFrameworkPage /></PrivateRoute>} />
         <Route path="audits" element={<PrivateRoute requiredModule="audits"><AuditsPage /></PrivateRoute>} />
         <Route path="policies" element={<PrivateRoute requiredModule="policies"><PoliciesPage /></PrivateRoute>} />
         <Route path="policy-generator" element={<PrivateRoute requiredModule="policy-generator"><PolicyGeneratorPage /></PrivateRoute>} />

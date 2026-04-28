@@ -4,6 +4,19 @@
 
 Full-stack GRC (Governance, Risk & Compliance) SaaS platform: FastAPI backend + React frontend.
 
+### First-time setup on a new machine (Windows)
+
+```powershell
+# Installs Python 3.12 + Node LTS + Ollama (via winget), creates the venv,
+# installs all backend + frontend deps, and writes the .env files.
+powershell -ExecutionPolicy Bypass -File .\setup.ps1
+
+# Then start both servers (each in its own window):
+powershell -ExecutionPolicy Bypass -File .\start.ps1
+```
+
+### Manual / day-to-day start
+
 ```bash
 # Terminal 1: Backend (port 8000)
 cd backend && python -m uvicorn app.main:app --reload --port 8000
@@ -31,11 +44,11 @@ cd frontend && npm run dev -- --port 4000
 
 | Metric | Count |
 |--------|-------|
-| **Frontend Pages** | 37 |
-| **Backend API Routes** | 188 |
+| **Frontend Pages** | 38 |
+| **Backend API Routes** | 190 |
 | **Backend Modules** | 29 |
 | **Data Models** | 28+ |
-| **Frameworks** | 76 built-in |
+| **Frameworks** | 76 built-in (each can be forked into a tenant-owned editable copy) |
 | **Languages** | 3 (EN, FR, AR) |
 
 ---
@@ -66,7 +79,7 @@ backend/
 | `risk_scenarios.py` | `/risk-scenarios` | Threat→Vuln→Asset→Control chains |
 | `risk_matrices.py` | `/risk-matrices` | Custom probability/impact scales (JSON) |
 | `compliance.py` | `/compliance` | Assessments, controls, gaps, cross-framework |
-| `frameworks.py` | `/frameworks` | List/CRUD frameworks, **custom builder with AI** |
+| `frameworks.py` | `/frameworks` | List/CRUD frameworks, **custom builder with AI**, **clone built-in → editable tenant copy** (`POST /{id}/clone`), update metadata (`PATCH /{id}`) |
 | `audits.py` | `/audits` | Full audit lifecycle + findings CRUD |
 | `policies.py` | `/policies` | Policy CRUD + versioning + attestations |
 | `vendors.py` | `/vendors` | TPRM: vendors, contracts, cartography, prescreen AI |
@@ -129,7 +142,7 @@ backend/
 
 ```
 frontend/src/
-  pages/            # 37 page components
+  pages/            # 38 page components
   components/       # Reusable UI (layout, modals, vendor, notifications)
   api/              # HTTP client (endpoints.ts) with 15+ API objects
   types/            # TypeScript interfaces
@@ -138,7 +151,7 @@ frontend/src/
   context/          # FrameworkContext
 ```
 
-### All Pages (37) with Routes
+### All Pages (38) with Routes
 
 | Page | Route | Sidebar Group |
 |------|-------|---------------|
@@ -152,6 +165,7 @@ frontend/src/
 | FrameworksPage | `/frameworks` | Core |
 | CustomFrameworkPage | `/frameworks/custom/new` | Core |
 | FrameworkBuilderPage | `/frameworks/builder` | Core |
+| EditFrameworkPage | `/frameworks/:id/edit` | Core (entered via Customize / Edit buttons) |
 | IncidentsPage | `/incidents` | Security |
 | VulnerabilitiesPage | `/vulnerabilities` | Security |
 | ThreatLibraryPage | `/threats` | Security |
@@ -218,6 +232,12 @@ GOVERNANCE: Regulatory Updates, Trust Center, Risk Quantification, Activity Log,
 - Cross-framework coverage analysis
 - Gap identification with remediation steps
 - Evidence upload with justification per control
+
+### Framework Customization
+- **Customize** button on every built-in framework card → forks it into a tenant-owned, fully editable copy (`POST /frameworks/{id}/clone` copies metadata + all controls + parent/child links + requirements)
+- **Edit Framework** page (`/frameworks/:id/edit`) — rename framework, edit/delete any control inline, add brand-new custom controls
+- Built-in frameworks remain read-only and shared across tenants — only the tenant's clone is mutable
+- Backend enforces ownership: `PATCH/DELETE /frameworks/{id}` returns 403 on built-in or another tenant's framework
 
 ### 3rd Party Risk (TPRM)
 - Vendor CRUD with risk tiers (critical/high/medium/low)
@@ -298,6 +318,12 @@ GOVERNANCE: Regulatory Updates, Trust Center, Risk Quantification, Activity Log,
 ## Useful Commands
 
 ```bash
+# One-shot setup on a new Windows machine (installs Python, Node, Ollama, all deps)
+powershell -ExecutionPolicy Bypass -File .\setup.ps1
+
+# Start both servers in two new windows
+powershell -ExecutionPolicy Bypass -File .\start.ps1
+
 # Backend
 cd backend && python -m uvicorn app.main:app --reload --port 8000
 python -m py_compile app/api/v1/endpoints/FILE.py   # Check syntax
@@ -314,3 +340,27 @@ curl -s -X POST http://localhost:8000/api/v1/auth/login \
   -H "Content-Type: application/json" \
   -d '{"email":"admin@demo.com","password":"demo123"}'
 ```
+
+## Setup Files at Project Root
+
+| File | Purpose |
+|------|---------|
+| `setup.ps1` | One-shot installer for a new Windows machine. Idempotent — safe to re-run. |
+| `start.ps1` | Launches backend (8000) and frontend (4000) in two new PowerShell windows. |
+| `backend/requirements.txt` | pip-installable mirror of `pyproject.toml` so Poetry isn't required for local dev. |
+
+### Dev gotchas worth knowing
+
+- **Pydantic-settings env file priority** — in `backend/app/core/config.py` the order is `(.env, .env.dev, .env.local)` where **later files override earlier**. So `.env.local` always wins. Don't reverse this order.
+- **Celery `.delay()` calls in API endpoints must be wrapped in `try/except`** — the dev environment doesn't run Redis, so an unwrapped `.delay()` returns 500. Pattern used in `frameworks.py`:
+  ```python
+  try:
+      notify_framework_updated.delay(fw.id, fw.name)
+  except Exception:
+      pass
+  ```
+- **PowerShell execution policy** — the user must run `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned` once, otherwise `npm.ps1` (and other npm-installed scripts) won't execute.
+- **Stale PATH after winget installs** — newly installed binaries (Python, Node) won't be visible in PowerShell windows opened *before* the install. Either close/reopen the terminal or refresh PATH manually:
+  ```powershell
+  $env:Path = [Environment]::GetEnvironmentVariable('Path','Machine') + ';' + [Environment]::GetEnvironmentVariable('Path','User')
+  ```

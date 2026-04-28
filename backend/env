@@ -1,0 +1,5 @@
+DATABASE_URL=sqlite+aiosqlite:///D:/GRC/backend/grc_dev.db
+SECRET_KEY=dev-secret-key-change-in-production
+ENVIRONMENT=development
+DEBUG=true
+OPENSOURCEMALWARE="osm_UYHMQMHp31vCymjkpjp2J52b1obLrh8bO9PhQee5"
