@@ -769,6 +769,9 @@ export const usersApi = {
 
   unassignAuditor: (assignment_id: string) =>
     apiClient.delete(`/users/auditors/assignments/${assignment_id}`),
+
+  deleteAuditor: (auditor_id: string) =>
+    apiClient.delete(`/users/auditors/${auditor_id}`),
 };
 
 // ─── Traceability Matrix ──────────────────────

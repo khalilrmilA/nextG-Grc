@@ -187,6 +187,34 @@ async def assign_auditor(
     )
 
 
+@router.delete("/auditors/{auditor_id}", status_code=204,
+               responses={404: {"description": "Auditor not found"}, 403: {"description": "Not an auditor account"}})
+async def delete_auditor(
+    auditor_id: str,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    _: Annotated[User, Depends(require_roles(UserRole.TENANT_ADMIN))],
+    tenant_id: Annotated[str, Depends(get_tenant_id)],
+):
+    """Permanently delete an auditor account and all their assignments."""
+    auditor = (await db.execute(
+        select(User).where(User.id == auditor_id, User.tenant_id == tenant_id)
+    )).scalar_one_or_none()
+    if not auditor:
+        raise HTTPException(404, "Auditor not found")
+    if auditor.role != UserRole.AUDITOR:
+        raise HTTPException(403, "Can only delete auditor accounts")
+
+    # Remove all assignments first
+    assignments = (await db.execute(
+        select(AuditorAssignment).where(AuditorAssignment.auditor_id == auditor_id)
+    )).scalars().all()
+    for a in assignments:
+        await db.delete(a)
+
+    await db.delete(auditor)
+    await db.commit()
+
+
 @router.delete("/auditors/assignments/{assignment_id}", status_code=204,
                responses={404: {"description": "Assignment not found"}})
 async def unassign_auditor(

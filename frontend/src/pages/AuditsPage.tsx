@@ -314,6 +314,8 @@ export default function AuditsPage() {
   const [planAudit, setPlanAudit]               = useState<any | null>(null);
 
   const [notice, setNotice] = useState<string>("");
+  const [confirmDeleteAuditorId, setConfirmDeleteAuditorId] = useState<string | null>(null);
+  const [deletingAuditorId, setDeletingAuditorId] = useState<string | null>(null);
 
   async function loadAudits() {
     setLoadingAudits(true);
@@ -355,6 +357,20 @@ export default function AuditsPage() {
       setAssignments(prev => prev.filter(a => a.id !== assignmentId));
     } catch {
       setNotice("Failed to remove assignment.");
+    }
+  }
+
+  async function handleDeleteAuditor(auditorId: string) {
+    setDeletingAuditorId(auditorId);
+    try {
+      await usersApi.deleteAuditor(auditorId);
+      setAuditors(prev => prev.filter(a => a.id !== auditorId));
+      setAssignments(prev => prev.filter(a => a.auditor_id !== auditorId));
+    } catch {
+      setNotice("Failed to delete auditor account.");
+    } finally {
+      setDeletingAuditorId(null);
+      setConfirmDeleteAuditorId(null);
     }
   }
 
@@ -526,7 +542,7 @@ export default function AuditsPage() {
                 ) : (
                   <div className="divide-y divide-gray-50">
                     {auditors.map(a => (
-                      <div key={a.id} className="flex items-center gap-4 px-6 py-3">
+                      <div key={a.id} className="flex items-center gap-4 px-6 py-3 group">
                         <div className="w-8 h-8 rounded-full bg-purple-100 flex items-center justify-center text-purple-700 font-semibold text-sm shrink-0">
                           {a.first_name[0]}{a.last_name[0]}
                         </div>
@@ -537,6 +553,32 @@ export default function AuditsPage() {
                         <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${a.is_active ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-500"}`}>
                           {a.is_active ? "Active" : "Inactive"}
                         </span>
+                        {confirmDeleteAuditorId === a.id ? (
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            <span className="text-xs text-red-600 font-medium">Delete account?</span>
+                            <button
+                              onClick={() => handleDeleteAuditor(a.id)}
+                              disabled={deletingAuditorId === a.id}
+                              className="px-2 py-1 bg-red-600 text-white text-xs rounded-md hover:bg-red-700 disabled:opacity-50 transition-colors"
+                            >
+                              {deletingAuditorId === a.id ? "Deleting…" : "Yes, delete"}
+                            </button>
+                            <button
+                              onClick={() => setConfirmDeleteAuditorId(null)}
+                              className="px-2 py-1 bg-gray-100 text-gray-600 text-xs rounded-md hover:bg-gray-200 transition-colors"
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        ) : (
+                          <button
+                            onClick={() => setConfirmDeleteAuditorId(a.id)}
+                            className="opacity-0 group-hover:opacity-100 p-1.5 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all"
+                            title="Delete auditor account"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
                       </div>
                     ))}
                   </div>
