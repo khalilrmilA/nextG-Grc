@@ -354,6 +354,7 @@ async def _compute_cross_framework_coverage(
         select(ComplianceAssessment).where(
             ComplianceAssessment.tenant_id == assessment.tenant_id,
             ComplianceAssessment.id != assessment.id,
+            ComplianceAssessment.framework_id != assessment.framework_id,
         )
     )
     other_assessments = other_assessments_result.scalars().all()

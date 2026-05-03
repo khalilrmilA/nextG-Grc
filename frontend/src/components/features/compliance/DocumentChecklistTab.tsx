@@ -5,6 +5,7 @@ import {
 } from "lucide-react";
 import { complianceApi } from "@/api/endpoints";
 import type { DocumentChecklistResponse, MandatoryDocumentStatus, ChecklistUploadedDoc } from "@/types";
+import DocumentViewerModal, { type ViewableDoc } from "@/components/features/compliance/DocumentViewerModal";
 
 interface Props {
   readonly assessmentId: string;
@@ -15,10 +16,12 @@ interface Props {
 
 function DocFileRow({
   doc,
+  onView,
   onVisibilityToggled,
   onDeleted,
 }: {
   readonly doc: ChecklistUploadedDoc;
+  readonly onView: (doc: ChecklistUploadedDoc) => void;
   readonly onVisibilityToggled: (updated: ChecklistUploadedDoc) => void;
   readonly onDeleted: (id: string) => void;
 }) {
@@ -52,24 +55,7 @@ function DocFileRow({
     }
   }
 
-  async function handleOpen() {
-    const url = doc.kind === "evidence"
-      ? complianceApi.downloadEvidenceUrl(doc.id)
-      : complianceApi.downloadDocumentUrl(doc.id);
-    const stored = localStorage.getItem("grc_user_v2");
-    const token = stored ? (JSON.parse(stored)?.accessToken ?? "") : "";
-    try {
-      const res = await fetch(url, {
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-      });
-      if (!res.ok) return;
-      const blob = await res.blob();
-      const objUrl = URL.createObjectURL(blob);
-      window.open(objUrl, "_blank");
-    } catch {
-      // ignore
-    }
-  }
+  function handleOpen() { onView(doc); }
 
   if (deleting) return null;
 
@@ -131,12 +117,14 @@ function DocFileRow({
 function ClauseRow({
   item,
   assessmentId,
+  onView,
   onUploaded,
   onVisibilityToggled,
   onDeleted,
 }: {
   readonly item: MandatoryDocumentStatus;
   readonly assessmentId: string;
+  readonly onView: (doc: ChecklistUploadedDoc) => void;
   readonly onUploaded: (key: string, newDoc: ChecklistUploadedDoc) => void;
   readonly onVisibilityToggled: (key: string, updated: ChecklistUploadedDoc) => void;
   readonly onDeleted: (key: string, docId: string) => void;
@@ -224,6 +212,7 @@ function ClauseRow({
                 <DocFileRow
                   key={d.id}
                   doc={d}
+                  onView={onView}
                   onVisibilityToggled={(updated) => onVisibilityToggled(item.document_type_key, updated)}
                   onDeleted={(id) => onDeleted(item.document_type_key, id)}
                 />
@@ -271,6 +260,20 @@ export default function DocumentChecklistTab({ assessmentId, frameworkShortName 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [filter, setFilter] = useState<"all" | "missing" | "uploaded">("all");
+  const [viewingDoc, setViewingDoc] = useState<ViewableDoc | null>(null);
+
+  function openViewer(doc: ChecklistUploadedDoc) {
+    const fetchUrl = doc.kind === "evidence"
+      ? complianceApi.downloadEvidenceUrl(doc.id)
+      : complianceApi.downloadDocumentUrl(doc.id);
+    setViewingDoc({
+      id: doc.id,
+      fetchUrl,
+      fileName: doc.file_name,
+      contentType: doc.content_type ?? undefined,
+      fileSizeBytes: doc.file_size_bytes ?? undefined,
+    });
+  }
 
   async function load() {
     setLoading(true);
@@ -463,6 +466,7 @@ export default function DocumentChecklistTab({ assessmentId, frameworkShortName 
                     key={item.document_type_key}
                     item={item}
                     assessmentId={assessmentId}
+                    onView={openViewer}
                     onUploaded={handleUploaded}
                     onVisibilityToggled={handleVisibilityToggled}
                     onDeleted={handleDeleted}
@@ -495,19 +499,7 @@ export default function DocumentChecklistTab({ assessmentId, frameworkShortName 
                   )}
                 </div>
                 <button
-                  onClick={async () => {
-                    const url = doc.kind === "evidence"
-                      ? complianceApi.downloadEvidenceUrl(doc.id)
-                      : complianceApi.downloadDocumentUrl(doc.id);
-                    const stored = localStorage.getItem("grc_user_v2");
-                    const token = stored ? (JSON.parse(stored)?.accessToken ?? "") : "";
-                    try {
-                      const res = await fetch(url, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
-                      if (!res.ok) return;
-                      const blob = await res.blob();
-                      window.open(URL.createObjectURL(blob), "_blank");
-                    } catch { /* ignore */ }
-                  }}
+                  onClick={() => openViewer(doc)}
                   title="View file"
                   className="p-1 rounded hover:bg-green-100 text-green-600 transition-colors flex-shrink-0"
                 >
@@ -517,6 +509,10 @@ export default function DocumentChecklistTab({ assessmentId, frameworkShortName 
             ))}
           </div>
         </div>
+      )}
+
+      {viewingDoc && (
+        <DocumentViewerModal doc={viewingDoc} onClose={() => setViewingDoc(null)} />
       )}
     </div>
   );
