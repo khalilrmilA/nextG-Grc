@@ -14,6 +14,8 @@ from app.models.compliance import ControlAssessment, Evidence, EvidenceType, Upl
 from app.models.evidence_upload_token import EvidenceUploadToken
 from app.models.framework import FrameworkControl
 from app.models.mandatory_document import MandatoryDocument
+from app.models.notification import Notification, NotificationStatus, NotificationType
+from app.models.user import User, UserRole
 
 router = APIRouter()
 
@@ -26,6 +28,36 @@ ALLOWED_MIME = {
     "image/jpg",
 }
 MAX_FILE_SIZE = 10 * 1024 * 1024  # 10 MB
+
+_NOTIFY_ROLES = {UserRole.TENANT_ADMIN, UserRole.CISO}
+
+
+async def _notify_tenant_admins(
+    db: AsyncSession,
+    tenant_id: str,
+    notif_type: NotificationType,
+    title: str,
+    message: str,
+    link: str | None = None,
+) -> None:
+    """Create an in-app notification for every admin/CISO in the tenant."""
+    result = await db.execute(
+        select(User).where(
+            User.tenant_id == tenant_id,
+            User.is_active == True,  # noqa: E712
+            User.role.in_(["tenant_admin", "ciso"]),
+        )
+    )
+    for user in result.scalars().all():
+        db.add(Notification(
+            tenant_id=tenant_id,
+            user_id=user.id,
+            type=notif_type,
+            status=NotificationStatus.UNREAD,
+            title=title,
+            message=message,
+            data={"link": link} if link else {},
+        ))
 
 
 class ShareLinkInfo(BaseModel):
@@ -68,6 +100,22 @@ async def get_share_link_info(token: str, db: AsyncSession = Depends(get_db)):
     now = datetime.now(timezone.utc).replace(tzinfo=None)
     is_expired = tok.expires_at is not None and tok.expires_at < now
     is_maxed = tok.max_uses is not None and tok.use_count >= tok.max_uses
+    is_valid = tok.is_active and not is_expired and not is_maxed
+
+    # Notify tenant admins that the link was opened (only when valid)
+    if is_valid:
+        try:
+            link_label = tok.label or ctrl_id or "share link"
+            ctrl_display = f" ({ctrl_id} — {ctrl_title})" if ctrl_id else ""
+            await _notify_tenant_admins(
+                db, tok.tenant_id,
+                NotificationType.SHARE_LINK_VIEWED,
+                title="Stakeholder opened upload link",
+                message=f'The share link "{link_label}"{ctrl_display} was opened by an external stakeholder.',
+            )
+            await db.commit()
+        except Exception:
+            await db.rollback()
 
     return ShareLinkInfo(
         token=tok.token,
@@ -78,7 +126,7 @@ async def get_share_link_info(token: str, db: AsyncSession = Depends(get_db)):
         expires_at=tok.expires_at.isoformat() if tok.expires_at else None,
         max_uses=tok.max_uses,
         use_count=tok.use_count,
-        is_valid=tok.is_active and not is_expired and not is_maxed,
+        is_valid=is_valid,
     )
 
 
@@ -139,10 +187,17 @@ async def upload_evidence_via_token(
     ca = (await db.execute(
         select(ControlAssessment).where(ControlAssessment.id == tok.control_assessment_id)
     )).scalar_one_or_none()
+
+    ctrl_id = None
+    ctrl_title = None
     if ca:
         fc = (await db.execute(
             select(FrameworkControl).where(FrameworkControl.id == ca.control_id)
         )).scalar_one_or_none()
+        if fc:
+            ctrl_id = fc.control_id
+            ctrl_title = fc.title
+
         # Try to match against a MandatoryDocument by clause_ref = fc.control_id (human-readable)
         doc_type_key = None
         if fc:
@@ -164,12 +219,30 @@ async def upload_evidence_via_token(
             uploaded_by_id=None,
         ))
 
-    # Increment use count
+    # Increment use count and commit the evidence/document records
     await db.execute(
         sa_update(EvidenceUploadToken)
         .where(EvidenceUploadToken.id == tok.id)
         .values(use_count=tok.use_count + 1)
     )
     await db.commit()
+
+    # Notify tenant admins of the upload (non-fatal — commit already done above)
+    try:
+        link_label = tok.label or ctrl_id or "share link"
+        ctrl_display = f" for {ctrl_id} — {ctrl_title}" if ctrl_id else ""
+        size_kb = round(len(content) / 1024, 1)
+        await _notify_tenant_admins(
+            db, tok.tenant_id,
+            NotificationType.SHARE_LINK_UPLOAD,
+            title="New evidence file received",
+            message=(
+                f'A stakeholder uploaded "{file.filename}" ({size_kb} KB){ctrl_display} '
+                f'via share link "{link_label}".'
+            ),
+        )
+        await db.commit()
+    except Exception:
+        await db.rollback()
 
     return {"status": "uploaded", "file_name": file.filename, "evidence_id": file_id}

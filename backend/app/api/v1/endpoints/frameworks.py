@@ -682,6 +682,7 @@ async def delete_framework(
     """Delete a tenant-owned custom framework and all its controls."""
     fw = await _get_tenant_framework(db, framework_id, tenant_id)
     await db.delete(fw)
+    await db.commit()
 
 
 @router.delete("/{framework_id}/controls/{control_db_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -706,6 +707,7 @@ async def delete_control(
         raise HTTPException(status_code=404, detail="Control not found")
 
     await db.delete(control)
+    await db.commit()
 
 
 @router.post("/{framework_id}/controls/{control_db_id}/requirements", status_code=status.HTTP_201_CREATED)

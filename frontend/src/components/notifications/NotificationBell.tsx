@@ -4,7 +4,7 @@
  */
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
-import { Bell, Check, Trash2, AlertTriangle, Shield, FileText, TrendingDown, RefreshCw } from "lucide-react";
+import { Bell, Check, Trash2, AlertTriangle, Shield, FileText, TrendingDown, RefreshCw, Link2, Upload } from "lucide-react";
 import { notificationsApi } from "@/api/endpoints";
 
 interface Notification {
@@ -37,6 +37,8 @@ const SEVERITY_COLORS: Record<string, string> = {
 };
 
 function getIcon(type: string) {
+  if (type === "share_link_viewed") return Link2;
+  if (type === "share_link_upload") return Upload;
   if (type.includes("vendor") || type.includes("contract")) return FileText;
   if (type.includes("risk")) return AlertTriangle;
   if (type.includes("compliance")) return TrendingDown;

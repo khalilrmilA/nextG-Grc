@@ -30,6 +30,9 @@ class NotificationType(str, enum.Enum):
     # AI Access events
     AI_ACCESS_APPROVED = "ai_access_approved"
     AI_ACCESS_REQUEST = "ai_access_request"
+    # Share link events
+    SHARE_LINK_VIEWED = "share_link_viewed"
+    SHARE_LINK_UPLOAD = "share_link_upload"
     # General
     WEEKLY_DIGEST = "weekly_digest"
     SYSTEM = "system"
