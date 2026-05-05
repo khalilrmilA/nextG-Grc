@@ -1,19 +1,19 @@
 import { Link } from "react-router-dom";
 import {
-  CheckCircle, ArrowRight, Zap, Globe, Lock, BarChart2,
+  CheckCircle, ArrowRight, Zap, Lock, BarChart2,
   FileText, Building2, ClipboardList, BookOpen, AlertTriangle,
   ChevronRight, Star, Users, Award,
 } from "lucide-react";
 
 const FEATURES = [
-  { icon: AlertTriangle, title: "Risk Management",     desc: "Interactive heat maps, risk registers, and automated scoring across your organization." },
-  { icon: CheckCircle,   title: "Compliance Tracking", desc: "Map controls to 80+ frameworks. Track implementation progress with segmented dashboards." },
-  { icon: ClipboardList, title: "Audit Management",    desc: "Plan, execute, and report on internal and external audits. Track findings to closure." },
-  { icon: FileText,      title: "Policy Lifecycle",    desc: "Draft, approve, publish, and collect employee attestations — all in one place." },
-  { icon: Building2,     title: "Vendor Risk (TPRM)",  desc: "Onboard, tier, and continuously monitor third-party vendors and supply chain risk." },
-  { icon: BarChart2,     title: "Executive Reporting", desc: "Board-ready dashboards, PDF exports, and real-time compliance scores." },
-  { icon: BookOpen,      title: "Framework Library",   desc: "ISO 27001, SOC 2, GDPR, PCI DSS, HIPAA, NIST CSF, NIST 800-53, CIS Controls and more." },
-  { icon: Globe,         title: "Multi-Tenant SaaS",   desc: "Row-level security, SSO via Okta / Azure AD, and full audit trail out of the box." },
+  { icon: AlertTriangle, title: "Risk Management",        desc: "Interactive 5×5 heat maps, risk registers, and automated likelihood/impact scoring." },
+  { icon: CheckCircle,   title: "Compliance Tracking",    desc: "Map controls to 76+ frameworks. Track implementation progress with segmented dashboards." },
+  { icon: ClipboardList, title: "Audit Management",       desc: "Plan, execute, and report on internal and external audits. Track findings to closure." },
+  { icon: FileText,      title: "Policy Lifecycle",       desc: "Draft, approve, publish, and collect employee attestations — all in one place." },
+  { icon: Building2,     title: "Vendor Risk (TPRM)",     desc: "Onboard, tier, and continuously monitor third-party vendors with AI-powered contract review." },
+  { icon: BarChart2,     title: "Executive Reporting",    desc: "Board-ready dashboards, PDF exports, and real-time compliance scores." },
+  { icon: BookOpen,      title: "Framework Library",      desc: "ISO 27001, SOC 2, GDPR, PCI DSS, HIPAA, NIST CSF, NIST 800-53, CIS Controls and more." },
+  { icon: Zap,           title: "AI-Powered Workflows",   desc: "Generate policies, analyze vendor contracts, and prescreen suppliers with on-premise AI — your data never leaves your infrastructure." },
 ];
 
 const FRAMEWORKS = [
@@ -34,14 +34,13 @@ const PLANS = [
     features: [
       "Up to 3 compliance frameworks",
       "10 admin users",
-      "25 integrations",
       "Risk register (up to 200 risks)",
       "Policy management",
       "Basic audit management",
       "Email + chat support",
       "1 year data retention",
     ],
-    notIncluded: ["Custom frameworks", "API access", "White-label", "SLA guarantee"],
+    notIncluded: ["Custom frameworks", "AI policy generation", "Vendor TPRM", "PDF reporting", "SLA guarantee"],
   },
   {
     name: "Professional",
@@ -54,16 +53,15 @@ const PLANS = [
     features: [
       "Up to 10 compliance frameworks",
       "50 admin users",
-      "75+ integrations",
       "Unlimited risk register",
-      "Advanced TPRM (vendor questionnaires)",
-      "AI-assisted policy drafting",
-      "API access (REST)",
+      "Advanced TPRM (vendor questionnaires + AI prescreening)",
+      "AI-assisted policy & document drafting",
+      "AI contract review (6-section analysis)",
       "Priority support + CSM",
       "3 year data retention",
       "Custom reporting & PDF export",
     ],
-    notIncluded: ["White-label", "Dedicated infrastructure"],
+    notIncluded: ["Custom framework builder", "White-label", "Dedicated infrastructure"],
   },
   {
     name: "Enterprise",
@@ -76,15 +74,13 @@ const PLANS = [
     features: [
       "Unlimited frameworks",
       "Unlimited users",
-      "Unlimited integrations",
+      "Custom framework builder",
       "White-label & custom branding",
-      "Dedicated infrastructure (VPC)",
       "On-premise / self-hosted option",
       "Dedicated Customer Success Manager",
       "99.9% SLA guarantee",
       "7 year data retention",
-      "Custom AI model fine-tuning",
-      "SAML 2.0, OIDC SSO",
+      "Custom AI configuration (Ollama model selection)",
       "24/7 phone support",
     ],
     notIncluded: [],
@@ -174,7 +170,7 @@ export default function LandingPage() {
         <div className="max-w-4xl mx-auto">
           <div className="inline-flex items-center gap-2 bg-blue-50 border border-blue-100 text-blue-700 text-xs font-semibold px-4 py-1.5 rounded-full mb-6">
             <Zap className="w-3.5 h-3.5" />
-            Now supporting 80+ compliance frameworks
+            Now supporting 76 compliance frameworks
           </div>
           <h1 className="text-5xl md:text-6xl font-extrabold text-gray-900 leading-tight tracking-tight mb-6">
             Enterprise GRC,{" "}
@@ -199,7 +195,7 @@ export default function LandingPage() {
           {/* Stats */}
           <div className="mt-16 grid grid-cols-3 gap-6 max-w-lg mx-auto">
             {[
-              { label: "Frameworks supported", value: "80+" },
+              { label: "Frameworks supported", value: "76+" },
               { label: "Controls mapped",       value: "3,500+" },
               { label: "Avg. audit prep saved", value: "60%" },
             ].map(s => (
@@ -237,7 +233,7 @@ export default function LandingPage() {
       <section id="frameworks" className="py-24 px-6 bg-slate-900">
         <div className="max-w-5xl mx-auto text-center">
           <h2 className="text-3xl font-extrabold text-white mb-3">Built for every framework</h2>
-          <p className="text-slate-400 mb-12 max-w-xl mx-auto">Pre-loaded with controls, crosswalk mappings, and evidence requirements for 80+ global frameworks.</p>
+          <p className="text-slate-400 mb-12 max-w-xl mx-auto">Pre-loaded with controls, crosswalk mappings, and evidence requirements for 76 global frameworks.</p>
           <div className="flex flex-wrap justify-center gap-3">
             {FRAMEWORKS.map(fw => (
               <span key={fw} className="bg-slate-800 border border-slate-700 text-slate-300 text-sm font-medium px-4 py-2 rounded-xl hover:bg-slate-700 hover:text-white transition-colors cursor-default">
@@ -245,7 +241,7 @@ export default function LandingPage() {
               </span>
             ))}
             <span className="bg-blue-600/20 border border-blue-500/30 text-blue-400 text-sm font-medium px-4 py-2 rounded-xl">
-              + 68 more frameworks
+              + 64 more frameworks
             </span>
           </div>
           <div className="mt-12 grid grid-cols-3 gap-6 max-w-2xl mx-auto">
