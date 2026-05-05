@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
-import { Shield, Eye, EyeOff, Loader2 } from "lucide-react";
+import { Eye, EyeOff, Loader2 } from "lucide-react";
 import { authSession, DEMO_USERS, type UserRole, type PlanTier } from "../store/auth";
 import LanguageSwitcher from "../components/LanguageSwitcher";
 
@@ -80,11 +80,9 @@ export default function LoginPage() {
 
         {/* Logo */}
         <div className="flex flex-col items-center mb-8">
-          <div className="w-14 h-14 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-2xl flex items-center justify-center mb-4 shadow-2xl shadow-blue-500/30">
-            <Shield className="w-8 h-8 text-white" />
-          </div>
-          <h1 className="text-2xl font-bold text-white tracking-tight">GRC Platform</h1>
-          <p className="text-slate-400 text-sm mt-1">Governance · Risk · Compliance</p>
+          <img src="/logo.png" alt="ComplyZone" className="h-20 w-20 object-contain rounded-2xl bg-white p-1 shadow-2xl mb-4" />
+          <h1 className="text-2xl font-bold text-white tracking-tight">ComplyZone</h1>
+          <p className="text-slate-400 text-sm mt-1">Govern. Manage. Assure.</p>
           <div className="mt-3"><LanguageSwitcher /></div>
         </div>
 
@@ -156,7 +154,7 @@ export default function LoginPage() {
 
             <div className="flex items-center gap-3 my-5">
             <div className="flex-1 h-px bg-gray-100" />
-            <span className="text-xs text-gray-400">New to GRC Platform?</span>
+            <span className="text-xs text-gray-400">New to ComplyZone?</span>
             <div className="flex-1 h-px bg-gray-100" />
           </div>
 
@@ -195,7 +193,7 @@ export default function LoginPage() {
         </div>
 
         <p className="text-center mt-5 text-xs text-slate-500">
-          © {new Date().getFullYear()} GRC Platform · All rights reserved
+          © {new Date().getFullYear()} ComplyZone · All rights reserved
         </p>
       </div>
     </div>

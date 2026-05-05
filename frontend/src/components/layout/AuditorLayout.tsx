@@ -1,7 +1,7 @@
 import { Outlet, NavLink, useNavigate } from "react-router-dom";
 import { useAuthStore, authSession } from "../../store/auth";
 import {
-  Shield, ClipboardCheck, Settings, HelpCircle,
+  ClipboardCheck, Settings, HelpCircle,
   LogOut, Bell, ChevronRight,
 } from "lucide-react";
 import LanguageSwitcher from "../LanguageSwitcher";
@@ -24,11 +24,9 @@ export default function AuditorLayout() {
 
         {/* Logo */}
         <div className="flex items-center gap-3 px-5 py-4 border-b border-slate-700/60">
-          <div className="w-9 h-9 bg-gradient-to-br from-purple-500 to-purple-700 rounded-xl flex items-center justify-center shadow-lg">
-            <Shield className="w-5 h-5 text-white" />
-          </div>
+          <img src="/logo.png" alt="ComplyZone" className="h-9 w-9 rounded-xl object-contain bg-white p-0.5 flex-shrink-0" />
           <div>
-            <p className="font-bold text-sm text-white leading-none">GRC Platform</p>
+            <p className="font-bold text-sm text-white leading-none">ComplyZone</p>
             <p className="text-xs text-slate-400 mt-0.5">Auditor Portal</p>
           </div>
         </div>

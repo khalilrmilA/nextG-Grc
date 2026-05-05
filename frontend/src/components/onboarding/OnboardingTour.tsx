@@ -41,7 +41,7 @@ const TOUR_STEPS: TourStep[] = [
   {
     id: "welcome",
     target: "",
-    title: "Welcome to your GRC Platform!",
+    title: "Welcome to ComplyZone!",
     body: "This quick tour walks you through the key sections of the platform. It will only appear for your first 3 visits. You can skip at any time.",
     icon: Shield,
     iconColor: "from-blue-500 to-indigo-600",

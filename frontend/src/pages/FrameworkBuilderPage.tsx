@@ -9,7 +9,7 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   BookOpen, Sparkles, Plus, Check, ChevronRight, ChevronDown, Trash2,
-  Search, Loader2, Save, ArrowLeft, AlertCircle, Lightbulb, Library, Wand2,
+  Search, Loader2, Save, ArrowLeft, AlertCircle, Lightbulb, Library, Wand2, Copy,
 } from "lucide-react";
 import { frameworksApi } from "@/api/endpoints";
 
@@ -76,6 +76,15 @@ export default function FrameworkBuilderPage() {
   // Custom control form
   const [showCustomForm, setShowCustomForm] = useState(false);
   const [customCtrl, setCustomCtrl] = useState({ control_id: "", title: "", description: "", category: "" });
+  const [customTab, setCustomTab] = useState<"new" | "import">("new");
+
+  // Import-from-framework state (inside custom control form)
+  const [importFwList, setImportFwList] = useState<{ id: string; name: string; short_name: string }[]>([]);
+  const [importFwId, setImportFwId] = useState("");
+  const [importFwControls, setImportFwControls] = useState<Control[]>([]);
+  const [importFwLoading, setImportFwLoading] = useState(false);
+  const [importSearch, setImportSearch] = useState("");
+  const [importSelected, setImportSelected] = useState<string | null>(null);
 
   // Selected controls
   const [selected, setSelected] = useState<SelectedControl[]>([]);
@@ -90,6 +99,26 @@ export default function FrameworkBuilderPage() {
       loadFrameworks();
     }
   }, [step]);
+
+  // Load framework list for the import picker when tab switches to "import"
+  useEffect(() => {
+    if (customTab !== "import" || importFwList.length > 0) return;
+    frameworksApi.list().then(list =>
+      setImportFwList(list.map(f => ({ id: f.id, name: f.name, short_name: f.short_name })))
+    ).catch(() => {});
+  }, [customTab, importFwList.length]);
+
+  // Load controls for the selected import framework
+  useEffect(() => {
+    if (!importFwId) { setImportFwControls([]); return; }
+    setImportFwLoading(true);
+    setImportSelected(null);
+    setImportSearch("");
+    frameworksApi.getControls(importFwId)
+      .then(ctrls => setImportFwControls(ctrls as Control[]))
+      .catch(() => setImportFwControls([]))
+      .finally(() => setImportFwLoading(false));
+  }, [importFwId]);
 
   async function loadFrameworks() {
     try {
@@ -227,10 +256,14 @@ export default function FrameworkBuilderPage() {
         title: customCtrl.title.trim(),
         description: customCtrl.description.trim() || undefined,
         category: customCtrl.category.trim() || undefined,
-        source_framework: "Custom",
+        source_framework: customTab === "import" ? "Imported" : "Custom",
       },
     ]);
     setCustomCtrl({ control_id: "", title: "", description: "", category: "" });
+    setImportFwId("");
+    setImportSelected(null);
+    setImportSearch("");
+    setCustomTab("new");
     setShowCustomForm(false);
   }
 
@@ -681,7 +714,7 @@ export default function FrameworkBuilderPage() {
               <p className="text-sm font-semibold text-gray-700">Add Your Own Control</p>
               <button
                 type="button"
-                onClick={() => setShowCustomForm(v => !v)}
+                onClick={() => { setShowCustomForm(v => !v); setCustomTab("new"); }}
                 className="flex items-center gap-1.5 text-xs font-medium text-blue-600 hover:text-blue-800 bg-blue-50 hover:bg-blue-100 px-3 py-1.5 rounded-lg transition-colors"
               >
                 <Plus className="w-3.5 h-3.5" />
@@ -691,6 +724,110 @@ export default function FrameworkBuilderPage() {
 
             {showCustomForm && (
               <div className="bg-gray-50 border border-gray-200 rounded-xl p-4 space-y-3">
+                {/* Tabs */}
+                <div className="flex gap-1">
+                  <button
+                    type="button"
+                    onClick={() => setCustomTab("new")}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                      customTab === "new" ? "bg-blue-600 text-white" : "text-gray-600 hover:bg-gray-200"
+                    }`}
+                  >
+                    <Plus className="w-3 h-3" /> Create from scratch
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setCustomTab("import")}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                      customTab === "import" ? "bg-blue-600 text-white" : "text-gray-600 hover:bg-gray-200"
+                    }`}
+                  >
+                    <Copy className="w-3 h-3" /> Import from framework
+                  </button>
+                </div>
+
+                {/* Import picker */}
+                {customTab === "import" && (
+                  <div className="space-y-2">
+                    <select
+                      value={importFwId}
+                      onChange={e => setImportFwId(e.target.value)}
+                      className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                    >
+                      <option value="">— Select a framework —</option>
+                      {importFwList.map(f => (
+                        <option key={f.id} value={f.id}>{f.name} ({f.short_name})</option>
+                      ))}
+                    </select>
+
+                    {importFwId && (
+                      <div className="relative">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
+                        <input
+                          type="text"
+                          value={importSearch}
+                          onChange={e => setImportSearch(e.target.value)}
+                          placeholder="Search controls…"
+                          className="w-full border border-gray-200 rounded-lg pl-8 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        />
+                      </div>
+                    )}
+
+                    {importFwId && (
+                      <div className="border border-gray-200 rounded-lg bg-white overflow-y-auto max-h-40">
+                        {importFwLoading ? (
+                          <div className="flex items-center justify-center py-5 text-xs text-gray-400">
+                            <Loader2 className="w-4 h-4 animate-spin mr-2" /> Loading…
+                          </div>
+                        ) : importFwControls.filter(c =>
+                            !importSearch ||
+                            c.control_id.toLowerCase().includes(importSearch.toLowerCase()) ||
+                            c.title.toLowerCase().includes(importSearch.toLowerCase())
+                          ).length === 0 ? (
+                          <div className="py-5 text-center text-xs text-gray-400">No controls found</div>
+                        ) : (
+                          importFwControls
+                            .filter(c =>
+                              !importSearch ||
+                              c.control_id.toLowerCase().includes(importSearch.toLowerCase()) ||
+                              c.title.toLowerCase().includes(importSearch.toLowerCase())
+                            )
+                            .map(ctrl => (
+                              <button
+                                key={ctrl.id}
+                                type="button"
+                                onClick={() => {
+                                  setImportSelected(ctrl.id);
+                                  setCustomCtrl({
+                                    control_id: ctrl.control_id,
+                                    title: ctrl.title,
+                                    description: ctrl.description || "",
+                                    category: ctrl.category || "",
+                                  });
+                                }}
+                                className={`w-full text-left px-3 py-2 border-b border-gray-50 last:border-0 hover:bg-blue-50 transition-colors ${
+                                  importSelected === ctrl.id ? "bg-blue-50 border-l-2 border-l-blue-500" : ""
+                                }`}
+                              >
+                                <div className="flex items-center gap-2">
+                                  <span className="text-[10px] font-mono font-bold text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded flex-shrink-0">
+                                    {ctrl.control_id}
+                                  </span>
+                                  <span className="text-xs text-gray-800 line-clamp-1">{ctrl.title}</span>
+                                </div>
+                              </button>
+                            ))
+                        )}
+                      </div>
+                    )}
+
+                    {importSelected && (
+                      <p className="text-xs text-blue-600 font-medium">✓ Selected — edit the fields below before adding</p>
+                    )}
+                  </div>
+                )}
+
+                {/* Form fields */}
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <label className="block text-xs font-medium text-gray-600 mb-1">Control ID <span className="text-gray-400">(auto if blank)</span></label>

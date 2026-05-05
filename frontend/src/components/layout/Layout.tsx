@@ -395,12 +395,10 @@ export default function Layout() {
       <aside className={`w-64 flex flex-col shadow-2xl flex-shrink-0 transition-colors duration-200 ${sidebarClasses(appearance.sidebarStyle)}`}>
         {/* Logo */}
         <div className={`flex items-center gap-3 px-5 py-4 border-b ${sc.divider}`}>
-          <div className="w-9 h-9 bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl flex items-center justify-center shadow-lg shadow-blue-500/30">
-            <Shield className="w-5 h-5 text-white" />
-          </div>
+          <img src="/logo.png" alt="ComplyZone" className="h-9 w-9 rounded-xl object-contain bg-white p-0.5 flex-shrink-0" />
           <div>
-            <p className={`font-bold text-sm leading-none tracking-tight ${sc.logo}`}>GRC Platform</p>
-            <p className={`text-xs mt-0.5 ${sc.sub}`}>{t("auth.sign_in_subtitle").split(" ").slice(0, 2).join(" ")} &amp; Compliance</p>
+            <p className={`font-bold text-sm leading-none tracking-tight ${sc.logo}`}>ComplyZone</p>
+            <p className={`text-xs mt-0.5 ${sc.sub}`}>Govern. Manage. Assure.</p>
           </div>
         </div>
 
@@ -569,7 +567,7 @@ export default function Layout() {
         <header className="bg-white border-b border-gray-100 px-8 py-3.5 flex items-center justify-between flex-shrink-0">
           <div className="flex items-center gap-3 text-sm">
             <div className="flex items-center gap-2">
-              <span className="text-gray-400">GRC Platform</span>
+              <span className="text-gray-400">ComplyZone</span>
               <ChevronRight className="w-3.5 h-3.5 text-gray-300" />
               <span className="text-gray-900 font-semibold">{pageLabel}</span>
             </div>

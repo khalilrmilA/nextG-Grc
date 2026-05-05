@@ -1,6 +1,6 @@
 import { Link } from "react-router-dom";
 import {
-  Shield, CheckCircle, ArrowRight, Zap, Globe, Lock, BarChart2,
+  CheckCircle, ArrowRight, Zap, Globe, Lock, BarChart2,
   FileText, Building2, ClipboardList, BookOpen, AlertTriangle,
   ChevronRight, Star, Users, Award,
 } from "lucide-react";
@@ -149,10 +149,8 @@ export default function LandingPage() {
       <header className="fixed top-0 inset-x-0 z-50 bg-white/80 backdrop-blur border-b border-gray-100">
         <div className="max-w-7xl mx-auto px-6 py-3.5 flex items-center justify-between">
           <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-blue-700 rounded-xl flex items-center justify-center shadow-md shadow-blue-500/30">
-              <Shield className="w-4 h-4 text-white" />
-            </div>
-            <span className="font-bold text-gray-900 text-sm tracking-tight">GRC Platform</span>
+            <img src="/logo.png" alt="ComplyZone" className="h-8 w-8 object-contain rounded-xl" />
+            <span className="font-bold text-gray-900 text-sm tracking-tight">ComplyZone</span>
           </div>
           <nav className="hidden md:flex items-center gap-6 text-sm text-gray-500">
             <a href="#features" className="hover:text-gray-900 transition-colors">Features</a>
@@ -331,12 +329,10 @@ export default function LandingPage() {
       <footer className="bg-slate-900 text-slate-400 py-12 px-6">
         <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4">
           <div className="flex items-center gap-2">
-            <div className="w-7 h-7 bg-gradient-to-br from-blue-500 to-blue-700 rounded-lg flex items-center justify-center">
-              <Shield className="w-3.5 h-3.5 text-white" />
-            </div>
-            <span className="text-white font-bold text-sm">GRC Platform</span>
+            <img src="/logo.png" alt="ComplyZone" className="h-7 w-7 object-contain rounded-lg bg-white p-0.5" />
+            <span className="text-white font-bold text-sm">ComplyZone</span>
           </div>
-          <p className="text-xs text-slate-500">© 2026 GRC Platform, Inc. All rights reserved.</p>
+          <p className="text-xs text-slate-500">© 2026 ComplyZone, Inc. All rights reserved.</p>
           <div className="flex gap-5 text-sm">
             <a href="#" className="hover:text-white transition-colors">Privacy</a>
             <a href="#" className="hover:text-white transition-colors">Terms</a>

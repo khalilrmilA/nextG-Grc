@@ -432,7 +432,7 @@ export default function DocumentViewerModal({
                         {doc.fileName}
                         {doc.fileSizeBytes ? ` · ${(doc.fileSizeBytes / 1024).toFixed(1)} KB` : ""}
                       </p>
-                      <span className="text-xs text-gray-300">GRC Platform — NextStep IT</span>
+                      <span className="text-xs text-gray-300">ComplyZone — NextStep IT</span>
                     </div>
                   </div>
                 </div>

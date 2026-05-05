@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import {
   ArrowLeft, Plus, Save, Trash2, Pencil, X, Loader2,
-  AlertCircle, CheckCircle, BookOpen,
+  AlertCircle, CheckCircle, BookOpen, Search, Copy,
 } from "lucide-react";
 import { frameworksApi, customFrameworkApi } from "@/api/endpoints";
 import type { Framework, FrameworkControl } from "@/types";
@@ -286,7 +286,7 @@ export default function EditFrameworkPage() {
         )}
       </div>
 
-      {addOpen && <AddControlModal onClose={() => setAddOpen(false)} onSave={handleAdd} />}
+      {addOpen && <AddControlModal onClose={() => setAddOpen(false)} onSave={handleAdd} currentFrameworkId={fw.id} />}
     </div>
   );
 }
@@ -403,15 +403,63 @@ function ControlRow({
 function AddControlModal({
   onClose,
   onSave,
+  currentFrameworkId,
 }: {
   readonly onClose: () => void;
   readonly onSave: (data: { control_id: string; title: string; description?: string; category?: string }) => void;
+  readonly currentFrameworkId: string;
 }) {
+  const [tab, setTab] = useState<"new" | "import">("new");
+
+  // "Create from scratch" fields
   const [controlId, setControlId] = useState("");
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [category, setCategory] = useState("");
   const [submitting, setSubmitting] = useState(false);
+
+  // "Import from framework" state
+  const [frameworks, setFrameworks] = useState<Framework[]>([]);
+  const [selectedFwId, setSelectedFwId] = useState("");
+  const [fwControls, setFwControls] = useState<FrameworkControl[]>([]);
+  const [fwLoading, setFwLoading] = useState(false);
+  const [search, setSearch] = useState("");
+  const [selectedCtrl, setSelectedCtrl] = useState<FrameworkControl | null>(null);
+
+  // Load framework list once when switching to import tab
+  useEffect(() => {
+    if (tab !== "import" || frameworks.length > 0) return;
+    frameworksApi.list().then(list =>
+      setFrameworks(list.filter(f => f.id !== currentFrameworkId))
+    ).catch(() => {});
+  }, [tab, frameworks.length, currentFrameworkId]);
+
+  // Load controls when a framework is picked
+  useEffect(() => {
+    if (!selectedFwId) { setFwControls([]); return; }
+    setFwLoading(true);
+    setSelectedCtrl(null);
+    setSearch("");
+    frameworksApi.getControls(selectedFwId)
+      .then(setFwControls)
+      .catch(() => setFwControls([]))
+      .finally(() => setFwLoading(false));
+  }, [selectedFwId]);
+
+  function pickControl(ctrl: FrameworkControl) {
+    setSelectedCtrl(ctrl);
+    // Pre-fill the manual fields so the user can edit before saving
+    setControlId(ctrl.control_id);
+    setTitle(ctrl.title);
+    setDescription(ctrl.description ?? "");
+    setCategory(ctrl.category ?? "");
+  }
+
+  const filtered = fwControls.filter(c =>
+    !search ||
+    c.control_id.toLowerCase().includes(search.toLowerCase()) ||
+    c.title.toLowerCase().includes(search.toLowerCase())
+  );
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -428,14 +476,104 @@ function AddControlModal({
 
   return (
     <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
-      <form onSubmit={submit} className="bg-white rounded-2xl shadow-2xl w-full max-w-lg p-6 space-y-4">
-        <div className="flex items-center justify-between">
-          <h3 className="text-lg font-bold text-gray-900">Add custom control</h3>
+      <form onSubmit={submit} className="bg-white rounded-2xl shadow-2xl w-full max-w-lg flex flex-col max-h-[90vh]">
+        {/* Header */}
+        <div className="flex items-center justify-between px-6 pt-6 pb-4 flex-shrink-0">
+          <h3 className="text-lg font-bold text-gray-900">Add control</h3>
           <button type="button" onClick={onClose} className="p-1 text-gray-400 hover:text-gray-600 rounded-lg">
             <X className="w-4 h-4" />
           </button>
         </div>
-        <div className="space-y-3">
+
+        {/* Tabs */}
+        <div className="flex gap-1 px-6 pb-4 flex-shrink-0">
+          <button
+            type="button"
+            onClick={() => setTab("new")}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+              tab === "new" ? "bg-blue-600 text-white" : "text-gray-600 hover:bg-gray-100"
+            }`}
+          >
+            <Plus className="w-3.5 h-3.5" /> Create from scratch
+          </button>
+          <button
+            type="button"
+            onClick={() => setTab("import")}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+              tab === "import" ? "bg-blue-600 text-white" : "text-gray-600 hover:bg-gray-100"
+            }`}
+          >
+            <Copy className="w-3.5 h-3.5" /> Import from framework
+          </button>
+        </div>
+
+        {/* Import picker */}
+        {tab === "import" && (
+          <div className="px-6 pb-4 space-y-3 flex-shrink-0">
+            <select
+              value={selectedFwId}
+              onChange={e => setSelectedFwId(e.target.value)}
+              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="">— Select a framework —</option>
+              {frameworks.map(f => (
+                <option key={f.id} value={f.id}>{f.name} ({f.short_name})</option>
+              ))}
+            </select>
+
+            {selectedFwId && (
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
+                <input
+                  type="text"
+                  value={search}
+                  onChange={e => setSearch(e.target.value)}
+                  placeholder="Search controls…"
+                  className="w-full border border-gray-200 rounded-lg pl-8 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+            )}
+
+            {selectedFwId && (
+              <div className="border border-gray-200 rounded-lg overflow-y-auto max-h-48">
+                {fwLoading ? (
+                  <div className="flex items-center justify-center py-6 text-sm text-gray-400">
+                    <Loader2 className="w-4 h-4 animate-spin mr-2" /> Loading…
+                  </div>
+                ) : filtered.length === 0 ? (
+                  <div className="py-6 text-center text-sm text-gray-400">No controls found</div>
+                ) : (
+                  filtered.map(ctrl => (
+                    <button
+                      key={ctrl.id}
+                      type="button"
+                      onClick={() => pickControl(ctrl)}
+                      className={`w-full text-left px-3 py-2.5 border-b border-gray-50 last:border-0 hover:bg-blue-50 transition-colors ${
+                        selectedCtrl?.id === ctrl.id ? "bg-blue-50 border-l-2 border-l-blue-500" : ""
+                      }`}
+                    >
+                      <div className="flex items-center gap-2">
+                        <span className="text-[10px] font-mono font-bold text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded flex-shrink-0">
+                          {ctrl.control_id}
+                        </span>
+                        <span className="text-xs text-gray-800 line-clamp-1">{ctrl.title}</span>
+                      </div>
+                    </button>
+                  ))
+                )}
+              </div>
+            )}
+
+            {selectedCtrl && (
+              <p className="text-xs text-blue-600 font-medium">
+                ✓ Selected — edit the fields below before saving
+              </p>
+            )}
+          </div>
+        )}
+
+        {/* Form fields (always visible, pre-filled when importing) */}
+        <div className="px-6 pb-4 space-y-3 overflow-y-auto flex-1">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Control ID *</label>
             <input
@@ -480,7 +618,9 @@ function AddControlModal({
             </select>
           </div>
         </div>
-        <div className="flex justify-end gap-2 pt-2">
+
+        {/* Footer */}
+        <div className="flex justify-end gap-2 px-6 py-4 border-t border-gray-100 flex-shrink-0">
           <button type="button" onClick={onClose}
             className="text-sm px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg">
             Cancel

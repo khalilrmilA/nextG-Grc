@@ -1625,18 +1625,25 @@ async def upload_control_evidence(
                         )).scalars().all()
 
                         for target_ca in target_cas:
+                            # Give each copy its own file on disk so deletions are independent
+                            copy_rel = f"{tenant_id}/evidence/{uuid.uuid4().hex}_{evidence.file_name}"
+                            copy_full = Path(settings.UPLOADS_DIR) / copy_rel
+                            copy_full.parent.mkdir(parents=True, exist_ok=True)
+                            import shutil as _shutil
+                            _shutil.copy2(str(full_path), str(copy_full))
+
                             shared = Evidence(
                                 control_assessment_id=target_ca.id,
                                 tenant_id=tenant_id,
                                 name=evidence.name,
                                 evidence_type=EvidenceType.DOCUMENT,
                                 file_name=evidence.file_name,
-                                file_path=evidence.file_path,
+                                file_path=copy_rel,
                                 file_size_bytes=evidence.file_size_bytes,
                                 content_type=evidence.content_type,
                                 uploaded_by_id=current_user.id,
                                 is_visible_to_auditor=True,
-                                shared_from_evidence_id=evidence.id,
+                                shared_from_evidence_id=None,
                             )
                             db.add(shared)
                             shared_count += 1
@@ -1725,12 +1732,10 @@ async def delete_evidence(
     evidence = result.scalar_one_or_none()
     if not evidence:
         raise HTTPException(status_code=404, detail="Evidence not found")
-    # Delete physical file if it exists
     if evidence.file_path:
         from pathlib import Path as _Path
         full = _Path(settings.UPLOADS_DIR) / evidence.file_path
-        if full.exists():
-            full.unlink(missing_ok=True)
+        full.unlink(missing_ok=True)
     await db.delete(evidence)
     await db.commit()
 
