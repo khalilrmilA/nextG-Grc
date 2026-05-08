@@ -284,6 +284,36 @@ export default function LandingPage() {
         </div>
       </section>
 
+      {/* ── Resources Section ── */}
+      <section className="py-24 px-6 bg-gray-50">
+        <div className="max-w-5xl mx-auto">
+          <h2 className="text-3xl font-extrabold text-gray-900 text-center mb-12">Learn More</h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+            <Link to="/features-landing" className="group bg-white rounded-2xl p-8 border border-gray-200 hover:border-blue-600 hover:shadow-lg transition-all">
+              <div className="flex items-start justify-between mb-4">
+                <h3 className="text-2xl font-bold text-gray-900 group-hover:text-blue-600 transition-colors">Features</h3>
+                <ArrowRight className="w-6 h-6 text-gray-400 group-hover:text-blue-600 transition-colors" />
+              </div>
+              <p className="text-gray-600">Explore all the capabilities that make GRCEye the complete GRC platform — from risk management to compliance to audit operations.</p>
+              <div className="mt-6 pt-6 border-t border-gray-200">
+                <span className="text-blue-600 font-semibold text-sm">Browse features →</span>
+              </div>
+            </Link>
+
+            <Link to="/blog" className="group bg-white rounded-2xl p-8 border border-gray-200 hover:border-blue-600 hover:shadow-lg transition-all">
+              <div className="flex items-start justify-between mb-4">
+                <h3 className="text-2xl font-bold text-gray-900 group-hover:text-blue-600 transition-colors">Blog</h3>
+                <ArrowRight className="w-6 h-6 text-gray-400 group-hover:text-blue-600 transition-colors" />
+              </div>
+              <p className="text-gray-600">Read insights on compliance strategy, risk quantification, vendor management, and best practices from GRC experts.</p>
+              <div className="mt-6 pt-6 border-t border-gray-200">
+                <span className="text-blue-600 font-semibold text-sm">Read articles →</span>
+              </div>
+            </Link>
+          </div>
+        </div>
+      </section>
+
       {/* ── CTA ── */}
       <section className="py-24 px-6 bg-gradient-to-br from-blue-600 to-indigo-700 text-white text-center">
         <div className="max-w-2xl mx-auto">
