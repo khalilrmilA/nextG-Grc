@@ -81,9 +81,6 @@ export default function LoginPage() {
         {/* Logo */}
         <div className="flex flex-col items-center mb-8">
           <img src="/logo.png" alt="GRCEye" className="h-40 w-auto object-contain mb-4 drop-shadow-2xl" />
-          <div className="bg-yellow-300 text-slate-900 font-bold px-6 py-2 rounded-full text-sm tracking-widest mb-4 shadow-lg">
-            Govern · Manage · Assure
-          </div>
           <div className="mt-3"><LanguageSwitcher /></div>
         </div>
 
