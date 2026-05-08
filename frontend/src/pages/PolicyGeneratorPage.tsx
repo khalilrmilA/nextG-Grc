@@ -468,7 +468,7 @@ export default function PolicyGeneratorPage() {
   const handleDeletePolicy = async (policyId: string, e: React.MouseEvent) => {
     e.stopPropagation();
     e.preventDefault();
-    if (!window.confirm(`Delete this document? ID: ${policyId}`)) return;
+
     try {
       await policiesApi.delete(policyId);
       await refetchPolicies();
@@ -584,15 +584,51 @@ export default function PolicyGeneratorPage() {
 
   function handleDownload() {
     if (!selectedDoc || !currentContent) return;
-    const blob = new Blob([currentContent], { type: "text/plain;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `${slugify(selectedDoc)}.txt`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+    // Convert markdown-like content to styled HTML then print as PDF
+    const htmlContent = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>${selectedDoc}</title>
+  <style>
+    body { font-family: Arial, sans-serif; font-size: 12pt; line-height: 1.6; margin: 40px; color: #1a1a1a; }
+    h1 { font-size: 20pt; font-weight: bold; margin-top: 24px; margin-bottom: 8px; }
+    h2 { font-size: 15pt; font-weight: bold; margin-top: 20px; margin-bottom: 6px; border-bottom: 1px solid #ccc; padding-bottom: 4px; color: #1e3a8a; }
+    h3 { font-size: 13pt; font-weight: bold; margin-top: 16px; margin-bottom: 4px; }
+    h4 { font-size: 12pt; font-weight: 600; margin-top: 12px; margin-bottom: 4px; color: #444; }
+    p { margin: 4px 0 6px 0; }
+    li { margin: 2px 0; }
+    ul, ol { padding-left: 24px; }
+    hr { border: none; border-top: 1px solid #ddd; margin: 16px 0; }
+    @media print { body { margin: 20px; } }
+  </style>
+</head>
+<body>
+${currentContent
+  .split("\n")
+  .map(line => {
+    if (line.startsWith("# "))   return `<h1>${line.slice(2)}</h1>`;
+    if (line.startsWith("## "))  return `<h2>${line.slice(3)}</h2>`;
+    if (line.startsWith("### ")) return `<h3>${line.slice(4)}</h3>`;
+    if (line.startsWith("#### ")) return `<h4>${line.slice(5)}</h4>`;
+    if (line.startsWith("- ") || line.startsWith("* ")) return `<li>${line.slice(2)}</li>`;
+    if (/^\d+\. /.test(line)) return `<li>${line.replace(/^\d+\. /, "")}</li>`;
+    if (line.startsWith("---")) return `<hr>`;
+    if (line.trim() === "") return `<br>`;
+    return `<p>${line}</p>`;
+  })
+  .join("\n")}
+</body>
+</html>`;
+    const win = window.open("", "_blank");
+    if (!win) return;
+    win.document.write(htmlContent);
+    win.document.close();
+    win.onload = () => {
+      win.focus();
+      win.print();
+      win.close();
+    };
   }
 
   async function handleSaveToPolicies() {
@@ -940,7 +976,7 @@ export default function PolicyGeneratorPage() {
                 onClick={handleDownload}
                 className="flex items-center gap-1.5 text-xs text-gray-600 border border-gray-200 hover:bg-gray-50 px-3 py-1.5 rounded-lg transition-colors"
               >
-                <Download className="w-3.5 h-3.5" /> Download .txt
+                <Download className="w-3.5 h-3.5" /> Download PDF
               </button>
 
               <div className="w-px h-4 bg-gray-200" />

@@ -132,7 +132,7 @@ export default function AIAssistant() {
     {
       id: "welcome",
       role: "assistant",
-      content: "Hi! I'm your GRC AI assistant powered by **DeepSeek R1**.\n\nI can help you with ISO 27001, SOC 2, GDPR, risk assessments, policy drafting, audit prep, and more.\n\n⚡ First response may take ~10s while the model loads. What do you need help with?",
+      content: "Hi! I'm your GRC AI assistant.\n\nI can help you with ISO 27001, SOC 2, GDPR, risk assessments, policy drafting, audit prep, and more.\n\n⚡ First response may take ~10s while the AI loads. What do you need help with?",
     },
   ]);
   const [loading, setLoading] = useState(false);

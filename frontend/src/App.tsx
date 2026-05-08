@@ -76,6 +76,14 @@ function PrivateRoute({ children, requiredModule }: { readonly children: React.R
   return <>{children}</>;
 }
 
+function PublicOnlyRoute({ children }: { readonly children: React.ReactNode }) {
+  const user = useAuthStore((u) => u);
+  if (!user) return <>{children}</>;
+  if (user.role === "auditor") return <Navigate to="/auditor/portal" replace />;
+  if (user.role === "super_admin") return <Navigate to="/super-admin" replace />;
+  return <Navigate to="/dashboard" replace />;
+}
+
 function AuditorRoute({ children }: { readonly children: React.ReactNode }) {
   const user = useAuthStore((u) => u);
   if (!user) return <Navigate to="/login" replace />;
@@ -101,8 +109,8 @@ export default function App() {
       <Route path="/blog" element={<BlogPage />} />
       <Route path="/news" element={<NewsPage />} />
       <Route path="/faq" element={<FAQPage />} />
-      <Route path="/login" element={<LoginPage />} />
-      <Route path="/register" element={<RegisterPage />} />
+      <Route path="/login" element={<PublicOnlyRoute><LoginPage /></PublicOnlyRoute>} />
+      <Route path="/register" element={<PublicOnlyRoute><RegisterPage /></PublicOnlyRoute>} />
       <Route path="/super-admin" element={<SuperAdminRoute><SuperAdminPage /></SuperAdminRoute>} />
       {/* ── Auditor-only routes (dedicated layout) ── */}
       <Route
