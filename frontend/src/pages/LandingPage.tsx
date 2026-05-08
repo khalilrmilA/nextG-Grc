@@ -2,6 +2,7 @@ import { Link } from "react-router-dom";
 import { useEffect, useRef, useState } from "react";
 import SupportChat from "../components/landing/SupportChat";
 import PublicNav from "../components/landing/PublicNav";
+import { ShaderCard } from "../components/landing/ShaderCard";
 import {
   CheckCircle, ArrowRight, Zap, Lock, BarChart2,
   FileText, Building2, ClipboardList, BookOpen, AlertTriangle,
@@ -10,55 +11,6 @@ import {
   Database, Globe, Award, Cpu, ChevronRight,
 } from "lucide-react";
 
-// ── 3D Tilt Card ──────────────────────────────────────────────────────────────
-function TiltCard({ children, className = "" }: { children: React.ReactNode; className?: string }) {
-  const ref = useRef<HTMLDivElement>(null);
-  const [style, setStyle] = useState<React.CSSProperties>({});
-  const [glare, setGlare] = useState<React.CSSProperties>({});
-  const raf = useRef<number>(0);
-
-  function onMove(e: React.MouseEvent<HTMLDivElement>) {
-    cancelAnimationFrame(raf.current);
-    raf.current = requestAnimationFrame(() => {
-      const el = ref.current;
-      if (!el) return;
-      const { left, top, width, height } = el.getBoundingClientRect();
-      const x = (e.clientX - left) / width;   // 0→1
-      const y = (e.clientY - top)  / height;  // 0→1
-      const rotX = (0.5 - y) * 14;            // –7 … +7 deg
-      const rotY = (x - 0.5) * 14;
-      setStyle({
-        transform: `perspective(700px) rotateX(${rotX}deg) rotateY(${rotY}deg) scale3d(1.03,1.03,1.03)`,
-        transition: "transform 0.08s ease-out",
-        boxShadow: `${-rotY * 1.5}px ${rotX * 1.5}px 32px rgba(0,0,0,0.12)`,
-      });
-      setGlare({
-        background: `radial-gradient(circle at ${x * 100}% ${y * 100}%, rgba(255,255,255,0.18) 0%, transparent 65%)`,
-        opacity: 1,
-      });
-    });
-  }
-
-  function onLeave() {
-    cancelAnimationFrame(raf.current);
-    setStyle({ transform: "perspective(700px) rotateX(0deg) rotateY(0deg) scale3d(1,1,1)", transition: "transform 0.4s ease, box-shadow 0.4s ease", boxShadow: "none" });
-    setGlare({ opacity: 0, transition: "opacity 0.4s ease" });
-  }
-
-  return (
-    <div
-      ref={ref}
-      onMouseMove={onMove}
-      onMouseLeave={onLeave}
-      style={{ ...style, willChange: "transform", transformStyle: "preserve-3d" }}
-      className={`relative overflow-hidden ${className}`}
-    >
-      {children}
-      {/* Glare overlay */}
-      <div className="absolute inset-0 pointer-events-none rounded-2xl transition-opacity duration-300" style={glare} />
-    </div>
-  );
-}
 
 // ── Scroll-reveal hook ────────────────────────────────────────────────────────
 function useInView(threshold = 0.12) {
@@ -862,7 +814,7 @@ export default function LandingPage() {
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
             {ROLES.map(({ icon: Icon, title, color, desc }, i) => (
               <Reveal key={title} delay={i * 100}>
-                <TiltCard className="h-full">
+                <ShaderCard className="h-full">
                   <div className="bg-white rounded-2xl p-6 border border-gray-100 h-full">
                     <div className={`w-10 h-10 bg-gradient-to-br ${color} rounded-xl flex items-center justify-center mb-4`}>
                       <Icon className="w-5 h-5 text-white" />
@@ -870,7 +822,7 @@ export default function LandingPage() {
                     <h3 className="font-bold text-gray-900 mb-2">{title}</h3>
                     <p className="text-xs text-gray-500 leading-relaxed">{desc}</p>
                   </div>
-                </TiltCard>
+                </ShaderCard>
               </Reveal>
             ))}
           </div>
@@ -920,7 +872,7 @@ export default function LandingPage() {
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
             {FEATURES.map(({ icon: Icon, title, desc, color, bg, text }, i) => (
               <Reveal key={title} delay={i * 60}>
-                <TiltCard className="h-full">
+                <ShaderCard className="h-full">
                   <div className="bg-white rounded-2xl p-6 border border-gray-100 h-full cursor-default">
                     <div className={`w-12 h-12 ${bg} rounded-xl flex items-center justify-center mb-4`}>
                       <Icon className={`w-5 h-5 ${text}`} />
@@ -928,7 +880,7 @@ export default function LandingPage() {
                     <h3 className="font-bold text-gray-900 mb-2">{title}</h3>
                     <p className="text-sm text-gray-500 leading-relaxed">{desc}</p>
                   </div>
-                </TiltCard>
+                </ShaderCard>
               </Reveal>
             ))}
           </div>
@@ -1004,7 +956,7 @@ export default function LandingPage() {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             {TESTIMONIALS.map((t, i) => (
               <Reveal key={t.name} delay={i * 120}>
-                <TiltCard className="h-full">
+                <ShaderCard className="h-full">
                 <div className="bg-white rounded-2xl p-6 border border-gray-100 h-full flex flex-col">
                   <div className="flex gap-0.5 mb-4">
                     {Array.from({ length: t.rating }).map((_, j) => (
@@ -1022,7 +974,7 @@ export default function LandingPage() {
                     </div>
                   </div>
                 </div>
-                </TiltCard>
+                </ShaderCard>
               </Reveal>
             ))}
           </div>
@@ -1043,7 +995,7 @@ export default function LandingPage() {
               { to: "/faq",              title: "FAQ",       icon: MessageSquare, desc: "Common questions about GRCEye features, deployment, and getting started.", cta: "View FAQ →", color: "from-orange-500 to-amber-500" },
             ].map((item, i) => (
               <Reveal key={item.title} delay={i * 80}>
-                <TiltCard className="h-full">
+                <ShaderCard className="h-full">
                   <Link to={item.to} className="group bg-white rounded-2xl p-7 border border-gray-100 block h-full">
                     <div className="w-10 h-10 bg-gray-50 border border-gray-200 rounded-xl flex items-center justify-center mb-4">
                       <item.icon className="w-5 h-5 text-gray-500" />
@@ -1054,7 +1006,7 @@ export default function LandingPage() {
                       {item.cta}
                     </span>
                   </Link>
-                </TiltCard>
+                </ShaderCard>
               </Reveal>
             ))}
           </div>
