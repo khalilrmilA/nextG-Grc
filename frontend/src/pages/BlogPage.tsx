@@ -1,5 +1,5 @@
-import { Link } from "react-router-dom";
-import { ArrowRight, Calendar, User, ArrowUpRight } from "lucide-react";
+import { Calendar, ArrowUpRight } from "lucide-react";
+import PublicNav from "../components/landing/PublicNav";
 
 const BLOG_POSTS = [
   {
@@ -64,27 +64,12 @@ export default function BlogPage() {
   return (
     <div className="min-h-screen bg-white text-gray-900">
       {/* ── Nav ── */}
-      <header className="fixed top-0 inset-x-0 z-50 bg-white/80 backdrop-blur border-b border-gray-100">
-        <div className="max-w-7xl mx-auto px-6 py-3.5 flex items-center justify-between">
-          <Link to="/" className="flex items-center gap-2.5">
-            <img src="/logo.png" alt="GRCEye" className="h-14 w-auto object-contain" />
-          </Link>
-          <nav className="hidden md:flex items-center gap-8 text-sm text-gray-500">
-            <Link to="/features-landing" className="hover:text-gray-900 transition-colors">Features</Link>
-            <Link to="/blog" className="hover:text-gray-900 transition-colors font-medium text-gray-900">Blog</Link>
-            <Link to="/news" className="hover:text-gray-900 transition-colors">News</Link>
-            <Link to="/faq" className="hover:text-gray-900 transition-colors">FAQ</Link>
-          </nav>
-          <div className="flex items-center gap-3">
-            <Link to="/login" className="text-sm text-gray-600 hover:text-gray-900 font-medium transition-colors">
-              Sign in
-            </Link>
-            <Link to="/register" className="flex items-center gap-1.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold px-4 py-2 rounded-xl transition-colors shadow-sm">
-              Start free trial <ArrowRight className="w-3.5 h-3.5" />
-            </Link>
-          </div>
-        </div>
-      </header>
+      <PublicNav links={[
+        { to: "/features-landing", label: "Features" },
+        { to: "/blog", label: "Blog", activeOn: "/blog" },
+        { to: "/news", label: "News" },
+        { to: "/faq", label: "FAQ" },
+      ]} />
 
       {/* ── Hero ── */}
       <section className="pt-32 pb-16 px-6 text-center bg-gradient-to-b from-slate-50 via-white to-white">

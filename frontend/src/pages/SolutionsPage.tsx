@@ -1,6 +1,7 @@
 import { Link } from "react-router-dom";
 import { useEffect, useRef, useState } from "react";
 import SupportChat from "../components/landing/SupportChat";
+import PublicNav from "../components/landing/PublicNav";
 import {
   ArrowRight, CheckCircle, Shield, AlertTriangle, ClipboardList,
   FileText, Building2, Zap, Users, Globe, Heart, Cpu, Lock,
@@ -229,13 +230,6 @@ const USE_CASES = [
   },
 ];
 
-const NAV_LINKS = [
-  { to: "/", label: "Home" },
-  { to: "/solutions", label: "Solutions", active: true },
-  { to: "/features-landing", label: "Features" },
-  { to: "/faq", label: "FAQ" },
-];
-
 export default function SolutionsPage() {
   const [activeIndustry, setActiveIndustry] = useState(0);
   const ind = INDUSTRIES[activeIndustry];
@@ -244,22 +238,12 @@ export default function SolutionsPage() {
     <div className="min-h-screen bg-[#f0f9ff] text-gray-900">
 
       {/* Nav */}
-      <header className="fixed top-0 inset-x-0 z-50 bg-[#f0f9ff]/80 backdrop-blur border-b border-sky-100">
-        <div className="max-w-7xl mx-auto px-6 py-3.5 flex items-center justify-between">
-          <Link to="/"><img src="/logo.png" alt="GRCEye" className="h-14 w-auto object-contain" /></Link>
-          <nav className="hidden md:flex items-center gap-8 text-sm text-gray-500">
-            {NAV_LINKS.map(l => (
-              <Link key={l.to} to={l.to} className={`transition-colors ${l.active ? "text-blue-600 font-semibold" : "hover:text-blue-600"}`}>{l.label}</Link>
-            ))}
-          </nav>
-          <div className="flex items-center gap-3">
-            <Link to="/login" className="text-sm text-gray-600 hover:text-gray-900 font-medium transition-colors">Sign in</Link>
-            <Link to="/register" className="flex items-center gap-1.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold px-4 py-2 rounded-xl transition-all shadow-sm hover:-translate-y-0.5 hover:shadow-md">
-              Start free trial <ArrowRight className="w-3.5 h-3.5" />
-            </Link>
-          </div>
-        </div>
-      </header>
+      <PublicNav links={[
+        { to: "/", label: "Home" },
+        { to: "/solutions", label: "Solutions", activeOn: "/solutions" },
+        { to: "/features-landing", label: "Features" },
+        { to: "/faq", label: "FAQ" },
+      ]} />
 
       {/* Hero */}
       <section className="relative pt-32 pb-20 px-6 text-center overflow-hidden bg-gradient-to-b from-sky-100 via-[#f0f9ff] to-[#f0f9ff]">

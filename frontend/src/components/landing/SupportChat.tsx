@@ -238,7 +238,7 @@ export default function SupportChat() {
     return (
       <button
         onClick={() => setOpen(true)}
-        className="fixed bottom-6 right-6 z-50 flex items-center gap-2.5 bg-gradient-to-br from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white pl-4 pr-5 py-3 rounded-2xl shadow-xl shadow-blue-500/30 transition-all hover:scale-105 hover:shadow-blue-500/40 group"
+        className="fixed bottom-4 right-4 sm:bottom-6 sm:right-6 z-50 flex items-center gap-2.5 bg-gradient-to-br from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white pl-4 pr-5 py-3 rounded-2xl shadow-xl shadow-blue-500/30 transition-all hover:scale-105 hover:shadow-blue-500/40 group"
         title="GRCEye Support"
       >
         <MessageSquare className="w-5 h-5" />
@@ -250,7 +250,7 @@ export default function SupportChat() {
 
   // ── Open state ───────────────────────────────────────────────────────────────
   return (
-    <div className="fixed bottom-6 right-6 z-50 flex flex-col w-[400px] max-h-[640px] bg-white rounded-3xl shadow-2xl shadow-black/20 border border-sky-100 overflow-hidden">
+    <div className="fixed bottom-0 right-0 sm:bottom-6 sm:right-6 z-50 flex flex-col w-full sm:w-[400px] max-h-[100dvh] sm:max-h-[640px] bg-white sm:rounded-3xl shadow-2xl shadow-black/20 border-t sm:border border-sky-100 overflow-hidden">
 
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3.5 bg-gradient-to-r from-blue-600 to-indigo-600 text-white flex-shrink-0">

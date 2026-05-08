@@ -226,6 +226,15 @@ aside:hover ::-webkit-scrollbar-thumb:hover {
 }
 
 /* ══════════════════════════════════════════════════════════════════════════
+   Mobile responsiveness utilities
+   ══════════════════════════════════════════════════════════════════════════ */
+
+@media (max-width: 768px) {
+  /* Tables: auto-scroll horizontally rather than breaking layout */
+  table { display: block; overflow-x: auto; -webkit-overflow-scrolling: touch; max-width: 100%; }
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
    RTL support for Arabic
    Uses CSS logical properties so layout auto-flips with dir="rtl" on <html>
    ══════════════════════════════════════════════════════════════════════════ */

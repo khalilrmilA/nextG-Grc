@@ -15,7 +15,7 @@ import {
   LayoutDashboard, AlertTriangle, CheckSquare, BookOpen,
   ClipboardList, FileText, Building2, LogOut, Shield,
   ChevronRight, Bell, Settings, HelpCircle, Lock,
-  Crown, Briefcase, X, Trash2, Wand2,
+  Crown, Briefcase, X, Trash2, Wand2, Menu,
   AlertCircle, Info, ShieldAlert, ClipboardCheck, RefreshCw,
 } from "lucide-react";
 
@@ -210,7 +210,7 @@ function NotificationBell() {
       </button>
 
       {open && (
-        <div className="absolute right-0 top-10 w-96 bg-white rounded-2xl shadow-2xl border border-gray-100 z-50 overflow-hidden">
+        <div className="absolute right-0 top-10 w-[calc(100vw-2rem)] sm:w-96 max-w-[24rem] bg-white rounded-2xl shadow-2xl border border-gray-100 z-50 overflow-hidden">
           {/* Header */}
           <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
             <div className="flex items-center gap-2">
@@ -369,6 +369,16 @@ export default function Layout() {
   const pageLabel = t(`nav.${segment}` as never, PAGE_LABELS[segment] ?? segment);
   const [appearance] = useAppearance();
   const sc = sidebarTextClasses(appearance.sidebarStyle);
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
+
+  // Close mobile sidebar on route change
+  useEffect(() => { setMobileSidebarOpen(false); }, [location.pathname]);
+
+  // Lock body scroll when mobile sidebar open
+  useEffect(() => {
+    document.body.style.overflow = mobileSidebarOpen ? "hidden" : "";
+    return () => { document.body.style.overflow = ""; };
+  }, [mobileSidebarOpen]);
 
   const { primaryFramework } = useFramework();
   const plan        = user?.plan ?? "free_trial";
@@ -392,11 +402,32 @@ export default function Layout() {
 
   return (
     <div className="flex h-screen bg-gray-50">
+      {/* ── Mobile sidebar backdrop ── */}
+      {mobileSidebarOpen && (
+        <div
+          className="fixed inset-0 z-40 bg-black/50 backdrop-blur-sm md:hidden"
+          onClick={() => setMobileSidebarOpen(false)}
+        />
+      )}
+
       {/* ── Sidebar ── */}
-      <aside className={`w-64 flex flex-col shadow-2xl flex-shrink-0 transition-colors duration-200 ${sidebarClasses(appearance.sidebarStyle)}`}>
-        {/* Logo */}
-        <div className={`flex flex-col items-center px-4 py-4 border-b ${sc.divider}`}>
-          <img src="/logo.png" alt="GRCEye" className="h-24 w-auto object-contain" />
+      <aside className={`
+        fixed inset-y-0 left-0 z-50 w-64 flex flex-col shadow-2xl flex-shrink-0 transition-all duration-300
+        md:relative md:translate-x-0 md:z-auto
+        ${mobileSidebarOpen ? "translate-x-0" : "-translate-x-full"}
+        ${sidebarClasses(appearance.sidebarStyle)}
+      `}>
+        {/* Logo + mobile close */}
+        <div className={`flex items-center justify-between px-4 py-4 border-b ${sc.divider}`}>
+          <img src="/logo.png" alt="GRCEye" className="h-16 w-auto object-contain" />
+          <button
+            type="button"
+            onClick={() => setMobileSidebarOpen(false)}
+            className="md:hidden w-8 h-8 rounded-lg flex items-center justify-center text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition-colors"
+            aria-label="Close menu"
+          >
+            <X className="w-5 h-5" />
+          </button>
         </div>
 
         {/* Plan / role badge */}
@@ -559,16 +590,25 @@ export default function Layout() {
       </aside>
 
       {/* ── Main content ── */}
-      <main className="flex-1 flex flex-col overflow-hidden">
+      <main className="flex-1 flex flex-col overflow-hidden min-w-0">
         {/* Trial banner */}
         <TrialBanner />
 
         {/* Top bar */}
-        <header className="bg-white border-b border-gray-100 px-8 py-3.5 flex items-center justify-between flex-shrink-0">
+        <header className="bg-white border-b border-gray-100 px-4 sm:px-8 py-3.5 flex items-center justify-between flex-shrink-0">
           <div className="flex items-center gap-3 text-sm">
+            {/* Mobile hamburger */}
+            <button
+              type="button"
+              onClick={() => setMobileSidebarOpen(true)}
+              className="md:hidden w-8 h-8 rounded-lg flex items-center justify-center text-gray-500 hover:bg-gray-100 transition-colors"
+              aria-label="Open menu"
+            >
+              <Menu className="w-5 h-5" />
+            </button>
             <div className="flex items-center gap-2">
-              <span className="text-gray-400">GRCEye</span>
-              <ChevronRight className="w-3.5 h-3.5 text-gray-300" />
+              <span className="hidden sm:inline text-gray-400">GRCEye</span>
+              <ChevronRight className="hidden sm:inline w-3.5 h-3.5 text-gray-300" />
               <span className="text-gray-900 font-semibold">{pageLabel}</span>
             </div>
             {primaryFramework && (
@@ -603,7 +643,7 @@ export default function Layout() {
         </header>
 
         {/* Page content */}
-        <div className="flex-1 overflow-auto">
+        <div className="flex-1 overflow-auto overflow-x-hidden">
           <Outlet />
         </div>
       </main>

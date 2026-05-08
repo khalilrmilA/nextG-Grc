@@ -1,6 +1,7 @@
 import { Link } from "react-router-dom";
 import { useEffect, useRef, useState } from "react";
 import SupportChat from "../components/landing/SupportChat";
+import PublicNav from "../components/landing/PublicNav";
 import {
   CheckCircle, ArrowRight, Zap, Lock, BarChart2,
   FileText, Building2, ClipboardList, BookOpen, AlertTriangle,
@@ -443,27 +444,16 @@ export default function LandingPage() {
     <div className="min-h-screen bg-[#f0f9ff] text-gray-900">
 
       {/* ── Nav ── */}
-      <header className="fixed top-0 inset-x-0 z-50 bg-[#f0f9ff]/80 backdrop-blur border-b border-sky-100">
-        <div className="max-w-7xl mx-auto px-6 py-3.5 flex items-center justify-between">
-          <img src="/logo.png" alt="GRCEye" className="h-14 w-auto object-contain" />
-          <nav className="hidden md:flex items-center gap-8 text-sm text-gray-500">
-            <a href="#how-it-works" className="hover:text-blue-600 transition-colors">How it works</a>
-            <Link to="/features-landing" className="hover:text-blue-600 transition-colors">Features</Link>
-            <Link to="/solutions" className="hover:text-blue-600 transition-colors">Solutions</Link>
-            <a href="#frameworks" className="hover:text-blue-600 transition-colors">Frameworks</a>
-            <Link to="/faq" className="hover:text-blue-600 transition-colors">FAQ</Link>
-          </nav>
-          <div className="flex items-center gap-3">
-            <Link to="/login" className="text-sm text-gray-600 hover:text-gray-900 font-medium transition-colors">Sign in</Link>
-            <Link to="/register" className="flex items-center gap-1.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold px-4 py-2 rounded-xl transition-all shadow-sm hover:shadow-blue-300/40 hover:shadow-md">
-              Start free trial <ArrowRight className="w-3.5 h-3.5" />
-            </Link>
-          </div>
-        </div>
-      </header>
+      <PublicNav links={[
+        { to: "#how-it-works", label: "How it works", hash: true },
+        { to: "/features-landing", label: "Features" },
+        { to: "/solutions", label: "Solutions" },
+        { to: "#frameworks", label: "Frameworks", hash: true },
+        { to: "/faq", label: "FAQ" },
+      ]} />
 
       {/* ── Hero ── */}
-      <section className="relative pt-32 pb-24 px-6 text-center overflow-hidden bg-gradient-to-b from-sky-100 via-[#f0f9ff] to-[#f0f9ff]">
+      <section className="relative pt-28 sm:pt-32 pb-16 sm:pb-24 px-4 sm:px-6 text-center overflow-hidden bg-gradient-to-b from-sky-100 via-[#f0f9ff] to-[#f0f9ff]">
         {/* Animated blobs */}
         <div className="absolute -top-24 -left-24 w-[420px] h-[420px] bg-blue-200/40 rounded-full blur-3xl animate-blob pointer-events-none" />
         <div className="absolute top-32 -right-20 w-[360px] h-[360px] bg-sky-200/35 rounded-full blur-3xl animate-blob animation-delay-2000 pointer-events-none" />
@@ -799,7 +789,7 @@ export default function LandingPage() {
               </span>
             </div>
           </Reveal>
-          <div className="mt-12 grid grid-cols-3 gap-6 max-w-2xl mx-auto">
+          <div className="mt-12 grid grid-cols-1 sm:grid-cols-3 gap-6 max-w-2xl mx-auto">
             {[
               { icon: Lock,  label: "ISO/IEC certified controls", value: "ISO 27001 · ISO 27002 · ISO 42001" },
               { icon: Award, label: "Regulatory frameworks",      value: "GDPR · HIPAA · PCI DSS · DORA · NIS2" },

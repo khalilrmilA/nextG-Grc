@@ -1,6 +1,7 @@
 import { Link } from "react-router-dom";
 import { useState } from "react";
 import { ArrowRight, ChevronDown, FileText, ExternalLink } from "lucide-react";
+import PublicNav from "../components/landing/PublicNav";
 
 const FAQ_ITEMS = [
   {
@@ -242,26 +243,12 @@ export default function FAQPage() {
   return (
     <div className="min-h-screen bg-white text-gray-900">
       {/* ── Nav ── */}
-      <header className="fixed top-0 inset-x-0 z-50 bg-white/90 backdrop-blur-md border-b border-gray-100 shadow-sm">
-        <div className="max-w-7xl mx-auto px-6 py-3.5 flex items-center justify-between">
-          <Link to="/" className="flex items-center gap-2.5">
-            <img src="/logo.png" alt="GRCEye" className="h-14 w-auto object-contain" />
-          </Link>
-          <nav className="hidden md:flex items-center gap-8 text-sm text-gray-500 font-medium">
-            <Link to="/#features" className="hover:text-gray-900 transition-colors">Features</Link>
-            <Link to="/#frameworks" className="hover:text-gray-900 transition-colors">Frameworks</Link>
-            <Link to="/faq" className="text-blue-600 font-semibold">FAQ</Link>
-          </nav>
-          <div className="flex items-center gap-3">
-            <Link to="/login" className="text-sm text-gray-600 hover:text-gray-900 font-medium transition-colors">
-              Sign in
-            </Link>
-            <Link to="/register" className="flex items-center gap-1.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold px-4 py-2.5 rounded-xl transition-colors shadow-sm">
-              Get started free <ArrowRight className="w-3.5 h-3.5" />
-            </Link>
-          </div>
-        </div>
-      </header>
+      <PublicNav links={[
+        { to: "/features-landing", label: "Features" },
+        { to: "/solutions", label: "Solutions" },
+        { to: "/faq", label: "FAQ", activeOn: "/faq" },
+        { to: "/blog", label: "Blog" },
+      ]} />
 
       {/* ── Hero ── */}
       <section className="pt-32 pb-16 px-6 text-center bg-gradient-to-b from-slate-50 via-white to-white">
