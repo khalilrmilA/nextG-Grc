@@ -391,6 +391,10 @@ export default function PolicyGeneratorPage() {
   const [activeCategory, setActiveCategory] = useState<string>("foundation");
   const [selectedDoc, setSelectedDoc] = useState<string | null>(null);
 
+  // Right sidebar
+  const [showSidebar, setShowSidebar] = useState(false);
+  const [selectedPolicyId, setSelectedPolicyId] = useState<string | null>(null);
+
   // Control picker modal
   const [showControlPicker, setShowControlPicker] = useState(false);
   const [targetControls, setTargetControls] = useState<FrameworkControl[]>([]);
@@ -450,6 +454,30 @@ export default function PolicyGeneratorPage() {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
   }, [output, streaming]);
+
+  // Fetch user's previously generated policies
+  const { data: policiesData, refetch: refetchPolicies } = useQuery({
+    queryKey: ["policies"],
+    queryFn: () => policiesApi.list({ limit: 50 }),
+    retry: false,
+  });
+
+  const previousPolicies = policiesData?.items || [];
+
+  const handleDeletePolicy = async (policyId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    try {
+      await policiesApi.delete(policyId);
+      refetchPolicies();
+      if (selectedPolicyId === policyId) {
+        setSelectedPolicyId(null);
+        setOutput("");
+        setEditContent("");
+      }
+    } catch (err) {
+      console.error("Failed to delete policy:", err);
+    }
+  };
 
   const generate = useCallback(async () => {
     if (!selectedDoc || !form.org_name || !form.industry) return;
@@ -1008,84 +1036,115 @@ export default function PolicyGeneratorPage() {
         )}
       </div>
 
-      {/* ── RIGHT PANEL (Previous Documents) ────────────────────────────── */}
-      <div className="w-72 flex-shrink-0 border-l border-gray-100 bg-white flex flex-col overflow-hidden">
-        {/* Header */}
-        <div className="px-4 py-4 border-b border-gray-100 bg-gray-50">
-          <div className="flex items-center gap-2 mb-1">
-            <Clock className="w-4 h-4 text-gray-500" />
-            <h2 className="text-sm font-semibold text-gray-900">Previously Generated</h2>
+      {/* ── RIGHT SIDEBAR (Collapsible Previous Documents) ────────────────────────────── */}
+      {showSidebar && (
+        <div className="w-72 flex-shrink-0 border-l border-gray-100 bg-white flex flex-col overflow-hidden">
+          {/* Header */}
+          <div className="px-4 py-4 border-b border-gray-100 bg-gray-50 flex items-center justify-between">
+            <div className="flex-1">
+              <div className="flex items-center gap-2 mb-1">
+                <Clock className="w-4 h-4 text-gray-500" />
+                <h2 className="text-sm font-semibold text-gray-900">Previously Generated</h2>
+              </div>
+              <p className="text-xs text-gray-400">Your recent documents</p>
+            </div>
+            <button
+              onClick={() => setShowSidebar(false)}
+              className="p-1 hover:bg-gray-200 text-gray-400 hover:text-gray-600 rounded transition-colors"
+            >
+              <X className="w-4 h-4" />
+            </button>
           </div>
-          <p className="text-xs text-gray-400">Your recent documents</p>
-        </div>
 
-        {/* Documents list */}
-        <div className="flex-1 overflow-y-auto">
-          <div className="space-y-2 p-3">
-            {/* Mock data - in production, this would fetch from policiesApi */}
-            {[
-              { id: "1", title: "Information Security Policy", date: "Today", status: "approved" },
-              { id: "2", title: "Access Control Policy", date: "Yesterday", status: "draft" },
-              { id: "3", title: "Data Classification Policy", date: "2 days ago", status: "approved" },
-              { id: "4", title: "Incident Response Plan", date: "3 days ago", status: "draft" },
-              { id: "5", title: "Business Continuity Plan", date: "1 week ago", status: "approved" },
-              { id: "6", title: "Backup & Recovery Procedure", date: "1 week ago", status: "draft" },
-            ].length > 0 ? (
-              [
-                { id: "1", title: "Information Security Policy", date: "Today", status: "approved" },
-                { id: "2", title: "Access Control Policy", date: "Yesterday", status: "draft" },
-                { id: "3", title: "Data Classification Policy", date: "2 days ago", status: "approved" },
-                { id: "4", title: "Incident Response Plan", date: "3 days ago", status: "draft" },
-                { id: "5", title: "Business Continuity Plan", date: "1 week ago", status: "approved" },
-                { id: "6", title: "Backup & Recovery Procedure", date: "1 week ago", status: "draft" },
-              ].map((doc) => (
-                <div
-                  key={doc.id}
-                  className="group p-3 rounded-lg border border-gray-100 hover:border-gray-200 hover:shadow-sm bg-white transition-all cursor-pointer"
-                >
-                  <div className="flex items-start gap-2 mb-2">
-                    <FileText className="w-3.5 h-3.5 text-purple-500 flex-shrink-0 mt-1" />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-xs font-medium text-gray-900 truncate">{doc.title}</p>
-                      <p className="text-[11px] text-gray-400 mt-0.5">{doc.date}</p>
-                    </div>
-                  </div>
-                  <div className="flex items-center justify-between gap-2">
-                    <span
-                      className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold ${
-                        doc.status === "approved"
-                          ? "bg-green-50 text-green-700"
-                          : "bg-yellow-50 text-yellow-700"
+          {/* Documents list */}
+          <div className="flex-1 overflow-y-auto">
+            <div className="space-y-2 p-3">
+              {previousPolicies.length > 0 ? (
+                previousPolicies.map((policy: any) => {
+                  const isSelected = selectedPolicyId === policy.id;
+                  return (
+                    <div
+                      key={policy.id}
+                      onClick={() => {
+                        setSelectedPolicyId(policy.id);
+                        setSelectedDoc(policy.title);
+                        setOutput(policy.content || "");
+                        setEditing(false);
+                        setEditContent("");
+                      }}
+                      className={`group p-3 rounded-lg border transition-all cursor-pointer ${
+                        isSelected
+                          ? "border-blue-300 shadow-md bg-blue-50"
+                          : "border-gray-100 hover:border-gray-200 hover:shadow-sm bg-white"
                       }`}
                     >
-                      <span className={`w-1.5 h-1.5 rounded-full ${doc.status === "approved" ? "bg-green-500" : "bg-yellow-500"}`} />
-                      {doc.status === "approved" ? "Approved" : "Draft"}
-                    </span>
-                    <button className="opacity-0 group-hover:opacity-100 p-1 hover:bg-red-50 text-gray-400 hover:text-red-600 rounded transition-all">
-                      <Trash2 className="w-3 h-3" />
-                    </button>
+                      <div className="flex items-start gap-2 mb-2">
+                        <FileText className="w-3.5 h-3.5 text-purple-500 flex-shrink-0 mt-1" />
+                        <div className="flex-1 min-w-0">
+                          <p className={`text-xs font-medium truncate ${isSelected ? "text-blue-900" : "text-gray-900"}`}>
+                            {policy.title}
+                          </p>
+                          <p className={`text-[11px] mt-0.5 ${isSelected ? "text-blue-600" : "text-gray-400"}`}>
+                            {new Date(policy.created_at).toLocaleDateString()}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex items-center justify-between gap-2">
+                        <span
+                          className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold ${
+                            policy.status === "approved"
+                              ? "bg-green-50 text-green-700"
+                              : "bg-yellow-50 text-yellow-700"
+                          }`}
+                        >
+                          <span
+                            className={`w-1.5 h-1.5 rounded-full ${
+                              policy.status === "approved" ? "bg-green-500" : "bg-yellow-500"
+                            }`}
+                          />
+                          {policy.status === "approved" ? "Approved" : "Draft"}
+                        </span>
+                        <button
+                          onClick={(e) => handleDeletePolicy(policy.id, e)}
+                          className="opacity-0 group-hover:opacity-100 p-1 hover:bg-red-50 text-gray-400 hover:text-red-600 rounded transition-all"
+                        >
+                          <Trash2 className="w-3 h-3" />
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })
+              ) : (
+                <div className="flex flex-col items-center justify-center h-full text-center py-12">
+                  <div className="w-12 h-12 rounded-full bg-gray-100 flex items-center justify-center mb-3">
+                    <FileText className="w-5 h-5 text-gray-300" />
                   </div>
+                  <p className="text-xs font-medium text-gray-500 mb-1">No documents yet</p>
+                  <p className="text-[11px] text-gray-400">Generate your first document using the form on the left</p>
                 </div>
-              ))
-            ) : (
-              <div className="flex flex-col items-center justify-center h-full text-center py-12">
-                <div className="w-12 h-12 rounded-full bg-gray-100 flex items-center justify-center mb-3">
-                  <FileText className="w-5 h-5 text-gray-300" />
-                </div>
-                <p className="text-xs font-medium text-gray-500 mb-1">No documents yet</p>
-                <p className="text-[11px] text-gray-400">Generate your first document using the form on the left</p>
-              </div>
-            )}
+              )}
+            </div>
+          </div>
+
+          {/* Footer */}
+          <div className="border-t border-gray-100 px-3 py-3 bg-gray-50 flex-shrink-0">
+            <a href="/policies" className="w-full block text-center text-xs text-blue-600 hover:text-blue-700 font-medium py-1.5 rounded-lg hover:bg-blue-50 transition-colors">
+              View all documents →
+            </a>
           </div>
         </div>
+      )}
 
-        {/* Footer */}
-        <div className="border-t border-gray-100 px-3 py-3 bg-gray-50 flex-shrink-0">
-          <button className="w-full text-xs text-blue-600 hover:text-blue-700 font-medium py-1.5 rounded-lg hover:bg-blue-50 transition-colors">
-            View all documents →
-          </button>
-        </div>
-      </div>
+      {/* Toggle sidebar button (when closed) */}
+      {!showSidebar && (
+        <button
+          onClick={() => setShowSidebar(true)}
+          className="w-12 flex-shrink-0 border-l border-gray-100 bg-white hover:bg-gray-50 flex items-center justify-center transition-colors"
+          title="Show previous documents"
+        >
+          <Clock className="w-5 h-5 text-gray-400 hover:text-gray-600" />
+        </button>
+      )}
 
       {/* Control Picker Modal */}
       <ControlPickerModal
