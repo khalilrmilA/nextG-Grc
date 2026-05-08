@@ -2,7 +2,6 @@ import { Link } from "react-router-dom";
 import { useEffect, useRef, useState } from "react";
 import SupportChat from "../components/landing/SupportChat";
 import PublicNav from "../components/landing/PublicNav";
-import { ShaderCard } from "../components/landing/ShaderCard";
 import {
   CheckCircle, ArrowRight, Zap, Lock, BarChart2,
   FileText, Building2, ClipboardList, BookOpen, AlertTriangle,
@@ -814,15 +813,13 @@ export default function LandingPage() {
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
             {ROLES.map(({ icon: Icon, title, color, desc }, i) => (
               <Reveal key={title} delay={i * 100}>
-                <ShaderCard className="h-full">
-                  <div className="bg-white rounded-2xl p-6 border border-gray-100 h-full">
-                    <div className={`w-10 h-10 bg-gradient-to-br ${color} rounded-xl flex items-center justify-center mb-4`}>
-                      <Icon className="w-5 h-5 text-white" />
-                    </div>
-                    <h3 className="font-bold text-gray-900 mb-2">{title}</h3>
-                    <p className="text-xs text-gray-500 leading-relaxed">{desc}</p>
+                <div className="gradient-border bg-white rounded-2xl p-6 card-hover h-full">
+                  <div className={`w-12 h-12 bg-gradient-to-br ${color} rounded-2xl flex items-center justify-center mb-4 shadow-lg`}>
+                    <Icon className="w-5 h-5 text-white" />
                   </div>
-                </ShaderCard>
+                  <h3 className="font-bold text-gray-900 mb-2">{title}</h3>
+                  <p className="text-xs text-gray-500 leading-relaxed">{desc}</p>
+                </div>
               </Reveal>
             ))}
           </div>
@@ -872,15 +869,13 @@ export default function LandingPage() {
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
             {FEATURES.map(({ icon: Icon, title, desc, color, bg, text }, i) => (
               <Reveal key={title} delay={i * 60}>
-                <ShaderCard className="h-full">
-                  <div className="bg-white rounded-2xl p-6 border border-gray-100 h-full cursor-default">
-                    <div className={`w-12 h-12 ${bg} rounded-xl flex items-center justify-center mb-4`}>
-                      <Icon className={`w-5 h-5 ${text}`} />
-                    </div>
-                    <h3 className="font-bold text-gray-900 mb-2">{title}</h3>
-                    <p className="text-sm text-gray-500 leading-relaxed">{desc}</p>
+                <div className="gradient-border bg-white rounded-2xl p-6 card-hover h-full group cursor-default">
+                  <div className={`w-12 h-12 ${bg} rounded-2xl flex items-center justify-center mb-4 group-hover:bg-gradient-to-br group-hover:${color} transition-all duration-300`}>
+                    <Icon className={`w-5 h-5 ${text} group-hover:text-white transition-colors duration-300`} />
                   </div>
-                </ShaderCard>
+                  <h3 className="font-bold text-gray-900 mb-2 group-hover:text-blue-600 transition-colors">{title}</h3>
+                  <p className="text-sm text-gray-500 leading-relaxed">{desc}</p>
+                </div>
               </Reveal>
             ))}
           </div>
@@ -956,8 +951,7 @@ export default function LandingPage() {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             {TESTIMONIALS.map((t, i) => (
               <Reveal key={t.name} delay={i * 120}>
-                <ShaderCard className="h-full">
-                <div className="bg-white rounded-2xl p-6 border border-gray-100 h-full flex flex-col">
+                <div className="gradient-border bg-white rounded-2xl p-6 card-hover h-full flex flex-col">
                   <div className="flex gap-0.5 mb-4">
                     {Array.from({ length: t.rating }).map((_, j) => (
                       <Star key={j} className="w-4 h-4 text-yellow-400 fill-yellow-400" />
@@ -974,7 +968,6 @@ export default function LandingPage() {
                     </div>
                   </div>
                 </div>
-                </ShaderCard>
               </Reveal>
             ))}
           </div>
@@ -989,24 +982,22 @@ export default function LandingPage() {
           </Reveal>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
             {[
-              { to: "/features-landing", title: "Features",  icon: Zap,         desc: "Deep-dive into every module — Risk, Compliance, Audit, Policy, Vendor, AI, and Governance.", cta: "Explore features →", color: "from-blue-500 to-indigo-600" },
-              { to: "/solutions",        title: "Solutions", icon: Building2,    desc: "GRCEye for SaaS, Healthcare, FinTech, and Enterprise — use cases and workflows by industry.", cta: "View solutions →", color: "from-purple-500 to-pink-600" },
-              { to: "/blog",             title: "Blog",      icon: FileText,     desc: "Insights on compliance strategy, risk management, and best practices from the GRCEye team.", cta: "Read articles →", color: "from-teal-500 to-cyan-600" },
+              { to: "/features-landing", title: "Features",  icon: Zap,          desc: "Deep-dive into every module — Risk, Compliance, Audit, Policy, Vendor, AI, and Governance.", cta: "Explore features →", color: "from-blue-500 to-indigo-600" },
+              { to: "/solutions",        title: "Solutions", icon: Building2,     desc: "GRCEye for SaaS, Healthcare, FinTech, and Enterprise — use cases and workflows by industry.", cta: "View solutions →", color: "from-purple-500 to-pink-600" },
+              { to: "/blog",             title: "Blog",      icon: FileText,      desc: "Insights on compliance strategy, risk management, and best practices from the GRCEye team.", cta: "Read articles →", color: "from-teal-500 to-cyan-600" },
               { to: "/faq",              title: "FAQ",       icon: MessageSquare, desc: "Common questions about GRCEye features, deployment, and getting started.", cta: "View FAQ →", color: "from-orange-500 to-amber-500" },
             ].map((item, i) => (
               <Reveal key={item.title} delay={i * 80}>
-                <ShaderCard className="h-full">
-                  <Link to={item.to} className="group bg-white rounded-2xl p-7 border border-gray-100 block h-full">
-                    <div className="w-10 h-10 bg-gray-50 border border-gray-200 rounded-xl flex items-center justify-center mb-4">
-                      <item.icon className="w-5 h-5 text-gray-500" />
-                    </div>
-                    <h3 className="text-lg font-bold text-gray-900 mb-2">{item.title}</h3>
-                    <p className="text-gray-500 text-sm leading-relaxed mb-4">{item.desc}</p>
-                    <span className="text-blue-600 font-semibold text-xs flex items-center gap-1">
-                      {item.cta}
-                    </span>
-                  </Link>
-                </ShaderCard>
+                <Link to={item.to} className="group gradient-border bg-white rounded-2xl p-7 card-hover block h-full">
+                  <div className={`w-10 h-10 bg-gradient-to-br ${item.color} rounded-xl flex items-center justify-center mb-4 shadow-md group-hover:scale-110 transition-transform`}>
+                    <item.icon className="w-5 h-5 text-white" />
+                  </div>
+                  <h3 className="text-lg font-bold text-gray-900 group-hover:text-blue-600 transition-colors mb-2">{item.title}</h3>
+                  <p className="text-gray-500 text-sm leading-relaxed mb-4">{item.desc}</p>
+                  <span className="text-blue-600 font-semibold text-xs flex items-center gap-1 group-hover:gap-2 transition-all">
+                    {item.cta}
+                  </span>
+                </Link>
               </Reveal>
             ))}
           </div>
