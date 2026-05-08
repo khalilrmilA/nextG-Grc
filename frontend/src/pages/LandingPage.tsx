@@ -547,7 +547,7 @@ export default function LandingPage() {
       {/* ── Hero ── */}
       <section className="relative pt-28 sm:pt-32 pb-16 sm:pb-24 px-4 sm:px-6 text-center overflow-hidden">
         {/* Mesh/grid pattern */}
-        <div className="absolute inset-0 dot-grid-bg opacity-30 pointer-events-none" />
+        <div className="absolute inset-0 opacity-[0.04] pointer-events-none [background-image:linear-gradient(rgba(99,102,241,.2)_1px,transparent_1px),linear-gradient(90deg,rgba(99,102,241,.2)_1px,transparent_1px)] [background-size:40px_40px]" />
         {/* Gradient overlay */}
         <div className="absolute inset-0 bg-gradient-to-b from-sky-100/80 via-[#f0f9ff]/90 to-[#f0f9ff] pointer-events-none" />
         {/* Animated blobs */}
@@ -657,7 +657,7 @@ export default function LandingPage() {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
             {HOW_IT_WORKS.map((step, i) => (
               <Reveal key={step.step} delay={i * 150}>
-                <div className="relative gradient-border bg-white rounded-2xl p-7 shadow-sm card-hover h-full">
+                <div className="relative bg-white rounded-2xl p-7 border border-gray-100 hover:border-gray-200 hover:shadow-sm transition-all h-full">
                   {i < HOW_IT_WORKS.length - 1 && (
                     <div className="hidden md:block absolute top-10 left-[calc(100%+1rem)] w-8 h-0.5 bg-gradient-to-r from-blue-300 to-indigo-300" />
                   )}
@@ -812,8 +812,8 @@ export default function LandingPage() {
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
             {ROLES.map(({ icon: Icon, title, color, desc }, i) => (
               <Reveal key={title} delay={i * 100}>
-                <div className="gradient-border bg-white rounded-2xl p-6 card-hover h-full">
-                  <div className={`w-12 h-12 bg-gradient-to-br ${color} rounded-2xl flex items-center justify-center mb-4 shadow-lg`}>
+                <div className="bg-white rounded-2xl p-6 border border-gray-100 hover:border-gray-200 hover:shadow-sm transition-all h-full">
+                  <div className={`w-10 h-10 bg-gradient-to-br ${color} rounded-xl flex items-center justify-center mb-4`}>
                     <Icon className="w-5 h-5 text-white" />
                   </div>
                   <h3 className="font-bold text-gray-900 mb-2">{title}</h3>
@@ -828,7 +828,7 @@ export default function LandingPage() {
       {/* ── Animated stats bar ── */}
       <section className="py-20 px-4 sm:px-6 relative overflow-hidden">
         <div className="absolute inset-0 bg-gradient-to-br from-blue-700 via-indigo-700 to-violet-800" />
-        <div className="absolute inset-0 dot-grid-bg opacity-10" />
+        <div className="absolute inset-0 opacity-[0.03] [background-image:linear-gradient(rgba(255,255,255,.15)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,.15)_1px,transparent_1px)] [background-size:40px_40px]" />
         <div className="absolute top-0 right-0 w-[400px] h-[400px] bg-white/5 rounded-full blur-3xl animate-blob pointer-events-none" />
         <div className="absolute bottom-0 left-0 w-[300px] h-[300px] bg-indigo-400/10 rounded-full blur-3xl animate-blob animation-delay-2000 pointer-events-none" />
         <div className="relative max-w-5xl mx-auto">
@@ -868,11 +868,11 @@ export default function LandingPage() {
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
             {FEATURES.map(({ icon: Icon, title, desc, color, bg, text }, i) => (
               <Reveal key={title} delay={i * 60}>
-                <div className="gradient-border bg-white rounded-2xl p-6 card-hover h-full group cursor-default">
-                  <div className={`w-12 h-12 ${bg} rounded-2xl flex items-center justify-center mb-4 group-hover:bg-gradient-to-br group-hover:${color} transition-all duration-300`}>
-                    <Icon className={`w-5 h-5 ${text} group-hover:text-white transition-colors duration-300`} />
+                <div className="bg-white rounded-2xl p-6 border border-gray-100 hover:border-gray-200 hover:shadow-sm transition-all h-full cursor-default">
+                  <div className={`w-12 h-12 ${bg} rounded-xl flex items-center justify-center mb-4`}>
+                    <Icon className={`w-5 h-5 ${text}`} />
                   </div>
-                  <h3 className="font-bold text-gray-900 mb-2 group-hover:text-blue-600 transition-colors">{title}</h3>
+                  <h3 className="font-bold text-gray-900 mb-2">{title}</h3>
                   <p className="text-sm text-gray-500 leading-relaxed">{desc}</p>
                 </div>
               </Reveal>
@@ -923,9 +923,9 @@ export default function LandingPage() {
             { icon: Globe, label: "Industry standards", value: "SOC 2 · CIS v8 · NIST · CSA CCM", color: "from-teal-500 to-cyan-600" },
           ].map((s, i) => (
             <Reveal key={s.label} delay={i * 100}>
-              <div className="gradient-border bg-slate-800 rounded-2xl p-5 text-left card-hover border border-slate-700">
-                <div className={`w-9 h-9 bg-gradient-to-br ${s.color} rounded-xl flex items-center justify-center mb-3 shadow-lg`}>
-                  <s.icon className="w-4 h-4 text-white" />
+              <div className="bg-slate-800 rounded-2xl p-5 text-left border border-slate-700 hover:border-slate-600 hover:bg-slate-700/60 transition-all">
+                <div className="w-9 h-9 bg-slate-700 rounded-xl flex items-center justify-center mb-3">
+                  <s.icon className="w-4 h-4 text-slate-300" />
                 </div>
                 <p className="text-xs text-slate-400 mb-1">{s.label}</p>
                 <p className="text-sm font-semibold text-white leading-snug">{s.value}</p>
@@ -950,7 +950,7 @@ export default function LandingPage() {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             {TESTIMONIALS.map((t, i) => (
               <Reveal key={t.name} delay={i * 120}>
-                <div className="gradient-border bg-white rounded-2xl p-6 card-hover h-full flex flex-col">
+                <div className="bg-white rounded-2xl p-6 border border-gray-100 hover:border-gray-200 hover:shadow-sm transition-all h-full flex flex-col">
                   <div className="flex gap-0.5 mb-4">
                     {Array.from({ length: t.rating }).map((_, j) => (
                       <Star key={j} className="w-4 h-4 text-yellow-400 fill-yellow-400" />
@@ -987,11 +987,11 @@ export default function LandingPage() {
               { to: "/faq",              title: "FAQ",       icon: MessageSquare, desc: "Common questions about GRCEye features, deployment, and getting started.", cta: "View FAQ →", color: "from-orange-500 to-amber-500" },
             ].map((item, i) => (
               <Reveal key={item.title} delay={i * 80}>
-                <Link to={item.to} className="group gradient-border bg-white rounded-2xl p-7 card-hover block h-full">
-                  <div className={`w-10 h-10 bg-gradient-to-br ${item.color} rounded-xl flex items-center justify-center mb-4 shadow-md group-hover:scale-110 transition-transform`}>
-                    <item.icon className="w-5 h-5 text-white" />
+                <Link to={item.to} className="group bg-white rounded-2xl p-7 border border-gray-100 hover:border-gray-200 hover:shadow-sm transition-all block h-full">
+                  <div className="w-10 h-10 bg-gray-50 border border-gray-200 rounded-xl flex items-center justify-center mb-4">
+                    <item.icon className="w-5 h-5 text-gray-500" />
                   </div>
-                  <h3 className="text-lg font-bold text-gray-900 group-hover:text-blue-600 transition-colors mb-2">{item.title}</h3>
+                  <h3 className="text-lg font-bold text-gray-900 mb-2">{item.title}</h3>
                   <p className="text-gray-500 text-sm leading-relaxed mb-4">{item.desc}</p>
                   <span className="text-blue-600 font-semibold text-xs flex items-center gap-1 group-hover:gap-2 transition-all">
                     {item.cta}
@@ -1006,7 +1006,7 @@ export default function LandingPage() {
       {/* ── CTA ── */}
       <section className="relative py-28 px-4 sm:px-6 overflow-hidden">
         <div className="absolute inset-0 bg-gradient-to-br from-blue-700 via-indigo-700 to-violet-800" />
-        <div className="absolute inset-0 dot-grid-bg opacity-10" />
+        <div className="absolute inset-0 opacity-[0.03] [background-image:linear-gradient(rgba(255,255,255,.15)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,.15)_1px,transparent_1px)] [background-size:40px_40px]" />
         <div className="absolute top-0 left-1/4 w-80 h-80 bg-white/10 rounded-full blur-3xl animate-blob pointer-events-none" />
         <div className="absolute bottom-0 right-1/4 w-64 h-64 bg-indigo-300/20 rounded-full blur-3xl animate-blob animation-delay-2000 pointer-events-none" />
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] bg-blue-500/5 rounded-full blur-3xl animate-blob-slow pointer-events-none" />

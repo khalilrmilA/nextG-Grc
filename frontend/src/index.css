@@ -306,27 +306,6 @@ aside:hover ::-webkit-scrollbar-thumb:hover {
   animation: glow-pulse 2.5s ease-in-out infinite;
 }
 
-.gradient-border {
-  position: relative;
-  background: white;
-  border-radius: 1rem;
-  isolation: isolate;
-}
-.gradient-border::before {
-  content: '';
-  position: absolute;
-  inset: -1.5px;
-  border-radius: inherit;
-  background: linear-gradient(135deg, #3b82f6, #6366f1, #0ea5e9, #8b5cf6, #3b82f6);
-  background-size: 300% 300%;
-  animation: gradientShift 4s ease infinite;
-  z-index: -1;
-  opacity: 0;
-  transition: opacity 0.4s ease;
-}
-.gradient-border:hover::before {
-  opacity: 1;
-}
 
 .typing-cursor {
   border-right: 2.5px solid #2563eb;
@@ -346,10 +325,6 @@ aside:hover ::-webkit-scrollbar-thumb:hover {
   opacity: 0.4;
 }
 
-.dot-grid-bg {
-  background-image: radial-gradient(circle, #93c5fd 1px, transparent 1px);
-  background-size: 28px 28px;
-}
 
 .hex-pattern {
   background-color: #0f172a;
