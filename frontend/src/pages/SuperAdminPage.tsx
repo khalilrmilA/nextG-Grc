@@ -875,12 +875,9 @@ export default function SuperAdminPage() {
     <div className="min-h-screen bg-gray-50 flex">
       {/* Sidebar */}
       <aside className="w-56 flex flex-col bg-slate-900 shadow-2xl flex-shrink-0 fixed h-full">
-        <div className="flex items-center gap-3 px-5 py-5 border-b border-slate-700/60">
-          <img src="/logo.png" alt="GRCEye" className="h-9 w-9 rounded-xl object-contain bg-white p-0.5 flex-shrink-0" />
-          <div>
-            <p className="font-bold text-sm text-white leading-none">GRCEye</p>
-            <p className="text-xs text-slate-400 mt-0.5">Super Admin</p>
-          </div>
+        <div className="flex flex-col items-center gap-1 px-4 py-5 border-b border-slate-700/60">
+          <img src="/logo.png" alt="GRCEye" className="h-24 w-auto object-contain" />
+          <p className="text-xs text-slate-400">Super Admin</p>
         </div>
 
         <nav className="flex-1 px-3 py-4 space-y-1">

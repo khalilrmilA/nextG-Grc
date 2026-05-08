@@ -145,8 +145,7 @@ export default function LandingPage() {
       <header className="fixed top-0 inset-x-0 z-50 bg-white/80 backdrop-blur border-b border-gray-100">
         <div className="max-w-7xl mx-auto px-6 py-3.5 flex items-center justify-between">
           <div className="flex items-center gap-2.5">
-            <img src="/logo.png" alt="GRCEye" className="h-8 w-8 object-contain rounded-xl" />
-            <span className="font-bold text-gray-900 text-sm tracking-tight">GRCEye</span>
+            <img src="/logo.png" alt="GRCEye" className="h-14 w-auto object-contain" />
           </div>
           <nav className="hidden md:flex items-center gap-6 text-sm text-gray-500">
             <a href="#features" className="hover:text-gray-900 transition-colors">Features</a>
@@ -325,8 +324,7 @@ export default function LandingPage() {
       <footer className="bg-slate-900 text-slate-400 py-12 px-6">
         <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4">
           <div className="flex items-center gap-2">
-            <img src="/logo.png" alt="GRCEye" className="h-7 w-7 object-contain rounded-lg bg-white p-0.5" />
-            <span className="text-white font-bold text-sm">GRCEye</span>
+            <img src="/logo.png" alt="GRCEye" className="h-12 w-auto object-contain bg-white rounded-lg p-1.5" />
           </div>
           <p className="text-xs text-slate-500">© 2026 GRCEye, Inc. All rights reserved.</p>
           <div className="flex gap-5 text-sm">
