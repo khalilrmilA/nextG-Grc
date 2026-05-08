@@ -41,7 +41,9 @@ async def _get_or_create_quota(db: AsyncSession, user: User) -> AiUsageQuota:
 
     if quota is None:
         # Auto-provision: 1 M tokens / 10 K requests per month
+        from uuid import uuid4
         quota = AiUsageQuota(
+            id=str(uuid4()),
             tenant_id=user.tenant_id,
             user_id=user.id,
             feature="all",
