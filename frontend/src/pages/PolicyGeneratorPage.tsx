@@ -1088,12 +1088,19 @@ export default function PolicyGeneratorPage() {
                   return (
                     <div
                       key={policy.id}
-                      onClick={() => {
+                      onClick={async () => {
                         setSelectedPolicyId(policy.id);
                         setSelectedDoc(policy.title);
-                        setOutput(policy.content || "");
                         setEditing(false);
                         setEditContent("");
+                        setDone(true);
+                        try {
+                          const versions = await policiesApi.getVersions(String(policy.id));
+                          const current = versions.find(v => v.is_current) ?? versions[0];
+                          setOutput(current?.content ?? "No content found for this document.");
+                        } catch {
+                          setOutput("Failed to load document content.");
+                        }
                       }}
                       className={`group p-3 rounded-lg border transition-all cursor-pointer ${
                         isSelected

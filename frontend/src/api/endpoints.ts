@@ -435,6 +435,11 @@ export const policiesApi = {
 
   update: (id: string, data: Partial<Policy>) =>
     apiClient.patch<Policy>(`/policies/${id}`, data).then((r) => r.data),
+
+  getVersions: (id: string) =>
+    apiClient.get<Array<{ id: string; version_number: number; content: string; is_current: boolean }>>(`/policies/${id}/versions`).then((r) => r.data),
+
+  delete: (id: string) => apiClient.delete(`/policies/${id}`),
 };
 
 // ─── Vendors ─────────────────────────────────
