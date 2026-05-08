@@ -1,9 +1,10 @@
 import { useState, useRef, useEffect, useCallback } from "react";
+import { useQuery } from "@tanstack/react-query";
 import {
   Wand2, ChevronRight, Loader2, Copy, CheckCheck,
   Download, Save, RotateCcw, FileText, BookOpen,
   ClipboardList, Shield, Sparkles, X, Pencil, Eye,
-  CheckCircle, CheckSquare, Square, ChevronDown, Search,
+  CheckCircle, CheckSquare, Square, ChevronDown, Search, Clock, Trash2,
 } from "lucide-react";
 import { aiApi, frameworksApi, policiesApi } from "@/api/endpoints";
 import AiGate from "@/components/features/ai/AiGate";
@@ -1005,6 +1006,85 @@ export default function PolicyGeneratorPage() {
             </p>
           </div>
         )}
+      </div>
+
+      {/* ── RIGHT PANEL (Previous Documents) ────────────────────────────── */}
+      <div className="w-72 flex-shrink-0 border-l border-gray-100 bg-white flex flex-col overflow-hidden">
+        {/* Header */}
+        <div className="px-4 py-4 border-b border-gray-100 bg-gray-50">
+          <div className="flex items-center gap-2 mb-1">
+            <Clock className="w-4 h-4 text-gray-500" />
+            <h2 className="text-sm font-semibold text-gray-900">Previously Generated</h2>
+          </div>
+          <p className="text-xs text-gray-400">Your recent documents</p>
+        </div>
+
+        {/* Documents list */}
+        <div className="flex-1 overflow-y-auto">
+          <div className="space-y-2 p-3">
+            {/* Mock data - in production, this would fetch from policiesApi */}
+            {[
+              { id: "1", title: "Information Security Policy", date: "Today", status: "approved" },
+              { id: "2", title: "Access Control Policy", date: "Yesterday", status: "draft" },
+              { id: "3", title: "Data Classification Policy", date: "2 days ago", status: "approved" },
+              { id: "4", title: "Incident Response Plan", date: "3 days ago", status: "draft" },
+              { id: "5", title: "Business Continuity Plan", date: "1 week ago", status: "approved" },
+              { id: "6", title: "Backup & Recovery Procedure", date: "1 week ago", status: "draft" },
+            ].length > 0 ? (
+              [
+                { id: "1", title: "Information Security Policy", date: "Today", status: "approved" },
+                { id: "2", title: "Access Control Policy", date: "Yesterday", status: "draft" },
+                { id: "3", title: "Data Classification Policy", date: "2 days ago", status: "approved" },
+                { id: "4", title: "Incident Response Plan", date: "3 days ago", status: "draft" },
+                { id: "5", title: "Business Continuity Plan", date: "1 week ago", status: "approved" },
+                { id: "6", title: "Backup & Recovery Procedure", date: "1 week ago", status: "draft" },
+              ].map((doc) => (
+                <div
+                  key={doc.id}
+                  className="group p-3 rounded-lg border border-gray-100 hover:border-gray-200 hover:shadow-sm bg-white transition-all cursor-pointer"
+                >
+                  <div className="flex items-start gap-2 mb-2">
+                    <FileText className="w-3.5 h-3.5 text-purple-500 flex-shrink-0 mt-1" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-medium text-gray-900 truncate">{doc.title}</p>
+                      <p className="text-[11px] text-gray-400 mt-0.5">{doc.date}</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-between gap-2">
+                    <span
+                      className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold ${
+                        doc.status === "approved"
+                          ? "bg-green-50 text-green-700"
+                          : "bg-yellow-50 text-yellow-700"
+                      }`}
+                    >
+                      <span className={`w-1.5 h-1.5 rounded-full ${doc.status === "approved" ? "bg-green-500" : "bg-yellow-500"}`} />
+                      {doc.status === "approved" ? "Approved" : "Draft"}
+                    </span>
+                    <button className="opacity-0 group-hover:opacity-100 p-1 hover:bg-red-50 text-gray-400 hover:text-red-600 rounded transition-all">
+                      <Trash2 className="w-3 h-3" />
+                    </button>
+                  </div>
+                </div>
+              ))
+            ) : (
+              <div className="flex flex-col items-center justify-center h-full text-center py-12">
+                <div className="w-12 h-12 rounded-full bg-gray-100 flex items-center justify-center mb-3">
+                  <FileText className="w-5 h-5 text-gray-300" />
+                </div>
+                <p className="text-xs font-medium text-gray-500 mb-1">No documents yet</p>
+                <p className="text-[11px] text-gray-400">Generate your first document using the form on the left</p>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div className="border-t border-gray-100 px-3 py-3 bg-gray-50 flex-shrink-0">
+          <button className="w-full text-xs text-blue-600 hover:text-blue-700 font-medium py-1.5 rounded-lg hover:bg-blue-50 transition-colors">
+            View all documents →
+          </button>
+        </div>
       </div>
 
       {/* Control Picker Modal */}
