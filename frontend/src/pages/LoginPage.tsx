@@ -80,8 +80,8 @@ export default function LoginPage() {
 
         {/* Logo */}
         <div className="flex flex-col items-center mb-8">
-          <img src="/logo.png" alt="ComplyZone" className="h-20 w-20 object-contain rounded-2xl bg-white p-1 shadow-2xl mb-4" />
-          <h1 className="text-2xl font-bold text-white tracking-tight">ComplyZone</h1>
+          <img src="/logo.png" alt="GRCEye" className="h-20 w-20 object-contain rounded-2xl bg-white p-1 shadow-2xl mb-4" />
+          <h1 className="text-2xl font-bold text-white tracking-tight">GRCEye</h1>
           <p className="text-slate-400 text-sm mt-1">Govern. Manage. Assure.</p>
           <div className="mt-3"><LanguageSwitcher /></div>
         </div>
@@ -154,7 +154,7 @@ export default function LoginPage() {
 
             <div className="flex items-center gap-3 my-5">
             <div className="flex-1 h-px bg-gray-100" />
-            <span className="text-xs text-gray-400">New to ComplyZone?</span>
+            <span className="text-xs text-gray-400">New to GRCEye?</span>
             <div className="flex-1 h-px bg-gray-100" />
           </div>
 
@@ -193,7 +193,7 @@ export default function LoginPage() {
         </div>
 
         <p className="text-center mt-5 text-xs text-slate-500">
-          © {new Date().getFullYear()} ComplyZone · All rights reserved
+          © {new Date().getFullYear()} GRCEye · All rights reserved
         </p>
       </div>
     </div>

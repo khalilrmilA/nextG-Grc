@@ -103,7 +103,7 @@ export default function AssignControlModal({ ca, gap, assessmentName, frameworkN
 <body>
   <div class="logo-bar">
     <div>
-      <div class="logo-title">ComplyZone</div>
+      <div class="logo-title">GRCEye</div>
       <div class="logo-sub">${assessmentName} · ${frameworkName}</div>
     </div>
     <div style="text-align:right">
@@ -161,7 +161,7 @@ export default function AssignControlModal({ ca, gap, assessmentName, frameworkN
   </div>
 
   <div class="footer">
-    <span>ComplyZone — Control Assignment Record</span>
+    <span>GRCEye — Control Assignment Record</span>
     <span class="confidential">Confidential</span>
   </div>
 

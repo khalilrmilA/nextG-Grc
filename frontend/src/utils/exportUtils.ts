@@ -299,7 +299,7 @@ export function exportComplianceReport(data: ReportData) {
   </table>
 
   <div class="footer">
-    ComplyZone · ${data.frameworkShortName} Compliance Report · ${data.generatedAt}
+    GRCEye · ${data.frameworkShortName} Compliance Report · ${data.generatedAt}
   </div>
 </div>
 </body>

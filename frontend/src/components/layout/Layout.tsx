@@ -395,9 +395,9 @@ export default function Layout() {
       <aside className={`w-64 flex flex-col shadow-2xl flex-shrink-0 transition-colors duration-200 ${sidebarClasses(appearance.sidebarStyle)}`}>
         {/* Logo */}
         <div className={`flex items-center gap-3 px-5 py-4 border-b ${sc.divider}`}>
-          <img src="/logo.png" alt="ComplyZone" className="h-9 w-9 rounded-xl object-contain bg-white p-0.5 flex-shrink-0" />
+          <img src="/logo.png" alt="GRCEye" className="h-9 w-9 rounded-xl object-contain bg-white p-0.5 flex-shrink-0" />
           <div>
-            <p className={`font-bold text-sm leading-none tracking-tight ${sc.logo}`}>ComplyZone</p>
+            <p className={`font-bold text-sm leading-none tracking-tight ${sc.logo}`}>GRCEye</p>
             <p className={`text-xs mt-0.5 ${sc.sub}`}>Govern. Manage. Assure.</p>
           </div>
         </div>
@@ -567,7 +567,7 @@ export default function Layout() {
         <header className="bg-white border-b border-gray-100 px-8 py-3.5 flex items-center justify-between flex-shrink-0">
           <div className="flex items-center gap-3 text-sm">
             <div className="flex items-center gap-2">
-              <span className="text-gray-400">ComplyZone</span>
+              <span className="text-gray-400">GRCEye</span>
               <ChevronRight className="w-3.5 h-3.5 text-gray-300" />
               <span className="text-gray-900 font-semibold">{pageLabel}</span>
             </div>
