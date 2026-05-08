@@ -81,7 +81,7 @@ class Settings(BaseSettings):
 
     # Ollama (local AI)
     OLLAMA_BASE_URL: str = "http://localhost:11434"
-    OLLAMA_CHAT_MODEL: str = "deepseek-v3.1:671b-cloud"
+    OLLAMA_CHAT_MODEL: str = "gpt-oss:120b-cloud"
     OLLAMA_ANALYSIS_BATCH_SIZE: int = 25
 
     # Threat Intelligence
