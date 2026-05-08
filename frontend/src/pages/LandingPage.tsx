@@ -166,6 +166,9 @@ export default function LandingPage() {
       {/* ── Hero ── */}
       <section className="pt-32 pb-20 px-6 text-center bg-gradient-to-b from-slate-50 via-white to-white">
         <div className="max-w-4xl mx-auto">
+          <div className="inline-flex bg-yellow-300 text-slate-900 font-bold px-6 py-2 rounded-full text-sm tracking-widest mb-6 shadow-lg">
+            Govern · Manage · Assure
+          </div>
           <div className="inline-flex items-center gap-2 bg-blue-50 border border-blue-100 text-blue-700 text-xs font-semibold px-4 py-1.5 rounded-full mb-6">
             <Zap className="w-3.5 h-3.5" />
             Now supporting 76 compliance frameworks
@@ -306,7 +309,10 @@ export default function LandingPage() {
           <div className="flex items-center gap-2">
             <img src="/logo.png" alt="GRCEye" className="h-12 w-auto object-contain bg-white rounded-lg p-1.5" />
           </div>
-          <p className="text-xs text-slate-500">© 2026 GRCEye, Inc. All rights reserved.</p>
+          <div className="text-center">
+            <p className="text-xs text-slate-500">© 2026 GRCEye, Inc. All rights reserved.</p>
+            <p className="text-xs text-slate-600 mt-2">Powered by <span className="font-semibold">SilentWolf</span></p>
+          </div>
           <div className="flex gap-5 text-sm">
             <a href="#" className="hover:text-white transition-colors">Privacy</a>
             <a href="#" className="hover:text-white transition-colors">Terms</a>

@@ -47,7 +47,7 @@ import EvidenceUploadPage from "./pages/EvidenceUploadPage";
 
 function PrivateRoute({ children, requiredModule }: { readonly children: React.ReactNode; requiredModule?: string }) {
   const user = useAuthStore((u) => u);
-  if (!user) return <Navigate to="/landing" replace />;
+  if (!user) return <Navigate to="/login" replace />;
   // Auditors have their own layout — block them from main app
   if (user.role === "auditor") return <Navigate to="/auditor/portal" replace />;
   // Super admin has their own page
@@ -74,14 +74,14 @@ function PrivateRoute({ children, requiredModule }: { readonly children: React.R
 
 function AuditorRoute({ children }: { readonly children: React.ReactNode }) {
   const user = useAuthStore((u) => u);
-  if (!user) return <Navigate to="/landing" replace />;
+  if (!user) return <Navigate to="/login" replace />;
   if (user.role !== "auditor") return <Navigate to="/dashboard" replace />;
   return <>{children}</>;
 }
 
 function SuperAdminRoute({ children }: { readonly children: React.ReactNode }) {
   const user = useAuthStore((u) => u);
-  if (!user) return <Navigate to="/landing" replace />;
+  if (!user) return <Navigate to="/login" replace />;
   if (user.role !== "super_admin") return <Navigate to="/dashboard" replace />;
   return <>{children}</>;
 }
@@ -91,7 +91,7 @@ export default function App() {
     <Routes>
       <Route path="/upload/:token" element={<EvidenceUploadPage />} />
       <Route path="/vendor-collab/:shareToken" element={<VendorCollaborationPage />} />
-      <Route path="/landing" element={<LandingPage />} />
+      <Route path="/" element={<LandingPage />} />
       <Route path="/login" element={<LoginPage />} />
       <Route path="/register" element={<RegisterPage />} />
       <Route path="/super-admin" element={<SuperAdminRoute><SuperAdminPage /></SuperAdminRoute>} />
@@ -114,14 +114,14 @@ export default function App() {
 
       {/* ── Main app routes ── */}
       <Route
-        path="/"
+        path="/app"
         element={
           <PrivateRoute>
             <Layout />
           </PrivateRoute>
         }
       >
-        <Route index element={<Navigate to="/dashboard" replace />} />
+        <Route index element={<Navigate to="/app/dashboard" replace />} />
         <Route path="dashboard" element={<DashboardPage />} />
         <Route path="risks" element={<PrivateRoute requiredModule="risks"><RisksPage /></PrivateRoute>} />
         <Route path="compliance" element={<PrivateRoute requiredModule="compliance"><CompliancePage /></PrivateRoute>} />
