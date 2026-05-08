@@ -47,7 +47,7 @@ import EvidenceUploadPage from "./pages/EvidenceUploadPage";
 
 function PrivateRoute({ children, requiredModule }: { readonly children: React.ReactNode; requiredModule?: string }) {
   const user = useAuthStore((u) => u);
-  if (!user) return <Navigate to="/login" replace />;
+  if (!user) return <Navigate to="/landing" replace />;
   // Auditors have their own layout — block them from main app
   if (user.role === "auditor") return <Navigate to="/auditor/portal" replace />;
   // Super admin has their own page
@@ -74,14 +74,14 @@ function PrivateRoute({ children, requiredModule }: { readonly children: React.R
 
 function AuditorRoute({ children }: { readonly children: React.ReactNode }) {
   const user = useAuthStore((u) => u);
-  if (!user) return <Navigate to="/login" replace />;
+  if (!user) return <Navigate to="/landing" replace />;
   if (user.role !== "auditor") return <Navigate to="/dashboard" replace />;
   return <>{children}</>;
 }
 
 function SuperAdminRoute({ children }: { readonly children: React.ReactNode }) {
   const user = useAuthStore((u) => u);
-  if (!user) return <Navigate to="/login" replace />;
+  if (!user) return <Navigate to="/landing" replace />;
   if (user.role !== "super_admin") return <Navigate to="/dashboard" replace />;
   return <>{children}</>;
 }
@@ -121,7 +121,7 @@ export default function App() {
           </PrivateRoute>
         }
       >
-        <Route index element={<Navigate to="/landing" replace />} />
+        <Route index element={<Navigate to="/dashboard" replace />} />
         <Route path="dashboard" element={<DashboardPage />} />
         <Route path="risks" element={<PrivateRoute requiredModule="risks"><RisksPage /></PrivateRoute>} />
         <Route path="compliance" element={<PrivateRoute requiredModule="compliance"><CompliancePage /></PrivateRoute>} />
