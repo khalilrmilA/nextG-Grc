@@ -976,7 +976,7 @@ ${currentContent
                 onClick={handleDownload}
                 className="flex items-center gap-1.5 text-xs text-gray-600 border border-gray-200 hover:bg-gray-50 px-3 py-1.5 rounded-lg transition-colors"
               >
-                <Download className="w-3.5 h-3.5" /> Download .txt
+                <Download className="w-3.5 h-3.5" /> Download PDF
               </button>
 
               <div className="w-px h-4 bg-gray-200" />
