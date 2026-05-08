@@ -862,13 +862,15 @@ export default function LandingPage() {
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
             {ROLES.map(({ icon: Icon, title, color, desc }, i) => (
               <Reveal key={title} delay={i * 100}>
-                <div className="bg-white rounded-2xl p-6 border border-gray-100 hover:border-gray-200 hover:shadow-sm transition-all h-full">
-                  <div className={`w-10 h-10 bg-gradient-to-br ${color} rounded-xl flex items-center justify-center mb-4`}>
-                    <Icon className="w-5 h-5 text-white" />
+                <TiltCard className="h-full">
+                  <div className="bg-white rounded-2xl p-6 border border-gray-100 h-full">
+                    <div className={`w-10 h-10 bg-gradient-to-br ${color} rounded-xl flex items-center justify-center mb-4`}>
+                      <Icon className="w-5 h-5 text-white" />
+                    </div>
+                    <h3 className="font-bold text-gray-900 mb-2">{title}</h3>
+                    <p className="text-xs text-gray-500 leading-relaxed">{desc}</p>
                   </div>
-                  <h3 className="font-bold text-gray-900 mb-2">{title}</h3>
-                  <p className="text-xs text-gray-500 leading-relaxed">{desc}</p>
-                </div>
+                </TiltCard>
               </Reveal>
             ))}
           </div>
@@ -1002,7 +1004,8 @@ export default function LandingPage() {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             {TESTIMONIALS.map((t, i) => (
               <Reveal key={t.name} delay={i * 120}>
-                <div className="bg-white rounded-2xl p-6 border border-gray-100 hover:border-gray-200 hover:shadow-sm transition-all h-full flex flex-col">
+                <TiltCard className="h-full">
+                <div className="bg-white rounded-2xl p-6 border border-gray-100 h-full flex flex-col">
                   <div className="flex gap-0.5 mb-4">
                     {Array.from({ length: t.rating }).map((_, j) => (
                       <Star key={j} className="w-4 h-4 text-yellow-400 fill-yellow-400" />
@@ -1019,6 +1022,7 @@ export default function LandingPage() {
                     </div>
                   </div>
                 </div>
+                </TiltCard>
               </Reveal>
             ))}
           </div>
@@ -1039,16 +1043,18 @@ export default function LandingPage() {
               { to: "/faq",              title: "FAQ",       icon: MessageSquare, desc: "Common questions about GRCEye features, deployment, and getting started.", cta: "View FAQ →", color: "from-orange-500 to-amber-500" },
             ].map((item, i) => (
               <Reveal key={item.title} delay={i * 80}>
-                <Link to={item.to} className="group bg-white rounded-2xl p-7 border border-gray-100 hover:border-gray-200 hover:shadow-sm transition-all block h-full">
-                  <div className="w-10 h-10 bg-gray-50 border border-gray-200 rounded-xl flex items-center justify-center mb-4">
-                    <item.icon className="w-5 h-5 text-gray-500" />
-                  </div>
-                  <h3 className="text-lg font-bold text-gray-900 mb-2">{item.title}</h3>
-                  <p className="text-gray-500 text-sm leading-relaxed mb-4">{item.desc}</p>
-                  <span className="text-blue-600 font-semibold text-xs flex items-center gap-1 group-hover:gap-2 transition-all">
-                    {item.cta}
-                  </span>
-                </Link>
+                <TiltCard className="h-full">
+                  <Link to={item.to} className="group bg-white rounded-2xl p-7 border border-gray-100 block h-full">
+                    <div className="w-10 h-10 bg-gray-50 border border-gray-200 rounded-xl flex items-center justify-center mb-4">
+                      <item.icon className="w-5 h-5 text-gray-500" />
+                    </div>
+                    <h3 className="text-lg font-bold text-gray-900 mb-2">{item.title}</h3>
+                    <p className="text-gray-500 text-sm leading-relaxed mb-4">{item.desc}</p>
+                    <span className="text-blue-600 font-semibold text-xs flex items-center gap-1">
+                      {item.cta}
+                    </span>
+                  </Link>
+                </TiltCard>
               </Reveal>
             ))}
           </div>
