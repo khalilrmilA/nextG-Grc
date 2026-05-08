@@ -10,6 +10,56 @@ import {
   Database, Globe, Award, Cpu, ChevronRight,
 } from "lucide-react";
 
+// ── 3D Tilt Card ──────────────────────────────────────────────────────────────
+function TiltCard({ children, className = "" }: { children: React.ReactNode; className?: string }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [style, setStyle] = useState<React.CSSProperties>({});
+  const [glare, setGlare] = useState<React.CSSProperties>({});
+  const raf = useRef<number>(0);
+
+  function onMove(e: React.MouseEvent<HTMLDivElement>) {
+    cancelAnimationFrame(raf.current);
+    raf.current = requestAnimationFrame(() => {
+      const el = ref.current;
+      if (!el) return;
+      const { left, top, width, height } = el.getBoundingClientRect();
+      const x = (e.clientX - left) / width;   // 0→1
+      const y = (e.clientY - top)  / height;  // 0→1
+      const rotX = (0.5 - y) * 14;            // –7 … +7 deg
+      const rotY = (x - 0.5) * 14;
+      setStyle({
+        transform: `perspective(700px) rotateX(${rotX}deg) rotateY(${rotY}deg) scale3d(1.03,1.03,1.03)`,
+        transition: "transform 0.08s ease-out",
+        boxShadow: `${-rotY * 1.5}px ${rotX * 1.5}px 32px rgba(0,0,0,0.12)`,
+      });
+      setGlare({
+        background: `radial-gradient(circle at ${x * 100}% ${y * 100}%, rgba(255,255,255,0.18) 0%, transparent 65%)`,
+        opacity: 1,
+      });
+    });
+  }
+
+  function onLeave() {
+    cancelAnimationFrame(raf.current);
+    setStyle({ transform: "perspective(700px) rotateX(0deg) rotateY(0deg) scale3d(1,1,1)", transition: "transform 0.4s ease, box-shadow 0.4s ease", boxShadow: "none" });
+    setGlare({ opacity: 0, transition: "opacity 0.4s ease" });
+  }
+
+  return (
+    <div
+      ref={ref}
+      onMouseMove={onMove}
+      onMouseLeave={onLeave}
+      style={{ ...style, willChange: "transform", transformStyle: "preserve-3d" }}
+      className={`relative overflow-hidden ${className}`}
+    >
+      {children}
+      {/* Glare overlay */}
+      <div className="absolute inset-0 pointer-events-none rounded-2xl transition-opacity duration-300" style={glare} />
+    </div>
+  );
+}
+
 // ── Scroll-reveal hook ────────────────────────────────────────────────────────
 function useInView(threshold = 0.12) {
   const ref = useRef<HTMLDivElement>(null);
@@ -827,7 +877,7 @@ export default function LandingPage() {
 
       {/* ── Animated stats bar ── */}
       <section className="py-20 px-4 sm:px-6 relative overflow-hidden">
-        <div className="absolute inset-0 bg-gradient-to-br from-blue-700 via-indigo-700 to-violet-800" />
+        <div className="absolute inset-0 bg-slate-900" />
         <div className="absolute inset-0 opacity-[0.03] [background-image:linear-gradient(rgba(255,255,255,.15)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,.15)_1px,transparent_1px)] [background-size:40px_40px]" />
         <div className="absolute top-0 right-0 w-[400px] h-[400px] bg-white/5 rounded-full blur-3xl animate-blob pointer-events-none" />
         <div className="absolute bottom-0 left-0 w-[300px] h-[300px] bg-indigo-400/10 rounded-full blur-3xl animate-blob animation-delay-2000 pointer-events-none" />
@@ -868,13 +918,15 @@ export default function LandingPage() {
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
             {FEATURES.map(({ icon: Icon, title, desc, color, bg, text }, i) => (
               <Reveal key={title} delay={i * 60}>
-                <div className="bg-white rounded-2xl p-6 border border-gray-100 hover:border-gray-200 hover:shadow-sm transition-all h-full cursor-default">
-                  <div className={`w-12 h-12 ${bg} rounded-xl flex items-center justify-center mb-4`}>
-                    <Icon className={`w-5 h-5 ${text}`} />
+                <TiltCard className="h-full">
+                  <div className="bg-white rounded-2xl p-6 border border-gray-100 h-full cursor-default">
+                    <div className={`w-12 h-12 ${bg} rounded-xl flex items-center justify-center mb-4`}>
+                      <Icon className={`w-5 h-5 ${text}`} />
+                    </div>
+                    <h3 className="font-bold text-gray-900 mb-2">{title}</h3>
+                    <p className="text-sm text-gray-500 leading-relaxed">{desc}</p>
                   </div>
-                  <h3 className="font-bold text-gray-900 mb-2">{title}</h3>
-                  <p className="text-sm text-gray-500 leading-relaxed">{desc}</p>
-                </div>
+                </TiltCard>
               </Reveal>
             ))}
           </div>
@@ -1005,7 +1057,7 @@ export default function LandingPage() {
 
       {/* ── CTA ── */}
       <section className="relative py-28 px-4 sm:px-6 overflow-hidden">
-        <div className="absolute inset-0 bg-gradient-to-br from-blue-700 via-indigo-700 to-violet-800" />
+        <div className="absolute inset-0 bg-blue-600" />
         <div className="absolute inset-0 opacity-[0.03] [background-image:linear-gradient(rgba(255,255,255,.15)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,.15)_1px,transparent_1px)] [background-size:40px_40px]" />
         <div className="absolute top-0 left-1/4 w-80 h-80 bg-white/10 rounded-full blur-3xl animate-blob pointer-events-none" />
         <div className="absolute bottom-0 right-1/4 w-64 h-64 bg-indigo-300/20 rounded-full blur-3xl animate-blob animation-delay-2000 pointer-events-none" />
