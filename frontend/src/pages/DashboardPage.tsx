@@ -860,6 +860,18 @@ export default function DashboardPage() {
     return (
       <div className="p-8 max-w-5xl space-y-6">
         <WelcomeCard />
+        <div className="bg-gradient-to-br from-purple-50 to-indigo-50 rounded-2xl border border-purple-200 p-8 text-center">
+          <Shield className="w-12 h-12 text-purple-500 mx-auto mb-3" />
+          <h2 className="text-xl font-bold text-gray-900 mb-2">{t("dashboard.get_started")}</h2>
+          <p className="text-gray-600 mb-6 max-w-md mx-auto">{t("dashboard.select_framework_desc")}</p>
+          <Link
+            to="/frameworks"
+            className="inline-flex items-center gap-2 bg-purple-600 hover:bg-purple-700 text-white font-semibold px-6 py-3 rounded-xl transition-colors"
+          >
+            <Plus className="w-5 h-5" />
+            {t("dashboard.select_frameworks")}
+          </Link>
+        </div>
         <GenericDashboard d={genericData ?? DEMO_DATA} isDemo={isDemo} />
       </div>
     );

@@ -30,11 +30,11 @@ export const PLAN_FEATURES: Record<PlanTier, {
 }> = {
   free_trial: {
     label: "Free Trial",
-    maxFrameworks: 1,
-    maxAdmins: 1,
-    maxIntegrations: 0,
-    modules: ["dashboard", "risks", "compliance"],
-    settingsTabs: ["profile", "security"],
+    maxFrameworks: 999,
+    maxAdmins: 999,
+    maxIntegrations: 999,
+    modules: ["dashboard", "risks", "compliance", "frameworks", "audits", "policies", "vendors", "incidents", "vulnerabilities", "threats", "risk-scenarios", "risk-quantification", "applied-controls", "security-exceptions", "trust-center", "regulatory", "activity-log", "webhooks", "reports", "policy-generator"],
+    settingsTabs: ["profile", "organization", "notifications", "security", "api"],
   },
   starter: {
     label: "Starter",

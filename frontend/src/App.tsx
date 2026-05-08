@@ -95,7 +95,6 @@ export default function App() {
     <Routes>
       <Route path="/upload/:token" element={<EvidenceUploadPage />} />
       <Route path="/vendor-collab/:shareToken" element={<VendorCollaborationPage />} />
-      <Route path="/" element={<LandingPage />} />
       <Route path="/features-landing" element={<FeaturesLandingPage />} />
       <Route path="/blog" element={<BlogPage />} />
       <Route path="/news" element={<NewsPage />} />
@@ -122,14 +121,14 @@ export default function App() {
 
       {/* ── Main app routes ── */}
       <Route
-        path="/app"
+        path="/"
         element={
           <PrivateRoute>
             <Layout />
           </PrivateRoute>
         }
       >
-        <Route index element={<Navigate to="/app/dashboard" replace />} />
+        <Route index element={<Navigate to="/dashboard" replace />} />
         <Route path="dashboard" element={<DashboardPage />} />
         <Route path="risks" element={<PrivateRoute requiredModule="risks"><RisksPage /></PrivateRoute>} />
         <Route path="compliance" element={<PrivateRoute requiredModule="compliance"><CompliancePage /></PrivateRoute>} />

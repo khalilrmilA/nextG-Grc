@@ -193,6 +193,12 @@ export default {
     blockers_count: "{{count}} blockers",
     no_open_gaps: "No open gaps",
     docs_uploaded_pct: "{{pct}}% of required documents uploaded",
+    get_started: "Get Started",
+    select_framework_desc: "Select a compliance framework to begin your compliance journey. You can add more frameworks anytime.",
+    select_frameworks: "Select Frameworks",
+    welcome_title: "Welcome to Your GRC Platform",
+    welcome_desc: "Manage compliance assessments, risks, audits, vendors, and policies all in one place. Start by selecting a framework to begin your compliance journey.",
+    full_guide: "Full Guide",
   },
 
   // Compliance

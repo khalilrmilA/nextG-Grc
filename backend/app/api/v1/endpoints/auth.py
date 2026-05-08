@@ -76,6 +76,7 @@ class UserProfileResponse(BaseModel):
     selected_framework_ids: list[Any] = []
     org_size: str | None = None
     primary_assessment_id: str | None = None  # auto-created assessment on registration
+    accessible_modules: list[str] = []  # modules available based on subscription tier
 
 
 class TokenResponse(BaseModel):
@@ -89,6 +90,26 @@ class RefreshRequest(BaseModel):
 
 
 _GENERIC_LOGIN_FAILURE = "Invalid email or password"
+
+# Module access mapping by subscription tier/status
+TIER_MODULES = {
+    "trialing": ["dashboard", "risks", "compliance", "frameworks", "audits", "policies", "vendors", "incidents", "vulnerabilities", "threats", "risk-scenarios", "risk-quantification", "applied-controls", "security-exceptions", "trust-center", "regulatory", "activity-log", "webhooks", "reports", "policy-generator"],
+    "starter": ["dashboard", "risks", "compliance", "frameworks", "audits", "policies"],
+    "professional": ["dashboard", "risks", "compliance", "frameworks", "audits", "policies", "vendors", "incidents", "vulnerabilities", "threats", "risk-scenarios", "risk-quantification", "applied-controls", "security-exceptions", "trust-center", "regulatory", "activity-log", "webhooks", "reports", "policy-generator"],
+    "enterprise": ["dashboard", "risks", "compliance", "frameworks", "audits", "policies", "vendors", "incidents", "vulnerabilities", "threats", "risk-scenarios", "risk-quantification", "applied-controls", "security-exceptions", "trust-center", "regulatory", "activity-log", "webhooks", "reports", "policy-generator"],
+}
+
+async def get_accessible_modules(tenant_id: str, db: AsyncSession) -> list[str]:
+    """Get accessible modules based on subscription tier and status."""
+    from app.models.subscription import Subscription
+    sub_result = await db.execute(select(Subscription).where(Subscription.tenant_id == tenant_id))
+    subscription = sub_result.scalar_one_or_none()
+    if not subscription:
+        return TIER_MODULES.get("starter", [])
+    # During trial, give full professional access
+    if subscription.status.value == "trialing":
+        return TIER_MODULES.get("trialing", [])
+    return TIER_MODULES.get(subscription.tier.value, [])
 
 
 @router.post("/login", response_model=TokenResponse)
@@ -162,12 +183,12 @@ async def register(request: Request, body: RegisterRequest, db: AsyncSession = D
     db.add(tenant)
     await db.flush()  # Get tenant.id
 
-    # Create subscription (14-day trial)
+    # Create subscription (14-day trial with full access)
     from datetime import datetime, timedelta, timezone
     trial_end = (datetime.now(timezone.utc) + timedelta(days=14)).isoformat()
     subscription = Subscription(
         tenant_id=tenant.id,
-        tier=SubscriptionTier.STARTER,
+        tier=SubscriptionTier.PROFESSIONAL,
         status=SubscriptionStatus.TRIALING,
         trial_ends_at=trial_end,
     )
@@ -253,6 +274,8 @@ async def get_profile(
         if assessment:
             primary_assessment_id = assessment.id
 
+    accessible_modules = await get_accessible_modules(current_user.tenant_id, db)
+
     return UserProfileResponse(
         id=current_user.id,
         email=current_user.email,
@@ -265,6 +288,7 @@ async def get_profile(
         selected_framework_ids=tenant.selected_framework_ids if tenant else [],
         org_size=tenant.org_size if tenant else None,
         primary_assessment_id=primary_assessment_id,
+        accessible_modules=accessible_modules,
     )
 
 
@@ -321,6 +345,8 @@ async def update_primary_framework(
     )
     assessment = a_result.scalar_one_or_none()
 
+    accessible_modules = await get_accessible_modules(current_user.tenant_id, db)
+
     return UserProfileResponse(
         id=current_user.id,
         email=current_user.email,
@@ -333,6 +359,7 @@ async def update_primary_framework(
         selected_framework_ids=tenant.selected_framework_ids or [],
         org_size=tenant.org_size,
         primary_assessment_id=assessment.id if assessment else None,
+        accessible_modules=accessible_modules,
     )
 
 
@@ -375,6 +402,8 @@ async def update_selected_frameworks(
         if a:
             primary_assessment_id = a.id
 
+    accessible_modules = await get_accessible_modules(current_user.tenant_id, db)
+
     return UserProfileResponse(
         id=current_user.id,
         email=current_user.email,
@@ -387,6 +416,7 @@ async def update_selected_frameworks(
         selected_framework_ids=tenant.selected_framework_ids or [],
         org_size=tenant.org_size,
         primary_assessment_id=primary_assessment_id,
+        accessible_modules=accessible_modules,
     )
 
 

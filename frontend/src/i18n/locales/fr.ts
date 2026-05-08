@@ -193,6 +193,12 @@ export default {
     blockers_count: "{{count}} bloquants",
     no_open_gaps: "Aucune lacune ouverte",
     docs_uploaded_pct: "{{pct}}% des documents requis téléversés",
+    get_started: "Démarrer",
+    select_framework_desc: "Sélectionnez un référentiel de conformité pour commencer votre parcours de conformité. Vous pouvez ajouter d'autres référentiels à tout moment.",
+    select_frameworks: "Sélectionner les référentiels",
+    welcome_title: "Bienvenue sur votre plateforme GRC",
+    welcome_desc: "Gérez les évaluations de conformité, les risques, les audits, les vendeurs et les politiques en un seul endroit. Commencez par sélectionner un référentiel pour débuter votre parcours de conformité.",
+    full_guide: "Guide complet",
   },
 
   // Compliance
