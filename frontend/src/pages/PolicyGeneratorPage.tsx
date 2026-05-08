@@ -585,6 +585,7 @@ export default function PolicyGeneratorPage() {
       } as any);
 
       setSaved(true);
+      await refetchPolicies();
     } catch (err) {
       console.error("Failed to save policy:", err);
       setError("Failed to save document. Please try again.");
@@ -608,6 +609,7 @@ export default function PolicyGeneratorPage() {
 
       setApproved(true);
       setSaved(true);
+      await refetchPolicies();
     } catch (err) {
       console.error("Failed to approve policy:", err);
       setError("Failed to save document. Please try again.");
