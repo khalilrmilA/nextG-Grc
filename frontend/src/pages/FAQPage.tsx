@@ -1,4 +1,5 @@
-import { Link, useState } from "react-router-dom";
+import { Link } from "react-router-dom";
+import { useState } from "react";
 import { ArrowRight, ChevronDown } from "lucide-react";
 
 const FAQ_ITEMS = [
