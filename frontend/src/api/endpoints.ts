@@ -772,6 +772,18 @@ export const usersApi = {
 
   deleteAuditor: (auditor_id: string) =>
     apiClient.delete(`/users/auditors/${auditor_id}`),
+
+  createUser: (data: { email: string; first_name: string; last_name: string; role: string; expires_at?: string | null }) =>
+    apiClient.post<AuditorUser & { temporary_password: string }>("/users/create", data).then((r) => r.data),
+
+  updateUser: (user_id: string, data: { is_active?: boolean; role?: string }) =>
+    apiClient.patch<{ id: string; email: string; first_name: string; last_name: string; role: string; is_active: boolean; expires_at?: string | null }>(`/users/${user_id}`, data).then((r) => r.data),
+
+  deleteUser: (user_id: string) =>
+    apiClient.delete(`/users/${user_id}`),
+
+  resetPassword: (user_id: string) =>
+    apiClient.post<{ temporary_password: string }>(`/users/${user_id}/reset-password`, {}).then((r) => r.data),
 };
 
 // ─── Traceability Matrix ──────────────────────

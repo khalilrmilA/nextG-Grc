@@ -254,3 +254,149 @@ async def unassign_auditor(
         raise HTTPException(404, "Assignment not found")
     await db.delete(a)
     await db.commit()
+
+
+# ── General user management (TENANT_ADMIN only) ────────────────────────────────
+
+_ASSIGNABLE_ROLES = {
+    UserRole.TENANT_ADMIN, UserRole.CISO, UserRole.RISK_MANAGER,
+    UserRole.COMPLIANCE_MANAGER, UserRole.AUDITOR, UserRole.POLICY_MANAGER,
+    UserRole.VENDOR_MANAGER, UserRole.CONTROL_OWNER, UserRole.VIEWER,
+}
+
+
+class UpdateUserPayload(BaseModel):
+    is_active: bool | None = None
+    role: str | None = None
+
+
+class ResetPasswordResponse(BaseModel):
+    temporary_password: str
+
+
+class CreateUserRequest(BaseModel):
+    email: EmailStr
+    first_name: str
+    last_name: str
+    role: str
+    expires_at: datetime | None = None
+
+
+@router.post("/create", response_model=CreateAuditorResponse, status_code=201,
+             responses={400: {"description": "Email already registered or invalid role"}})
+async def create_user(
+    body: CreateUserRequest,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    _: Annotated[User, Depends(require_roles(UserRole.TENANT_ADMIN))],
+    tenant_id: Annotated[str, Depends(get_tenant_id)],
+):
+    """Create a user with any assignable role. Server generates a temporary password."""
+    existing = (await db.execute(select(User).where(User.email == body.email))).scalar_one_or_none()
+    if existing:
+        raise HTTPException(400, "Email already registered")
+    try:
+        role = UserRole(body.role)
+    except ValueError:
+        raise HTTPException(400, f"Invalid role: {body.role}")
+    if role not in _ASSIGNABLE_ROLES:
+        raise HTTPException(403, "Cannot assign that role")
+    temp_password = _generate_auditor_password()
+    new_user = User(
+        tenant_id=tenant_id,
+        email=body.email,
+        hashed_password=hash_password(temp_password),
+        first_name=body.first_name,
+        last_name=body.last_name,
+        role=role,
+        is_verified=True,
+        expires_at=body.expires_at,
+    )
+    db.add(new_user)
+    await db.commit()
+    return CreateAuditorResponse(
+        id=new_user.id,
+        email=new_user.email,
+        first_name=new_user.first_name,
+        last_name=new_user.last_name,
+        role=new_user.role,
+        is_active=new_user.is_active,
+        expires_at=new_user.expires_at,
+        temporary_password=temp_password,
+    )
+
+
+@router.patch("/{user_id}", response_model=UserResponse,
+              responses={400: {"description": "Cannot modify self"}, 404: {"description": "User not found"}, 403: {"description": "Forbidden"}})
+async def update_user(
+    user_id: str,
+    body: UpdateUserPayload,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: Annotated[User, Depends(require_roles(UserRole.TENANT_ADMIN))],
+    tenant_id: Annotated[str, Depends(get_tenant_id)],
+):
+    """Update a user's role or active status within the tenant."""
+    if user_id == current_user.id:
+        raise HTTPException(400, "Cannot modify your own account")
+    user = (await db.execute(
+        select(User).where(User.id == user_id, User.tenant_id == tenant_id)
+    )).scalar_one_or_none()
+    if not user:
+        raise HTTPException(404, "User not found")
+    if user.role == UserRole.SUPER_ADMIN:
+        raise HTTPException(403, "Cannot modify super admin accounts")
+    if body.is_active is not None:
+        user.is_active = body.is_active
+    if body.role is not None:
+        try:
+            new_role = UserRole(body.role)
+        except ValueError:
+            raise HTTPException(400, f"Invalid role: {body.role}")
+        if new_role not in _ASSIGNABLE_ROLES:
+            raise HTTPException(403, "Cannot assign that role")
+        user.role = new_role
+    await db.commit()
+    return UserResponse.model_validate(user)
+
+
+@router.post("/{user_id}/reset-password", response_model=ResetPasswordResponse,
+             responses={404: {"description": "User not found"}, 403: {"description": "Forbidden"}})
+async def reset_user_password(
+    user_id: str,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    _: Annotated[User, Depends(require_roles(UserRole.TENANT_ADMIN))],
+    tenant_id: Annotated[str, Depends(get_tenant_id)],
+):
+    """Reset a user's password and return the new temporary password once."""
+    user = (await db.execute(
+        select(User).where(User.id == user_id, User.tenant_id == tenant_id)
+    )).scalar_one_or_none()
+    if not user:
+        raise HTTPException(404, "User not found")
+    if user.role == UserRole.SUPER_ADMIN:
+        raise HTTPException(403, "Cannot reset super admin passwords")
+    new_password = _generate_auditor_password()
+    user.hashed_password = hash_password(new_password)
+    await db.commit()
+    return ResetPasswordResponse(temporary_password=new_password)
+
+
+@router.delete("/{user_id}", status_code=204,
+               responses={400: {"description": "Cannot delete self"}, 404: {"description": "User not found"}, 403: {"description": "Forbidden"}})
+async def delete_user(
+    user_id: str,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: Annotated[User, Depends(require_roles(UserRole.TENANT_ADMIN))],
+    tenant_id: Annotated[str, Depends(get_tenant_id)],
+):
+    """Delete any user in the tenant except self and super admins."""
+    if user_id == current_user.id:
+        raise HTTPException(400, "Cannot delete your own account")
+    user = (await db.execute(
+        select(User).where(User.id == user_id, User.tenant_id == tenant_id)
+    )).scalar_one_or_none()
+    if not user:
+        raise HTTPException(404, "User not found")
+    if user.role == UserRole.SUPER_ADMIN:
+        raise HTTPException(403, "Cannot delete super admin accounts")
+    await db.delete(user)
+    await db.commit()
