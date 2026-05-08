@@ -8,6 +8,8 @@ import RegisterPage from "./pages/RegisterPage";
 import LandingPage from "./pages/LandingPage";
 import FeaturesLandingPage from "./pages/FeaturesLandingPage";
 import BlogPage from "./pages/BlogPage";
+import NewsPage from "./pages/NewsPage";
+import FAQPage from "./pages/FAQPage";
 import DashboardPage from "./pages/DashboardPage";
 import RisksPage from "./pages/RisksPage";
 import CompliancePage from "./pages/CompliancePage";
@@ -96,6 +98,8 @@ export default function App() {
       <Route path="/" element={<LandingPage />} />
       <Route path="/features-landing" element={<FeaturesLandingPage />} />
       <Route path="/blog" element={<BlogPage />} />
+      <Route path="/news" element={<NewsPage />} />
+      <Route path="/faq" element={<FAQPage />} />
       <Route path="/login" element={<LoginPage />} />
       <Route path="/register" element={<RegisterPage />} />
       <Route path="/super-admin" element={<SuperAdminRoute><SuperAdminPage /></SuperAdminRoute>} />
