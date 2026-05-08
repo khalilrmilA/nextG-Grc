@@ -148,9 +148,9 @@ export default function LandingPage() {
             <img src="/logo.png" alt="GRCEye" className="h-14 w-auto object-contain" />
           </div>
           <nav className="hidden md:flex items-center gap-6 text-sm text-gray-500">
-            <a href="#features" className="hover:text-gray-900 transition-colors">Features</a>
-            <a href="#frameworks" className="hover:text-gray-900 transition-colors">Frameworks</a>
-            <a href="#testimonials" className="hover:text-gray-900 transition-colors">Customers</a>
+            <Link to="/features" className="hover:text-gray-900 transition-colors">Features</Link>
+            <Link to="/frameworks" className="hover:text-gray-900 transition-colors">Frameworks</Link>
+            <Link to="/customers" className="hover:text-gray-900 transition-colors">Customers</Link>
           </nav>
           <div className="flex items-center gap-3">
             <Link to="/login" className="text-sm text-gray-600 hover:text-gray-900 font-medium transition-colors">
@@ -203,84 +203,6 @@ export default function LandingPage() {
               <div key={s.label} className="text-center">
                 <p className="text-3xl font-extrabold text-gray-900">{s.value}</p>
                 <p className="text-xs text-gray-500 mt-1">{s.label}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* ── Features ── */}
-      <section id="features" className="py-24 px-6 bg-white">
-        <div className="max-w-7xl mx-auto">
-          <div className="text-center mb-14">
-            <h2 className="text-3xl font-extrabold text-gray-900 mb-3">Everything your GRC team needs</h2>
-            <p className="text-gray-500 max-w-xl mx-auto">From risk to compliance to audit — one integrated workflow, no spreadsheets required.</p>
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-            {FEATURES.map(({ icon: Icon, title, desc }) => (
-              <div key={title} className="bg-gray-50 rounded-2xl p-6 hover:bg-blue-50 hover:border-blue-100 border border-transparent transition-all group">
-                <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center shadow-sm mb-4 group-hover:bg-blue-600 transition-colors">
-                  <Icon className="w-5 h-5 text-blue-600 group-hover:text-white transition-colors" />
-                </div>
-                <h3 className="font-semibold text-gray-900 mb-1.5">{title}</h3>
-                <p className="text-sm text-gray-500 leading-relaxed">{desc}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* ── Frameworks ── */}
-      <section id="frameworks" className="py-24 px-6 bg-slate-900">
-        <div className="max-w-5xl mx-auto text-center">
-          <h2 className="text-3xl font-extrabold text-white mb-3">Built for every framework</h2>
-          <p className="text-slate-400 mb-12 max-w-xl mx-auto">Pre-loaded with controls, crosswalk mappings, and evidence requirements for 76 global frameworks.</p>
-          <div className="flex flex-wrap justify-center gap-3">
-            {FRAMEWORKS.map(fw => (
-              <span key={fw} className="bg-slate-800 border border-slate-700 text-slate-300 text-sm font-medium px-4 py-2 rounded-xl hover:bg-slate-700 hover:text-white transition-colors cursor-default">
-                {fw}
-              </span>
-            ))}
-            <span className="bg-blue-600/20 border border-blue-500/30 text-blue-400 text-sm font-medium px-4 py-2 rounded-xl">
-              + 64 more frameworks
-            </span>
-          </div>
-          <div className="mt-12 grid grid-cols-3 gap-6 max-w-2xl mx-auto">
-            {[
-              { icon: Lock,   label: "ISO/IEC certified controls",   value: "ISO 27001 · ISO 27002 · ISO 42001" },
-              { icon: Award,  label: "Regulatory frameworks",        value: "GDPR · HIPAA · PCI DSS · DORA" },
-              { icon: Users,  label: "Industry standards",           value: "SOC 2 · CIS · NIST · CSA CCM" },
-            ].map(s => (
-              <div key={s.label} className="bg-slate-800 rounded-2xl p-5 text-left border border-slate-700">
-                <s.icon className="w-5 h-5 text-blue-400 mb-3" />
-                <p className="text-xs text-slate-400 mb-1">{s.label}</p>
-                <p className="text-sm font-semibold text-white leading-snug">{s.value}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* ── Testimonials ── */}
-      <section id="testimonials" className="py-24 px-6 bg-white">
-        <div className="max-w-5xl mx-auto">
-          <div className="text-center mb-14">
-            <h2 className="text-3xl font-extrabold text-gray-900 mb-3">Trusted by security teams</h2>
-            <p className="text-gray-500">From fast-growing startups to regulated enterprises.</p>
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {TESTIMONIALS.map(t => (
-              <div key={t.name} className="bg-gray-50 rounded-2xl p-6 border border-gray-100">
-                <div className="flex gap-0.5 mb-4">
-                  {Array.from({ length: t.rating }).map((_, i) => (
-                    <Star key={i} className="w-4 h-4 text-yellow-400 fill-yellow-400" />
-                  ))}
-                </div>
-                <p className="text-gray-700 text-sm leading-relaxed mb-5 italic">"{t.quote}"</p>
-                <div>
-                  <p className="text-sm font-semibold text-gray-900">{t.name}</p>
-                  <p className="text-xs text-gray-500">{t.role}</p>
-                </div>
               </div>
             ))}
           </div>
