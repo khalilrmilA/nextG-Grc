@@ -7,7 +7,9 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import settings
 from app.core.database import get_db
+from app.core.security_utils import csv_safe_cell
 from app.api.v1.dependencies.auth import get_current_user, get_tenant_id
 from app.models.user import User
 from app.models.risk import Risk
@@ -20,18 +22,35 @@ from app.models.compliance import ComplianceAssessment
 router = APIRouter()
 
 
+async def _read_csv_safely(file: UploadFile) -> str:
+    """Read an uploaded CSV with size + encoding guards.
+
+    Caps the upload at MAX_UPLOAD_SIZE_MB and decodes with errors='replace'
+    so a non-UTF-8 file produces a 400 (not a 500 stack trace)."""
+    max_bytes = settings.MAX_UPLOAD_SIZE_MB * 1024 * 1024
+    raw = await file.read()
+    if len(raw) > max_bytes:
+        raise HTTPException(413, f"CSV exceeds {settings.MAX_UPLOAD_SIZE_MB} MB limit")
+    return raw.decode("utf-8", errors="replace")
+
+
 def _csv_response(rows: list[dict], filename: str) -> StreamingResponse:
-    """Build a CSV streaming response from a list of dicts."""
+    """Build a CSV streaming response from a list of dicts.
+
+    Cells are run through ``csv_safe_cell`` so values that begin with =, +,
+    -, @, \\t or \\r are prefixed with a single quote. This blocks formula
+    injection when the export is opened in Excel/LibreOffice."""
     if not rows:
         buf = io.StringIO()
         buf.write("No data available\n")
         buf.seek(0)
         return StreamingResponse(iter([buf.getvalue()]), media_type="text/csv",
                                  headers={"Content-Disposition": f'attachment; filename="{filename}"'})
+    safe_rows = [{k: csv_safe_cell(v) for k, v in r.items()} for r in rows]
     buf = io.StringIO()
-    writer = csv.DictWriter(buf, fieldnames=rows[0].keys())
+    writer = csv.DictWriter(buf, fieldnames=safe_rows[0].keys())
     writer.writeheader()
-    writer.writerows(rows)
+    writer.writerows(safe_rows)
     buf.seek(0)
     return StreamingResponse(iter([buf.getvalue()]), media_type="text/csv",
                              headers={"Content-Disposition": f'attachment; filename="{filename}"'})
@@ -127,7 +146,7 @@ async def export_compliance(db: AsyncSession = Depends(get_db), _: User = Depend
 @router.post("/import/risks")
 async def import_risks(file: UploadFile = File(...), db: AsyncSession = Depends(get_db), _: User = Depends(get_current_user), tenant_id: str = Depends(get_tenant_id)):
     """Import risks from CSV file. Columns: title, description, category, likelihood, impact, severity."""
-    content = (await file.read()).decode("utf-8")
+    content = await _read_csv_safely(file)
     reader = csv.DictReader(io.StringIO(content))
     created = 0; errors = []
     for i, row in enumerate(reader, 2):
@@ -148,7 +167,7 @@ async def import_risks(file: UploadFile = File(...), db: AsyncSession = Depends(
 @router.post("/import/vendors")
 async def import_vendors(file: UploadFile = File(...), db: AsyncSession = Depends(get_db), _: User = Depends(get_current_user), tenant_id: str = Depends(get_tenant_id)):
     """Import vendors from CSV. Columns: name, industry, country, risk_tier, services_provided, website."""
-    content = (await file.read()).decode("utf-8")
+    content = await _read_csv_safely(file)
     reader = csv.DictReader(io.StringIO(content))
     created = 0; errors = []
     for i, row in enumerate(reader, 2):
@@ -173,7 +192,7 @@ async def import_vendors(file: UploadFile = File(...), db: AsyncSession = Depend
 @router.post("/import/assets")
 async def import_assets(file: UploadFile = File(...), db: AsyncSession = Depends(get_db), _: User = Depends(get_current_user), tenant_id: str = Depends(get_tenant_id)):
     """Import assets from CSV. Columns: name, asset_type, criticality, description, hosting_type, location."""
-    content = (await file.read()).decode("utf-8")
+    content = await _read_csv_safely(file)
     reader = csv.DictReader(io.StringIO(content))
     created = 0; errors = []
     for i, row in enumerate(reader, 2):

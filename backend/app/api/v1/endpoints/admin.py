@@ -291,14 +291,17 @@ async def approve_ai_request(
     try:
         await db.flush()
         await db.commit()
-    except Exception as e:
-        logger.error(f"Database commit error: {str(e)}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
+    except Exception:
+        logger.exception("admin.ai_access.commit_error")
+        raise HTTPException(status_code=500, detail="Internal server error")
 
     logger.info(f"AI access request approved: {request_id}, new status: {request.status}")
 
-    # Send notification to user
-    notify_ai_access_approved.delay(request.user_id, request.user_email)
+    # Send notification to user (fire-and-forget — Redis may be down).
+    try:
+        notify_ai_access_approved.delay(request.user_id, request.user_email)
+    except Exception:
+        logger.warning("admin.ai_access.notify_delay_failed user_id=%s", request.user_id)
 
     return {
         "id": request.id,
@@ -343,9 +346,9 @@ async def deny_ai_request(
     try:
         await db.flush()
         await db.commit()
-    except Exception as e:
-        logger.error(f"Database commit error: {str(e)}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
+    except Exception:
+        logger.exception("admin.ai_access.commit_error")
+        raise HTTPException(status_code=500, detail="Internal server error")
 
     logger.info(f"AI access request denied: {request_id}")
     return {

@@ -32,7 +32,7 @@ ALLOWED_MIME = {
     "image/jpeg",
     "image/jpg",
 }
-MAX_FILE_SIZE = 10 * 1024 * 1024  # 10 MB
+MAX_FILE_SIZE = settings.MAX_UPLOAD_SIZE_MB * 1024 * 1024
 
 _NOTIFY_ROLES = {UserRole.TENANT_ADMIN, UserRole.CISO}
 
@@ -158,7 +158,7 @@ async def upload_evidence_via_token(
     # declared MIME (clients can spoof Content-Type otherwise).
     content = await file.read()
     if len(content) > MAX_FILE_SIZE:
-        raise HTTPException(413, "File exceeds 10 MB limit")
+        raise HTTPException(413, f"File exceeds {settings.MAX_UPLOAD_SIZE_MB} MB limit")
     if file.content_type not in ALLOWED_MIME:
         raise HTTPException(415, "Unsupported file type. Use PDF, DOCX, TXT, or images.")
     if not verify_file_signature(content, file.content_type):

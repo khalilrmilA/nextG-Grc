@@ -172,12 +172,14 @@ async def browse_controls_by_framework(
 async def get_ai_control_suggestions(
     body: AISuggestionsRequest,
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
 ):
     """Get AI-suggested controls based on industry, region, and use case."""
     import httpx
     import json as json_lib
     from app.core.config import settings
+    from app.core import ai_quota
+    ai_quota.check_quota_or_raise(current_user.id)
 
     selected_context = ""
     if body.selected_control_ids:
@@ -232,6 +234,7 @@ Return ONLY valid JSON in this exact format:
             if resp.status_code != 200:
                 raise HTTPException(status_code=500, detail=f"Ollama error {resp.status_code}")
             data = resp.json()
+            ai_quota.record_from_ollama_response(current_user.id, data)
             ai_text = data.get("message", {}).get("content", "")
 
         try:
@@ -249,12 +252,14 @@ Return ONLY valid JSON in this exact format:
             rationale=ai_result.get("rationale", ""),
         )
 
-    except httpx.RequestError as e:
-        raise HTTPException(status_code=503, detail=f"Ollama unavailable: {str(e)}")
-    except Exception as e:
-        import traceback
-        traceback.print_exc()
-        raise HTTPException(status_code=500, detail=f"AI suggestions failed: {str(e)}")
+    except httpx.RequestError:
+        import logging
+        logging.getLogger(__name__).exception("framework.ai_suggest.ollama_unreachable")
+        raise HTTPException(status_code=503, detail="AI service temporarily unavailable")
+    except Exception:
+        import logging
+        logging.getLogger(__name__).exception("framework.ai_suggest.error")
+        raise HTTPException(status_code=500, detail="AI suggestions failed")
 
 
 @router.post("/builder/create", response_model=FrameworkResponse, status_code=status.HTTP_201_CREATED)

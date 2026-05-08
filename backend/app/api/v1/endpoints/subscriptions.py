@@ -6,8 +6,8 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
-from app.api.v1.dependencies.auth import get_current_user, get_tenant_id
-from app.models.user import User
+from app.api.v1.dependencies.auth import get_current_user, get_tenant_id, require_roles
+from app.models.user import User, UserRole
 from app.models.subscription import Subscription, SubscriptionTier, SubscriptionStatus, TIER_LIMITS
 
 router = APIRouter()
@@ -54,12 +54,26 @@ async def get_current_subscription(db: AsyncSession = Depends(get_db), _: User =
     return out
 
 @router.patch("/current", response_model=SubscriptionOut)
-async def update_subscription(body: SubscriptionUpdate, db: AsyncSession = Depends(get_db), _: User = Depends(get_current_user), tenant_id: str = Depends(get_tenant_id)):
+async def update_subscription(
+    body: SubscriptionUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    tenant_id: str = Depends(get_tenant_id),
+):
+    """Update subscription billing cycle. Tier changes are RESTRICTED to
+    super_admin: tier mutation belongs to the billing system, not user
+    self-service (otherwise any user could escalate to enterprise tier)."""
     r = await db.execute(select(Subscription).where(Subscription.tenant_id == tenant_id))
     sub = r.scalar_one_or_none()
     if not sub: raise HTTPException(404, "No subscription found")
-    if body.tier: sub.tier = SubscriptionTier(body.tier)
-    if body.billing_cycle: sub.billing_cycle = body.billing_cycle
+    if body.tier:
+        if current_user.role != UserRole.SUPER_ADMIN:
+            raise HTTPException(403, "Only platform admins can change subscription tier")
+        sub.tier = SubscriptionTier(body.tier)
+    if body.billing_cycle:
+        if current_user.role not in (UserRole.SUPER_ADMIN, UserRole.TENANT_ADMIN):
+            raise HTTPException(403, "Insufficient permissions")
+        sub.billing_cycle = body.billing_cycle
     await db.commit(); await db.refresh(sub)
     out = SubscriptionOut.model_validate(sub)
     out.limits = sub.limits

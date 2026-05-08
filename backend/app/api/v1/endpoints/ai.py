@@ -19,6 +19,7 @@ from pydantic import BaseModel
 import httpx
 
 from app.core.config import settings
+from app.core import ai_quota
 
 router = APIRouter()
 
@@ -70,10 +71,14 @@ async def _require_ai_access(
     db: Annotated[AsyncSession, Depends(get_db)],
     current_user: Annotated[User, Depends(get_current_user)],
 ) -> tuple[User, AiUsageQuota]:
-    """Dependency: ensure the user has AI access (auto-provisioned for local Ollama)."""
+    """Dependency: ensure the user has AI access AND has not exceeded the
+    daily 100k-token cap (see app.core.ai_quota.DAILY_TOKEN_LIMIT)."""
+    # Daily-token guardrail: hard 429 when exceeded. Resets at 00:00 UTC.
+    ai_quota.check_quota_or_raise(current_user.id)
+
     quota = await _get_or_create_quota(db, current_user)
 
-    # Soft limits: reset usage instead of blocking (local Ollama has no cost)
+    # Soft monthly limits: reset usage instead of blocking (local Ollama has no cost)
     if quota.monthly_used_tokens >= quota.monthly_limit_tokens:
         from datetime import datetime, timedelta, timezone
         quota.monthly_used_tokens = 0
@@ -102,13 +107,18 @@ async def _tracked_sse_generator(
     db: AsyncSession,
     quota: AiUsageQuota,
 ) -> AsyncGenerator[str, None]:
-    """Wrap _ollama_sse_generator and increment quota when stream ends."""
+    """Wrap _ollama_sse_generator and increment both monthly DB quota AND
+    daily ai_quota counter when stream ends."""
     total_chars = 0
     async for chunk in _ollama_sse_generator(messages, model, system_prompt):
         total_chars += len(chunk)
         yield chunk
-    # Estimate tokens from chars (~4 chars per token) and record usage
-    await _increment_usage(db, quota, max(1, total_chars // 4))
+    # Estimate tokens from chars (~4 chars per token) and record usage in
+    # both the monthly DB-backed quota and the daily ai_quota counter.
+    estimated_tokens = max(1, total_chars // 4)
+    await _increment_usage(db, quota, estimated_tokens)
+    if quota.user_id:
+        ai_quota.record_usage(quota.user_id, estimated_tokens)
 
 DEFAULT_MODEL = settings.OLLAMA_CHAT_MODEL  # e.g. deepseek-v3.1:671b-cloud
 
@@ -266,15 +276,35 @@ async def _ollama_sse_generator(
 # ─── Endpoints ─────────────────────────────────────────────────────────────────
 
 
+async def _quota_only_sse_generator(
+    messages: list[dict],
+    model: str,
+    system_prompt: str,
+    user_id: str,
+) -> AsyncGenerator[str, None]:
+    """Wrap _ollama_sse_generator and record only the daily ai_quota counter
+    (used by /chat which has no DB-backed monthly quota row)."""
+    total_chars = 0
+    async for chunk in _ollama_sse_generator(messages, model, system_prompt):
+        total_chars += len(chunk)
+        yield chunk
+    ai_quota.record_usage(user_id, max(1, total_chars // 4))
+
+
 @router.post("/chat")
 async def chat(
     request: ChatRequest,
     current_user: Annotated[User, Depends(get_current_user)],
 ):
-    """Stream a GRC-aware AI chat response from Ollama. Free for all authenticated users."""
+    """Stream a GRC-aware AI chat response from Ollama. Subject to the daily
+    ai_quota.DAILY_TOKEN_LIMIT per user."""
+    estimated = ai_quota.estimate_tokens(
+        " ".join(m.content for m in request.messages)
+    )
+    ai_quota.check_quota_or_raise(current_user.id, estimated)
     messages = [{"role": m.role, "content": m.content} for m in request.messages]
     return StreamingResponse(
-        _ollama_sse_generator(messages, request.model, SYSTEM_PROMPT),
+        _quota_only_sse_generator(messages, request.model, SYSTEM_PROMPT, current_user.id),
         media_type=_SSE_MEDIA_TYPE,
         headers=_SSE_HEADERS,
     )
@@ -311,7 +341,7 @@ async def generate_policy(
 
 
 @router.get("/models")
-async def list_models():
+async def list_models(current_user: Annotated[User, Depends(get_current_user)]):
     """Return available Ollama models by querying the local Ollama instance."""
     base_url = settings.OLLAMA_BASE_URL.rstrip("/")
     try:
@@ -503,15 +533,18 @@ Be practical and specific. Focus on actionable test steps that an auditor can ex
 async def analyze_vendor(
     request: VendorRiskRequest,
     db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_user)],
 ):
     """Analyze vendor with web search and return full analysis as JSON."""
+    ai_quota.check_quota_or_raise(current_user.id)
     # Perform web search for vendor information
     web_context = ""
     try:
         import httpx
+        from urllib.parse import quote_plus
         search_query = f"{request.vendor_name} security compliance certifications"
-        search_url = f"https://api.duckduckgo.com/?q={search_query}&format=json&no_html=1"
-        async with httpx.AsyncClient(timeout=10.0) as http_client:
+        search_url = f"https://api.duckduckgo.com/?q={quote_plus(search_query)}&format=json&no_html=1"
+        async with httpx.AsyncClient(timeout=10.0, follow_redirects=False) as http_client:
             resp = await http_client.get(search_url)
             if resp.status_code == 200:
                 data = resp.json()
@@ -1032,8 +1065,9 @@ async def ai_access_check(
 
 
 @router.get("/health")
-async def ai_health():
-    """Check if Ollama is reachable."""
+async def ai_health(current_user: Annotated[User, Depends(get_current_user)]):
+    """Check if Ollama is reachable. Authenticated; does not leak the
+    internal Ollama URL (was an information disclosure pre-fix)."""
     base_url = settings.OLLAMA_BASE_URL.rstrip("/")
     reachable = False
     try:
@@ -1045,8 +1079,6 @@ async def ai_health():
     return {
         "status": "ok" if reachable else "ollama_unreachable",
         "provider": "ollama",
-        "model": DEFAULT_MODEL,
-        "ollama_url": base_url,
         "reachable": reachable,
     }
 

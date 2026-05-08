@@ -73,10 +73,10 @@ async def generate_and_download_report(
 
     try:
         pdf_bytes = await generate_report(report_type, db, tenant_id, tenant_name)
-    except Exception as e:
-        import traceback
-        traceback.print_exc()
-        raise HTTPException(status_code=500, detail=f"Report generation failed: {str(e)}")
+    except Exception:
+        import logging
+        logging.getLogger(__name__).exception("report.generate.error report_type=%s", report_type)
+        raise HTTPException(status_code=500, detail="Report generation failed")
 
     # Build filename with date
     from datetime import datetime
@@ -112,10 +112,10 @@ async def preview_report(
 
     try:
         pdf_bytes = await generate_report(report_type, db, tenant_id, tenant_name)
-    except Exception as e:
-        import traceback
-        traceback.print_exc()
-        raise HTTPException(status_code=500, detail=f"Report preview failed: {str(e)}")
+    except Exception:
+        import logging
+        logging.getLogger(__name__).exception("report.preview.error report_type=%s", report_type)
+        raise HTTPException(status_code=500, detail="Report preview failed")
 
     return Response(
         content=pdf_bytes,

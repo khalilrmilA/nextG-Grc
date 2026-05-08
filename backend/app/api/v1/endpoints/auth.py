@@ -31,6 +31,20 @@ def _hash_email_for_log(email: str) -> str:
     return hashlib.sha256(email.lower().encode()).hexdigest()[:12]
 
 
+# Slugs that are publicly visible (Trust Center) and shouldn't be squatted on
+# self-service registration. Extend as needed; full impersonation prevention
+# requires email-domain verification, which lives in a future fix.
+_RESERVED_SLUGS = {
+    "admin", "api", "auth", "auditor", "dashboard", "demo", "platform",
+    "superadmin", "super-admin", "support", "system", "trust", "trust-center",
+    "www", "billing", "console",
+    # Brand / impersonation-prone names
+    "anthropic", "google", "microsoft", "amazon", "apple", "openai", "meta",
+    "facebook", "github", "gitlab", "stripe", "salesforce", "okta", "auth0",
+    "cloudflare", "ibm", "oracle", "deloitte", "kpmg", "pwc", "ey",
+}
+
+
 class LoginRequest(BaseModel):
     email: EmailStr
     password: str
@@ -122,6 +136,11 @@ async def register(request: Request, body: RegisterRequest, db: AsyncSession = D
     existing = await db.execute(select(User).where(User.email == body.email))
     if existing.scalar_one_or_none():
         raise HTTPException(status_code=400, detail="Registration could not be completed")
+
+    # Reserved-slug guard: block obvious squatting (brand names, system slugs).
+    # Domain-verification is the proper long-term fix.
+    if body.organization_slug.strip().lower() in _RESERVED_SLUGS:
+        raise HTTPException(status_code=400, detail="That organization slug is reserved")
 
     # Check slug uniqueness (slugs are public-facing identifiers, OK to be specific)
     existing_tenant = await db.execute(

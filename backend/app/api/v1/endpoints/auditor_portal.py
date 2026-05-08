@@ -12,6 +12,7 @@ import httpx
 
 from app.core.config import settings
 from app.core.database import get_db
+from app.core import ai_quota
 from app.models.user import User, UserRole
 from app.models.compliance import ComplianceAssessment, ControlAssessment, ControlStatus, UploadedDocument, Evidence
 from app.models.auditor_assignment import AuditorAssignment
@@ -38,6 +39,7 @@ Be concise but comprehensive. Flag certification blockers explicitly."""
 async def _audit_report_generator(
     messages: list[dict],
     model: str,
+    user_id: str | None = None,
 ) -> AsyncGenerator[str, None]:
     base_url = settings.OLLAMA_BASE_URL.rstrip("/")
     url = f"{base_url}/api/chat"
@@ -46,6 +48,7 @@ async def _audit_report_generator(
         "stream": True,
         "messages": [{"role": "system", "content": AUDIT_REPORT_SYSTEM_PROMPT}, *messages],
     }
+    total_chars = 0
     try:
         async with httpx.AsyncClient(timeout=300.0) as client:
             async with client.stream("POST", url, json=payload) as response:
@@ -63,12 +66,19 @@ async def _audit_report_generator(
                         continue
                     token = chunk.get("message", {}).get("content", "")
                     if token:
+                        total_chars += len(token)
                         yield f"data: {json.dumps({'token': token})}\n\n"
                     if chunk.get("done"):
+                        # Capture authoritative token counts when present.
+                        if user_id:
+                            ai_quota.record_from_ollama_response(user_id, chunk)
                         break
     except Exception as exc:  # noqa: BLE001
         yield f"data: {json.dumps({'error': str(exc)})}\n\n"
     finally:
+        if user_id and total_chars and ai_quota.get_used(user_id) == 0:
+            # Fallback record if Ollama didn't report counts on the done chunk.
+            ai_quota.record_usage(user_id, max(1, total_chars // 4))
         yield _SSE_DONE
 
 router = APIRouter()
@@ -470,8 +480,9 @@ async def generate_audit_report(
     messages = [{"role": "user", "content": prompt}]
     model = getattr(settings, "OLLAMA_CHAT_MODEL", "llama3.1:8b")
 
+    ai_quota.check_quota_or_raise(current_user.id)
     return StreamingResponse(
-        _audit_report_generator(messages, model),
+        _audit_report_generator(messages, model, current_user.id),
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )

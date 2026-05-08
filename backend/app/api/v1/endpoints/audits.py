@@ -6,6 +6,7 @@ from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
+from app.core.security_utils import assert_user_in_tenant
 from app.api.v1.dependencies.auth import get_current_user, get_tenant_id
 from app.models.user import User
 from app.models.audit import (
@@ -98,6 +99,7 @@ async def list_audits(status_filter: str | None = None, db: AsyncSession = Depen
 
 @router.post("", response_model=AuditOut, status_code=201)
 async def create_audit(body: AuditCreate, db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user), tenant_id: str = Depends(get_tenant_id)):
+    await assert_user_in_tenant(db, body.lead_auditor_id, tenant_id, field_name="lead_auditor_id")
     a = Audit(tenant_id=tenant_id, title=body.title, description=body.description,
               audit_type=AuditType(body.audit_type), lead_auditor_id=body.lead_auditor_id or user.id,
               framework_id=body.framework_id, planned_start=body.planned_start,
@@ -112,6 +114,7 @@ async def get_audit(audit_id: str, db: AsyncSession = Depends(get_db), _: User =
 @router.patch("/{audit_id}", response_model=AuditOut)
 async def update_audit(audit_id: str, body: AuditUpdate, db: AsyncSession = Depends(get_db), _: User = Depends(get_current_user), tenant_id: str = Depends(get_tenant_id)):
     a = await _audit(db, audit_id, tenant_id)
+    await assert_user_in_tenant(db, body.lead_auditor_id, tenant_id, field_name="lead_auditor_id")
     for f in ["title","description","lead_auditor_id","planned_start","planned_end","actual_start","actual_end","scope","executive_summary","in_scope_systems"]:
         v = getattr(body, f, None)
         if v is not None: setattr(a, f, v)
@@ -134,6 +137,7 @@ async def list_findings(audit_id: str, db: AsyncSession = Depends(get_db), _: Us
 @router.post("/{audit_id}/findings", response_model=FindingOut, status_code=201)
 async def create_finding(audit_id: str, body: FindingCreate, db: AsyncSession = Depends(get_db), _: User = Depends(get_current_user), tenant_id: str = Depends(get_tenant_id)):
     await _audit(db, audit_id, tenant_id)
+    await assert_user_in_tenant(db, body.remediation_owner_id, tenant_id, field_name="remediation_owner_id")
     f = AuditFinding(audit_id=audit_id, title=body.title, description=body.description,
                      severity=FindingSeverity(body.severity), control_id=body.control_id,
                      remediation_owner_id=body.remediation_owner_id, due_date=body.due_date, recommendation=body.recommendation)
@@ -146,6 +150,7 @@ async def update_finding(audit_id: str, fid: str, body: FindingUpdate, db: Async
     r = await db.execute(select(AuditFinding).where(AuditFinding.id == fid, AuditFinding.audit_id == audit_id))
     f = r.scalar_one_or_none()
     if not f: raise HTTPException(404, "Finding not found")
+    await assert_user_in_tenant(db, body.remediation_owner_id, tenant_id, field_name="remediation_owner_id")
     for fld in ["title","description","remediation_owner_id","due_date","recommendation","management_response","remediation_notes"]:
         v = getattr(body, fld, None)
         if v is not None: setattr(f, fld, v)

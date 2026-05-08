@@ -83,7 +83,7 @@ def _parse_feed(xml_text: str, source: str, default_regulation: str) -> list[dic
         return []
 
 
-async def _assess_with_ollama(items: list[dict], tenant_frameworks: list[str] | None = None) -> list[dict]:
+async def _assess_with_ollama(items: list[dict], tenant_frameworks: list[str] | None = None, user_id: str | None = None) -> list[dict]:
     """Ask Ollama to filter and classify items relevant to the tenant's frameworks."""
     fw_context = ", ".join(tenant_frameworks) if tenant_frameworks else "ISO 27001, GDPR, NIST CSF, SOC 2, PCI DSS"
     numbered = "\n".join(
@@ -116,6 +116,9 @@ async def _assess_with_ollama(items: list[dict], tenant_frameworks: list[str] | 
                 },
             )
             if resp.status_code == 200:
+                if user_id:
+                    from app.core import ai_quota
+                    ai_quota.record_from_ollama_response(user_id, resp.json())
                 content = resp.json().get("message", {}).get("content", "[]")
                 assessed = json.loads(content)
                 if not isinstance(assessed, list):
@@ -229,10 +232,12 @@ class FetchNewsOut(BaseModel):
 @router.post("/fetch-news", response_model=FetchNewsOut)
 async def fetch_regulatory_news(
     db: Annotated[AsyncSession, Depends(get_db)],
-    _: Annotated[User, Depends(get_current_user)],
+    current_user: Annotated[User, Depends(get_current_user)],
     tenant_id: Annotated[str, Depends(get_tenant_id)],
 ):
     """Fetch RSS feeds from regulatory bodies, assess with AI, and create draft updates."""
+    from app.core import ai_quota
+    ai_quota.check_quota_or_raise(current_user.id)
     # 1. Fetch all feeds concurrently
     raw_items: list[dict] = []
     async with httpx.AsyncClient(timeout=15.0, follow_redirects=True, headers={"User-Agent": "GRC-Platform/1.0"}) as client:
@@ -268,7 +273,7 @@ async def fetch_regulatory_news(
         tenant_frameworks = [r[0] for r in fw_rows.all()]
 
     # 4. Ask Ollama to classify relevance against the tenant's frameworks
-    assessed = await _assess_with_ollama(new_items, tenant_frameworks or None)
+    assessed = await _assess_with_ollama(new_items, tenant_frameworks or None, current_user.id)
 
     # 5. Persist as pending_approval — user must approve before they appear in the main list
     created_titles: list[str] = []

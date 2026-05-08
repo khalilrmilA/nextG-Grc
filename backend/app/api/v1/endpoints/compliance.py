@@ -16,6 +16,7 @@ from app.api.v1.dependencies.auth import get_current_user, get_tenant_id, requir
 from app.api.v1.dependencies.pagination import PaginationParams
 from app.core.config import settings
 from app.core.database import get_db
+from app.core.security_utils import sanitize_for_prompt, verify_file_signature
 from app.models.compliance import (
     AssessmentStatus,
     ComplianceAssessment,
@@ -775,6 +776,16 @@ async def upload_document(
     if len(file_bytes) > max_bytes:
         raise HTTPException(status_code=413, detail=f"File too large (max {settings.MAX_UPLOAD_SIZE_MB}MB)")
 
+    # Magic-byte verification — clients can lie about Content-Type. Skip the
+    # check for declared text/plain (no reliable signature).
+    declared = (content_type or "").lower()
+    if "pdf" in declared and not verify_file_signature(file_bytes, "application/pdf"):
+        raise HTTPException(415, "File contents do not match the declared PDF type.")
+    if "image/png" in declared and not verify_file_signature(file_bytes, "image/png"):
+        raise HTTPException(415, "File contents do not match the declared PNG type.")
+    if ("image/jpeg" in declared or "image/jpg" in declared) and not verify_file_signature(file_bytes, "image/jpeg"):
+        raise HTTPException(415, "File contents do not match the declared JPEG type.")
+
     safe_name = _sanitize_filename(file.filename or "document.txt")
     rel_path = f"{tenant_id}/{assessment_id}/{uuid.uuid4().hex}_{safe_name}"
     full_path = Path(settings.UPLOADS_DIR) / rel_path
@@ -850,7 +861,7 @@ async def upload_document(
 async def analyze_assessment(
     assessment_id: str,
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(require_roles(UserRole.TENANT_ADMIN, UserRole.SUPER_ADMIN)),
+    current_user: User = Depends(require_roles(UserRole.TENANT_ADMIN, UserRole.SUPER_ADMIN)),
     tenant_id: str = Depends(get_tenant_id),
 ) -> dict:
     """
@@ -902,9 +913,15 @@ async def analyze_assessment(
 
     await db.flush()
 
-    # Run AI analysis
+    # Run AI analysis — guard against blowing the daily token budget. The
+    # batch analysis is unmetered per-call (sync workers, no user context),
+    # so we estimate up-front and record a lump sum after.
+    from app.core import ai_quota
+    estimated = ai_quota.estimate_tokens(doc_text) + len(controls) * 200
+    ai_quota.check_quota_or_raise(current_user.id, estimated)
     model = settings.OLLAMA_CHAT_MODEL
     verdicts = await _run_batch_analysis(doc_text, controls, model)
+    ai_quota.record_usage(current_user.id, estimated)
 
     verdict_map = {
         "compliant": ControlStatus.IMPLEMENTED,
@@ -1295,6 +1312,10 @@ async def act_on_gap_recommendation(
 
     gap, _ = row
 
+    # Verify owner_id (if any) is in this tenant before assigning the action item.
+    from app.core.security_utils import assert_user_in_tenant as _assert_user
+    await _assert_user(db, body.owner_id, tenant_id, field_name="owner_id")
+
     gap.recommendation_status = body.action + "ed"  # "accepted" | "rejected"
 
     action_item_id = None
@@ -1315,7 +1336,7 @@ async def act_on_gap_recommendation(
             gap_id=gap_id,
             title=f"Remediate: {ctrl_title}",
             description=gap.gap_description,
-            owner_id=body.owner_id or current_user.id,
+            owner_id=body.owner_id or current_user.id,  # tenant-checked above
             due_date=body.due_date,
             priority=priority,
             status=ActionItemStatus.OPEN,
@@ -1347,6 +1368,9 @@ async def bulk_act_on_gaps(
     if body.action not in ("accept", "reject"):
         raise HTTPException(status_code=422, detail="action must be 'accept' or 'reject'")
 
+    from app.core.security_utils import assert_user_in_tenant as _assert_user
+    await _assert_user(db, body.owner_id, tenant_id, field_name="owner_id")
+
     result = await db.execute(
         select(ComplianceGap, ComplianceAssessment)
         .join(ComplianceAssessment, ComplianceGap.assessment_id == ComplianceAssessment.id)
@@ -1376,7 +1400,7 @@ async def bulk_act_on_gaps(
                 gap_id=gap.id,
                 title=f"Remediate: {ctrl_title}",
                 description=gap.gap_description,
-                owner_id=body.owner_id or current_user.id,
+                owner_id=body.owner_id or current_user.id,  # tenant-checked above
                 due_date=body.due_date,
                 priority=priority,
                 status=ActionItemStatus.OPEN,
@@ -1553,6 +1577,15 @@ async def upload_control_evidence(
     max_bytes = settings.MAX_UPLOAD_SIZE_MB * 1024 * 1024
     if len(file_bytes) > max_bytes:
         raise HTTPException(status_code=413, detail=f"File too large (max {settings.MAX_UPLOAD_SIZE_MB}MB)")
+
+    # Magic-byte verification — see notes on upload_document above.
+    declared = (content_type or "").lower()
+    if "pdf" in declared and not verify_file_signature(file_bytes, "application/pdf"):
+        raise HTTPException(415, "File contents do not match the declared PDF type.")
+    if "image/png" in declared and not verify_file_signature(file_bytes, "image/png"):
+        raise HTTPException(415, "File contents do not match the declared PNG type.")
+    if ("image/jpeg" in declared or "image/jpg" in declared) and not verify_file_signature(file_bytes, "image/jpeg"):
+        raise HTTPException(415, "File contents do not match the declared JPEG type.")
 
     safe_name = _sanitize_filename(file.filename or "evidence.txt")
     rel_path = f"{tenant_id}/evidence/{uuid.uuid4().hex}_{safe_name}"

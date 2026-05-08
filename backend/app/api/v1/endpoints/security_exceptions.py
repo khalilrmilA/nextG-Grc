@@ -6,8 +6,8 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
-from app.api.v1.dependencies.auth import get_current_user, get_tenant_id
-from app.models.user import User
+from app.api.v1.dependencies.auth import get_current_user, get_tenant_id, require_roles
+from app.models.user import User, UserRole
 from app.models.security_exception import SecurityException, RiskAcceptance
 
 router = APIRouter()
@@ -74,19 +74,40 @@ async def create_exception(body: SECreate, db: AsyncSession = Depends(get_db), u
     return SEOut.model_validate(e)
 
 @router.patch("/exceptions/{eid}/approve", response_model=SEOut)
-async def approve_exception(eid: str, db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user), tenant_id: str = Depends(get_tenant_id)):
+async def approve_exception(
+    eid: str,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_roles(UserRole.TENANT_ADMIN, UserRole.CISO)),
+    tenant_id: str = Depends(get_tenant_id),
+):
+    """Approve a pending security exception. Four-eyes principle: requester
+    cannot approve their own request, and only TENANT_ADMIN/CISO can approve."""
     r = await db.execute(select(SecurityException).where(SecurityException.id == eid, SecurityException.tenant_id == tenant_id))
     e = r.scalar_one_or_none()
     if not e: raise HTTPException(404, "Exception not found")
+    if e.requested_by_id == user.id:
+        raise HTTPException(403, "You cannot approve your own request (four-eyes principle).")
+    if e.status != "pending_approval":
+        raise HTTPException(409, f"Cannot approve exception in status '{e.status}'")
     e.status = "approved"; e.approver_id = user.id; e.approved_at = datetime.utcnow().isoformat()
     await db.commit(); await db.refresh(e)
     return SEOut.model_validate(e)
 
 @router.patch("/exceptions/{eid}/reject", response_model=SEOut)
-async def reject_exception(eid: str, reason: str = "", db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user), tenant_id: str = Depends(get_tenant_id)):
+async def reject_exception(
+    eid: str,
+    reason: str = "",
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_roles(UserRole.TENANT_ADMIN, UserRole.CISO)),
+    tenant_id: str = Depends(get_tenant_id),
+):
     r = await db.execute(select(SecurityException).where(SecurityException.id == eid, SecurityException.tenant_id == tenant_id))
     e = r.scalar_one_or_none()
     if not e: raise HTTPException(404, "Exception not found")
+    if e.requested_by_id == user.id:
+        raise HTTPException(403, "You cannot reject your own request (four-eyes principle).")
+    if e.status != "pending_approval":
+        raise HTTPException(409, f"Cannot reject exception in status '{e.status}'")
     e.status = "rejected"; e.approver_id = user.id; e.rejection_reason = reason
     await db.commit(); await db.refresh(e)
     return SEOut.model_validate(e)
@@ -106,10 +127,19 @@ async def create_acceptance(body: RACreate, db: AsyncSession = Depends(get_db), 
     return RAOut.model_validate(a)
 
 @router.patch("/acceptances/{aid}/approve", response_model=RAOut)
-async def approve_acceptance(aid: str, db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user), tenant_id: str = Depends(get_tenant_id)):
+async def approve_acceptance(
+    aid: str,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_roles(UserRole.TENANT_ADMIN, UserRole.CISO)),
+    tenant_id: str = Depends(get_tenant_id),
+):
+    """Approve a risk acceptance. Four-eyes principle: requester cannot
+    approve their own acceptance."""
     r = await db.execute(select(RiskAcceptance).where(RiskAcceptance.id == aid, RiskAcceptance.tenant_id == tenant_id))
     a = r.scalar_one_or_none()
     if not a: raise HTTPException(404, "Acceptance not found")
+    if a.requested_by_id == user.id:
+        raise HTTPException(403, "You cannot approve your own risk acceptance (four-eyes principle).")
     a.status = "approved"; a.approver_id = user.id; a.approved_at = datetime.utcnow().isoformat()
     await db.commit(); await db.refresh(a)
     return RAOut.model_validate(a)
