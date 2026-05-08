@@ -1959,7 +1959,7 @@ async def create_share_link(
     await db.commit()
     await db.refresh(tok)
 
-    frontend_base = getattr(settings, "FRONTEND_BASE_URL", "http://localhost:4000")
+    frontend_base = settings.FRONTEND_BASE_URL
     return ShareLinkResponse(
         id=tok.id,
         token=tok.token,
@@ -1989,7 +1989,7 @@ async def list_share_links(
         ).order_by(EvidenceUploadToken.created_at.desc())
     )).scalars().all()
 
-    frontend_base = getattr(settings, "FRONTEND_BASE_URL", "http://localhost:4000")
+    frontend_base = settings.FRONTEND_BASE_URL
     return [
         ShareLinkResponse(
             id=r.id,
