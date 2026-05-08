@@ -7,6 +7,7 @@ import LoginPage from "./pages/LoginPage";
 import RegisterPage from "./pages/RegisterPage";
 import LandingPage from "./pages/LandingPage";
 import FeaturesLandingPage from "./pages/FeaturesLandingPage";
+import SolutionsPage from "./pages/SolutionsPage";
 import BlogPage from "./pages/BlogPage";
 import NewsPage from "./pages/NewsPage";
 import FAQPage from "./pages/FAQPage";
@@ -106,6 +107,7 @@ export default function App() {
       <Route path="/upload/:token" element={<EvidenceUploadPage />} />
       <Route path="/vendor-collab/:shareToken" element={<VendorCollaborationPage />} />
       <Route path="/features-landing" element={<FeaturesLandingPage />} />
+      <Route path="/solutions" element={<SolutionsPage />} />
       <Route path="/blog" element={<BlogPage />} />
       <Route path="/news" element={<NewsPage />} />
       <Route path="/faq" element={<FAQPage />} />

@@ -1409,7 +1409,6 @@ const TAB_MIN_PLAN: Partial<Record<Tab, PlanTier>> = {
   organization:  "starter",
   notifications: "starter",
   api:           "professional",
-  appearance:    "enterprise",
 };
 
 const PLAN_ORDER: PlanTier[] = ["free_trial", "starter", "professional", "enterprise"];
