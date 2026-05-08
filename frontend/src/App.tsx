@@ -121,7 +121,7 @@ export default function App() {
           </PrivateRoute>
         }
       >
-        <Route index element={<Navigate to="/dashboard" replace />} />
+        <Route index element={<Navigate to="/landing" replace />} />
         <Route path="dashboard" element={<DashboardPage />} />
         <Route path="risks" element={<PrivateRoute requiredModule="risks"><RisksPage /></PrivateRoute>} />
         <Route path="compliance" element={<PrivateRoute requiredModule="compliance"><CompliancePage /></PrivateRoute>} />
