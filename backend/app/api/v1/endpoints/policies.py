@@ -129,7 +129,16 @@ async def update_policy(pid: str, body: PolicyUpdate, db: AsyncSession = Depends
 
 @router.delete("/{pid}", status_code=204)
 async def delete_policy(pid: str, db: AsyncSession = Depends(get_db), _: User = Depends(get_current_user), tenant_id: str = Depends(get_tenant_id)):
-    p = await _policy(db, pid, tenant_id); await db.delete(p); await db.commit()
+    p = await _policy(db, pid, tenant_id)
+    # Delete child records before the policy to avoid FK constraint errors
+    versions = (await db.execute(select(PolicyVersion).where(PolicyVersion.policy_id == pid))).scalars().all()
+    attestations = (await db.execute(select(PolicyAttestation).where(PolicyAttestation.policy_id == pid))).scalars().all()
+    for v in versions:
+        await db.delete(v)
+    for a in attestations:
+        await db.delete(a)
+    await db.delete(p)
+    await db.commit()
 
 
 # ── Versions ─────────────────────────────────────────────────────────────
