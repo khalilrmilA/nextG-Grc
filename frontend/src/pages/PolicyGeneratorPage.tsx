@@ -467,15 +467,19 @@ export default function PolicyGeneratorPage() {
 
   const handleDeletePolicy = async (policyId: string, e: React.MouseEvent) => {
     e.stopPropagation();
+    e.preventDefault();
+    if (!window.confirm(`Delete this document? ID: ${policyId}`)) return;
     try {
       await policiesApi.delete(policyId);
-      refetchPolicies();
+      await refetchPolicies();
       if (selectedPolicyId === policyId) {
         setSelectedPolicyId(null);
         setOutput("");
         setEditContent("");
+        setDone(false);
       }
-    } catch (err) {
+    } catch (err: any) {
+      alert(`Delete failed: ${err?.response?.status} ${err?.response?.data?.detail ?? err?.message}`);
       console.error("Failed to delete policy:", err);
     }
   };
