@@ -150,7 +150,6 @@ export default function LandingPage() {
           <nav className="hidden md:flex items-center gap-6 text-sm text-gray-500">
             <a href="#features" className="hover:text-gray-900 transition-colors">Features</a>
             <a href="#frameworks" className="hover:text-gray-900 transition-colors">Frameworks</a>
-            <a href="#pricing" className="hover:text-gray-900 transition-colors">Pricing</a>
             <a href="#testimonials" className="hover:text-gray-900 transition-colors">Customers</a>
           </nav>
           <div className="flex items-center gap-3">
@@ -256,25 +255,6 @@ export default function LandingPage() {
               </div>
             ))}
           </div>
-        </div>
-      </section>
-
-      {/* ── Pricing ── */}
-      <section id="pricing" className="py-24 px-6 bg-gray-50">
-        <div className="max-w-6xl mx-auto">
-          <div className="text-center mb-14">
-            <h2 className="text-3xl font-extrabold text-gray-900 mb-3">Simple, transparent pricing</h2>
-            <p className="text-gray-500">All plans include a 14-day free trial. No credit card required.</p>
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8 items-start">
-            {PLANS.map(plan => (
-              <PricingCard key={plan.name} plan={plan} />
-            ))}
-          </div>
-          <p className="text-center text-sm text-gray-400 mt-8">
-            All prices in USD. Annual billing only for listed rates. Monthly billing available at +20%.{" "}
-            <a href="mailto:sales@grcplatform.io" className="text-blue-600 hover:underline">Contact sales</a> for volume discounts.
-          </p>
         </div>
       </section>
 
