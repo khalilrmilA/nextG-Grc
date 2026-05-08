@@ -87,7 +87,7 @@ export default function PublicNav({ links }: PublicNavProps) {
       )}
 
       {/* Mobile drawer */}
-      <div className={`fixed top-0 right-0 bottom-0 z-[70] w-72 bg-white shadow-2xl transition-transform duration-300 md:hidden flex flex-col ${open ? "translate-x-0" : "translate-x-full"}`}>
+      <div className={`fixed top-0 left-0 bottom-0 z-[70] w-72 bg-white shadow-2xl transition-transform duration-300 md:hidden flex flex-col ${open ? "translate-x-0" : "-translate-x-full"}`}>
         {/* Drawer header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
           <img src="/logo.png" alt="GRCEye" className="h-12 w-auto object-contain" />
