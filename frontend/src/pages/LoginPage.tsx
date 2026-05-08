@@ -4,6 +4,14 @@ import { Eye, EyeOff, Loader2 } from "lucide-react";
 import { authSession, DEMO_USERS, type UserRole, type PlanTier } from "../store/auth";
 import LanguageSwitcher from "../components/LanguageSwitcher";
 
+function calculateDaysRemaining(trialEndsAt?: string): number {
+  if (!trialEndsAt) return 14;
+  const endDate = new Date(trialEndsAt);
+  const now = new Date();
+  const daysLeft = Math.ceil((endDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+  return Math.max(0, daysLeft);
+}
+
 export default function LoginPage() {
   const [email, setEmail]       = useState("");
   const [password, setPassword] = useState("");
@@ -47,14 +55,17 @@ export default function LoginPage() {
         const profile = await api.getProfile();
         const current = authSession.getUser();
         if (current) {
+          const daysRemaining = calculateDaysRemaining();
           authSession.login({
             ...current,
             role: (profile.role as UserRole),
+            daysRemaining: current.plan === "free_trial" ? daysRemaining : undefined,
             tenant_id: profile.tenant_id,
             primary_framework_id: profile.primary_framework_id,
             selected_framework_ids: profile.selected_framework_ids,
             org_size: profile.org_size,
             primary_assessment_id: profile.primary_assessment_id,
+            accessible_modules: profile.accessible_modules,
           });
         }
       } catch {/* best-effort */}

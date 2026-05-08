@@ -158,6 +158,7 @@ export default function RegisterPage() {
             selected_framework_ids: profile.selected_framework_ids,
             org_size: profile.org_size,
             primary_assessment_id: profile.primary_assessment_id,
+            accessible_modules: profile.accessible_modules,
           });
         }
       } catch {/* profile enrichment is best-effort */}

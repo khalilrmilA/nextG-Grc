@@ -6,6 +6,7 @@ import { useAuthStore, authSession, PLAN_FEATURES, type PlanTier } from "../../s
 import AIAssistant from "../ai/AIAssistant";
 import LanguageSwitcher from "../LanguageSwitcher";
 import OnboardingTour from "../onboarding/OnboardingTour";
+import TrialBanner from "../TrialBanner";
 import { notificationsApi } from "../../api/endpoints";
 import type { AppNotification } from "../../types";
 import { useAppearance } from "../../store/appearance";
@@ -559,6 +560,9 @@ export default function Layout() {
 
       {/* ── Main content ── */}
       <main className="flex-1 flex flex-col overflow-hidden">
+        {/* Trial banner */}
+        <TrialBanner />
+
         {/* Top bar */}
         <header className="bg-white border-b border-gray-100 px-8 py-3.5 flex items-center justify-between flex-shrink-0">
           <div className="flex items-center gap-3 text-sm">

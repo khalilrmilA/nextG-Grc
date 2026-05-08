@@ -49,6 +49,7 @@ export interface UserProfile {
   selected_framework_ids: string[];
   org_size: string | null;
   primary_assessment_id: string | null;
+  accessible_modules?: string[];
 }
 
 export const authApi = {
