@@ -1,5 +1,6 @@
 import { Link } from "react-router-dom";
 import { useEffect, useRef, useState } from "react";
+import SupportChat from "../components/landing/SupportChat";
 import {
   ArrowRight, CheckCircle, Shield, AlertTriangle, ClipboardList,
   FileText, Building2, Zap, Users, Globe, Heart, Cpu, Lock,
@@ -504,6 +505,8 @@ export default function SolutionsPage() {
           </div>
         </Reveal>
       </section>
+
+      <SupportChat />
 
       {/* Footer */}
       <footer className="bg-slate-900 text-slate-400 py-10 px-6">
