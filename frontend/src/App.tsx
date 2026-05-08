@@ -93,6 +93,8 @@ function SuperAdminRoute({ children }: { readonly children: React.ReactNode }) {
 export default function App() {
   return (
     <Routes>
+      {/* ── Public routes (no authentication required) ── */}
+      <Route path="/" element={<LandingPage />} />
       <Route path="/upload/:token" element={<EvidenceUploadPage />} />
       <Route path="/vendor-collab/:shareToken" element={<VendorCollaborationPage />} />
       <Route path="/features-landing" element={<FeaturesLandingPage />} />
@@ -119,16 +121,15 @@ export default function App() {
         <Route path="help" element={<HelpPage />} />
       </Route>
 
-      {/* ── Main app routes ── */}
+      {/* ── Main app routes (protected) ── */}
       <Route
-        path="/"
+        path="/*"
         element={
           <PrivateRoute>
             <Layout />
           </PrivateRoute>
         }
       >
-        <Route index element={<Navigate to="/dashboard" replace />} />
         <Route path="dashboard" element={<DashboardPage />} />
         <Route path="risks" element={<PrivateRoute requiredModule="risks"><RisksPage /></PrivateRoute>} />
         <Route path="compliance" element={<PrivateRoute requiredModule="compliance"><CompliancePage /></PrivateRoute>} />
