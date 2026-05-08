@@ -15,7 +15,7 @@ export default function LoginPage() {
   function redirectAfterLogin(role?: string) {
     if (role === "auditor")          navigate("/auditor/portal");
     else if (role === "super_admin") navigate("/super-admin");
-    else                             navigate("/dashboard");
+    else                             navigate("/app/dashboard");
   }
 
   async function handleSubmit(e: React.FormEvent) {
