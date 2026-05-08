@@ -435,6 +435,7 @@ export default function PolicyGeneratorPage() {
 
   const abortRef = useRef<AbortController | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const outputRef = useRef<string>("");
 
   // Auto-populate framework from Frameworks page selection
   useEffect(() => {
@@ -462,7 +463,7 @@ export default function PolicyGeneratorPage() {
     retry: false,
   });
 
-  const previousPolicies = policiesData?.items || [];
+  const previousPolicies = Array.isArray(policiesData) ? policiesData : (policiesData as any)?.items || [];
 
   const handleDeletePolicy = async (policyId: string, e: React.MouseEvent) => {
     e.stopPropagation();
@@ -492,6 +493,7 @@ export default function PolicyGeneratorPage() {
     setSaved(false);
     setEditing(false);
     setEditContent("");
+    outputRef.current = "";
     setApproved(false);
     setStreaming(true);
 
@@ -520,13 +522,32 @@ export default function PolicyGeneratorPage() {
         },
         (token) => {
           const filtered = filter(token);
-          if (filtered) setOutput((prev) => prev + filtered);
+          if (filtered) {
+            outputRef.current += filtered;
+            setOutput((prev) => prev + filtered);
+          }
         },
         async () => {
           setStreaming(false);
           setDone(true);
-          // Refresh token usage in real-time after generation completes
           await refreshAiTokens();
+          // Auto-save as draft so it appears in history immediately
+          if (selectedDoc && outputRef.current.trim()) {
+            try {
+              const category = DOCUMENT_CATEGORIES.find(c => c.docs.some(d => d === selectedDoc))?.label || "General";
+              await policiesApi.create({
+                title: selectedDoc,
+                description: `AI-generated ${selectedDoc} for ${form.org_name}. Industry: ${form.industry}. Frameworks: ${form.frameworks.join(", ") || "None"}.`,
+                category,
+                linked_controls: [],
+                content: outputRef.current,
+              } as any);
+              setSaved(true);
+              await refetchPolicies();
+            } catch {
+              // silent — user can still save manually
+            }
+          }
         },
         ctrl.signal,
       );

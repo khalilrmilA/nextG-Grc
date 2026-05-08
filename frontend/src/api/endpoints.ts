@@ -425,8 +425,8 @@ export const auditsApi = {
 // ─── Policies ────────────────────────────────
 
 export const policiesApi = {
-  list: (params?: { page?: number; page_size?: number }) =>
-    apiClient.get<PaginatedResponse<Policy>>("/policies", { params }).then((r) => r.data),
+  list: (params?: { page?: number; page_size?: number; limit?: number }) =>
+    apiClient.get<Policy[]>("/policies", { params }).then((r) => r.data),
 
   get: (id: string) => apiClient.get<Policy>(`/policies/${id}`).then((r) => r.data),
 
