@@ -1135,8 +1135,9 @@ export default function PolicyGeneratorPage() {
                           {policy.status === "approved" ? "Approved" : "Draft"}
                         </span>
                         <button
-                          onClick={(e) => handleDeletePolicy(policy.id, e)}
-                          className="opacity-0 group-hover:opacity-100 p-1 hover:bg-red-50 text-gray-400 hover:text-red-600 rounded transition-all"
+                          onClick={(e) => handleDeletePolicy(String(policy.id), e)}
+                          className="p-1 hover:bg-red-50 text-gray-300 hover:text-red-600 rounded transition-all"
+                          title="Delete"
                         >
                           <Trash2 className="w-3 h-3" />
                         </button>
