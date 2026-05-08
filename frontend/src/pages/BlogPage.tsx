@@ -14,7 +14,7 @@ const BLOG_POSTS = [
   {
     id: 2,
     title: "Risk Quantification: From Guesswork to Math",
-    excerpt: "Stop using spreadsheets for risk scoring. Learn how Monte Carlo simulation brings statistical rigor to your risk register and gives your board board the financial language they need.",
+    excerpt: "Stop using spreadsheets for risk scoring. Learn how Monte Carlo simulation brings statistical rigor to your risk register and gives your board the financial language they need.",
     date: "2026-03-10",
     author: "Marcus Rodriguez",
     category: "Risk Management",
@@ -69,10 +69,11 @@ export default function BlogPage() {
           <Link to="/" className="flex items-center gap-2.5">
             <img src="/logo.png" alt="GRCEye" className="h-14 w-auto object-contain" />
           </Link>
-          <nav className="hidden md:flex items-center gap-6 text-sm text-gray-500">
+          <nav className="hidden md:flex items-center gap-8 text-sm text-gray-500">
             <Link to="/features-landing" className="hover:text-gray-900 transition-colors">Features</Link>
             <Link to="/blog" className="hover:text-gray-900 transition-colors font-medium text-gray-900">Blog</Link>
-            <a href="#" className="hover:text-gray-900 transition-colors">Documentation</a>
+            <Link to="/news" className="hover:text-gray-900 transition-colors">News</Link>
+            <Link to="/faq" className="hover:text-gray-900 transition-colors">FAQ</Link>
           </nav>
           <div className="flex items-center gap-3">
             <Link to="/login" className="text-sm text-gray-600 hover:text-gray-900 font-medium transition-colors">
@@ -91,7 +92,7 @@ export default function BlogPage() {
           <h1 className="text-5xl md:text-6xl font-extrabold text-gray-900 leading-tight tracking-tight mb-4">
             GRC Insights & Best Practices
           </h1>
-          <p className="text-xl text-gray-500 mb-8">
+          <p className="text-xl text-gray-500">
             Compliance guidance, risk strategies, and vendor management insights from the GRC experts.
           </p>
         </div>

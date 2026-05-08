@@ -77,7 +77,7 @@ export default function NewsPage() {
           <Link to="/" className="flex items-center gap-2.5">
             <img src="/logo.png" alt="GRCEye" className="h-14 w-auto object-contain" />
           </Link>
-          <nav className="hidden md:flex items-center gap-6 text-sm text-gray-500">
+          <nav className="hidden md:flex items-center gap-8 text-sm text-gray-500">
             <Link to="/features-landing" className="hover:text-gray-900 transition-colors">Features</Link>
             <Link to="/blog" className="hover:text-gray-900 transition-colors">Blog</Link>
             <Link to="/news" className="hover:text-gray-900 transition-colors font-medium text-gray-900">News</Link>
