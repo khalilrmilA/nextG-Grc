@@ -6,6 +6,8 @@ import AuditorLayout from "./components/layout/AuditorLayout";
 import LoginPage from "./pages/LoginPage";
 import RegisterPage from "./pages/RegisterPage";
 import LandingPage from "./pages/LandingPage";
+import FeaturesLandingPage from "./pages/FeaturesLandingPage";
+import BlogPage from "./pages/BlogPage";
 import DashboardPage from "./pages/DashboardPage";
 import RisksPage from "./pages/RisksPage";
 import CompliancePage from "./pages/CompliancePage";
@@ -92,6 +94,8 @@ export default function App() {
       <Route path="/upload/:token" element={<EvidenceUploadPage />} />
       <Route path="/vendor-collab/:shareToken" element={<VendorCollaborationPage />} />
       <Route path="/" element={<LandingPage />} />
+      <Route path="/features-landing" element={<FeaturesLandingPage />} />
+      <Route path="/blog" element={<BlogPage />} />
       <Route path="/login" element={<LoginPage />} />
       <Route path="/register" element={<RegisterPage />} />
       <Route path="/super-admin" element={<SuperAdminRoute><SuperAdminPage /></SuperAdminRoute>} />
