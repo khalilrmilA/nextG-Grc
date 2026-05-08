@@ -1,18 +1,34 @@
 """Authentication endpoints — login, register, refresh, logout."""
-from fastapi import APIRouter, Depends, HTTPException, status
+import hashlib
+import logging
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, Field
 from typing import Annotated, Any
 
 from app.core.database import get_db
-from app.core.security import verify_password, hash_password, create_access_token, create_refresh_token, decode_token
+from app.core.rate_limit import limiter
+from app.core.security import (
+    create_access_token,
+    create_refresh_token,
+    decode_token,
+    hash_password,
+    revoke_jti,
+    verify_password,
+)
 from app.models.user import User, UserRole
 from app.models.tenant import Tenant
 from app.models.subscription import Subscription, SubscriptionTier, SubscriptionStatus
 from app.api.v1.dependencies import get_current_user
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
+
+
+def _hash_email_for_log(email: str) -> str:
+    """Hash an email so logs are debuggable without storing PII in plaintext."""
+    return hashlib.sha256(email.lower().encode()).hexdigest()[:12]
 
 
 class LoginRequest(BaseModel):
@@ -22,7 +38,7 @@ class LoginRequest(BaseModel):
 
 class RegisterRequest(BaseModel):
     email: EmailStr
-    password: str
+    password: str = Field(..., min_length=12, max_length=200)
     first_name: str
     last_name: str
     organization_name: str
@@ -58,52 +74,56 @@ class RefreshRequest(BaseModel):
     refresh_token: str
 
 
+_GENERIC_LOGIN_FAILURE = "Invalid email or password"
+
+
 @router.post("/login", response_model=TokenResponse)
-async def login(body: LoginRequest, db: AsyncSession = Depends(get_db)):
-    import logging
-    logger = logging.getLogger(__name__)
+@limiter.limit("10/minute")
+async def login(request: Request, body: LoginRequest, db: AsyncSession = Depends(get_db)):
+    email_hash = _hash_email_for_log(body.email)
     try:
         result = await db.execute(select(User).where(User.email == body.email))
         user = result.scalar_one_or_none()
-        logger.info(f"Login attempt for {body.email}, user found: {user is not None}")
 
-        if not user or not user.hashed_password or not verify_password(body.password, user.hashed_password):
-            logger.warning(f"Login failed for {body.email}")
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid email or password",
-            )
-
+        # Constant-ish handling: any user-existence / password / activation failure
+        # returns the same generic 401 to prevent enumeration. We still differentiate
+        # internally for logging and metrics.
+        if not user or not user.hashed_password:
+            logger.info("login.fail email_hash=%s reason=no_user", email_hash)
+            raise HTTPException(status.HTTP_401_UNAUTHORIZED, _GENERIC_LOGIN_FAILURE)
+        if not verify_password(body.password, user.hashed_password):
+            logger.info("login.fail email_hash=%s reason=bad_password", email_hash)
+            raise HTTPException(status.HTTP_401_UNAUTHORIZED, _GENERIC_LOGIN_FAILURE)
         if not user.is_active:
-            logger.warning(f"Login blocked - account disabled: {body.email}")
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Account disabled")
+            logger.info("login.fail email_hash=%s reason=disabled", email_hash)
+            raise HTTPException(status.HTTP_401_UNAUTHORIZED, _GENERIC_LOGIN_FAILURE)
 
         token_data = {"sub": user.id, "tenant_id": user.tenant_id, "role": user.role}
-        logger.info(f"Login successful for {body.email}")
+        logger.info("login.ok email_hash=%s", email_hash)
         return TokenResponse(
             access_token=create_access_token(token_data),
             refresh_token=create_refresh_token(token_data),
         )
     except HTTPException:
         raise
-    except Exception as e:
-        import traceback
-        logger = logging.getLogger(__name__)
-        logger.error(f"Login error: {str(e)}", exc_info=True)
+    except Exception:
+        logger.exception("login.error email_hash=%s", email_hash)
+        # Generic 500 — never leak exception details to the client.
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Login error: {str(e)[:100]}",
+            status.HTTP_500_INTERNAL_SERVER_ERROR,
+            "Internal server error",
         )
 
 
 @router.post("/register", response_model=TokenResponse, status_code=status.HTTP_201_CREATED)
-async def register(body: RegisterRequest, db: AsyncSession = Depends(get_db)):
-    # Check email uniqueness
+@limiter.limit("5/hour")
+async def register(request: Request, body: RegisterRequest, db: AsyncSession = Depends(get_db)):
+    # Check email uniqueness — generic 400 to avoid enumeration via this endpoint.
     existing = await db.execute(select(User).where(User.email == body.email))
     if existing.scalar_one_or_none():
-        raise HTTPException(status_code=400, detail="Email already registered")
+        raise HTTPException(status_code=400, detail="Registration could not be completed")
 
-    # Check slug uniqueness
+    # Check slug uniqueness (slugs are public-facing identifiers, OK to be specific)
     existing_tenant = await db.execute(
         select(Tenant).where(Tenant.slug == body.organization_slug)
     )
@@ -352,10 +372,14 @@ async def update_selected_frameworks(
 
 
 @router.post("/refresh", response_model=TokenResponse)
-async def refresh_token(body: RefreshRequest, db: AsyncSession = Depends(get_db)):
+@limiter.limit("30/minute")
+async def refresh_token(request: Request, body: RefreshRequest, db: AsyncSession = Depends(get_db)):
     payload = decode_token(body.refresh_token)
     if payload.get("type") != "refresh":
         raise HTTPException(status_code=400, detail="Invalid refresh token")
+
+    # Refresh-token rotation: revoke the old jti so it can't be reused.
+    revoke_jti(payload.get("jti"))
 
     user_id = payload.get("sub")
     result = await db.execute(select(User).where(User.id == user_id))
@@ -369,3 +393,15 @@ async def refresh_token(body: RefreshRequest, db: AsyncSession = Depends(get_db)
         access_token=create_access_token(token_data),
         refresh_token=create_refresh_token(token_data),
     )
+
+
+@router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
+async def logout(body: RefreshRequest):
+    """Revoke the supplied refresh token (best-effort)."""
+    try:
+        payload = decode_token(body.refresh_token)
+        revoke_jti(payload.get("jti"))
+    except HTTPException:
+        # Already invalid — nothing to revoke. Still return 204.
+        pass
+    return None

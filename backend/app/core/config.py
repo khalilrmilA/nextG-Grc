@@ -92,9 +92,30 @@ class Settings(BaseSettings):
     ENABLE_CONTINUOUS_MONITORING: bool = False
 
 
+_INSECURE_SECRETS = {
+    "change-me-in-production",
+    "dev-local-secret-key-abc123xyz789",
+    "dev-secret-key-do-not-use-in-production-abc123",
+    "",
+}
+
+
 @lru_cache
 def get_settings() -> Settings:
-    return Settings()
+    s = Settings()
+    if s.ENVIRONMENT == "production":
+        if s.SECRET_KEY in _INSECURE_SECRETS or len(s.SECRET_KEY) < 32:
+            raise RuntimeError(
+                "SECRET_KEY is unset, default, or too short for production. "
+                "Generate a strong secret: python -c \"import secrets; print(secrets.token_urlsafe(64))\""
+            )
+        if s.DEBUG:
+            raise RuntimeError("DEBUG must be False in production")
+    return s
 
 
 settings = get_settings()
+
+
+def is_production() -> bool:
+    return settings.ENVIRONMENT == "production"

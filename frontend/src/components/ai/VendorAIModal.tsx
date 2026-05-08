@@ -7,6 +7,7 @@ import { X, RefreshCw, Copy, Download, Sparkles, ShieldCheck, ChevronDown, Chevr
 import { vendorsApi } from "@/api/endpoints";
 import { useAiTokenRefresh } from "@/hooks/useAiTokenRefresh";
 import AiGate from "@/components/features/ai/AiGate";
+import { safeMarkdown } from "@/lib/safeMarkdown";
 
 interface Props {
   vendorId: string;
@@ -30,22 +31,9 @@ const DEFAULT_QUESTIONNAIRE: Record<string, string> = {
   "Does the 3rd party maintain a list of sub-processors?": "N/A",
 };
 
-function renderMarkdown(text: string) {
-  return text
-    .replace(/^## (.+)$/gm, '<h3 class="text-sm font-bold text-gray-900 mt-5 mb-2 border-b border-gray-200 pb-1">$1</h3>')
-    .replace(/^### (.+)$/gm, '<h4 class="text-xs font-bold text-gray-700 mt-4 mb-1.5">$1</h4>')
-    .replace(/^#### (.+)$/gm, '<h5 class="text-xs font-semibold text-blue-700 mt-3 mb-1">$1</h5>')
-    .replace(/\*\*(.+?)\*\*/g, '<strong class="font-semibold">$1</strong>')
-    .replace(/`(.+?)`/g, '<code class="bg-gray-100 text-blue-700 px-1 rounded text-xs font-mono">$1</code>')
-    .replace(/^(\| .+)$/gm, (_, row) => {
-      const cells = row.replace(/^\| /, "").replace(/ \|$/, "").split(" | ")
-        .map((c: string) => `<td class="border border-gray-200 px-2 py-1 text-xs">${c.trim()}</td>`).join("");
-      return `<tr>${cells}</tr>`;
-    })
-    .replace(/^- (.+)$/gm, '<li class="ml-4 list-disc text-xs text-gray-600 leading-relaxed">$1</li>')
-    .replace(/^(\d+)\. (.+)$/gm, '<li class="ml-4 list-decimal text-xs text-gray-600 leading-relaxed">$2</li>')
-    .replace(/\n/g, "<br/>");
-}
+// Markdown rendering: use the shared XSS-safe helper. AI output may contain
+// attacker-influenced strings (e.g. vendor names), so we never insert raw HTML.
+const renderMarkdown = safeMarkdown;
 
 // ── Questionnaire Builder ─────────────────────────────────────────────────────
 function QuestionnairePanel({

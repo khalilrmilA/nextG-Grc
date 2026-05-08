@@ -1,4 +1,6 @@
 """User management endpoints — create auditors, list tenant users."""
+import secrets
+import string
 from datetime import datetime
 from typing import Annotated
 from uuid import uuid4
@@ -6,6 +8,12 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from pydantic import BaseModel, EmailStr
+
+
+def _generate_auditor_password() -> str:
+    """Cryptographically random 16-char password with mixed alphabet/digits."""
+    alphabet = string.ascii_letters + string.digits
+    return "".join(secrets.choice(alphabet) for _ in range(16))
 
 from app.core.database import get_db
 from app.core.security import hash_password
@@ -23,7 +31,6 @@ class CreateAuditorRequest(BaseModel):
     email: EmailStr
     first_name: str
     last_name: str
-    temporary_password: str
     expires_at: datetime | None = None
 
 
@@ -39,6 +46,11 @@ class UserResponse(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class CreateAuditorResponse(UserResponse):
+    """Returned only on creation — exposes the one-time auto-generated password."""
+    temporary_password: str
+
+
 @router.get("", response_model=list[UserResponse])
 async def list_users(
     db: Annotated[AsyncSession, Depends(get_db)],
@@ -50,7 +62,7 @@ async def list_users(
     return [UserResponse.model_validate(u) for u in result.scalars().all()]
 
 
-@router.post("/auditors", response_model=UserResponse, status_code=status.HTTP_201_CREATED,
+@router.post("/auditors", response_model=CreateAuditorResponse, status_code=status.HTTP_201_CREATED,
              responses={400: {"description": "Email already registered"}})
 async def create_auditor(
     body: CreateAuditorRequest,
@@ -58,15 +70,19 @@ async def create_auditor(
     current_user: Annotated[User, Depends(require_roles(UserRole.TENANT_ADMIN))],
     tenant_id: Annotated[str, Depends(get_tenant_id)],
 ):
-    """Create an auditor account within the tenant. No auto-assignment — use /auditors/assign."""
+    """Create an auditor account within the tenant. The server generates a strong
+    temporary password and returns it ONCE in the response. Caller is responsible
+    for delivering it to the auditor via a secure channel (email, etc.). No
+    auto-assignment — use /auditors/assign."""
     existing = await db.execute(select(User).where(User.email == body.email))
     if existing.scalar_one_or_none():
         raise HTTPException(status_code=400, detail="Email already registered")
 
+    temporary_password = _generate_auditor_password()
     auditor = User(
         tenant_id=tenant_id,
         email=body.email,
-        hashed_password=hash_password(body.temporary_password),
+        hashed_password=hash_password(temporary_password),
         first_name=body.first_name,
         last_name=body.last_name,
         role=UserRole.AUDITOR,
@@ -75,7 +91,16 @@ async def create_auditor(
     )
     db.add(auditor)
     await db.commit()
-    return UserResponse.model_validate(auditor)
+    return CreateAuditorResponse(
+        id=auditor.id,
+        email=auditor.email,
+        first_name=auditor.first_name,
+        last_name=auditor.last_name,
+        role=auditor.role,
+        is_active=auditor.is_active,
+        expires_at=auditor.expires_at,
+        temporary_password=temporary_password,
+    )
 
 
 # ── List auditors ─────────────────────────────────────────────────────────────

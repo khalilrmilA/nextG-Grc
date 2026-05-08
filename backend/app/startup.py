@@ -6,6 +6,7 @@ import asyncio
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, text
 
+from app.core.config import settings
 from app.core.database import engine, Base, AsyncSessionLocal
 from app.core.security import hash_password
 from app.models.tenant import Tenant
@@ -20,6 +21,11 @@ async def create_tables():
 
 
 async def seed_demo_data():
+    # Demo / super-admin seeding is gated to non-production environments only.
+    # In production, operators must bootstrap the first admin manually.
+    if settings.ENVIRONMENT == "production":
+        print("[startup] ENVIRONMENT=production — skipping demo + super-admin seed.")
+        return
     async with AsyncSessionLocal() as db:
         # Check if demo tenant already exists
         result = await db.execute(select(Tenant).where(Tenant.slug == "demo"))

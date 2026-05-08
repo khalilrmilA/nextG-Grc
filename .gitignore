@@ -42,7 +42,15 @@ Thumbs.db
 # Alembic
 alembic/versions/__pycache__/
 
-# Secrets
+# Secrets — never commit env files except the example template
 *.pem
 *.key
 credentials.json
+.env.local
+.env.dev
+.env.production
+backend/.env.local
+backend/.env.dev
+backend/.env.production
+frontend/.env.local
+frontend/.env.production

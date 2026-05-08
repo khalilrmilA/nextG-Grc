@@ -9,12 +9,15 @@ from fastapi.middleware.gzip import GZipMiddleware
 import structlog
 import sentry_sdk
 
-from app.core.config import settings
+from app.core.config import settings, is_production
 from app.core.database import engine, Base, AsyncSessionLocal
 from app.api.v1.router import api_router
 from app.core.seed_mandatory_docs import seed_mandatory_documents
 from app.services.threat_scheduler import start_threat_scheduler
 from app.core.activity_middleware import ActivityLogMiddleware
+from app.core.security_middleware import SecurityHeadersMiddleware
+from app.core.rate_limit import limiter, rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
 
 logger = structlog.get_logger()
 
@@ -68,15 +71,21 @@ def create_application() -> FastAPI:
         lifespan=lifespan,
     )
 
+    # Rate limiter (slowapi) — register before routes so route decorators see it.
+    application.state.limiter = limiter
+    application.add_exception_handler(RateLimitExceeded, rate_limit_exceeded_handler)
+
     # Middleware — CORSMiddleware must be added last (outermost layer)
     application.add_middleware(GZipMiddleware, minimum_size=1000)
     application.add_middleware(ActivityLogMiddleware)
+    application.add_middleware(SecurityHeadersMiddleware, is_production=is_production())
     application.add_middleware(
         CORSMiddleware,
         allow_origins=settings.ALLOWED_ORIGINS,
         allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
+        allow_methods=["GET", "POST", "PATCH", "PUT", "DELETE", "OPTIONS"],
+        allow_headers=["Authorization", "Content-Type", "X-Requested-With", "Accept", "Origin"],
+        max_age=600,
     )
 
     # Routes

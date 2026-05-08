@@ -278,6 +278,7 @@ async def get_audit_checklist(
         select(AuditorAssignment).where(
             AuditorAssignment.auditor_id == current_user.id,
             AuditorAssignment.assessment_id == assessment_id,
+            AuditorAssignment.tenant_id == tenant_id,
             AuditorAssignment.is_active == True,  # noqa: E712
         )
     )
@@ -387,11 +388,12 @@ async def update_audit_verdict(
 
     ca, assessment = row
 
-    # Verify auditor is assigned
+    # Verify auditor is assigned (tenant-scoped to prevent cross-tenant IDOR)
     asgn_result = await db.execute(
         select(AuditorAssignment).where(
             AuditorAssignment.auditor_id == current_user.id,
             AuditorAssignment.assessment_id == assessment.id,
+            AuditorAssignment.tenant_id == tenant_id,
             AuditorAssignment.is_active == True,  # noqa: E712
         )
     )
@@ -421,6 +423,7 @@ async def generate_audit_report(
         select(AuditorAssignment).where(
             AuditorAssignment.auditor_id == current_user.id,
             AuditorAssignment.assessment_id == assessment_id,
+            AuditorAssignment.tenant_id == tenant_id,
             AuditorAssignment.is_active == True,  # noqa: E712
         )
     )

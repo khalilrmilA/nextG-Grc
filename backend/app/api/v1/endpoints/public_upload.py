@@ -10,6 +10,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.core.database import get_db
+from app.core.security_utils import (
+    sanitize_filename,
+    server_extension_for,
+    verify_file_signature,
+)
 from app.models.compliance import ControlAssessment, Evidence, EvidenceType, UploadedDocument
 from app.models.evidence_upload_token import EvidenceUploadToken
 from app.models.framework import FrameworkControl
@@ -149,30 +154,34 @@ async def upload_evidence_via_token(
     if tok.max_uses is not None and tok.use_count >= tok.max_uses:
         raise HTTPException(403, "Upload link has reached its maximum number of uses")
 
-    # Validate file
+    # Validate file size, declared MIME, and verify magic bytes match the
+    # declared MIME (clients can spoof Content-Type otherwise).
     content = await file.read()
     if len(content) > MAX_FILE_SIZE:
         raise HTTPException(413, "File exceeds 10 MB limit")
     if file.content_type not in ALLOWED_MIME:
         raise HTTPException(415, "Unsupported file type. Use PDF, DOCX, TXT, or images.")
+    if not verify_file_signature(content, file.content_type):
+        raise HTTPException(415, "File contents do not match the declared type.")
 
-    # Save file to uploads dir
+    # Save file using a server-derived filename — never trust the client suffix.
     uploads_dir = Path(settings.UPLOADS_DIR)
     uploads_dir.mkdir(parents=True, exist_ok=True)
-    ext = Path(file.filename or "file").suffix
+    safe_display_name = sanitize_filename(file.filename, default="upload")
+    ext = server_extension_for(file.content_type)
     file_id = str(uuid.uuid4())
     rel_path = f"evidence/{file_id}{ext}"
     full_path = uploads_dir / rel_path
     full_path.parent.mkdir(parents=True, exist_ok=True)
     full_path.write_bytes(content)
 
-    # Create evidence record
+    # Create evidence record — use sanitized filename for display only
     evidence = Evidence(
         id=file_id,
         control_assessment_id=tok.control_assessment_id,
         tenant_id=tok.tenant_id,
-        name=file.filename,
-        file_name=file.filename,
+        name=safe_display_name,
+        file_name=safe_display_name,
         file_path=rel_path,
         file_size_bytes=len(content),
         content_type=file.content_type,
@@ -210,7 +219,7 @@ async def upload_evidence_via_token(
         db.add(UploadedDocument(
             assessment_id=ca.assessment_id,
             tenant_id=tok.tenant_id,
-            file_name=file.filename,
+            file_name=safe_display_name,
             file_path=rel_path,
             content_type=file.content_type,
             file_size_bytes=len(content),
@@ -237,7 +246,7 @@ async def upload_evidence_via_token(
             NotificationType.SHARE_LINK_UPLOAD,
             title="New evidence file received",
             message=(
-                f'A stakeholder uploaded "{file.filename}" ({size_kb} KB){ctrl_display} '
+                f'A stakeholder uploaded "{safe_display_name}" ({size_kb} KB){ctrl_display} '
                 f'via share link "{link_label}".'
             ),
         )
@@ -245,4 +254,4 @@ async def upload_evidence_via_token(
     except Exception:
         await db.rollback()
 
-    return {"status": "uploaded", "file_name": file.filename, "evidence_id": file_id}
+    return {"status": "uploaded", "file_name": safe_display_name, "evidence_id": file_id}

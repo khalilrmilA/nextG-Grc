@@ -394,9 +394,8 @@ export default function Layout() {
       {/* ── Sidebar ── */}
       <aside className={`w-64 flex flex-col shadow-2xl flex-shrink-0 transition-colors duration-200 ${sidebarClasses(appearance.sidebarStyle)}`}>
         {/* Logo */}
-        <div className={`flex flex-col items-center gap-1 px-4 py-4 border-b ${sc.divider}`}>
+        <div className={`flex flex-col items-center px-4 py-4 border-b ${sc.divider}`}>
           <img src="/logo.png" alt="GRCEye" className="h-24 w-auto object-contain" />
-          <p className={`text-xs ${sc.sub}`}>Govern. Manage. Assure.</p>
         </div>
 
         {/* Plan / role badge */}

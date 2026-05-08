@@ -8,9 +8,9 @@ from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
-from app.api.v1.dependencies.auth import get_current_user, get_tenant_id
+from app.api.v1.dependencies.auth import get_current_user, get_tenant_id, require_roles
 from app.models.tenant import Tenant
-from app.models.user import User
+from app.models.user import User, UserRole
 from app.models.compliance import ComplianceAssessment
 from app.models.policy import Policy, PolicyStatus
 from app.models.vendor import Vendor
@@ -62,7 +62,7 @@ async def get_trust_center_config(
 async def update_trust_center_config(
     body: TrustCenterConfig,
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(get_current_user),
+    _: User = Depends(require_roles(UserRole.TENANT_ADMIN, UserRole.CISO)),
     tenant_id: str = Depends(get_tenant_id),
 ):
     """Update trust center configuration."""
@@ -144,16 +144,18 @@ async def get_public_trust_center(
                     "score": fw["score"],
                 })
 
-    # Subprocessors (vendors marked as active)
+    # Subprocessors — public output is intentionally minimal: only an aggregate
+    # count and a list of distinct countries to support data-residency disclosures.
+    # Per-vendor names/services are NOT exposed publicly to avoid leaking the
+    # tenant's supplier list to competitors or attackers.
     if tc.get("show_subprocessors", False):
         vendors = list((await db.execute(
             select(Vendor).where(Vendor.tenant_id == tenant.id, Vendor.status == "active")
         )).scalars().all())
-        for v in vendors:
-            result.subprocessors.append({
-                "name": v.name,
-                "purpose": v.services_provided or "Service Provider",
-                "country": v.country,
-            })
+        countries = sorted({(v.country or "").strip() for v in vendors if v.country})
+        result.subprocessors.append({
+            "subprocessor_count": len(vendors),
+            "countries": countries,
+        })
 
     return result

@@ -1,3 +1,4 @@
+import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Any
 from jose import jwt, JWTError
@@ -7,6 +8,20 @@ from app.core.config import settings
 
 # Use Argon2 for password hashing (more reliable than bcrypt)
 pwd_context = CryptContext(schemes=["argon2"], deprecated="auto")
+
+# In-memory revocation set for refresh token JTIs. Process-local — for
+# multi-worker / multi-host deployments swap with a Redis set keyed by jti.
+_REVOKED_JTIS: set[str] = set()
+
+
+def revoke_jti(jti: str) -> None:
+    """Mark a token's jti as revoked. Subsequent decodes will reject it."""
+    if jti:
+        _REVOKED_JTIS.add(jti)
+
+
+def is_jti_revoked(jti: str | None) -> bool:
+    return bool(jti) and jti in _REVOKED_JTIS
 
 
 def hash_password(password: str) -> str:
@@ -34,7 +49,7 @@ def create_access_token(data: dict[str, Any]) -> str:
     expire = datetime.now(timezone.utc) + timedelta(
         minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES
     )
-    payload.update({"exp": expire, "type": "access"})
+    payload.update({"exp": expire, "type": "access", "jti": uuid.uuid4().hex})
     return jwt.encode(payload, settings.SECRET_KEY, algorithm=settings.JWT_ALGORITHM)
 
 
@@ -43,7 +58,7 @@ def create_refresh_token(data: dict[str, Any]) -> str:
     expire = datetime.now(timezone.utc) + timedelta(
         days=settings.REFRESH_TOKEN_EXPIRE_DAYS
     )
-    payload.update({"exp": expire, "type": "refresh"})
+    payload.update({"exp": expire, "type": "refresh", "jti": uuid.uuid4().hex})
     return jwt.encode(payload, settings.SECRET_KEY, algorithm=settings.JWT_ALGORITHM)
 
 
@@ -52,6 +67,8 @@ def decode_token(token: str) -> dict[str, Any]:
         payload = jwt.decode(
             token, settings.SECRET_KEY, algorithms=[settings.JWT_ALGORITHM]
         )
+        if is_jti_revoked(payload.get("jti")):
+            raise JWTError("Token has been revoked")
         return payload
     except JWTError:
         raise HTTPException(

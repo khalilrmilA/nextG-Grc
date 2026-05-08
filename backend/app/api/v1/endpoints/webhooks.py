@@ -7,8 +7,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 import httpx
 
 from app.core.database import get_db
-from app.api.v1.dependencies.auth import get_current_user, get_tenant_id
-from app.models.user import User
+from app.core.security_utils import validate_outbound_url
+from app.api.v1.dependencies.auth import get_current_user, get_tenant_id, require_roles
+from app.models.user import User, UserRole
 
 router = APIRouter()
 
@@ -60,9 +61,13 @@ async def list_webhooks(
 @router.post("", response_model=WebhookConfig, status_code=201)
 async def create_webhook(
     body: WebhookConfig,
-    db: AsyncSession = Depends(get_db), _: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_roles(UserRole.TENANT_ADMIN, UserRole.CISO)),
     tenant_id: str = Depends(get_tenant_id),
 ):
+    # Validate URL — reject SSRF targets (private IPs, localhost, non-http schemes).
+    body.url = validate_outbound_url(body.url)
+
     # Validate events
     invalid = [e for e in body.events if e not in VALID_EVENTS]
     if invalid:
@@ -87,7 +92,8 @@ async def create_webhook(
 @router.delete("/{webhook_id}", status_code=204)
 async def delete_webhook(
     webhook_id: str,
-    db: AsyncSession = Depends(get_db), _: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_roles(UserRole.TENANT_ADMIN, UserRole.CISO)),
     tenant_id: str = Depends(get_tenant_id),
 ):
     r = await db.execute(select(Tenant).where(Tenant.id == tenant_id))
@@ -104,7 +110,8 @@ async def delete_webhook(
 @router.post("/{webhook_id}/test")
 async def test_webhook(
     webhook_id: str,
-    db: AsyncSession = Depends(get_db), _: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_roles(UserRole.TENANT_ADMIN, UserRole.CISO)),
     tenant_id: str = Depends(get_tenant_id),
 ):
     """Send a test event to a webhook."""
@@ -116,15 +123,18 @@ async def test_webhook(
     hook = next((h for h in hooks if h.get("id") == webhook_id), None)
     if not hook: raise HTTPException(404, "Webhook not found")
 
-    # Send test payload
+    # Re-validate URL at delivery time — webhook configs persisted before the
+    # SSRF guard was added must still be checked.
+    validate_outbound_url(hook.get("url", ""))
+
     payload = {
         "event": "test.ping",
         "timestamp": datetime.utcnow().isoformat(),
         "data": {"message": "This is a test webhook from GRC Platform"},
     }
     try:
-        async with httpx.AsyncClient(timeout=10.0) as client:
+        async with httpx.AsyncClient(timeout=10.0, follow_redirects=False) as client:
             resp = await client.post(hook["url"], json=payload)
             return {"status": "sent", "response_code": resp.status_code}
-    except Exception as e:
-        return {"status": "failed", "error": str(e)}
+    except Exception:
+        return {"status": "failed", "error": "Delivery failed"}

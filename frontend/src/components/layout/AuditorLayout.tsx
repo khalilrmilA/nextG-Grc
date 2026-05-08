@@ -23,9 +23,8 @@ export default function AuditorLayout() {
       <aside className="w-60 flex flex-col bg-slate-900 shadow-2xl flex-shrink-0">
 
         {/* Logo */}
-        <div className="flex flex-col items-center gap-1 px-4 py-4 border-b border-slate-700/60">
+        <div className="flex flex-col items-center px-4 py-4 border-b border-slate-700/60">
           <img src="/logo.png" alt="GRCEye" className="h-24 w-auto object-contain" />
-          <p className="text-xs text-slate-400">Auditor Portal</p>
         </div>
 
         {/* Company badge */}
