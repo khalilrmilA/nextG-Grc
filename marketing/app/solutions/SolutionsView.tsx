@@ -7,7 +7,7 @@ import PublicNav from "@/components/landing/PublicNav";
 import {
   ArrowRight, CheckCircle, Shield, AlertTriangle, ClipboardList,
   FileText, Building2, Users, Globe, Heart, Cpu, Lock,
-  BarChart2, ChevronRight, Star,
+  BarChart2, ChevronRight, Star, Award, ShieldCheck, Landmark,
 } from "lucide-react";
 
 function useInView(threshold = 0.12) {
@@ -95,12 +95,12 @@ const ROLES = [
 ];
 
 const USE_CASES = [
-  { icon: "🏆", title: "ISO 27001:2022 Certification", desc: "GRCEye pre-loads all 93 Annex A controls and the full ISMS scope requirements. Run a gap assessment, generate your Statement of Applicability, collect evidence per control, and manage your internal audit — all in one place.", time: "Typical prep time: 4–6 months", color: "border-blue-200 bg-blue-50/50" },
-  { icon: "✅", title: "SOC 2 Type II Readiness", desc: "Map your controls to the Trust Service Criteria (Security, Availability, Confidentiality, Privacy, Processing Integrity). Generate evidence, run an internal readiness audit, and share a Trust Center with auditors before the formal engagement.", time: "Typical prep time: 3–5 months", color: "border-green-200 bg-green-50/50" },
-  { icon: "🔒", title: "GDPR Compliance Program", desc: "Track your data processing activities, manage DPA templates, run a GDPR gap assessment against all 99 articles, implement breach notification workflows, and respond to data subject requests — all within GRCEye.", time: "Initial assessment: 2–4 weeks", color: "border-purple-200 bg-purple-50/50" },
-  { icon: "🏦", title: "DORA Digital Resilience", desc: "Meet DORA's five pillars — ICT risk management, incident reporting, digital resilience testing, third-party risk, and information sharing — with GRCEye's pre-built control set and vendor risk module.", time: "Ongoing compliance program", color: "border-emerald-200 bg-emerald-50/50" },
-  { icon: "🛡️", title: "Vendor Risk Management Program", desc: "Tier every vendor (Critical/High/Medium/Low), run AI-powered prescreen questionnaires before onboarding, review contracts with AI clause detection, route for CISO approval, and monitor ongoing risk with a 6-dimension cartography heatmap.", time: "Onboarding per vendor: 1–3 days", color: "border-orange-200 bg-orange-50/50" },
-  { icon: "📋", title: "Internal Audit Program", desc: "Plan and execute internal audits with structured checklists, assign lead auditors, record findings with severity ratings, track remediation to closure, and generate a final PDF audit report — without email or spreadsheets.", time: "Per audit cycle: 2–6 weeks", color: "border-red-200 bg-red-50/50" },
+  { icon: Award,         iconColor: "from-blue-500 to-indigo-600",  title: "ISO 27001:2022 Certification",       desc: "GRCEye pre-loads all 93 Annex A controls and the full ISMS scope requirements. Run a gap assessment, generate your Statement of Applicability, collect evidence per control, and manage your internal audit — all in one place.", time: "Typical prep time: 4–6 months", color: "border-blue-200 bg-blue-50/50" },
+  { icon: CheckCircle,   iconColor: "from-green-500 to-emerald-600", title: "SOC 2 Type II Readiness",            desc: "Map your controls to the Trust Service Criteria (Security, Availability, Confidentiality, Privacy, Processing Integrity). Generate evidence, run an internal readiness audit, and share a Trust Center with auditors before the formal engagement.", time: "Typical prep time: 3–5 months", color: "border-green-200 bg-green-50/50" },
+  { icon: Lock,          iconColor: "from-purple-500 to-pink-600",   title: "GDPR Compliance Program",            desc: "Track your data processing activities, manage DPA templates, run a GDPR gap assessment against all 99 articles, implement breach notification workflows, and respond to data subject requests — all within GRCEye.", time: "Initial assessment: 2–4 weeks", color: "border-purple-200 bg-purple-50/50" },
+  { icon: Landmark,      iconColor: "from-emerald-500 to-teal-600",  title: "DORA Digital Resilience",            desc: "Meet DORA's five pillars — ICT risk management, incident reporting, digital resilience testing, third-party risk, and information sharing — with GRCEye's pre-built control set and vendor risk module.", time: "Ongoing compliance program", color: "border-emerald-200 bg-emerald-50/50" },
+  { icon: ShieldCheck,   iconColor: "from-orange-500 to-amber-600",  title: "Vendor Risk Management Program",     desc: "Tier every vendor (Critical/High/Medium/Low), run AI-powered prescreen questionnaires before onboarding, review contracts with AI clause detection, route for CISO approval, and monitor ongoing risk with a 6-dimension cartography heatmap.", time: "Onboarding per vendor: 1–3 days", color: "border-orange-200 bg-orange-50/50" },
+  { icon: ClipboardList, iconColor: "from-red-500 to-rose-600",      title: "Internal Audit Program",             desc: "Plan and execute internal audits with structured checklists, assign lead auditors, record findings with severity ratings, track remediation to closure, and generate a final PDF audit report — without email or spreadsheets.", time: "Per audit cycle: 2–6 weeks", color: "border-red-200 bg-red-50/50" },
 ];
 
 export default function SolutionsView() {
@@ -253,7 +253,9 @@ export default function SolutionsView() {
             {USE_CASES.map((uc, i) => (
               <Reveal key={uc.title} delay={i * 80}>
                 <div className={`rounded-2xl p-6 border ${uc.color} card-hover h-full`}>
-                  <span className="text-3xl mb-4 block">{uc.icon}</span>
+                  <div className={`w-12 h-12 bg-gradient-to-br ${uc.iconColor} rounded-2xl flex items-center justify-center mb-4 shadow-lg`}>
+                    <uc.icon className="w-6 h-6 text-white" />
+                  </div>
                   <h3 className="font-bold text-gray-900 text-lg mb-2">{uc.title}</h3>
                   <p className="text-gray-600 text-sm leading-relaxed mb-4">{uc.desc}</p>
                   <p className="text-xs font-semibold text-gray-400 border-t border-gray-200 pt-3">{uc.time}</p>
