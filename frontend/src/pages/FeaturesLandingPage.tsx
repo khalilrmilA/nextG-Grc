@@ -1,3 +1,4 @@
+import PublicFooter from "../components/landing/PublicFooter";
 import { Link } from "react-router-dom";
 import { useEffect, useRef, useState } from "react";
 import SupportChat from "../components/landing/SupportChat";
@@ -400,17 +401,7 @@ export default function FeaturesLandingPage() {
       <SupportChat />
 
       {/* Footer */}
-      <footer className="bg-slate-900 text-slate-400 py-10 px-6">
-        <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4">
-          <img src="/logo.png" alt="GRCEye" className="h-12 w-auto object-contain bg-white rounded-xl p-1.5" />
-          <p className="text-xs text-slate-600">© 2026 GRCEye, Inc. All rights reserved. · Powered by <span className="text-slate-500 font-semibold">SilentWolf</span></p>
-          <div className="flex gap-5 text-sm">
-            <a href="#" className="hover:text-white transition-colors">Privacy</a>
-            <a href="#" className="hover:text-white transition-colors">Terms</a>
-            <Link to="/contact" className="hover:text-white transition-colors">Contact</Link>
-          </div>
-        </div>
-      </footer>
+      <PublicFooter />
     </div>
   );
 }
