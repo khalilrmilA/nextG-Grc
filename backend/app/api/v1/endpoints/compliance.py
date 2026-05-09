@@ -763,28 +763,30 @@ async def upload_document(
         "pdf" in content_type
         or "docx" in content_type
         or "word" in content_type
+        or "spreadsheetml" in content_type
+        or "ms-excel" in content_type
         or "text/plain" in content_type
         or name_lower.endswith(".pdf")
         or name_lower.endswith(".docx")
+        or name_lower.endswith(".xlsx")
+        or name_lower.endswith(".xls")
         or name_lower.endswith(".txt")
     )
     if not is_allowed:
-        raise HTTPException(status_code=422, detail="Only PDF, DOCX, and TXT files are supported")
+        raise HTTPException(status_code=422, detail="Only PDF, DOCX, XLSX, XLS, and TXT files are supported")
 
     file_bytes = await file.read()
     max_bytes = settings.MAX_UPLOAD_SIZE_MB * 1024 * 1024
     if len(file_bytes) > max_bytes:
         raise HTTPException(status_code=413, detail=f"File too large (max {settings.MAX_UPLOAD_SIZE_MB}MB)")
 
-    # Magic-byte verification — clients can lie about Content-Type. Skip the
-    # check for declared text/plain (no reliable signature).
     declared = (content_type or "").lower()
     if "pdf" in declared and not verify_file_signature(file_bytes, "application/pdf"):
         raise HTTPException(415, "File contents do not match the declared PDF type.")
-    if "image/png" in declared and not verify_file_signature(file_bytes, "image/png"):
-        raise HTTPException(415, "File contents do not match the declared PNG type.")
-    if ("image/jpeg" in declared or "image/jpg" in declared) and not verify_file_signature(file_bytes, "image/jpeg"):
-        raise HTTPException(415, "File contents do not match the declared JPEG type.")
+    if "spreadsheetml" in declared and not verify_file_signature(file_bytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"):
+        raise HTTPException(415, "File contents do not match the declared XLSX type.")
+    if "ms-excel" in declared and not verify_file_signature(file_bytes, "application/vnd.ms-excel"):
+        raise HTTPException(415, "File contents do not match the declared XLS type.")
 
     safe_name = _sanitize_filename(file.filename or "document.txt")
     rel_path = f"{tenant_id}/{assessment_id}/{uuid.uuid4().hex}_{safe_name}"
@@ -1560,13 +1562,17 @@ async def upload_control_evidence(
         "pdf" in content_type
         or "docx" in content_type
         or "word" in content_type
+        or "spreadsheetml" in content_type
+        or "ms-excel" in content_type
         or "text/plain" in content_type
         or name_lower.endswith(".pdf")
         or name_lower.endswith(".docx")
+        or name_lower.endswith(".xlsx")
+        or name_lower.endswith(".xls")
         or name_lower.endswith(".txt")
     )
     if not is_allowed:
-        raise HTTPException(status_code=422, detail="Only PDF, DOCX, and TXT files are supported")
+        raise HTTPException(status_code=422, detail="Only PDF, DOCX, XLSX, XLS, and TXT files are supported")
 
     file_bytes = await file.read()
     max_bytes = settings.MAX_UPLOAD_SIZE_MB * 1024 * 1024
@@ -1576,6 +1582,10 @@ async def upload_control_evidence(
     declared = (content_type or "").lower()
     if "pdf" in declared and not verify_file_signature(file_bytes, "application/pdf"):
         raise HTTPException(415, "File contents do not match the declared PDF type.")
+    if "spreadsheetml" in declared and not verify_file_signature(file_bytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"):
+        raise HTTPException(415, "File contents do not match the declared XLSX type.")
+    if "ms-excel" in declared and not verify_file_signature(file_bytes, "application/vnd.ms-excel"):
+        raise HTTPException(415, "File contents do not match the declared XLS type.")
 
     safe_name = _sanitize_filename(file.filename or "evidence.txt")
     rel_path = f"{tenant_id}/evidence/{uuid.uuid4().hex}_{safe_name}"

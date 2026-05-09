@@ -236,7 +236,7 @@ function ClauseRow({
           <input
             ref={inputRef}
             type="file"
-            accept=".pdf,.docx,.txt,.png,.jpg,.jpeg"
+            accept=".pdf,.docx,.xlsx,.xls,.txt"
             multiple
             className="hidden"
             onChange={(e) => {

@@ -106,7 +106,7 @@ export default function EvidenceUploadPage() {
           <input
             ref={inputRef}
             type="file"
-            accept=".pdf,.docx,.txt,.png,.jpg,.jpeg"
+            accept=".pdf,.docx,.xlsx,.xls,.txt"
             multiple
             className="hidden"
             onChange={(e) => handleFiles(e.target.files)}
@@ -119,7 +119,7 @@ export default function EvidenceUploadPage() {
           <p className="text-sm font-medium text-gray-700">
             {uploading ? "Uploading…" : "Drop files here or click to browse"}
           </p>
-          <p className="text-xs text-gray-400 mt-1">PDF, DOCX, TXT, PNG, JPG — max 10 MB each</p>
+          <p className="text-xs text-gray-400 mt-1">PDF, DOCX, XLSX, XLS, TXT — max 10 MB each</p>
         </div>
 
         {/* Error */}

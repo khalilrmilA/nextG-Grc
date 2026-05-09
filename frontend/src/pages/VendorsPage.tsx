@@ -337,13 +337,13 @@ function AddVendorModal({ onClose, onSaved }: { readonly onClose: () => void; re
             <label htmlFor="v-contract" className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Upload Contract (Optional)</label>
             <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 text-center cursor-pointer hover:border-blue-400 hover:bg-blue-50 transition-colors"
               onClick={() => document.getElementById("v-contract")?.click()}>
-              <input id="v-contract" type="file" accept=".pdf,.txt,.doc,.docx" className="hidden"
+              <input id="v-contract" type="file" accept=".pdf,.docx,.xlsx,.xls,.txt" className="hidden"
                 onChange={e => setContractFile(e.target.files?.[0] || null)} />
               <p className="text-sm text-gray-600">
                 {contractFile ? (
                   <>✓ <strong>{contractFile.name}</strong> selected</>
                 ) : (
-                  <>Click to upload contract (PDF, TXT, or DOC)</>
+                  <>Click to upload contract (PDF, DOCX, XLSX, XLS, TXT)</>
                 )}
               </p>
               <p className="text-xs text-gray-400 mt-1">AI will automatically review the contract</p>

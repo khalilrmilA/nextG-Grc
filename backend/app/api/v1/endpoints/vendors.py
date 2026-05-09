@@ -597,18 +597,26 @@ async def upload_vendor_contract(
         content = await contract_file.read()
         if len(content) > max_bytes:
             raise HTTPException(413, f"File exceeds {settings.MAX_UPLOAD_SIZE_MB} MB limit")
-        # Enforce PDF, DOCX, TXT only.
+        # Enforce PDF, DOCX, XLSX, XLS, TXT only.
         ct = (contract_file.content_type or "").lower()
         name_lower = safe_name.lower()
         type_allowed = (
-            "pdf" in ct or "docx" in ct or "word" in ct or "text/plain" in ct
-            or name_lower.endswith(".pdf") or name_lower.endswith(".docx") or name_lower.endswith(".txt")
+            "pdf" in ct or "docx" in ct or "word" in ct
+            or "spreadsheetml" in ct or "ms-excel" in ct
+            or "text/plain" in ct
+            or name_lower.endswith(".pdf") or name_lower.endswith(".docx")
+            or name_lower.endswith(".xlsx") or name_lower.endswith(".xls")
+            or name_lower.endswith(".txt")
         )
         if not type_allowed:
-            raise HTTPException(422, "Only PDF, DOCX, and TXT files are supported")
+            raise HTTPException(422, "Only PDF, DOCX, XLSX, XLS, and TXT files are supported")
         declared = ct
         if "pdf" in declared and not verify_file_signature(content, "application/pdf"):
             raise HTTPException(415, "File contents do not match the declared PDF type.")
+        if "spreadsheetml" in declared and not verify_file_signature(content, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"):
+            raise HTTPException(415, "File contents do not match the declared XLSX type.")
+        if "ms-excel" in declared and not verify_file_signature(content, "application/vnd.ms-excel"):
+            raise HTTPException(415, "File contents do not match the declared XLS type.")
         with open(file_path, "wb") as f:
             f.write(content)
     except HTTPException:

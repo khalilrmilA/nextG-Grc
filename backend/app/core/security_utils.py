@@ -20,6 +20,10 @@ _MAGIC_SIGNATURES: dict[str, list[tuple[int, bytes]]] = {
     "application/vnd.openxmlformats-officedocument.wordprocessingml.document": [
         (0, b"PK\x03\x04"),
     ],
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": [
+        (0, b"PK\x03\x04"),
+    ],
+    "application/vnd.ms-excel": [(0, b"\xD0\xCF\x11\xE0")],
     "image/png": [(0, b"\x89PNG\r\n\x1a\n")],
     "image/jpeg": [(0, b"\xff\xd8\xff")],
     "image/jpg": [(0, b"\xff\xd8\xff")],
@@ -29,6 +33,8 @@ _MAGIC_SIGNATURES: dict[str, list[tuple[int, bytes]]] = {
 _EXTENSION_FOR_MIME = {
     "application/pdf": ".pdf",
     "application/vnd.openxmlformats-officedocument.wordprocessingml.document": ".docx",
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": ".xlsx",
+    "application/vnd.ms-excel": ".xls",
     "image/png": ".png",
     "image/jpeg": ".jpg",
     "image/jpg": ".jpg",
