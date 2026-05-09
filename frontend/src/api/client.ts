@@ -61,13 +61,27 @@ class ApiClient {
       (error) => Promise.reject(error)
     );
 
-    // Response: auto-refresh on 401
+    // Response: auto-refresh on 401, redirect to service-down on server errors
     this.client.interceptors.response.use(
       (response) => response,
       async (error) => {
+        const status: number | undefined = error.response?.status;
+
+        // No response at all = backend unreachable (network down, connection refused)
+        if (!error.response) {
+          window.location.href = "/service-down";
+          return Promise.reject(error);
+        }
+
+        // Server-side failures — backend is broken, not a user error
+        if (status !== undefined && status >= 500) {
+          window.location.href = "/service-down";
+          return Promise.reject(error);
+        }
+
         const originalRequest = error.config;
 
-        if (error.response?.status === 401 && !originalRequest._retry) {
+        if (status === 401 && !originalRequest._retry) {
           originalRequest._retry = true;
 
           try {
@@ -83,7 +97,6 @@ class ApiClient {
             return this.client(originalRequest);
           } catch {
             this.clearTokens();
-            // Don't force redirect — let React Router handle unauthenticated state
           }
         }
 

@@ -6,6 +6,7 @@ import AuditorLayout from "./components/layout/AuditorLayout";
 import LoginPage from "./pages/LoginPage";
 import RegisterPage from "./pages/RegisterPage";
 import LandingPage from "./pages/LandingPage";
+import ServiceDownPage from "./pages/ServiceDownPage";
 import FeaturesLandingPage from "./pages/FeaturesLandingPage";
 import SolutionsPage from "./pages/SolutionsPage";
 import BlogPage from "./pages/BlogPage";
@@ -102,6 +103,7 @@ export default function App() {
   return (
     <Routes>
       {/* ── Public routes (no authentication required) ── */}
+      <Route path="/service-down" element={<ServiceDownPage />} />
       <Route path="/" element={<LandingPage />} />
       <Route path="/upload/:token" element={<EvidenceUploadPage />} />
       <Route path="/vendor-collab/:shareToken" element={<VendorCollaborationPage />} />

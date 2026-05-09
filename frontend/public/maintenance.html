@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>GRCEye — Under Maintenance</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #0f172a 100%);
+      color: #f8fafc;
+      padding: 1.5rem;
+    }
+
+    .card {
+      text-align: center;
+      max-width: 480px;
+      width: 100%;
+    }
+
+    /* Animated logo ring */
+    .ring-wrap {
+      display: flex;
+      justify-content: center;
+      margin-bottom: 2.5rem;
+    }
+    .ring {
+      position: relative;
+      width: 96px;
+      height: 96px;
+    }
+    .ring svg {
+      position: absolute;
+      inset: 0;
+      animation: spin 3s linear infinite;
+    }
+    .ring-inner {
+      position: absolute;
+      inset: 16px;
+      background: #1e293b;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .ring-inner span {
+      font-size: 1.75rem;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* Pulsing dot */
+    .status-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.35rem 1rem;
+      border-radius: 9999px;
+      background: rgba(234, 179, 8, 0.1);
+      border: 1px solid rgba(234, 179, 8, 0.25);
+      color: #fbbf24;
+      font-size: 0.75rem;
+      font-weight: 600;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      margin-bottom: 1.75rem;
+    }
+    .dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: #fbbf24;
+      animation: pulse 1.5s ease-in-out infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50%       { opacity: 0.4; transform: scale(0.75); }
+    }
+
+    h1 {
+      font-size: 2rem;
+      font-weight: 700;
+      margin-bottom: 0.75rem;
+      letter-spacing: -0.02em;
+    }
+
+    p {
+      color: #94a3b8;
+      font-size: 0.9375rem;
+      line-height: 1.7;
+      margin-bottom: 2.5rem;
+    }
+
+    /* Progress bar */
+    .bar-wrap {
+      background: #1e293b;
+      border-radius: 9999px;
+      height: 4px;
+      overflow: hidden;
+      margin-bottom: 2.5rem;
+    }
+    .bar {
+      height: 100%;
+      width: 40%;
+      background: linear-gradient(90deg, #3b82f6, #6366f1);
+      border-radius: 9999px;
+      animation: slide 2.5s ease-in-out infinite;
+    }
+    @keyframes slide {
+      0%   { transform: translateX(-100%); }
+      100% { transform: translateX(350%); }
+    }
+
+    /* Cards row */
+    .info-row {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 0.75rem;
+      margin-bottom: 2.5rem;
+    }
+    .info-card {
+      background: rgba(255,255,255,0.04);
+      border: 1px solid rgba(255,255,255,0.07);
+      border-radius: 0.75rem;
+      padding: 1rem 0.5rem;
+    }
+    .info-card .val { font-size: 1.25rem; font-weight: 700; color: #f8fafc; }
+    .info-card .lbl { font-size: 0.6875rem; color: #64748b; margin-top: 0.2rem; }
+
+    footer {
+      font-size: 0.75rem;
+      color: #334155;
+    }
+    footer a { color: #475569; text-decoration: none; }
+    footer a:hover { color: #94a3b8; }
+  </style>
+</head>
+<body>
+  <div class="card">
+
+    <!-- Spinning ring -->
+    <div class="ring-wrap">
+      <div class="ring">
+        <svg viewBox="0 0 96 96" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <circle cx="48" cy="48" r="44" stroke="#1e3a5f" stroke-width="3"/>
+          <path d="M48 4 A44 44 0 0 1 92 48" stroke="#3b82f6" stroke-width="3" stroke-linecap="round"/>
+        </svg>
+        <div class="ring-inner"><span>🔧</span></div>
+      </div>
+    </div>
+
+    <!-- Status -->
+    <div class="status-pill">
+      <span class="dot"></span>
+      Scheduled maintenance
+    </div>
+
+    <!-- Heading -->
+    <h1>We're upgrading<br/>GRCEye</h1>
+    <p>
+      Our platform is temporarily offline for scheduled maintenance.<br/>
+      We'll be back shortly — usually within a few minutes.
+    </p>
+
+    <!-- Progress bar -->
+    <div class="bar-wrap"><div class="bar"></div></div>
+
+    <!-- Info cards -->
+    <div class="info-row">
+      <div class="info-card">
+        <div class="val">~5 min</div>
+        <div class="lbl">Est. downtime</div>
+      </div>
+      <div class="info-card">
+        <div class="val">99.9%</div>
+        <div class="lbl">Uptime SLA</div>
+      </div>
+      <div class="info-card">
+        <div class="val">🔒</div>
+        <div class="lbl">Data is safe</div>
+      </div>
+    </div>
+
+    <footer>
+      GRCEye &nbsp;·&nbsp; <a href="mailto:support@grceye.com">support@grceye.com</a>
+    </footer>
+  </div>
+
+  <script>
+    // Auto-reload every 30 s to check if the service is back
+    setTimeout(() => location.reload(), 30000);
+  </script>
+</body>
+</html>
