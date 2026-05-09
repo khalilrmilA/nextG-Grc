@@ -80,11 +80,25 @@ async def seed_demo_data():
         )
         db.add(ciso)
 
+        # Create viewer (demo/read-only) user
+        viewer = User(
+            tenant_id=tenant.id,
+            email="viewer@demo.com",
+            hashed_password=hash_password("demo123"),
+            first_name="Demo",
+            last_name="Viewer",
+            role=UserRole.VIEWER,
+            is_active=True,
+            is_verified=True,
+        )
+        db.add(viewer)
+
         await db.commit()
         print("[startup] Demo data seeded:")
         print("  Tenant: Acme Corp (Demo)")
         print("  Users: admin@demo.com / demo123")
         print("        ciso@demo.com / demo123")
+        print("        viewer@demo.com / demo123 (read-only demo)")
 
     # Seed super admin (platform owner) — separate from any tenant
     async with AsyncSessionLocal() as db:

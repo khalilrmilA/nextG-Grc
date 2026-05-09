@@ -253,7 +253,15 @@ async def get_profile(
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
     """Return the current user's profile including tenant framework settings."""
-    tenant_result = await db.execute(select(Tenant).where(Tenant.id == current_user.tenant_id))
+    # Viewers always read from the demo tenant.
+    effective_tenant_id = current_user.tenant_id
+    if current_user.role == UserRole.VIEWER:
+        from app.api.v1.dependencies.auth import _get_demo_tenant_id
+        demo_id = await _get_demo_tenant_id(db)
+        if demo_id:
+            effective_tenant_id = demo_id
+
+    tenant_result = await db.execute(select(Tenant).where(Tenant.id == effective_tenant_id))
     tenant = tenant_result.scalar_one_or_none()
 
     # Find the primary assessment (most recent for the primary framework)
@@ -264,7 +272,7 @@ async def get_profile(
         a_result = await db.execute(
             select(ComplianceAssessment)
             .where(
-                ComplianceAssessment.tenant_id == current_user.tenant_id,
+                ComplianceAssessment.tenant_id == effective_tenant_id,
                 ComplianceAssessment.framework_id == tenant.primary_framework_id,
             )
             .order_by(desc(ComplianceAssessment.created_at))
@@ -274,7 +282,7 @@ async def get_profile(
         if assessment:
             primary_assessment_id = assessment.id
 
-    accessible_modules = await get_accessible_modules(current_user.tenant_id, db)
+    accessible_modules = await get_accessible_modules(effective_tenant_id, db)
 
     return UserProfileResponse(
         id=current_user.id,
@@ -282,7 +290,7 @@ async def get_profile(
         first_name=current_user.first_name,
         last_name=current_user.last_name,
         role=current_user.role,
-        tenant_id=current_user.tenant_id,
+        tenant_id=effective_tenant_id,
         tenant_name=tenant.name if tenant else "",
         primary_framework_id=tenant.primary_framework_id if tenant else None,
         selected_framework_ids=tenant.selected_framework_ids if tenant else [],

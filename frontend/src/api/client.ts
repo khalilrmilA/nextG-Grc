@@ -48,14 +48,38 @@ class ApiClient {
     } catch {}
   }
 
+  private isViewerRole(): boolean {
+    try {
+      const raw = localStorage.getItem("grc_user_v2");
+      if (!raw) return false;
+      const parsed = JSON.parse(raw);
+      return parsed?.role === "viewer";
+    } catch {
+      return false;
+    }
+  }
+
   private setupInterceptors(): void {
-    // Request: attach access token from Zustand persisted store
+    // Request: attach access token; block write requests for viewer (demo) accounts.
     this.client.interceptors.request.use(
       (config: InternalAxiosRequestConfig) => {
         const { access } = this.getTokens();
         if (access && config.headers) {
           config.headers.Authorization = `Bearer ${access}`;
         }
+
+        // Viewer role = demo/read-only — block all mutating requests client-side.
+        const method = (config.method ?? "get").toUpperCase();
+        const writeMethods = ["POST", "PUT", "PATCH", "DELETE"];
+        // Allow auth endpoints (login, change-password, etc.) to pass through.
+        const isAuthEndpoint = (config.url ?? "").includes("/auth/");
+        if (this.isViewerRole() && writeMethods.includes(method) && !isAuthEndpoint) {
+          window.dispatchEvent(new CustomEvent("demo-block"));
+          const err = new Error("Demo accounts are read-only. Sign up to use this feature.") as Error & { isDemoBlock: boolean };
+          err.isDemoBlock = true;
+          return Promise.reject(err);
+        }
+
         return config;
       },
       (error) => Promise.reject(error)

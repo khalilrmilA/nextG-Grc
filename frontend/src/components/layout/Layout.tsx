@@ -17,6 +17,7 @@ import {
   ChevronRight, Bell, Settings, HelpCircle, Lock,
   Crown, X, Trash2, Wand2, Menu,
   AlertCircle, Info, ShieldAlert, ClipboardCheck, RefreshCw,
+  Eye,
 } from "lucide-react";
 
 const NAV_GROUPS = [
@@ -370,6 +371,17 @@ export default function Layout() {
   const [appearance] = useAppearance();
   const sc = sidebarTextClasses(appearance.sidebarStyle);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
+  const [showDemoToast, setShowDemoToast] = useState(false);
+
+  // Listen for demo-block events fired by the API client interceptor
+  useEffect(() => {
+    function onDemoBlock() {
+      setShowDemoToast(true);
+      setTimeout(() => setShowDemoToast(false), 4000);
+    }
+    window.addEventListener("demo-block", onDemoBlock);
+    return () => window.removeEventListener("demo-block", onDemoBlock);
+  }, []);
 
   // Close mobile sidebar on route change
   useEffect(() => { setMobileSidebarOpen(false); }, [location.pathname]);
@@ -615,12 +627,24 @@ export default function Layout() {
               <div className="hidden sm:block">
                 <p className="text-xs font-semibold text-gray-800 leading-none">{user?.name ?? "User"}</p>
                 <p className="text-xs text-gray-400 mt-0.5">
-                  {isSuperAdmin ? "Platform Admin" : isAdmin ? `${user?.org} · Owner` : user?.org ?? ""}
+                  {isSuperAdmin ? "Platform Admin" : isAdmin ? `${user?.org} · Owner` : user?.role === "viewer" ? "Demo · Read-only" : user?.org ?? ""}
                 </p>
               </div>
             </div>
           </div>
         </header>
+
+        {/* Demo mode banner for viewer role */}
+        {user?.role === "viewer" && (
+          <div className="flex items-center gap-3 px-4 py-2.5 bg-amber-50 border-b border-amber-200 text-amber-800 text-sm flex-shrink-0">
+            <Eye className="w-4 h-4 flex-shrink-0 text-amber-600" />
+            <span className="font-medium">Demo Mode</span>
+            <span className="text-amber-700">— You are viewing read-only demo data. All create, edit, and delete actions are disabled.</span>
+            <a href="/register" className="ml-auto flex-shrink-0 px-3 py-1 bg-amber-600 text-white text-xs font-semibold rounded-lg hover:bg-amber-700 transition-colors">
+              Get full access
+            </a>
+          </div>
+        )}
 
         {/* Page content */}
         <div className="flex-1 overflow-auto overflow-x-hidden">
@@ -628,11 +652,25 @@ export default function Layout() {
         </div>
       </main>
 
-      {/* AI Assistant floating button */}
-      <AIAssistant />
+      {/* AI Assistant floating button — hidden for demo viewers */}
+      {user?.role !== "viewer" && <AIAssistant />}
 
       {/* Onboarding tour — shown for first 3 visits */}
       <OnboardingTour />
+
+      {/* Demo-block toast — appears when viewer tries to write */}
+      {showDemoToast && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[200] flex items-center gap-3 bg-gray-900 text-white text-sm font-medium px-5 py-3 rounded-2xl shadow-2xl">
+          <Eye className="w-4 h-4 text-amber-400 flex-shrink-0" />
+          <span>Demo accounts are read-only.{" "}
+            <a href="/register" className="underline text-amber-400 hover:text-white">Sign up</a>
+            {" "}to use this feature.
+          </span>
+          <button type="button" onClick={() => setShowDemoToast(false)} className="ml-1 text-gray-400 hover:text-white">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
     </div>
   );
 }

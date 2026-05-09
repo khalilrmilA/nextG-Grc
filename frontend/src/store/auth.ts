@@ -105,6 +105,13 @@ export const DEMO_USERS: Record<string, AuthUser> = {
     plan: "professional",
     org: "NextStep IT",
   },
+  "viewer@demo.com": {
+    email: "viewer@demo.com",
+    name: "Demo Viewer",
+    role: "viewer",
+    plan: "professional",
+    org: "Acme Corp",
+  },
 };
 
 // ── Simple in-memory + localStorage auth store ──────────────────────────────
@@ -182,4 +189,9 @@ export function useAuthStore<T>(selector: (user: AuthUser | null) => T): T {
     () => selector(_currentUser),   // always reads in-memory, never sessionStorage
     () => selector(_currentUser),   // server snapshot = same (no SSR)
   );
+}
+
+/** Returns true when the logged-in user is a read-only demo viewer. */
+export function useIsViewer(): boolean {
+  return useAuthStore((u) => u?.role === "viewer");
 }
