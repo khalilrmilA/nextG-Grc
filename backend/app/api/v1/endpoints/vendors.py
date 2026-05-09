@@ -597,8 +597,16 @@ async def upload_vendor_contract(
         content = await contract_file.read()
         if len(content) > max_bytes:
             raise HTTPException(413, f"File exceeds {settings.MAX_UPLOAD_SIZE_MB} MB limit")
-        # Magic-byte check — only allow declared PDF / DOCX / TXT.
-        declared = (contract_file.content_type or "").lower()
+        # Enforce PDF, DOCX, TXT only.
+        ct = (contract_file.content_type or "").lower()
+        name_lower = safe_name.lower()
+        type_allowed = (
+            "pdf" in ct or "docx" in ct or "word" in ct or "text/plain" in ct
+            or name_lower.endswith(".pdf") or name_lower.endswith(".docx") or name_lower.endswith(".txt")
+        )
+        if not type_allowed:
+            raise HTTPException(422, "Only PDF, DOCX, and TXT files are supported")
+        declared = ct
         if "pdf" in declared and not verify_file_signature(content, "application/pdf"):
             raise HTTPException(415, "File contents do not match the declared PDF type.")
         with open(file_path, "wb") as f:

@@ -444,6 +444,64 @@ async def refresh_token(request: Request, body: RefreshRequest, db: AsyncSession
     )
 
 
+class ChangePasswordRequest(BaseModel):
+    current_password: str
+    new_password: str = Field(..., min_length=8, max_length=200)
+
+
+@router.post("/change-password", status_code=status.HTTP_204_NO_CONTENT)
+async def change_password(
+    body: ChangePasswordRequest,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    """Allow the authenticated user to change their own password."""
+    if not verify_password(body.current_password, current_user.hashed_password):
+        raise HTTPException(status_code=400, detail="Current password is incorrect")
+    result = await db.execute(select(User).where(User.id == current_user.id))
+    user = result.scalar_one()
+    user.hashed_password = hash_password(body.new_password)
+    await db.commit()
+    return None
+
+
+class ForgotPasswordRequest(BaseModel):
+    email: EmailStr
+
+
+@router.post("/forgot-password", status_code=status.HTTP_204_NO_CONTENT)
+@limiter.limit("5/hour")
+async def forgot_password(request: Request, body: ForgotPasswordRequest, db: AsyncSession = Depends(get_db)):
+    """Generate a temporary password and send it to the user's email.
+    Always returns 204 to avoid email enumeration."""
+    import secrets, string
+    result = await db.execute(select(User).where(User.email == body.email))
+    user = result.scalar_one_or_none()
+    if not user or not user.is_active:
+        # Silent — don't reveal whether the email exists.
+        return None
+
+    alphabet = string.ascii_letters + string.digits
+    tmp_password = "".join(secrets.choice(alphabet) for _ in range(16))
+    user.hashed_password = hash_password(tmp_password)
+    await db.commit()
+
+    from app.services.email_service import send_email
+    await send_email(
+        to_email=user.email,
+        subject="Your temporary password — GRCEye",
+        template_name="notification.html",
+        context={
+            "title": "Password Reset",
+            "message": (
+                f"A temporary password has been generated for your account: <strong>{tmp_password}</strong><br><br>"
+                "Please log in with this password and change it immediately in Settings → Security."
+            ),
+        },
+    )
+    return None
+
+
 @router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
 async def logout(body: RefreshRequest):
     """Revoke the supplied refresh token (best-effort)."""

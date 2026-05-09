@@ -28,9 +28,6 @@ ALLOWED_MIME = {
     "application/pdf",
     "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     "text/plain",
-    "image/png",
-    "image/jpeg",
-    "image/jpg",
 }
 MAX_FILE_SIZE = settings.MAX_UPLOAD_SIZE_MB * 1024 * 1024
 
@@ -160,7 +157,7 @@ async def upload_evidence_via_token(
     if len(content) > MAX_FILE_SIZE:
         raise HTTPException(413, f"File exceeds {settings.MAX_UPLOAD_SIZE_MB} MB limit")
     if file.content_type not in ALLOWED_MIME:
-        raise HTTPException(415, "Unsupported file type. Use PDF, DOCX, TXT, or images.")
+        raise HTTPException(415, "Unsupported file type. Only PDF, DOCX, and TXT files are supported.")
     if not verify_file_signature(content, file.content_type):
         raise HTTPException(415, "File contents do not match the declared type.")
 

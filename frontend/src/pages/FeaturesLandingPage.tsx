@@ -66,10 +66,10 @@ const MODULES = [
     border: "border-blue-100",
     badge: "text-blue-700 bg-blue-50",
     title: "Compliance & Frameworks",
-    tagline: "76 frameworks. One assessment workflow. Zero duplication.",
+    tagline: "70+ frameworks. One assessment workflow. Zero duplication.",
     desc: "Run simultaneous assessments across multiple frameworks. Evidence uploaded once is reused across all mapped controls. The AI identifies gaps, estimates confidence scores, and generates remediation steps — turning weeks of manual work into a structured workflow.",
     features: [
-      { icon: BookOpen,    label: "76 Built-in Frameworks",       desc: "ISO 27001, SOC 2, GDPR, PCI DSS, HIPAA, DORA, NIS2, NIST CSF, NIST 800-53, CIS v8, AI Act, MITRE ATT&CK, and 64 more." },
+      { icon: BookOpen,    label: "70+ Built-in Frameworks",       desc: "ISO 27001, SOC 2, GDPR, PCI DSS, HIPAA, DORA, NIS2, NIST CSF, NIST 800-53, CIS v8, AI Act, MITRE ATT&CK, and more." },
       { icon: Zap,         label: "AI Gap Analysis",              desc: "Batch AI analysis of all controls. Each control gets an implementation confidence score, gap status, and AI-generated remediation steps." },
       { icon: Link2,       label: "Cross-Framework Coverage",     desc: "See which controls satisfy requirements in multiple frameworks simultaneously — avoid duplicating assessment work." },
       { icon: Upload,      label: "Evidence Management",          desc: "Upload files, add justification, and mark auditor visibility per control. Evidence links to specific controls across all assessments." },
@@ -210,7 +210,7 @@ export default function FeaturesLandingPage() {
         <div className="absolute top-10 -right-10 w-80 h-80 bg-indigo-200/20 rounded-full blur-3xl animate-blob animation-delay-2000 pointer-events-none" />
         <div className="relative max-w-3xl mx-auto">
           <div className="inline-flex items-center gap-2 bg-white/70 border border-sky-200 text-blue-700 text-xs font-semibold px-4 py-1.5 rounded-full mb-6 shadow-sm animate-fade-in-up">
-            <Zap className="w-3.5 h-3.5" /> 38 pages · 190 API routes · 29 AI document types · 76 frameworks
+            <Zap className="w-3.5 h-3.5" /> 38 pages · 190 API routes · 29 AI document types · 70+ frameworks
           </div>
           <h1 className="animate-fade-in-up animation-delay-200 text-5xl font-extrabold text-gray-900 leading-tight tracking-tight mb-6">
             Every feature,{" "}

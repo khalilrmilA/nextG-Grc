@@ -711,10 +711,10 @@ export default function LandingPage() {
               <div className="inline-flex items-center gap-2 text-blue-600 text-xs font-semibold bg-blue-50 border border-blue-100 px-3 py-1.5 rounded-full mb-4">
                 <CheckCircle className="w-3.5 h-3.5" /> Compliance & Frameworks
               </div>
-              <h3 className="text-xl sm:text-2xl font-bold text-gray-900 mb-3">76 frameworks, one assessment workflow</h3>
+              <h3 className="text-xl sm:text-2xl font-bold text-gray-900 mb-3">70+ frameworks, one assessment workflow</h3>
               <p className="text-gray-500 leading-relaxed mb-4">Run simultaneous assessments across ISO 27001, SOC 2, GDPR, PCI DSS, and any other framework. Evidence uploaded once applies to all mapped controls.</p>
               <ul className="space-y-2">
-                {["76 built-in frameworks with pre-mapped controls","AI-powered gap analysis with remediation guidance","Cross-framework evidence reuse — no duplication","Customizable frameworks: fork, edit, add controls","Auditor portal with scoped, read-only access"].map(f => (
+                {["70+ built-in frameworks with pre-mapped controls","AI-powered gap analysis with remediation guidance","Cross-framework evidence reuse — no duplication","Customizable frameworks: fork, edit, add controls","Auditor portal with scoped, read-only access"].map(f => (
                   <li key={f} className="flex items-start gap-2 text-sm text-gray-600">
                     <CheckCircle className="w-4 h-4 text-green-500 flex-shrink-0 mt-0.5" />{f}
                   </li>

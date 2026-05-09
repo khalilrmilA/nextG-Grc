@@ -102,6 +102,12 @@ export const authApi = {
 
   checkAiAccess: () =>
     apiClient.get<{ has_access: boolean; tokens_used: number; tokens_limit: number; requests_used: number; requests_limit: number; percentage_used: number; reset_at: string | null }>("/ai/access-check").then((r) => r.data),
+
+  changePassword: (current_password: string, new_password: string) =>
+    apiClient.post("/auth/change-password", { current_password, new_password }),
+
+  forgotPassword: (email: string) =>
+    apiClient.post("/auth/forgot-password", { email }),
 };
 
 // ─── Frameworks ──────────────────────────────

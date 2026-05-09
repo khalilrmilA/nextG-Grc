@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
-import { Eye, EyeOff, Loader2 } from "lucide-react";
+import { Eye, EyeOff, Loader2, X } from "lucide-react";
 import { authSession, DEMO_USERS, type UserRole, type PlanTier } from "../store/auth";
 import LanguageSwitcher from "../components/LanguageSwitcher";
 
@@ -19,6 +19,35 @@ export default function LoginPage() {
   const [error, setError]       = useState("");
   const [loading, setLoading]   = useState(false);
   const navigate = useNavigate();
+
+  // Forgot password modal state
+  const [showForgot, setShowForgot]   = useState(false);
+  const [forgotEmail, setForgotEmail] = useState("");
+  const [forgotSent, setForgotSent]   = useState(false);
+  const [forgotLoading, setForgotLoading] = useState(false);
+  const [forgotError, setForgotError] = useState("");
+
+  async function handleForgotSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setForgotLoading(true);
+    setForgotError("");
+    try {
+      const { authApi } = await import("../api/endpoints");
+      await authApi.forgotPassword(forgotEmail.trim().toLowerCase());
+      setForgotSent(true);
+    } catch {
+      setForgotError("Something went wrong. Please try again.");
+    } finally {
+      setForgotLoading(false);
+    }
+  }
+
+  function closeForgot() {
+    setShowForgot(false);
+    setForgotEmail("");
+    setForgotSent(false);
+    setForgotError("");
+  }
 
   function redirectAfterLogin(role?: string) {
     if (role === "auditor")          navigate("/auditor/portal");
@@ -128,7 +157,7 @@ export default function LoginPage() {
                 <label htmlFor="login-password" className="block text-xs font-medium text-gray-700">
                   Password
                 </label>
-                <button type="button" className="text-xs text-blue-600 hover:underline">
+                <button type="button" onClick={() => { setShowForgot(true); setForgotEmail(email); }} className="text-xs text-blue-600 hover:underline">
                   Forgot password?
                 </button>
               </div>
@@ -190,5 +219,39 @@ export default function LoginPage() {
         </div>
       </div>
     </div>
+
+    {/* Forgot password modal */}
+    {showForgot && (
+      <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
+        <div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-sm">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-base font-semibold text-gray-900">Reset your password</h3>
+            <button type="button" onClick={closeForgot} className="text-gray-400 hover:text-gray-600"><X className="w-4 h-4" /></button>
+          </div>
+          {forgotSent ? (
+            <div className="text-sm text-green-700 bg-green-50 border border-green-200 rounded-xl p-4">
+              If an account exists for that email, a temporary password has been sent. Check your inbox and change it after logging in.
+            </div>
+          ) : (
+            <form onSubmit={handleForgotSubmit} className="space-y-4">
+              <p className="text-sm text-gray-500">Enter your account email and we'll send you a temporary password.</p>
+              <input
+                type="email"
+                required
+                value={forgotEmail}
+                onChange={e => setForgotEmail(e.target.value)}
+                placeholder="you@company.com"
+                className="w-full px-3.5 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+              {forgotError && <p className="text-xs text-red-500">{forgotError}</p>}
+              <button type="submit" disabled={forgotLoading}
+                className="w-full py-2.5 bg-blue-600 text-white text-sm font-medium rounded-xl hover:bg-blue-700 transition-colors disabled:opacity-50">
+                {forgotLoading ? "Sending…" : "Send temporary password"}
+              </button>
+            </form>
+          )}
+        </div>
+      </div>
+    )}
   );
 }

@@ -1553,7 +1553,7 @@ async def upload_control_evidence(
 
     ca, assessment = row
 
-    # Accept: PDF, DOCX, images, TXT
+    # Accept: PDF, DOCX, TXT only
     content_type = file.content_type or ""
     name_lower = (file.filename or "").lower()
     is_allowed = (
@@ -1561,31 +1561,21 @@ async def upload_control_evidence(
         or "docx" in content_type
         or "word" in content_type
         or "text/plain" in content_type
-        or "image/png" in content_type
-        or "image/jpeg" in content_type
         or name_lower.endswith(".pdf")
         or name_lower.endswith(".docx")
         or name_lower.endswith(".txt")
-        or name_lower.endswith(".png")
-        or name_lower.endswith(".jpg")
-        or name_lower.endswith(".jpeg")
     )
     if not is_allowed:
-        raise HTTPException(status_code=422, detail="Only PDF, DOCX, TXT, PNG, JPG files are supported")
+        raise HTTPException(status_code=422, detail="Only PDF, DOCX, and TXT files are supported")
 
     file_bytes = await file.read()
     max_bytes = settings.MAX_UPLOAD_SIZE_MB * 1024 * 1024
     if len(file_bytes) > max_bytes:
         raise HTTPException(status_code=413, detail=f"File too large (max {settings.MAX_UPLOAD_SIZE_MB}MB)")
 
-    # Magic-byte verification — see notes on upload_document above.
     declared = (content_type or "").lower()
     if "pdf" in declared and not verify_file_signature(file_bytes, "application/pdf"):
         raise HTTPException(415, "File contents do not match the declared PDF type.")
-    if "image/png" in declared and not verify_file_signature(file_bytes, "image/png"):
-        raise HTTPException(415, "File contents do not match the declared PNG type.")
-    if ("image/jpeg" in declared or "image/jpg" in declared) and not verify_file_signature(file_bytes, "image/jpeg"):
-        raise HTTPException(415, "File contents do not match the declared JPEG type.")
 
     safe_name = _sanitize_filename(file.filename or "evidence.txt")
     rel_path = f"{tenant_id}/evidence/{uuid.uuid4().hex}_{safe_name}"

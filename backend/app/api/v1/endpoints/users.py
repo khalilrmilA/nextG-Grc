@@ -32,6 +32,7 @@ class CreateAuditorRequest(BaseModel):
     first_name: str
     last_name: str
     expires_at: datetime | None = None
+    temporary_password: str | None = None
 
 
 class UserResponse(BaseModel):
@@ -78,7 +79,7 @@ async def create_auditor(
     if existing.scalar_one_or_none():
         raise HTTPException(status_code=400, detail="Email already registered")
 
-    temporary_password = _generate_auditor_password()
+    temporary_password = body.temporary_password or _generate_auditor_password()
     auditor = User(
         tenant_id=tenant_id,
         email=body.email,

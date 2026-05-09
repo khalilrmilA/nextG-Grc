@@ -614,11 +614,25 @@ function SecurityTab() {
     { id: "2", device: "Safari / macOS",       location: "Lyon, FR",   ip: "10.0.0.5",    current: false, last: "2 days ago"  },
   ]);
   const [saved, setSaved] = useState(false);
-  function savePassword() {
+  const [pwError, setPwError] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  async function savePassword() {
     if (!pw.current || !pw.next || pw.next !== pw.confirm) return;
-    setSaved(true);
-    setPw({ current: "", next: "", confirm: "" });
-    setTimeout(() => setSaved(false), 2500);
+    setSaving(true);
+    setPwError("");
+    try {
+      const { authApi } = await import("../api/endpoints");
+      await authApi.changePassword(pw.current, pw.next);
+      setSaved(true);
+      setPw({ current: "", next: "", confirm: "" });
+      setTimeout(() => setSaved(false), 2500);
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
+      setPwError(msg || "Failed to update password. Please try again.");
+    } finally {
+      setSaving(false);
+    }
   }
 
   return (
@@ -652,11 +666,14 @@ function SecurityTab() {
             <p className="text-xs text-red-500 mt-1 flex items-center gap-1"><AlertTriangle className="w-3 h-3" /> {t("settings.passwords_no_match")}</p>
           )}
         </Field>
+        {pwError && (
+          <p className="text-xs text-red-500 flex items-center gap-1"><AlertTriangle className="w-3 h-3" /> {pwError}</p>
+        )}
         <div className="flex items-center justify-end gap-3 pt-2">
           {saved && <span className="flex items-center gap-1.5 text-sm text-green-600"><Check className="w-4 h-4" /> {t("settings.password_updated")}</span>}
-          <button type="button" onClick={savePassword}
-            className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors">
-            {t("settings.update_password")}
+          <button type="button" onClick={savePassword} disabled={saving}
+            className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50">
+            {saving ? "Saving…" : t("settings.update_password")}
           </button>
         </div>
       </div>
