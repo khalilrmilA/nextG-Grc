@@ -97,17 +97,18 @@ export default function LoginPage() {
             accessible_modules: profile.accessible_modules,
           });
         }
-      } catch {/* best-effort */}
+      } catch {/* best-effort profile enrichment — token already valid */}
 
       redirectAfterLogin(authSession.getUser()?.role);
-    } catch {
-      // Offline fallback for known accounts
-      const demoUser = DEMO_USERS[email.trim().toLowerCase()];
-      if (demoUser && (password === "demo123" || password === "super123")) {
-        authSession.login(demoUser);
-        redirectAfterLogin(demoUser.role);
-      } else {
+    } catch (err: unknown) {
+      authSession.logout();
+      const status = (err as { response?: { status?: number } })?.response?.status;
+      if (status === 401 || status === 403) {
         setError("Invalid email or password. Please try again.");
+      } else if (status === 422) {
+        setError("Invalid request. Please check your input.");
+      } else {
+        setError("Unable to sign in. Please try again.");
       }
     } finally {
       setLoading(false);

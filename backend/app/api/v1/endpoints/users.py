@@ -257,10 +257,10 @@ async def unassign_auditor(
     await db.commit()
 
 
-# ── General user management (TENANT_ADMIN only) ────────────────────────────────
-
+# ── General user management ────────────────────────────────────────────────────
+# CISO is intentionally excluded — only SUPER_ADMIN can promote to CISO
 _ASSIGNABLE_ROLES = {
-    UserRole.CISO, UserRole.RISK_MANAGER,
+    UserRole.RISK_MANAGER,
     UserRole.COMPLIANCE_MANAGER, UserRole.AUDITOR, UserRole.POLICY_MANAGER,
     UserRole.VENDOR_MANAGER, UserRole.CONTROL_OWNER, UserRole.VIEWER,
 }
