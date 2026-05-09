@@ -96,11 +96,6 @@ const SIZES = [
 
 const FRAMEWORKS = ["ISO 27001:2022", "SOC 2", "NIST CSF 2.0", "GDPR", "HIPAA", "PCI DSS 4.0", "NIST 800-53"];
 
-// ── Helpers ────────────────────────────────────────────────────────────────────
-
-function slugify(s: string) {
-  return s.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "");
-}
 
 // ── Render markdown-like output ────────────────────────────────────────────────
 

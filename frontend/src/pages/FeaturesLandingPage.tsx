@@ -5,7 +5,7 @@ import PublicNav from "../components/landing/PublicNav";
 import {
   ArrowRight, CheckCircle, AlertTriangle, ClipboardList, FileText,
   Building2, BarChart2, BookOpen, Zap, Shield, ChevronRight,
-  Database, Globe, Lock, Cpu, Bell, RefreshCw, Download,
+  Database, Globe, Cpu, Bell, RefreshCw, Download,
   Users, Activity, TrendingUp, GitBranch, Upload, Link2,
 } from "lucide-react";
 
@@ -235,7 +235,7 @@ export default function FeaturesLandingPage() {
         <div className="max-w-5xl mx-auto grid grid-cols-2 md:grid-cols-4 gap-8 text-center">
           {[
             { value: "38",     label: "Platform pages" },
-            { value: "76+",    label: "Compliance frameworks" },
+            { value: "70+",    label: "Compliance frameworks" },
             { value: "3,500+", label: "Pre-mapped controls" },
             { value: "29",     label: "AI document types" },
           ].map((s, i) => (

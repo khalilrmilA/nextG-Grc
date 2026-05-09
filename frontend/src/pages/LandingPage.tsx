@@ -111,7 +111,7 @@ function CountUp({ to, suffix = "", prefix = "" }: { to: number; suffix?: string
 // ── Data ─────────────────────────────────────────────────────────────────────
 const FEATURES = [
   { icon: AlertTriangle, title: "Risk Management",       desc: "Interactive 5×5 heatmaps, risk registers, Monte Carlo simulations, and automated likelihood/impact scoring.", color: "from-red-500 to-rose-600", bg: "bg-red-50", text: "text-red-600" },
-  { icon: CheckCircle,   title: "Compliance Tracking",   desc: "Map controls to 76+ frameworks. Track implementation progress with segmented dashboards and AI gap analysis.", color: "from-blue-500 to-blue-700", bg: "bg-blue-50", text: "text-blue-600" },
+  { icon: CheckCircle,   title: "Compliance Tracking",   desc: "Map controls to 70+ frameworks. Track implementation progress with segmented dashboards and AI gap analysis.", color: "from-blue-500 to-blue-700", bg: "bg-blue-50", text: "text-blue-600" },
   { icon: ClipboardList, title: "Audit Management",      desc: "Plan, execute, and report on internal and external audits. Assign auditors, track findings, generate PDF reports.", color: "from-purple-500 to-indigo-600", bg: "bg-purple-50", text: "text-purple-600" },
   { icon: FileText,      title: "Policy Lifecycle",      desc: "Draft, version, approve, publish, and collect employee attestations — end-to-end policy governance in one place.", color: "from-orange-500 to-amber-600", bg: "bg-orange-50", text: "text-orange-600" },
   { icon: Building2,     title: "Vendor Risk (TPRM)",    desc: "Onboard, tier, and continuously monitor third-party vendors with AI-powered contract review and prescreen questionnaires.", color: "from-indigo-500 to-violet-600", bg: "bg-indigo-50", text: "text-indigo-600" },
@@ -143,7 +143,7 @@ const ROLES = [
 ];
 
 const HOW_IT_WORKS = [
-  { step: "01", icon: BookOpen, title: "Connect your frameworks", desc: "Select from 76 built-in compliance frameworks or build a custom one. GRCEye pre-loads all controls, requirements, and crosswalk mappings automatically.", color: "from-blue-500 to-indigo-600" },
+  { step: "01", icon: BookOpen, title: "Connect your frameworks", desc: "Select from 70+ built-in compliance frameworks or build a custom one. GRCEye pre-loads all controls, requirements, and crosswalk mappings automatically.", color: "from-blue-500 to-indigo-600" },
   { step: "02", icon: Zap,      title: "Assess and close gaps",   desc: "Run AI-powered compliance assessments. The platform identifies gaps, suggests remediation steps, and links evidence across all mapped controls simultaneously.", color: "from-purple-500 to-pink-600" },
   { step: "03", icon: BarChart2,title: "Report with confidence",  desc: "Generate board-ready PDF reports, share a public Trust Center with customers, and give auditors scoped portal access — all without leaving the platform.", color: "from-teal-500 to-cyan-600" },
 ];
@@ -560,7 +560,7 @@ export default function LandingPage() {
           {/* Badge */}
           <div className="animate-fade-in-up inline-flex items-center gap-2 bg-white/80 border border-blue-200 text-blue-700 text-xs font-semibold px-4 py-1.5 rounded-full mb-6 shadow-sm backdrop-blur-sm">
             <Sparkles className="w-3.5 h-3.5 text-yellow-500 animate-pulse" />
-            76 compliance frameworks · On-premise AI · Zero data egress
+            70+ compliance frameworks · On-premise AI · Zero data egress
             <span className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse" />
           </div>
 
@@ -598,7 +598,7 @@ export default function LandingPage() {
           {/* Animated stats */}
           <div className="animate-fade-in-up animation-delay-1000 mt-14 grid grid-cols-3 gap-4 max-w-md mx-auto">
             {[
-              { value: 76, suffix: "+", label: "Frameworks" },
+              { value: 70, suffix: "+", label: "Frameworks" },
               { value: 3500, suffix: "+", label: "Controls mapped" },
               { value: 60, suffix: "%", label: "Faster audits" },
             ].map(s => (
@@ -835,7 +835,7 @@ export default function LandingPage() {
         <div className="relative max-w-5xl mx-auto">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-8 text-center text-white">
             {[
-              { icon: Shield,     to: 76,   suffix: "+", label: "Compliance frameworks",   sub: "pre-loaded controls & crosswalks" },
+              { icon: Shield,     to: 70,   suffix: "+", label: "Compliance frameworks",   sub: "pre-loaded controls & crosswalks" },
               { icon: Activity,   to: 3500, suffix: "+", label: "Pre-mapped controls",      sub: "across all frameworks" },
               { icon: TrendingUp, to: 60,   suffix: "%", label: "Faster audit prep",        sub: "vs. manual spreadsheet work" },
               { icon: Database,   to: 0,    suffix: "",  label: "Data sent to external AI", sub: "on-premise model, zero egress" },
@@ -899,7 +899,7 @@ export default function LandingPage() {
               <BookOpen className="w-3.5 h-3.5" /> Framework Library
             </div>
             <h2 className="text-2xl sm:text-3xl font-extrabold text-white mb-3">Built for every framework</h2>
-            <p className="text-slate-400 max-w-xl mx-auto">Pre-loaded with controls, crosswalk mappings, and evidence requirements for 76 global frameworks.</p>
+            <p className="text-slate-400 max-w-xl mx-auto">Pre-loaded with controls, crosswalk mappings, and evidence requirements for 70+ global frameworks.</p>
           </Reveal>
         </div>
 

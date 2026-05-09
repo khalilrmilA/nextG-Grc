@@ -4,7 +4,7 @@ import SupportChat from "../components/landing/SupportChat";
 import PublicNav from "../components/landing/PublicNav";
 import {
   ArrowRight, CheckCircle, Shield, AlertTriangle, ClipboardList,
-  FileText, Building2, Zap, Users, Globe, Heart, Cpu, Lock,
+  FileText, Building2, Users, Globe, Heart, Cpu, Lock,
   BarChart2, ChevronRight, Star,
 } from "lucide-react";
 
@@ -104,7 +104,7 @@ const INDUSTRIES = [
     points: [
       "Multi-tenant isolation for business units or subsidiaries",
       "9 built-in roles with granular module-level access",
-      "76 built-in frameworks with cross-walk mappings",
+      "70+ built-in frameworks with cross-walk mappings",
       "Webhook integrations with existing SIEM and ticketing tools",
       "Full activity log and audit trail for every user action",
     ],
@@ -342,7 +342,7 @@ export default function SolutionsPage() {
                   </div>
                   <ol className="space-y-3">
                     {[
-                      "Select your relevant frameworks from the 76 built-in library",
+                      "Select your relevant frameworks from the 70+ built-in library",
                       "Run an AI-powered gap assessment across all controls",
                       "Upload evidence and close gaps with AI remediation guidance",
                       "Assign auditors and manage findings in the audit module",

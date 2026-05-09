@@ -46,7 +46,7 @@ export default function AuditorPortalPage() {
       ]);
       if (data.status === "fulfilled") setAssignments(data.value);
       else setError("Failed to load assignments.");
-      if (policyData.status === "fulfilled") setPolicies(policyData.value.items ?? []);
+      if (policyData.status === "fulfilled") setPolicies(policyData.value ?? []);
     } finally {
       setLoading(false);
     }
