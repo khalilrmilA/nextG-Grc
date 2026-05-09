@@ -3,8 +3,8 @@ import { useTranslation } from "react-i18next";
 import { useSearchParams } from "react-router-dom";
 import {
   Settings, User, Bell, Shield, Key, Globe, Palette,
-  Building2, Save, Eye, EyeOff, Check, AlertTriangle,
-  Lock, Crown, Trash2, Plus, ChevronDown, Loader2, Zap,
+  Save, Eye, EyeOff, Check, AlertTriangle,
+  Lock, Crown, Trash2, Plus, Loader2, Zap,
   Sun, Moon, Monitor, RotateCcw,
 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -333,124 +333,6 @@ function ProfileTab() {
           <select value={form.language} onChange={e => setForm(f => ({ ...f, language: e.target.value }))}
             className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500">
             {["English", "Français", "العربية", "Español", "Deutsch"].map(l => <option key={l}>{l}</option>)}
-          </select>
-        </Field>
-      </div>
-      <SaveBar onSave={save} saved={saved} />
-    </div>
-  );
-}
-
-// ── Tab: Organization ─────────────────────────────────────────────────────────
-
-const PLAN_CARDS: { tier: PlanTier; price: string; features: string[] }[] = [
-  { tier: "free_trial",   price: "Free",       features: ["1 framework", "1 admin",   "Dashboard + Risks + Compliance", "14-day trial"] },
-  { tier: "starter",      price: "$6,000/yr",  features: ["3 frameworks", "10 admins", "All core modules", "25 integrations", "Email support"] },
-  { tier: "professional", price: "$20,000/yr", features: ["10 frameworks", "50 admins", "All modules incl. Vendors", "75 integrations", "Priority support"] },
-  { tier: "enterprise",   price: "Custom",     features: ["Unlimited frameworks", "Unlimited admins", "White-label", "Custom integrations", "Dedicated CSM"] },
-];
-
-function OrganizationTab() {
-  const { t } = useTranslation();
-  const user = useAuthStore(u => u);
-  const currentPlan = user?.plan ?? "free_trial";
-  const [form, setForm] = useState({
-    name: user?.org ?? "Acme Corp", domain: "acme.com", industry: "Technology",
-    size: "100–499", country: "France", vatNumber: "FR12345678901",
-  });
-  const [saved, setSaved]   = useState(false);
-  const [showPlans, setShowPlans] = useState(false);
-  function save() { setSaved(true); setTimeout(() => setSaved(false), 2500); }
-
-  return (
-    <div className="space-y-6">
-      <div>
-        <h2 className="text-base font-semibold text-gray-900">{t("settings.org_title")}</h2>
-        <p className="text-sm text-gray-500 mt-0.5">{t("settings.org_subtitle")}</p>
-      </div>
-
-      {/* Current plan */}
-      <div className="p-4 bg-blue-50 border border-blue-100 rounded-xl">
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="text-sm font-semibold text-blue-800">{PLAN_FEATURES[currentPlan].label}</p>
-            <p className="text-xs text-blue-600 mt-0.5">
-              {PLAN_FEATURES[currentPlan].maxFrameworks === 999
-                ? t("settings.unlimited_frameworks")
-                : `${PLAN_FEATURES[currentPlan].maxFrameworks} ${t("settings.frameworks_label")}`} ·{" "}
-              {PLAN_FEATURES[currentPlan].maxAdmins === 999
-                ? t("settings.unlimited_admins")
-                : `${PLAN_FEATURES[currentPlan].maxAdmins} ${t("settings.admins_label")}`}
-            </p>
-          </div>
-          <button type="button" onClick={() => setShowPlans(v => !v)}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 text-white text-xs font-semibold rounded-lg hover:bg-blue-700 transition-colors">
-            {showPlans ? t("settings.hide_plans") : t("settings.change_plan")}
-            <ChevronDown className={`w-3 h-3 transition-transform ${showPlans ? "rotate-180" : ""}`} />
-          </button>
-        </div>
-
-        {showPlans && (
-          <div className="mt-4 grid grid-cols-2 gap-3">
-            {PLAN_CARDS.map(({ tier, price, features }) => {
-              const isCurrent = tier === currentPlan;
-              return (
-                <div key={tier}
-                  className={`p-3 rounded-xl border-2 transition-all ${isCurrent ? "border-blue-500 bg-white" : "border-gray-200 bg-white hover:border-blue-300"}`}>
-                  <div className="flex items-center justify-between mb-2">
-                    <p className="text-sm font-semibold text-gray-800 capitalize">{PLAN_FEATURES[tier].label}</p>
-                    {isCurrent && <span className="text-xs font-bold text-blue-600">{t("settings.current_plan_label")}</span>}
-                  </div>
-                  <p className="text-base font-bold text-gray-900 mb-2">{price}</p>
-                  <ul className="space-y-1">
-                    {features.map(f => (
-                      <li key={f} className="flex items-start gap-1.5 text-xs text-gray-600">
-                        <Check className="w-3 h-3 text-green-500 mt-0.5 flex-shrink-0" />
-                        {f}
-                      </li>
-                    ))}
-                  </ul>
-                  {!isCurrent && (
-                    <button type="button"
-                      className="mt-3 w-full py-1.5 bg-blue-600 text-white text-xs font-medium rounded-lg hover:bg-blue-700 transition-colors">
-                      {tier === "enterprise" ? t("settings.contact_sales") : t("settings.upgrade")}
-                    </button>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </div>
-
-      <Field label={t("settings.org_name_label")}>
-        <Input value={form.name} onChange={v => setForm(f => ({ ...f, name: v }))} />
-      </Field>
-      <div className="grid grid-cols-2 gap-4">
-        <Field label={t("settings.primary_domain")} hint={t("settings.domain_hint")}>
-          <Input value={form.domain} onChange={v => setForm(f => ({ ...f, domain: v }))} placeholder="company.com" />
-        </Field>
-        <Field label={t("settings.vat_number")}>
-          <Input value={form.vatNumber} onChange={v => setForm(f => ({ ...f, vatNumber: v }))} placeholder="FR00000000000" />
-        </Field>
-      </div>
-      <div className="grid grid-cols-3 gap-4">
-        <Field label={t("settings.industry")}>
-          <select value={form.industry} onChange={e => setForm(f => ({ ...f, industry: e.target.value }))}
-            className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500">
-            {["Technology", "Finance & Banking", "Healthcare", "Retail", "Manufacturing", "Government", "Education", "Other"].map(i => <option key={i}>{i}</option>)}
-          </select>
-        </Field>
-        <Field label={t("settings.company_size")}>
-          <select value={form.size} onChange={e => setForm(f => ({ ...f, size: e.target.value }))}
-            className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500">
-            {["1–9", "10–49", "50–99", "100–499", "500–999", "1000+"].map(s => <option key={s}>{s}</option>)}
-          </select>
-        </Field>
-        <Field label={t("settings.country")}>
-          <select value={form.country} onChange={e => setForm(f => ({ ...f, country: e.target.value }))}
-            className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500">
-            {["France", "United States", "United Kingdom", "Germany", "Saudi Arabia", "UAE", "Canada", "Other"].map(c => <option key={c}>{c}</option>)}
           </select>
         </Field>
       </div>
@@ -1444,20 +1326,19 @@ export default function SettingsPage() {
   const [searchParams] = useSearchParams();
   const [activeTab, setActiveTab] = useState<Tab>(() => {
     const t = searchParams.get("tab");
-    const valid: Tab[] = ["profile","organization","framework","notifications","security","ai-access","api","appearance","admin"];
+    const valid: Tab[] = ["profile","framework","notifications","security","ai-access","api","appearance","admin"];
     return valid.includes(t as Tab) ? (t as Tab) : "profile";
   });
 
   // Sync if URL changes
   useEffect(() => {
     const t = searchParams.get("tab");
-    const valid: Tab[] = ["profile","organization","framework","notifications","security","ai-access","api","appearance","admin"];
+    const valid: Tab[] = ["profile","framework","notifications","security","ai-access","api","appearance","admin"];
     if (t && valid.includes(t as Tab)) setActiveTab(t as Tab);
   }, [searchParams]);
 
   const ALL_TABS: { id: Tab; icon: React.ElementType; label: string; adminOnly?: boolean; superAdminOnly?: boolean }[] = [
     { id: "profile",       icon: User,      label: t("settings.profile")            },
-    { id: "organization",  icon: Building2, label: t("settings.organization")       },
     { id: "framework",     icon: Shield,    label: t("settings.framework")          },
     { id: "notifications", icon: Bell,      label: t("settings.notifications")      },
     { id: "security",      icon: Shield,    label: t("settings.security")           },
@@ -1480,7 +1361,6 @@ export default function SettingsPage() {
       return <LockedOverlay requiredPlan={PLAN_FEATURES[required].label} />;
     }
     if (tab === "profile")       return <ProfileTab />;
-    if (tab === "organization")  return <OrganizationTab />;
     if (tab === "framework")     return <FrameworkTab />;
     if (tab === "notifications") return <NotificationsTab />;
     if (tab === "security")      return <SecurityTab />;
@@ -1534,10 +1414,7 @@ export default function SettingsPage() {
               <p className="text-xs text-orange-500 mt-0.5">{t("settings.days_remaining", { days: user?.daysRemaining ?? 14 })}</p>
             )}
             {!isAdmin && plan !== "enterprise" && (
-              <button type="button" onClick={() => setActiveTab("organization")}
-                className="mt-2 text-xs font-medium text-blue-600 hover:text-blue-700">
-                {t("settings.upgrade_arrow")}
-              </button>
+              <p className="mt-2 text-xs text-gray-400">{PLAN_FEATURES[plan].label}</p>
             )}
           </div>
         </aside>
