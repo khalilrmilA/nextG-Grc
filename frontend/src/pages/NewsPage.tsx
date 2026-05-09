@@ -1,3 +1,4 @@
+import PublicFooter from "../components/landing/PublicFooter";
 import { ArrowRight, Zap, Calendar } from "lucide-react";
 import PublicNav from "../components/landing/PublicNav";
 import SEO from "../components/seo/SEO";
@@ -159,23 +160,7 @@ export default function NewsPage() {
       </section>
 
       {/* ── Footer ── */}
-      <footer className="bg-slate-900 text-slate-400 py-12 px-6">
-        <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4">
-          <div className="flex items-center gap-2">
-            <img src="/logo.png" alt="GRCEye" className="h-12 w-auto object-contain bg-white rounded-lg p-1.5" />
-          </div>
-          <div className="text-center">
-            <p className="text-xs text-slate-500">© 2026 GRCEye, Inc. All rights reserved.</p>
-            <p className="text-xs text-slate-600 mt-2">Powered by <span className="font-semibold">SilentWolf</span></p>
-          </div>
-          <div className="flex gap-5 text-sm">
-            <a href="#" className="hover:text-white transition-colors">Privacy</a>
-            <a href="#" className="hover:text-white transition-colors">Terms</a>
-            <a href="#" className="hover:text-white transition-colors">Security</a>
-            <a href="mailto:sales@grcplatform.io" className="hover:text-white transition-colors">Contact</a>
-          </div>
-        </div>
-      </footer>
+      <PublicFooter />
     </div>
   );
 }

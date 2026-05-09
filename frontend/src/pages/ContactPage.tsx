@@ -1,3 +1,4 @@
+import PublicFooter from "../components/landing/PublicFooter";
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { ArrowRight, Send, Mail, MessageSquare, Building2, CheckCircle, AlertCircle } from "lucide-react";
@@ -258,11 +259,7 @@ export default function ContactPage() {
       </section>
 
       {/* Footer */}
-      <footer className="border-t border-gray-100 bg-white">
-        <div className="max-w-7xl mx-auto px-6 py-8 text-center text-sm text-gray-500">
-          © {new Date().getFullYear()} GRCEye, Inc. All rights reserved. · Powered by SilentWolf
-        </div>
-      </footer>
+      <PublicFooter />
 
       <SupportChat />
     </div>
