@@ -43,7 +43,7 @@ export default function PublicFooter() {
             <ul className="space-y-2.5 text-sm">
               {[
                 { label: "Privacy Policy", href: "#"                         },
-                { label: "Terms of Service", href: "#"                       },
+                { label: "Terms of Service", href: "/terms"                   },
                 { label: "Security",       href: "#"                         },
                 { label: "Contact",        href: "/contact"                  },
                 { label: "Support",        href: "mailto:support@grceye.io"  },

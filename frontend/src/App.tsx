@@ -50,6 +50,7 @@ import ContractCollaborationPage from "./pages/ContractCollaborationPage";
 import VendorCollaborationPage from "./pages/VendorCollaborationPage";
 import EvidenceUploadPage from "./pages/EvidenceUploadPage";
 import ContactPage from "./pages/ContactPage";
+import TermsPage from "./pages/TermsPage";
 
 function PrivateRoute({ children, requiredModule }: { readonly children: React.ReactNode; requiredModule?: string }) {
   const user = useAuthStore((u) => u);
@@ -114,6 +115,7 @@ export default function App() {
       <Route path="/news" element={<NewsPage />} />
       <Route path="/faq" element={<FAQPage />} />
       <Route path="/contact" element={<ContactPage />} />
+      <Route path="/terms" element={<TermsPage />} />
       <Route path="/login" element={<PublicOnlyRoute><LoginPage /></PublicOnlyRoute>} />
       <Route path="/register" element={<PublicOnlyRoute><RegisterPage /></PublicOnlyRoute>} />
       <Route path="/super-admin" element={<SuperAdminRoute><SuperAdminPage /></SuperAdminRoute>} />
