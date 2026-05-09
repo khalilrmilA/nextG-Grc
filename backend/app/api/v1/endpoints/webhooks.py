@@ -62,7 +62,7 @@ async def list_webhooks(
 async def create_webhook(
     body: WebhookConfig,
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(require_roles(UserRole.TENANT_ADMIN, UserRole.CISO)),
+    _: User = Depends(require_roles(UserRole.CISO)),
     tenant_id: str = Depends(get_tenant_id),
 ):
     # Validate URL — reject SSRF targets (private IPs, localhost, non-http schemes).
@@ -93,7 +93,7 @@ async def create_webhook(
 async def delete_webhook(
     webhook_id: str,
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(require_roles(UserRole.TENANT_ADMIN, UserRole.CISO)),
+    _: User = Depends(require_roles(UserRole.CISO)),
     tenant_id: str = Depends(get_tenant_id),
 ):
     r = await db.execute(select(Tenant).where(Tenant.id == tenant_id))
@@ -111,7 +111,7 @@ async def delete_webhook(
 async def test_webhook(
     webhook_id: str,
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(require_roles(UserRole.TENANT_ADMIN, UserRole.CISO)),
+    _: User = Depends(require_roles(UserRole.CISO)),
     tenant_id: str = Depends(get_tenant_id),
 ):
     """Send a test event to a webhook."""

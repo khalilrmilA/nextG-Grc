@@ -62,7 +62,7 @@ async def get_trust_center_config(
 async def update_trust_center_config(
     body: TrustCenterConfig,
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(require_roles(UserRole.TENANT_ADMIN, UserRole.CISO)),
+    _: User = Depends(require_roles(UserRole.CISO)),
     tenant_id: str = Depends(get_tenant_id),
 ):
     """Update trust center configuration."""

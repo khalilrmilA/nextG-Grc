@@ -54,7 +54,7 @@ async def get_current_tenant(db: AsyncSession = Depends(get_db), _: User = Depen
 async def update_current_tenant(
     body: TenantUpdate,
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(require_roles(UserRole.TENANT_ADMIN, UserRole.CISO)),
+    _: User = Depends(require_roles(UserRole.CISO)),
     tenant_id: str = Depends(get_tenant_id),
 ):
     r = await db.execute(select(Tenant).where(Tenant.id == tenant_id))

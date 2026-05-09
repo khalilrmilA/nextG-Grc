@@ -20,7 +20,7 @@ import {
 // ── Mock data (offline / demo fallback) ──────────────────────────────────────
 
 const MOCK_USERS: SuperAdminUser[] = [
-  { id: "u1", email: "admin@demo.com",   first_name: "Admin",  last_name: "Demo",   role: "tenant_admin", tenant_id: "t1", tenant_name: "Acme Corp", is_active: true,  created_at: "2026-01-01T00:00:00Z" },
+  { id: "u1", email: "admin@demo.com",   first_name: "Admin",  last_name: "Demo",   role: "ciso", tenant_id: "t1", tenant_name: "Acme Corp", is_active: true,  created_at: "2026-01-01T00:00:00Z" },
   { id: "u2", email: "ciso@demo.com",    first_name: "Sophie", last_name: "Martin", role: "ciso",         tenant_id: "t1", tenant_name: "Acme Corp", is_active: true,  created_at: "2026-01-02T00:00:00Z" },
   { id: "u3", email: "auditor@demo.com", first_name: "Jean",   last_name: "Dupont", role: "auditor",      tenant_id: "t2", tenant_name: "Beta GmbH", is_active: true,  created_at: "2026-01-05T00:00:00Z" },
   { id: "u4", email: "viewer@demo.com",  first_name: "Trial",  last_name: "User",   role: "viewer",       tenant_id: "t3", tenant_name: "Gamma Inc", is_active: false, created_at: "2026-02-10T00:00:00Z" },

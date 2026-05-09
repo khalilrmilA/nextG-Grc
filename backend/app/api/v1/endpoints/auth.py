@@ -201,7 +201,7 @@ async def register(request: Request, body: RegisterRequest, db: AsyncSession = D
         hashed_password=hash_password(body.password),
         first_name=body.first_name,
         last_name=body.last_name,
-        role=UserRole.TENANT_ADMIN,
+        role=UserRole.CISO,
         is_verified=False,
     )
     db.add(user)

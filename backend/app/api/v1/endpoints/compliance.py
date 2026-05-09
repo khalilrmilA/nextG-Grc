@@ -541,7 +541,7 @@ async def _build_assessment_detail(
 async def create_assessment(
     body: AssessmentCreate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_roles(UserRole.TENANT_ADMIN, UserRole.SUPER_ADMIN)),
+    current_user: User = Depends(require_roles(UserRole.CISO)),
     tenant_id: str = Depends(get_tenant_id),
 ) -> AssessmentDetailResponse:
     """Create a new compliance assessment. If an active assessment already exists for
@@ -600,7 +600,7 @@ async def create_assessment(
 async def list_assessments(
     pagination: PaginationParams = Depends(),
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(require_roles(UserRole.TENANT_ADMIN, UserRole.SUPER_ADMIN)),
+    _: User = Depends(require_roles(UserRole.CISO)),
     tenant_id: str = Depends(get_tenant_id),
 ) -> PaginatedAssessments:
     """List compliance assessments for the tenant, limited to selected frameworks."""
@@ -695,7 +695,7 @@ async def list_assessments(
 async def get_assessment(
     assessment_id: str,
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(require_roles(UserRole.TENANT_ADMIN, UserRole.SUPER_ADMIN)),
+    _: User = Depends(require_roles(UserRole.CISO)),
     tenant_id: str = Depends(get_tenant_id),
 ) -> AssessmentDetailResponse:
     """Get full assessment detail."""
@@ -715,7 +715,7 @@ async def get_assessment(
 async def delete_assessment(
     assessment_id: str,
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(require_roles(UserRole.TENANT_ADMIN, UserRole.SUPER_ADMIN)),
+    _: User = Depends(require_roles(UserRole.CISO)),
     tenant_id: str = Depends(get_tenant_id),
 ) -> None:
     """Delete a compliance assessment. Only draft assessments can be deleted."""
@@ -743,7 +743,7 @@ async def upload_document(
     file: UploadFile = File(...),
     document_type_key: str | None = Form(default=None),
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_roles(UserRole.TENANT_ADMIN, UserRole.SUPER_ADMIN)),
+    current_user: User = Depends(require_roles(UserRole.CISO)),
     tenant_id: str = Depends(get_tenant_id),
 ) -> UploadedDocumentResponse:
     """Upload a document to an assessment for compliance analysis."""
@@ -861,7 +861,7 @@ async def upload_document(
 async def analyze_assessment(
     assessment_id: str,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_roles(UserRole.TENANT_ADMIN, UserRole.SUPER_ADMIN)),
+    current_user: User = Depends(require_roles(UserRole.CISO)),
     tenant_id: str = Depends(get_tenant_id),
 ) -> dict:
     """
@@ -1016,7 +1016,7 @@ async def analyze_assessment(
 async def get_assessment_results(
     assessment_id: str,
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(require_roles(UserRole.TENANT_ADMIN, UserRole.SUPER_ADMIN)),
+    _: User = Depends(require_roles(UserRole.CISO)),
     tenant_id: str = Depends(get_tenant_id),
 ) -> AssessmentDetailResponse:
     """Get assessment results (alias for GET /assessments/{id})."""
@@ -1028,7 +1028,7 @@ async def update_control_assessment(
     control_assessment_id: str,
     body: ControlAssessmentUpdate,
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(require_roles(UserRole.TENANT_ADMIN, UserRole.SUPER_ADMIN)),
+    _: User = Depends(require_roles(UserRole.CISO)),
     tenant_id: str = Depends(get_tenant_id),
 ) -> ControlAssessmentResponse:
     """Manually override a control assessment status."""
@@ -1100,7 +1100,7 @@ async def update_control_assessment(
 async def get_document_checklist(
     assessment_id: str,
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(require_roles(UserRole.TENANT_ADMIN, UserRole.SUPER_ADMIN)),
+    _: User = Depends(require_roles(UserRole.CISO)),
     tenant_id: str = Depends(get_tenant_id),
 ) -> dict:
     """
@@ -1287,7 +1287,7 @@ async def act_on_gap_recommendation(
     gap_id: str,
     body: RecommendationRequest,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_roles(UserRole.TENANT_ADMIN, UserRole.SUPER_ADMIN)),
+    current_user: User = Depends(require_roles(UserRole.CISO)),
     tenant_id: str = Depends(get_tenant_id),
 ) -> dict:
     """
@@ -1361,7 +1361,7 @@ async def bulk_act_on_gaps(
     assessment_id: str,
     body: BulkRecommendationRequest,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_roles(UserRole.TENANT_ADMIN, UserRole.SUPER_ADMIN)),
+    current_user: User = Depends(require_roles(UserRole.CISO)),
     tenant_id: str = Depends(get_tenant_id),
 ) -> dict:
     """Accept or reject multiple gap recommendations at once."""
@@ -1535,7 +1535,7 @@ async def upload_control_evidence(
     control_assessment_id: str,
     file: UploadFile = File(...),
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_roles(UserRole.TENANT_ADMIN, UserRole.SUPER_ADMIN)),
+    current_user: User = Depends(require_roles(UserRole.CISO)),
     tenant_id: str = Depends(get_tenant_id),
 ) -> EvidenceResponse:
     """Upload evidence file for a specific control assessment."""

@@ -61,7 +61,7 @@ async def seed_demo_data():
             hashed_password=hash_password("demo123"),
             first_name="Admin",
             last_name="Demo",
-            role=UserRole.TENANT_ADMIN,
+            role=UserRole.CISO,
             is_active=True,
             is_verified=True,
         )

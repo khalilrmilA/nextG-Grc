@@ -32,7 +32,6 @@ export interface User extends BaseEntity {
 
 export type UserRole =
   | "super_admin"
-  | "tenant_admin"
   | "ciso"
   | "risk_manager"
   | "compliance_manager"

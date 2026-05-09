@@ -71,7 +71,7 @@ async def update_subscription(
             raise HTTPException(403, "Only platform admins can change subscription tier")
         sub.tier = SubscriptionTier(body.tier)
     if body.billing_cycle:
-        if current_user.role not in (UserRole.SUPER_ADMIN, UserRole.TENANT_ADMIN):
+        if current_user.role not in (UserRole.SUPER_ADMIN, UserRole.CISO):
             raise HTTPException(403, "Insufficient permissions")
         sub.billing_cycle = body.billing_cycle
     await db.commit(); await db.refresh(sub)

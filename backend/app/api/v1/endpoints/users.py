@@ -55,7 +55,7 @@ class CreateAuditorResponse(UserResponse):
 @router.get("", response_model=list[UserResponse])
 async def list_users(
     db: Annotated[AsyncSession, Depends(get_db)],
-    _: Annotated[User, Depends(require_roles(UserRole.TENANT_ADMIN, UserRole.CISO))],
+    _: Annotated[User, Depends(require_roles(UserRole.CISO))],
     tenant_id: Annotated[str, Depends(get_tenant_id)],
 ):
     """List all users in the tenant."""
@@ -68,7 +68,7 @@ async def list_users(
 async def create_auditor(
     body: CreateAuditorRequest,
     db: Annotated[AsyncSession, Depends(get_db)],
-    current_user: Annotated[User, Depends(require_roles(UserRole.TENANT_ADMIN))],
+    current_user: Annotated[User, Depends(require_roles(UserRole.CISO))],
     tenant_id: Annotated[str, Depends(get_tenant_id)],
 ):
     """Create an auditor account within the tenant. The server generates a strong
@@ -109,7 +109,7 @@ async def create_auditor(
 @router.get("/auditors", response_model=list[UserResponse])
 async def list_auditors(
     db: Annotated[AsyncSession, Depends(get_db)],
-    _: Annotated[User, Depends(require_roles(UserRole.TENANT_ADMIN, UserRole.CISO))],
+    _: Annotated[User, Depends(require_roles(UserRole.CISO))],
     tenant_id: Annotated[str, Depends(get_tenant_id)],
 ):
     """List all auditor accounts in the tenant."""
@@ -139,7 +139,7 @@ class AssignmentResponse(BaseModel):
 @router.get("/auditors/assignments", response_model=list[AssignmentResponse])
 async def list_assignments(
     db: Annotated[AsyncSession, Depends(get_db)],
-    _: Annotated[User, Depends(require_roles(UserRole.TENANT_ADMIN, UserRole.CISO))],
+    _: Annotated[User, Depends(require_roles(UserRole.CISO))],
     tenant_id: Annotated[str, Depends(get_tenant_id)],
 ):
     """List all auditor→assessment assignments for this tenant."""
@@ -169,7 +169,7 @@ async def list_assignments(
 async def assign_auditor(
     body: AssignAuditorRequest,
     db: Annotated[AsyncSession, Depends(get_db)],
-    current_user: Annotated[User, Depends(require_roles(UserRole.TENANT_ADMIN, UserRole.CISO))],
+    current_user: Annotated[User, Depends(require_roles(UserRole.CISO))],
     tenant_id: Annotated[str, Depends(get_tenant_id)],
 ):
     """Assign an auditor to a compliance assessment."""
@@ -218,7 +218,7 @@ async def assign_auditor(
 async def delete_auditor(
     auditor_id: str,
     db: Annotated[AsyncSession, Depends(get_db)],
-    _: Annotated[User, Depends(require_roles(UserRole.TENANT_ADMIN))],
+    _: Annotated[User, Depends(require_roles(UserRole.CISO))],
     tenant_id: Annotated[str, Depends(get_tenant_id)],
 ):
     """Permanently delete an auditor account and all their assignments."""
@@ -246,7 +246,7 @@ async def delete_auditor(
 async def unassign_auditor(
     assignment_id: str,
     db: Annotated[AsyncSession, Depends(get_db)],
-    _: Annotated[User, Depends(require_roles(UserRole.TENANT_ADMIN, UserRole.CISO))],
+    _: Annotated[User, Depends(require_roles(UserRole.CISO))],
     tenant_id: Annotated[str, Depends(get_tenant_id)],
 ):
     """Remove an auditor assignment."""
@@ -260,7 +260,7 @@ async def unassign_auditor(
 # ── General user management (TENANT_ADMIN only) ────────────────────────────────
 
 _ASSIGNABLE_ROLES = {
-    UserRole.TENANT_ADMIN, UserRole.CISO, UserRole.RISK_MANAGER,
+    UserRole.CISO, UserRole.RISK_MANAGER,
     UserRole.COMPLIANCE_MANAGER, UserRole.AUDITOR, UserRole.POLICY_MANAGER,
     UserRole.VENDOR_MANAGER, UserRole.CONTROL_OWNER, UserRole.VIEWER,
 }
@@ -288,7 +288,7 @@ class CreateUserRequest(BaseModel):
 async def create_user(
     body: CreateUserRequest,
     db: Annotated[AsyncSession, Depends(get_db)],
-    _: Annotated[User, Depends(require_roles(UserRole.TENANT_ADMIN))],
+    _: Annotated[User, Depends(require_roles(UserRole.CISO))],
     tenant_id: Annotated[str, Depends(get_tenant_id)],
 ):
     """Create a user with any assignable role. Server generates a temporary password."""
@@ -332,7 +332,7 @@ async def update_user(
     user_id: str,
     body: UpdateUserPayload,
     db: Annotated[AsyncSession, Depends(get_db)],
-    current_user: Annotated[User, Depends(require_roles(UserRole.TENANT_ADMIN))],
+    current_user: Annotated[User, Depends(require_roles(UserRole.CISO))],
     tenant_id: Annotated[str, Depends(get_tenant_id)],
 ):
     """Update a user's role or active status within the tenant."""
@@ -364,7 +364,7 @@ async def update_user(
 async def reset_user_password(
     user_id: str,
     db: Annotated[AsyncSession, Depends(get_db)],
-    _: Annotated[User, Depends(require_roles(UserRole.TENANT_ADMIN))],
+    _: Annotated[User, Depends(require_roles(UserRole.CISO))],
     tenant_id: Annotated[str, Depends(get_tenant_id)],
 ):
     """Reset a user's password and return the new temporary password once."""
@@ -386,7 +386,7 @@ async def reset_user_password(
 async def delete_user(
     user_id: str,
     db: Annotated[AsyncSession, Depends(get_db)],
-    current_user: Annotated[User, Depends(require_roles(UserRole.TENANT_ADMIN))],
+    current_user: Annotated[User, Depends(require_roles(UserRole.CISO))],
     tenant_id: Annotated[str, Depends(get_tenant_id)],
 ):
     """Delete any user in the tenant except self and super admins."""

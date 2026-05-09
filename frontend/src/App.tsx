@@ -34,7 +34,6 @@ import SettingsPage from "./pages/SettingsPage";
 import HelpPage from "./pages/HelpPage";
 import PolicyGeneratorPage from "./pages/PolicyGeneratorPage";
 import SuperAdminPage from "./pages/SuperAdminPage";
-import CompanyAdminPage from "./pages/CompanyAdminPage";
 import IncidentsPage from "./pages/IncidentsPage";
 import VulnerabilitiesPage from "./pages/VulnerabilitiesPage";
 import ThreatLibraryPage from "./pages/ThreatLibraryPage";
@@ -171,7 +170,6 @@ export default function App() {
         <Route path="cheat" element={<CheatSheetPage />} />
         <Route path="settings" element={<SettingsPage />} />
         <Route path="help" element={<HelpPage />} />
-        <Route path="company-admin" element={<CompanyAdminPage />} />
       </Route>
     </Routes>
   );

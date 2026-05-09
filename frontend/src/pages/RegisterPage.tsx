@@ -138,7 +138,7 @@ export default function RegisterPage() {
       authSession.login({
         email: form.email,
         name: `${form.first_name} ${form.last_name}`.trim(),
-        role: "admin",
+        role: "ciso",
         plan: "free_trial",
         daysRemaining: 14,
         org: form.organization_name,

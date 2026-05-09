@@ -24,7 +24,7 @@ from app.models.contract_collaboration import ContractCollaboration
 
 async def get_recipients_for_tenant(db: AsyncSession, tenant_id: str) -> list[User]:
     """Get users who should receive CISO-type notifications (CISO, admin roles).
-    Roles are stored as uppercase enum names in the DB (e.g. 'CISO', 'TENANT_ADMIN').
+    Roles are stored as uppercase enum names in the DB (e.g. 'CISO', 'RISK_MANAGER').
     """
     from sqlalchemy import or_
     from sqlalchemy import String, cast
@@ -33,8 +33,8 @@ async def get_recipients_for_tenant(db: AsyncSession, tenant_id: str) -> list[Us
             User.tenant_id == tenant_id,
             User.is_active == True,  # noqa: E712
             or_(
-                cast(User.role, String).in_(["CISO", "TENANT_ADMIN", "RISK_MANAGER", "COMPLIANCE_MANAGER"]),
-                User.role.in_([UserRole.CISO, UserRole.TENANT_ADMIN, UserRole.RISK_MANAGER, UserRole.COMPLIANCE_MANAGER]),
+                cast(User.role, String).in_(["CISO", "RISK_MANAGER", "COMPLIANCE_MANAGER"]),
+                User.role.in_([UserRole.CISO, UserRole.RISK_MANAGER, UserRole.COMPLIANCE_MANAGER]),
             )
         )
     )
@@ -259,7 +259,7 @@ async def check_pending_ciso_contracts(db: AsyncSession) -> int:
         cisos = [u for u in recipients if u.role == UserRole.CISO]
         if not cisos:
             # If no CISO, notify admins
-            cisos = [u for u in recipients if u.role == UserRole.TENANT_ADMIN]
+            cisos = [u for u in recipients if u.role == UserRole.CISO]
 
         for user in cisos:
             if not await notification_exists(db, user.id, NotificationType.VENDOR_ALERT, contract.id, within_days=3):
@@ -381,7 +381,7 @@ async def check_action_plan_deadlines(db: AsyncSession) -> int:
 
             recipients = await get_recipients_for_tenant(db, collab.tenant_id)
             # Only notify CISO / admins
-            cisos = [u for u in recipients if u.role in (UserRole.CISO, UserRole.TENANT_ADMIN)]
+            cisos = [u for u in recipients if u.role in (UserRole.CISO, UserRole.CISO)]
             for user in cisos:
                 if not await notification_exists(db, user.id, NotificationType.VENDOR_ALERT, entity_id, within_days=3):
                     await create_notification(

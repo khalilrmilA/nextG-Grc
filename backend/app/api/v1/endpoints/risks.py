@@ -122,7 +122,7 @@ async def create_risk(
     tenant_id: str = Depends(get_tenant_id),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_roles(
-        UserRole.TENANT_ADMIN, UserRole.CISO, UserRole.RISK_MANAGER
+        UserRole.CISO, UserRole.RISK_MANAGER
     )),
 ):
     # Auto-calculate severity
@@ -170,7 +170,7 @@ async def update_risk(
     body: RiskUpdate,
     tenant_id: str = Depends(get_tenant_id),
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(require_roles(UserRole.TENANT_ADMIN, UserRole.CISO, UserRole.RISK_MANAGER)),
+    _: User = Depends(require_roles(UserRole.CISO, UserRole.RISK_MANAGER)),
 ):
     result = await db.execute(
         select(Risk).where(Risk.id == risk_id, Risk.tenant_id == tenant_id)
@@ -190,7 +190,7 @@ async def delete_risk(
     risk_id: str,
     tenant_id: str = Depends(get_tenant_id),
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(require_roles(UserRole.TENANT_ADMIN, UserRole.CISO)),
+    _: User = Depends(require_roles(UserRole.CISO)),
 ):
     result = await db.execute(
         select(Risk).where(Risk.id == risk_id, Risk.tenant_id == tenant_id)

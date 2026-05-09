@@ -926,7 +926,7 @@ export default function CompanyAdminPage() {
   const user = useAuthStore(u => u);
   const [tab, setTab] = useState<"users" | "auditors">("users");
 
-  if (!user || user.role !== "admin") return <Navigate to="/dashboard" replace />;
+  if (!user || user.role !== "ciso") return <Navigate to="/dashboard" replace />;
 
   const tabs = [
     { id: "users"    as const, label: "All Users",  icon: <Users className="w-4 h-4" /> },

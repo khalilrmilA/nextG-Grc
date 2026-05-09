@@ -1437,7 +1437,7 @@ function planAllows(userPlan: PlanTier, required: PlanTier): boolean {
 export default function SettingsPage() {
   const { t } = useTranslation();
   const user    = useAuthStore(u => u);
-  const isAdmin = user?.role === "admin";
+  const isAdmin = user?.role === "ciso";
   const isSuperAdmin = user?.role === "super_admin";
   const plan    = user?.plan ?? "free_trial";
 

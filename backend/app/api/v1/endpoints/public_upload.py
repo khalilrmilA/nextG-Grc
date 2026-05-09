@@ -31,7 +31,7 @@ ALLOWED_MIME = {
 }
 MAX_FILE_SIZE = settings.MAX_UPLOAD_SIZE_MB * 1024 * 1024
 
-_NOTIFY_ROLES = {UserRole.TENANT_ADMIN, UserRole.CISO}
+_NOTIFY_ROLES = {UserRole.CISO, UserRole.CISO}
 
 
 async def _notify_tenant_admins(
@@ -47,7 +47,7 @@ async def _notify_tenant_admins(
         select(User).where(
             User.tenant_id == tenant_id,
             User.is_active == True,  # noqa: E712
-            User.role.in_(["tenant_admin", "ciso"]),
+            User.role.in_(["ciso", "ciso"]),
         )
     )
     for user in result.scalars().all():

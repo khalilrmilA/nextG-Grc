@@ -8,7 +8,6 @@ from app.core.database import Base
 
 class UserRole(str, enum.Enum):
     SUPER_ADMIN = "super_admin"       # Platform admin (internal)
-    TENANT_ADMIN = "tenant_admin"     # Org admin
     CISO = "ciso"                     # Chief Information Security Officer
     RISK_MANAGER = "risk_manager"     # Risk management team
     COMPLIANCE_MANAGER = "compliance_manager"

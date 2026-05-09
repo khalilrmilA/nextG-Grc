@@ -77,7 +77,7 @@ async def create_exception(body: SECreate, db: AsyncSession = Depends(get_db), u
 async def approve_exception(
     eid: str,
     db: AsyncSession = Depends(get_db),
-    user: User = Depends(require_roles(UserRole.TENANT_ADMIN, UserRole.CISO)),
+    user: User = Depends(require_roles(UserRole.CISO)),
     tenant_id: str = Depends(get_tenant_id),
 ):
     """Approve a pending security exception. Four-eyes principle: requester
@@ -98,7 +98,7 @@ async def reject_exception(
     eid: str,
     reason: str = "",
     db: AsyncSession = Depends(get_db),
-    user: User = Depends(require_roles(UserRole.TENANT_ADMIN, UserRole.CISO)),
+    user: User = Depends(require_roles(UserRole.CISO)),
     tenant_id: str = Depends(get_tenant_id),
 ):
     r = await db.execute(select(SecurityException).where(SecurityException.id == eid, SecurityException.tenant_id == tenant_id))
@@ -130,7 +130,7 @@ async def create_acceptance(body: RACreate, db: AsyncSession = Depends(get_db), 
 async def approve_acceptance(
     aid: str,
     db: AsyncSession = Depends(get_db),
-    user: User = Depends(require_roles(UserRole.TENANT_ADMIN, UserRole.CISO)),
+    user: User = Depends(require_roles(UserRole.CISO)),
     tenant_id: str = Depends(get_tenant_id),
 ):
     """Approve a risk acceptance. Four-eyes principle: requester cannot

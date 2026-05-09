@@ -15,7 +15,7 @@ import {
   LayoutDashboard, AlertTriangle, CheckSquare, BookOpen,
   ClipboardList, FileText, Building2, LogOut, Shield,
   ChevronRight, Bell, Settings, HelpCircle, Lock,
-  Crown, Briefcase, X, Trash2, Wand2, Menu,
+  Crown, X, Trash2, Wand2, Menu,
   AlertCircle, Info, ShieldAlert, ClipboardCheck, RefreshCw,
 } from "lucide-react";
 
@@ -72,7 +72,7 @@ const PAGE_LABELS: Record<string, string> = {
 
 function roleIcon(role: string) {
   if (role === "super_admin") return { Icon: Crown,         color: "from-yellow-500 to-orange-500" };
-  if (role === "admin")       return { Icon: Crown,         color: "from-yellow-500 to-orange-500" };
+  if (role === "ciso")       return { Icon: Crown,         color: "from-yellow-500 to-orange-500" };
   return                             { Icon: Shield,         color: "from-blue-500 to-blue-600"    };
 }
 
@@ -382,7 +382,7 @@ export default function Layout() {
 
   const { primaryFramework } = useFramework();
   const plan        = user?.plan ?? "free_trial";
-  const isAdmin     = user?.role === "admin";
+  const isAdmin     = user?.role === "ciso";
   const isSuperAdmin = user?.role === "super_admin";
   // Everyone except auditors gets full access to all modules
   const isUser      = user?.role !== "auditor" && user?.role !== "super_admin";
@@ -538,26 +538,6 @@ export default function Layout() {
           ))}
         </nav>
 
-        {/* Company Admin Panel — only for admin role */}
-        {user?.role === "admin" && (
-          <div className="px-3 pb-2">
-            <NavLink
-              to="/company-admin"
-              className={({ isActive }) =>
-                `flex items-center gap-3 px-3 py-2.5 w-full rounded-xl text-sm font-medium transition-all ${
-                  isActive ? sc.navActive : sc.navItem
-                }`
-              }
-            >
-              {({ isActive }) => (
-                <>
-                  <Briefcase className={`w-4 h-4 flex-shrink-0 ${isActive ? sc.navIconActive : sc.navIcon}`} />
-                  <span className="flex-1">Admin Panel</span>
-                </>
-              )}
-            </NavLink>
-          </div>
-        )}
 
         {/* Bottom actions */}
         <div className={`px-3 pb-4 pt-3 border-t ${sc.divider} space-y-0.5`}>

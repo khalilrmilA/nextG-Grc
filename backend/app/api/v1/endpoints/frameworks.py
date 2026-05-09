@@ -266,7 +266,7 @@ Return ONLY valid JSON in this exact format:
 async def build_custom_framework(
     body: BuildCustomFrameworkRequest,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_roles(UserRole.TENANT_ADMIN, UserRole.CISO)),
+    current_user: User = Depends(require_roles(UserRole.CISO)),
     tenant_id: str = Depends(get_tenant_id),
 ):
     """Create a new custom framework with the provided list of controls."""
@@ -453,7 +453,7 @@ async def clone_framework(
     framework_id: str,
     body: CloneFrameworkRequest = CloneFrameworkRequest(),
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(require_roles(UserRole.TENANT_ADMIN, UserRole.CISO)),
+    _: User = Depends(require_roles(UserRole.CISO)),
     tenant_id: str = Depends(get_tenant_id),
 ):
     """Fork any framework (built-in or custom) into a tenant-owned editable copy.
@@ -536,7 +536,7 @@ async def update_framework(
     framework_id: str,
     body: FrameworkUpdate,
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(require_roles(UserRole.TENANT_ADMIN, UserRole.CISO)),
+    _: User = Depends(require_roles(UserRole.CISO)),
     tenant_id: str = Depends(get_tenant_id),
 ):
     """Update tenant-owned framework metadata (name, short_name, etc.)."""
@@ -564,7 +564,7 @@ async def update_framework(
 async def create_framework(
     body: FrameworkCreate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_roles(UserRole.TENANT_ADMIN, UserRole.CISO)),
+    current_user: User = Depends(require_roles(UserRole.CISO)),
     tenant_id: str = Depends(get_tenant_id),
 ):
     """Create a custom (tenant-owned) framework."""
@@ -599,7 +599,7 @@ async def add_control(
     framework_id: str,
     body: ControlCreate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_roles(UserRole.TENANT_ADMIN, UserRole.CISO)),
+    current_user: User = Depends(require_roles(UserRole.CISO)),
     tenant_id: str = Depends(get_tenant_id),
 ):
     """Add a control to a custom framework."""
@@ -633,7 +633,7 @@ async def update_control(
     control_db_id: str,
     body: ControlUpdate,
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(require_roles(UserRole.TENANT_ADMIN, UserRole.CISO)),
+    _: User = Depends(require_roles(UserRole.CISO)),
     tenant_id: str = Depends(get_tenant_id),
 ):
     """Update a control on a tenant-owned framework."""
@@ -681,7 +681,7 @@ async def update_control(
 async def delete_framework(
     framework_id: str,
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(require_roles(UserRole.TENANT_ADMIN, UserRole.CISO)),
+    _: User = Depends(require_roles(UserRole.CISO)),
     tenant_id: str = Depends(get_tenant_id),
 ):
     """Delete a tenant-owned custom framework and all its controls."""
@@ -695,7 +695,7 @@ async def delete_control(
     framework_id: str,
     control_db_id: str,
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(require_roles(UserRole.TENANT_ADMIN, UserRole.CISO)),
+    _: User = Depends(require_roles(UserRole.CISO)),
     tenant_id: str = Depends(get_tenant_id),
 ):
     """Delete a control from a tenant-owned framework."""
@@ -721,7 +721,7 @@ async def add_requirement(
     control_db_id: str,
     body: RequirementCreate,
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(require_roles(UserRole.TENANT_ADMIN, UserRole.CISO)),
+    _: User = Depends(require_roles(UserRole.CISO)),
     tenant_id: str = Depends(get_tenant_id),
 ):
     """Add a requirement to a control on a tenant-owned framework."""

@@ -114,7 +114,7 @@ def notify_risk_created(self, risk_id: str, created_by_user_id: str):
                     and_(
                         User.tenant_id == risk.tenant_id,
                         User.is_active == True,
-                        User.role.in_(["tenant_admin", "ciso", "risk_manager"]),
+                        User.role.in_(["ciso", "risk_manager"]),
                     )
                 )
             )
@@ -212,7 +212,7 @@ def notify_compliance_score_drop(
                     and_(
                         User.tenant_id == tenant_id,
                         User.is_active == True,
-                        User.role.in_(["tenant_admin", "ciso", "compliance_manager"]),
+                        User.role.in_(["ciso", "compliance_manager"]),
                     )
                 )
             )
@@ -276,7 +276,7 @@ def send_policy_review_reminders():
                         and_(
                             User.tenant_id == policy.tenant_id,
                             User.is_active == True,
-                            User.role.in_(["tenant_admin", "ciso", "policy_manager"]),
+                            User.role.in_(["ciso", "policy_manager"]),
                         )
                     )
                 )
@@ -335,7 +335,7 @@ def send_weekly_digest():
                 select(User).where(
                     and_(
                         User.is_active == True,
-                        User.role.in_(["tenant_admin", "ciso"]),
+                        User.role.in_(["ciso"]),
                     )
                 )
             )
@@ -544,7 +544,7 @@ def notify_ai_access_request(self, request_id: str, user_name: str, user_email: 
                     and_(
                         User.tenant_id == ai_request.tenant_id,
                         User.is_active == True,
-                        User.role.in_(["tenant_admin", "super_admin"]),
+                        User.role.in_(["super_admin"]),
                     )
                 )
             )

@@ -1,4 +1,4 @@
-export type UserRole = "super_admin" | "admin" | "user" | "auditor";
+export type UserRole = "super_admin" | "ciso" | "risk_manager" | "compliance_manager" | "auditor" | "policy_manager" | "vendor_manager" | "control_owner" | "viewer";
 export type PlanTier = "free_trial" | "starter" | "professional" | "enterprise";
 
 export interface AuthUser {
@@ -66,14 +66,14 @@ export const DEMO_USERS: Record<string, AuthUser> = {
   "admin@demo.com": {
     email: "admin@demo.com",
     name: "Admin Demo",
-    role: "admin",
+    role: "ciso",
     plan: "enterprise",
     org: "Acme Corp",
   },
   "ciso@demo.com": {
     email: "ciso@demo.com",
     name: "Sophie Martin",
-    role: "user",
+    role: "ciso",
     plan: "professional",
     org: "Acme Corp",
   },
@@ -94,7 +94,7 @@ export const DEMO_USERS: Record<string, AuthUser> = {
   "khalilrmila@nextstep-it.com": {
     email: "khalilrmila@nextstep-it.com",
     name: "Khalil Rmila",
-    role: "admin",
+    role: "ciso",
     plan: "enterprise",
     org: "NextStep IT",
   },
