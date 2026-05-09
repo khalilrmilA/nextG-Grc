@@ -1,5 +1,6 @@
 import { Calendar, ArrowUpRight } from "lucide-react";
 import PublicNav from "../components/landing/PublicNav";
+import SEO from "../components/seo/SEO";
 
 const BLOG_POSTS = [
   {
@@ -63,6 +64,13 @@ const CATEGORIES = ["All", "Compliance", "Risk Management", "Vendor Risk", "Audi
 export default function BlogPage() {
   return (
     <div className="min-h-screen bg-white text-gray-900">
+      <SEO
+        title="GRC Blog — NIS2, ISO 27001, Risk Quantification & More"
+        titleOverride
+        description="In-depth articles on GRC: NIS2 compliance, risk quantification, contract review with AI, auditor portals and how to build custom frameworks."
+        path="/blog"
+        keywords="GRC blog, NIS2 article, risk quantification guide, ISO 27001 tips, audit blog, compliance articles"
+      />
       {/* ── Nav ── */}
       <PublicNav links={[
         { to: "/features-landing", label: "Features" },

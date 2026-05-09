@@ -3,6 +3,7 @@ import ReactDOM from "react-dom/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter } from "react-router-dom";
 import { I18nextProvider } from "react-i18next";
+import { HelmetProvider } from "react-helmet-async";
 import App from "./App";
 import { FrameworkProvider } from "./context/FrameworkContext";
 import "./index.css";
@@ -59,15 +60,17 @@ class ErrorBoundary extends React.Component<
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
     <ErrorBoundary>
-      <I18nextProvider i18n={i18n}>
-        <QueryClientProvider client={queryClient}>
-          <BrowserRouter>
-            <FrameworkProvider>
-              <App />
-            </FrameworkProvider>
-          </BrowserRouter>
-        </QueryClientProvider>
-      </I18nextProvider>
+      <HelmetProvider>
+        <I18nextProvider i18n={i18n}>
+          <QueryClientProvider client={queryClient}>
+            <BrowserRouter>
+              <FrameworkProvider>
+                <App />
+              </FrameworkProvider>
+            </BrowserRouter>
+          </QueryClientProvider>
+        </I18nextProvider>
+      </HelmetProvider>
     </ErrorBoundary>
   </React.StrictMode>
 );

@@ -2,6 +2,7 @@ import { Link } from "react-router-dom";
 import { useEffect, useRef, useState } from "react";
 import SupportChat from "../components/landing/SupportChat";
 import PublicNav from "../components/landing/PublicNav";
+import SEO from "../components/seo/SEO";
 import {
   CheckCircle, ArrowRight, Zap, Lock, BarChart2,
   FileText, Building2, ClipboardList, BookOpen, AlertTriangle,
@@ -534,6 +535,13 @@ export default function LandingPage() {
 
   return (
     <div className="min-h-screen bg-[#f0f9ff] text-gray-900">
+      <SEO
+        title="GRCEye — Governance, Risk & Compliance Platform"
+        titleOverride
+        description="The all-in-one GRC SaaS platform. 70+ compliance frameworks, AI gap analysis, risk quantification, audits, policies, vendor risk and a public trust center — built for security teams and CISOs."
+        path="/"
+        keywords="GRC platform, governance risk compliance, ISO 27001, SOC 2, NIST CSF, GDPR, NIS2, DORA, risk management software, compliance automation, AI compliance, vendor risk management, TPRM, audit software, policy management"
+      />
       <ScrollProgress />
 
       {/* ── Nav ── */}
@@ -1080,7 +1088,7 @@ export default function LandingPage() {
                   { label: "Privacy Policy", href: "#" },
                   { label: "Terms of Service", href: "#" },
                   { label: "Security", href: "#" },
-                  { label: "Contact Sales", href: "mailto:sales@grceye.io" },
+                  { label: "Contact", href: "/contact" },
                   { label: "Support", href: "mailto:support@grceye.io" },
                 ].map(l => (
                   <li key={l.label}><a href={l.href} className="hover:text-white transition-colors">{l.label}</a></li>

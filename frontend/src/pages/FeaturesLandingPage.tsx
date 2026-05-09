@@ -2,6 +2,7 @@ import { Link } from "react-router-dom";
 import { useEffect, useRef, useState } from "react";
 import SupportChat from "../components/landing/SupportChat";
 import PublicNav from "../components/landing/PublicNav";
+import SEO from "../components/seo/SEO";
 import {
   ArrowRight, CheckCircle, AlertTriangle, ClipboardList, FileText,
   Building2, BarChart2, BookOpen, Zap, Shield, ChevronRight,
@@ -195,6 +196,12 @@ export default function FeaturesLandingPage() {
 
   return (
     <div className="min-h-screen bg-[#f0f9ff] text-gray-900">
+      <SEO
+        title="Features"
+        description="Explore every GRCEye module: risk register, Monte Carlo risk quantification, multi-framework compliance, AI gap analysis, audits, policies, vendor risk, threat library and more."
+        path="/features-landing"
+        keywords="GRC features, risk register, Monte Carlo risk, AI compliance, gap analysis, audit management, vendor risk, TPRM, policy management, threat library"
+      />
 
       {/* Nav */}
       <PublicNav links={[
@@ -400,7 +407,7 @@ export default function FeaturesLandingPage() {
           <div className="flex gap-5 text-sm">
             <a href="#" className="hover:text-white transition-colors">Privacy</a>
             <a href="#" className="hover:text-white transition-colors">Terms</a>
-            <a href="mailto:sales@grceye.io" className="hover:text-white transition-colors">Contact</a>
+            <Link to="/contact" className="hover:text-white transition-colors">Contact</Link>
           </div>
         </div>
       </footer>

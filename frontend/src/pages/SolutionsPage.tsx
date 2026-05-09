@@ -2,6 +2,7 @@ import { Link } from "react-router-dom";
 import { useEffect, useRef, useState } from "react";
 import SupportChat from "../components/landing/SupportChat";
 import PublicNav from "../components/landing/PublicNav";
+import SEO from "../components/seo/SEO";
 import {
   ArrowRight, CheckCircle, Shield, AlertTriangle, ClipboardList,
   FileText, Building2, Users, Globe, Heart, Cpu, Lock,
@@ -236,6 +237,12 @@ export default function SolutionsPage() {
 
   return (
     <div className="min-h-screen bg-[#f0f9ff] text-gray-900">
+      <SEO
+        title="Solutions"
+        description="GRCEye for SaaS, FinTech, Healthcare and Enterprise. Role-based workflows for CISOs, risk managers, compliance officers, auditors and policy managers."
+        path="/solutions"
+        keywords="GRC for SaaS, GRC for FinTech, GRC for Healthcare, CISO software, compliance manager tools, risk manager platform"
+      />
 
       {/* Nav */}
       <PublicNav links={[
@@ -500,7 +507,7 @@ export default function SolutionsPage() {
           <div className="flex gap-5 text-sm">
             <a href="#" className="hover:text-white transition-colors">Privacy</a>
             <a href="#" className="hover:text-white transition-colors">Terms</a>
-            <a href="mailto:sales@grceye.io" className="hover:text-white transition-colors">Contact</a>
+            <Link to="/contact" className="hover:text-white transition-colors">Contact</Link>
           </div>
         </div>
       </footer>

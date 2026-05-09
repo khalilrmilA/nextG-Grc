@@ -3,6 +3,7 @@ import { useNavigate, Link } from "react-router-dom";
 import { Eye, EyeOff, Loader2, X } from "lucide-react";
 import { authSession, DEMO_USERS, type UserRole, type PlanTier } from "../store/auth";
 import LanguageSwitcher from "../components/LanguageSwitcher";
+import SEO from "../components/seo/SEO";
 
 function calculateDaysRemaining(trialEndsAt?: string): number {
   if (!trialEndsAt) return 14;
@@ -117,6 +118,7 @@ export default function LoginPage() {
 
   return (
     <>
+    <SEO title="Sign in" description="Sign in to GRCEye." path="/login" noIndex />
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center p-4">
       <div className="w-full max-w-sm">
 

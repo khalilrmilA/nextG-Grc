@@ -2,6 +2,7 @@ import { Link } from "react-router-dom";
 import { useState } from "react";
 import { ArrowRight, ChevronDown, FileText, ExternalLink } from "lucide-react";
 import PublicNav from "../components/landing/PublicNav";
+import SEO from "../components/seo/SEO";
 
 const FAQ_ITEMS = [
   {
@@ -240,8 +241,31 @@ function FAQAccordion({ category, items }: { category: string; items: Array<{ q:
 }
 
 export default function FAQPage() {
+  // Build Schema.org FAQPage JSON-LD from the FAQ_ITEMS data
+  const faqJsonLd = {
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    "mainEntity": FAQ_ITEMS.flatMap(cat =>
+      cat.items.map(item => ({
+        "@type": "Question",
+        "name": item.q,
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": item.a,
+        },
+      }))
+    ),
+  };
+
   return (
     <div className="min-h-screen bg-white text-gray-900">
+      <SEO
+        title="Frequently Asked Questions"
+        description="Answers to common questions about GRCEye — pricing, security, integrations, frameworks, AI features and the auditor portal."
+        path="/faq"
+        keywords="GRCEye FAQ, GRC platform pricing, GRC security, compliance software questions"
+        jsonLd={faqJsonLd}
+      />
       {/* ── Nav ── */}
       <PublicNav links={[
         { to: "/features-landing", label: "Features" },

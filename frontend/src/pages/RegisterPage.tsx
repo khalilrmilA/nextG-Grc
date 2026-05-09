@@ -7,6 +7,7 @@ import { frameworksApi } from "../api/endpoints";
 import { authSession } from "../store/auth";
 import FrameworkSelectionCard from "../components/features/compliance/FrameworkSelectionCard";
 import LanguageSwitcher from "../components/LanguageSwitcher";
+import SEO from "../components/seo/SEO";
 import type { Framework } from "@/types";
 
 const COUNTRIES = [
@@ -182,6 +183,7 @@ export default function RegisterPage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center p-4">
+      <SEO title="Get started" description="Create your free GRCEye account — 14-day trial, no credit card required." path="/register" noIndex />
       <div className="w-full max-w-2xl">
         {/* Header */}
         <div className="flex flex-col items-center mb-8">

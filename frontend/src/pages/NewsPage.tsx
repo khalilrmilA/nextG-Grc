@@ -1,5 +1,6 @@
 import { ArrowRight, Zap, Calendar } from "lucide-react";
 import PublicNav from "../components/landing/PublicNav";
+import SEO from "../components/seo/SEO";
 
 const NEWS_ITEMS = [
   {
@@ -71,6 +72,12 @@ const NEWS_ITEMS = [
 export default function NewsPage() {
   return (
     <div className="min-h-screen bg-white text-gray-900">
+      <SEO
+        title="Regulatory News & Framework Updates"
+        description="Track the latest GRC regulatory changes — EU AI Act, NIST CSF 2.0, GDPR enforcement, NIS2 deadlines, ISO 27001 updates and DORA milestones."
+        path="/news"
+        keywords="EU AI Act news, NIST CSF 2.0, GDPR enforcement, NIS2 deadline, ISO 27001 update, DORA news, regulatory updates"
+      />
       {/* ── Nav ── */}
       <PublicNav links={[
         { to: "/features-landing", label: "Features" },

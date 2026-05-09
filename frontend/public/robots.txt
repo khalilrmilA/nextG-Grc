@@ -1,0 +1,50 @@
+# GRCEye — robots policy
+# Allow public marketing pages, block authenticated app + private routes.
+
+User-agent: *
+Allow: /
+Allow: /features-landing
+Allow: /solutions
+Allow: /blog
+Allow: /news
+Allow: /faq
+Allow: /contact
+Allow: /GRCEye_Datasheet_2026.html
+
+# Block authenticated app
+Disallow: /login
+Disallow: /register
+Disallow: /dashboard
+Disallow: /risks
+Disallow: /risk-scenarios
+Disallow: /risk-quantification
+Disallow: /compliance
+Disallow: /frameworks
+Disallow: /audits
+Disallow: /policies
+Disallow: /policy-generator
+Disallow: /vendors
+Disallow: /reports
+Disallow: /incidents
+Disallow: /vulnerabilities
+Disallow: /threats
+Disallow: /applied-controls
+Disallow: /security-exceptions
+Disallow: /trust-center
+Disallow: /regulatory
+Disallow: /activity-log
+Disallow: /webhooks
+Disallow: /settings
+Disallow: /help
+Disallow: /cheat
+Disallow: /super-admin
+Disallow: /company-admin
+Disallow: /auditor/
+Disallow: /upload/
+Disallow: /vendor-collab/
+Disallow: /service-down
+
+# Block search-result spam from crawlers
+Disallow: /*?*
+
+Sitemap: https://grceye.com/sitemap.xml
