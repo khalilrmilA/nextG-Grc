@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
-import { Shield, ChevronRight, ChevronLeft, Check, Eye, EyeOff } from "lucide-react";
+import { ChevronRight, ChevronLeft, Check, Eye, EyeOff } from "lucide-react";
 import { authApi } from "../api/endpoints";
 import { frameworksApi } from "../api/endpoints";
 import { authSession } from "../store/auth";
@@ -187,9 +187,7 @@ export default function RegisterPage() {
       <div className="w-full max-w-2xl">
         {/* Header */}
         <div className="flex flex-col items-center mb-8">
-          <div className="w-14 h-14 bg-blue-500 rounded-2xl flex items-center justify-center mb-3 shadow-lg">
-            <Shield className="w-8 h-8 text-white" />
-          </div>
+          <img src="/logo-vertical.png" alt="GRCEye — Governance, Risk & Compliance Platform" className="h-32 w-auto object-contain mb-4 drop-shadow-2xl bg-white/95 rounded-2xl p-3" />
           <h1 className="text-3xl font-bold text-white">{t("public.register.seo_title")}</h1>
           <p className="text-slate-400 mt-1 text-sm">{t("public.register.tagline")}</p>
           <div className="mt-3"><LanguageSwitcher /></div>

@@ -876,7 +876,7 @@ export default function SuperAdminPage() {
       {/* Sidebar */}
       <aside className="w-56 flex flex-col bg-slate-900 shadow-2xl flex-shrink-0 fixed h-full">
         <div className="flex flex-col items-center px-4 py-5 border-b border-slate-700/60">
-          <img src="/logo.png" alt="GRCEye" className="h-24 w-auto object-contain" />
+          <img src="/logo-vertical.png" alt="GRCEye — Governance, Risk & Compliance Platform" className="h-24 w-auto object-contain bg-white/95 rounded-xl p-2" />
         </div>
 
         <nav className="flex-1 px-3 py-4 space-y-1">

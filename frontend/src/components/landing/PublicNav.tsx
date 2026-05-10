@@ -39,7 +39,7 @@ export default function PublicNav({ links }: PublicNavProps) {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3 flex items-center justify-between">
           {/* Logo */}
           <Link to="/" onClick={() => setOpen(false)}>
-            <img src="/logo.png" alt="GRCEye" className="h-12 sm:h-14 w-auto object-contain" />
+            <img src="/logo-horizontal.png" alt="GRCEye — Governance, Risk & Compliance Platform" className="h-10 sm:h-12 w-auto object-contain" />
           </Link>
 
           {/* Desktop nav */}
@@ -95,7 +95,7 @@ export default function PublicNav({ links }: PublicNavProps) {
       <div className={`fixed top-0 left-0 bottom-0 z-[70] w-72 bg-white shadow-2xl transition-transform duration-300 md:hidden flex flex-col ${open ? "translate-x-0" : "-translate-x-full"}`}>
         {/* Drawer header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
-          <img src="/logo.png" alt="GRCEye" className="h-12 w-auto object-contain" />
+          <img src="/logo-horizontal.png" alt="GRCEye — Governance, Risk & Compliance Platform" className="h-10 w-auto object-contain" />
           <button
             onClick={() => setOpen(false)}
             className="w-9 h-9 flex items-center justify-center rounded-xl bg-gray-100 text-gray-600"

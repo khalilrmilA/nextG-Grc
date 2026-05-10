@@ -126,7 +126,7 @@ export default function LoginPage() {
 
         {/* Logo */}
         <div className="flex flex-col items-center mb-8">
-          <img src="/logo.png" alt="GRCEye" className="h-40 w-auto object-contain mb-4 drop-shadow-2xl" />
+          <img src="/logo-vertical.png" alt="GRCEye — Governance, Risk & Compliance Platform" className="h-44 w-auto object-contain mb-4 drop-shadow-2xl bg-white/95 rounded-2xl p-3" />
           <div className="mt-3"><LanguageSwitcher /></div>
         </div>
 

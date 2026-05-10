@@ -431,7 +431,7 @@ export default function Layout() {
       `}>
         {/* Logo + mobile close */}
         <div className={`flex items-center justify-between px-4 py-4 border-b ${sc.divider}`}>
-          <img src="/logo.png" alt="GRCEye" className="h-16 w-auto object-contain" />
+          <img src="/logo-vertical.png" alt="GRCEye — Governance, Risk & Compliance Platform" className="h-16 w-auto object-contain" />
           <button
             type="button"
             onClick={() => setMobileSidebarOpen(false)}
