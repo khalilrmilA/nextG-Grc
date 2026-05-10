@@ -212,9 +212,9 @@ export default function LoginPage() {
 
         <div className="mt-6 space-y-2">
           <div className="flex items-center justify-between">
-            <Link to="/" className="text-xs text-blue-600 hover:underline">
+            <a href="/" className="text-xs text-blue-600 hover:underline">
               {t("public.login.back_home")}
-            </Link>
+            </a>
             <p className="text-xs text-slate-500">
               © {new Date().getFullYear()} GRCEye
             </p>

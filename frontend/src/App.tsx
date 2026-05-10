@@ -5,13 +5,7 @@ import Layout from "./components/layout/Layout";
 import AuditorLayout from "./components/layout/AuditorLayout";
 import LoginPage from "./pages/LoginPage";
 import RegisterPage from "./pages/RegisterPage";
-import LandingPage from "./pages/LandingPage";
 import ServiceDownPage from "./pages/ServiceDownPage";
-import FeaturesLandingPage from "./pages/FeaturesLandingPage";
-import SolutionsPage from "./pages/SolutionsPage";
-import BlogPage from "./pages/BlogPage";
-import NewsPage from "./pages/NewsPage";
-import FAQPage from "./pages/FAQPage";
 import DashboardPage from "./pages/DashboardPage";
 import RisksPage from "./pages/RisksPage";
 import CompliancePage from "./pages/CompliancePage";
@@ -49,9 +43,6 @@ import RiskQuantificationPage from "./pages/RiskQuantificationPage";
 import ContractCollaborationPage from "./pages/ContractCollaborationPage";
 import VendorCollaborationPage from "./pages/VendorCollaborationPage";
 import EvidenceUploadPage from "./pages/EvidenceUploadPage";
-import ContactPage from "./pages/ContactPage";
-import TermsPage from "./pages/TermsPage";
-import HowItWorksPage from "./pages/HowItWorksPage";
 
 function PrivateRoute({ children, requiredModule }: { readonly children: React.ReactNode; requiredModule?: string }) {
   const user = useAuthStore((u) => u);
@@ -107,17 +98,8 @@ export default function App() {
     <Routes>
       {/* ── Public routes (no authentication required) ── */}
       <Route path="/service-down" element={<ServiceDownPage />} />
-      <Route path="/" element={<LandingPage />} />
       <Route path="/upload/:token" element={<EvidenceUploadPage />} />
       <Route path="/vendor-collab/:shareToken" element={<VendorCollaborationPage />} />
-      <Route path="/how-it-works" element={<HowItWorksPage />} />
-      <Route path="/features-landing" element={<FeaturesLandingPage />} />
-      <Route path="/solutions" element={<SolutionsPage />} />
-      <Route path="/blog" element={<BlogPage />} />
-      <Route path="/news" element={<NewsPage />} />
-      <Route path="/faq" element={<FAQPage />} />
-      <Route path="/contact" element={<ContactPage />} />
-      <Route path="/terms" element={<TermsPage />} />
       <Route path="/login" element={<PublicOnlyRoute><LoginPage /></PublicOnlyRoute>} />
       <Route path="/register" element={<PublicOnlyRoute><RegisterPage /></PublicOnlyRoute>} />
       <Route path="/super-admin" element={<SuperAdminRoute><SuperAdminPage /></SuperAdminRoute>} />

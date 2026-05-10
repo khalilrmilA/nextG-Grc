@@ -17,7 +17,7 @@ const NAV_ITEMS: NavItem[] = [
   { kind: "link", to: "/how-it-works",    label: "How it works" },
   { kind: "link", to: "/features-landing", label: "Features"     },
   { kind: "link", to: "/solutions",        label: "Solutions"    },
-  { kind: "link", to: "/#frameworks",      label: "Frameworks"   },
+  { kind: "link", to: "/frameworks",        label: "Frameworks"   },
   {
     kind: "dropdown",
     label: "Resources",
