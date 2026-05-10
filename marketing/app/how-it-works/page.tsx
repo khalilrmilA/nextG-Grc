@@ -2,13 +2,13 @@ import type { Metadata } from "next";
 import HowItWorksView from "./HowItWorksView";
 
 export const metadata: Metadata = {
-  title: "How GRCEye Works — From Setup to Board Report in 30 Days",
-  description: "See how GRCEye turns manual compliance into an automated programme. 4 steps from framework selection to board-ready reporting — no consultants needed.",
-  keywords: "how GRC works, GRC implementation, compliance automation steps, GRC onboarding, GRC ROI, compliance programme setup",
+  title: "How GRCEye Works — AI-Powered GRC Explained",
+  description: "See how GRCEye's AI works: vendor chat, AI contract review, document generation, compliance gap analysis, and on-premise AI that never sends your data anywhere.",
+  keywords: "how GRC works, AI contract review, AI document generator, GRC AI assistant, vendor risk AI, compliance gap analysis AI",
   alternates: { canonical: "/how-it-works" },
   openGraph: {
-    title: "How GRCEye Works — From Setup to Board Report in 30 Days | GRCEye",
-    description: "See how GRCEye turns manual compliance into an automated programme. 4 steps from framework selection to board-ready reporting.",
+    title: "How GRCEye Works — AI-Powered GRC Explained | GRCEye",
+    description: "See how GRCEye's AI works: vendor chat, AI contract review, document generation, compliance gap analysis, and on-premise AI that never sends your data anywhere.",
     url: "/how-it-works",
     type: "website",
     images: ["/logo-horizontal.png"],

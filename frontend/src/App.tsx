@@ -51,6 +51,7 @@ import VendorCollaborationPage from "./pages/VendorCollaborationPage";
 import EvidenceUploadPage from "./pages/EvidenceUploadPage";
 import ContactPage from "./pages/ContactPage";
 import TermsPage from "./pages/TermsPage";
+import HowItWorksPage from "./pages/HowItWorksPage";
 
 function PrivateRoute({ children, requiredModule }: { readonly children: React.ReactNode; requiredModule?: string }) {
   const user = useAuthStore((u) => u);
@@ -109,6 +110,7 @@ export default function App() {
       <Route path="/" element={<LandingPage />} />
       <Route path="/upload/:token" element={<EvidenceUploadPage />} />
       <Route path="/vendor-collab/:shareToken" element={<VendorCollaborationPage />} />
+      <Route path="/how-it-works" element={<HowItWorksPage />} />
       <Route path="/features-landing" element={<FeaturesLandingPage />} />
       <Route path="/solutions" element={<SolutionsPage />} />
       <Route path="/blog" element={<BlogPage />} />
