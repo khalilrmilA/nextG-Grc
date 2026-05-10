@@ -72,7 +72,7 @@ export default function LoginPage() {
         email: email.trim().toLowerCase(),
         name: email.split("@")[0],
         role: "ciso" as UserRole,
-        plan: "professional" as PlanTier,
+        plan: "enterprise" as PlanTier,
         org: "My Organization",
       };
 

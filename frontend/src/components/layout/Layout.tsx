@@ -373,6 +373,21 @@ export default function Layout() {
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [showDemoToast, setShowDemoToast] = useState(false);
 
+  // Sync plan from subscription API on mount (corrects stale localStorage sessions)
+  useEffect(() => {
+    if (!user) return;
+    import("../../api/endpoints").then(({ subscriptionsApi }) => {
+      subscriptionsApi.get().then((sub) => {
+        const isTrialing = sub.status === "trialing";
+        const newPlan = isTrialing ? "free_trial" : (sub.tier as import("../../store/auth").PlanTier);
+        if (newPlan !== user.plan) {
+          authSession.patchUser({ plan: newPlan, daysRemaining: isTrialing ? user.daysRemaining : undefined });
+        }
+      }).catch(() => {/* ignore — best effort */});
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Listen for demo-block events fired by the API client interceptor
   useEffect(() => {
     function onDemoBlock() {
