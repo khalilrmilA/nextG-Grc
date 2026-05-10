@@ -155,14 +155,9 @@ export default function FeaturesView() {
 
   return (
     <div className="min-h-screen bg-[#f0f9ff] text-gray-900">
-      <PublicNav links={[
-        { to: "/", label: "Home" },
-        { to: "/solutions", label: "Solutions" },
-        { to: "/features-landing", label: "Features", activeOn: "/features-landing" },
-        { to: "/faq", label: "FAQ" },
-      ]} />
+      <PublicNav />
 
-      <section className="relative pt-32 pb-20 px-6 text-center overflow-hidden bg-gradient-to-b from-sky-100 via-[#f0f9ff] to-[#f0f9ff]">
+      <section className="relative pt-16 pb-20 px-6 text-center overflow-hidden bg-gradient-to-b from-sky-100 via-[#f0f9ff] to-[#f0f9ff]">
         <div className="absolute -top-20 -left-20 w-96 h-96 bg-blue-200/30 rounded-full blur-3xl animate-blob pointer-events-none" />
         <div className="absolute top-10 -right-10 w-80 h-80 bg-indigo-200/20 rounded-full blur-3xl animate-blob animation-delay-2000 pointer-events-none" />
         <div className="relative max-w-3xl mx-auto">

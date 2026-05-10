@@ -4,19 +4,18 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { ArrowRight, Menu, X } from "lucide-react";
 
-interface NavLink {
-  to: string;
-  label: string;
-  hash?: boolean;
-  activeOn?: string;
-}
+const NAV_LINKS = [
+  { to: "/features-landing", label: "Features" },
+  { to: "/solutions",        label: "Solutions" },
+  { to: "/faq",              label: "FAQ" },
+  { to: "/blog",             label: "Blog" },
+  { to: "/news",             label: "News" },
+  { to: "/contact",          label: "Contact" },
+];
 
-interface PublicNavProps {
-  links: NavLink[];
-}
-
-export default function PublicNav({ links }: PublicNavProps) {
+export default function PublicNav() {
   const [open, setOpen] = useState(false);
+  const [scrolled, setScrolled] = useState(false);
   const pathname = usePathname();
 
   useEffect(() => { setOpen(false); }, [pathname]);
@@ -26,42 +25,80 @@ export default function PublicNav({ links }: PublicNavProps) {
     return () => { document.body.style.overflow = ""; };
   }, [open]);
 
+  useEffect(() => {
+    function onScroll() { setScrolled(window.scrollY > 8); }
+    onScroll();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
+
+  const isActive = (to: string) => pathname === to;
+
   return (
     <>
-      <header className="fixed top-0 inset-x-0 z-50 bg-[#f0f9ff]/90 backdrop-blur border-b border-sky-100">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3 flex items-center justify-between">
-          <Link href="/" onClick={() => setOpen(false)}>
-            <img src="/logo.png" alt="GRCEye" className="h-12 sm:h-14 w-auto object-contain" />
+      {/* Top spacing so content doesn't hide behind the floating nav */}
+      <div className="h-20" aria-hidden />
+
+      <header
+        className={`fixed top-3 sm:top-4 inset-x-0 z-50 px-3 sm:px-6 transition-all duration-300 ${
+          scrolled ? "scale-[0.99]" : ""
+        }`}
+      >
+        <div
+          className={`max-w-6xl mx-auto bg-white/90 backdrop-blur-xl border border-gray-200/70 rounded-2xl flex items-center justify-between px-3 sm:px-5 h-14 transition-all duration-300 ${
+            scrolled ? "shadow-lg shadow-blue-900/5" : "shadow-md shadow-blue-900/[0.03]"
+          }`}
+        >
+          {/* Logo */}
+          <Link href="/" onClick={() => setOpen(false)} className="flex items-center gap-2 flex-shrink-0">
+            <img src="/logo.png" alt="GRCEye" className="h-9 sm:h-10 w-auto object-contain" />
           </Link>
 
-          <nav className="hidden md:flex items-center gap-6 lg:gap-8 text-sm text-gray-500">
-            {links.map(l =>
-              l.hash ? (
-                <a key={l.label} href={l.to} className="hover:text-blue-600 transition-colors">{l.label}</a>
-              ) : (
-                <Link
-                  key={l.label}
-                  href={l.to}
-                  className={`transition-colors ${pathname === (l.activeOn ?? l.to) ? "text-blue-600 font-semibold" : "hover:text-blue-600"}`}
-                >
-                  {l.label}
-                </Link>
-              )
-            )}
+          {/* Desktop nav */}
+          <nav className="hidden lg:flex items-center gap-1">
+            {NAV_LINKS.map(l => (
+              <Link
+                key={l.to}
+                href={l.to}
+                className={`relative px-3.5 py-2 text-sm font-medium rounded-lg transition-all ${
+                  isActive(l.to)
+                    ? "text-blue-700 bg-blue-50"
+                    : "text-gray-600 hover:text-gray-900 hover:bg-gray-50"
+                }`}
+              >
+                {l.label}
+              </Link>
+            ))}
           </nav>
 
-          <div className="hidden md:flex items-center gap-3">
-            <Link href="/login" className="text-sm text-gray-600 hover:text-gray-900 font-medium transition-colors">Sign in</Link>
-            <Link href="/register" className="flex items-center gap-1.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold px-4 py-2 rounded-xl transition-all shadow-sm hover:-translate-y-0.5 hover:shadow-md">
-              Start free trial <ArrowRight className="w-3.5 h-3.5" />
+          {/* Desktop CTA */}
+          <div className="hidden lg:flex items-center gap-1.5">
+            <Link
+              href="/login"
+              className="px-3.5 py-2 text-sm font-medium text-gray-700 hover:text-gray-900 transition-colors rounded-lg hover:bg-gray-50"
+            >
+              Sign in
+            </Link>
+            <Link
+              href="/register"
+              className="group flex items-center gap-1.5 bg-gradient-to-br from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white text-sm font-semibold pl-4 pr-3.5 py-2 rounded-lg transition-all shadow-sm hover:shadow-md hover:shadow-blue-500/30"
+            >
+              Start free trial
+              <ArrowRight className="w-3.5 h-3.5 transition-transform group-hover:translate-x-0.5" />
             </Link>
           </div>
 
-          <div className="flex md:hidden items-center gap-2">
-            <Link href="/login" className="text-sm text-gray-600 font-medium px-3 py-1.5">Sign in</Link>
+          {/* Mobile (hamburger) */}
+          <div className="flex lg:hidden items-center gap-2">
+            <Link
+              href="/register"
+              className="hidden sm:inline-flex items-center gap-1 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold px-3 py-1.5 rounded-lg shadow-sm"
+            >
+              Start trial
+            </Link>
             <button
               onClick={() => setOpen(true)}
-              className="w-9 h-9 flex items-center justify-center rounded-xl bg-white border border-sky-200 text-gray-700 shadow-sm"
+              className="w-9 h-9 flex items-center justify-center rounded-lg bg-gray-50 hover:bg-gray-100 border border-gray-200 text-gray-700 transition-colors"
               aria-label="Open menu"
             >
               <Menu className="w-5 h-5" />
@@ -70,63 +107,61 @@ export default function PublicNav({ links }: PublicNavProps) {
         </div>
       </header>
 
+      {/* Mobile drawer overlay */}
       {open && (
         <div
-          className="fixed inset-0 z-[60] bg-black/40 backdrop-blur-sm md:hidden"
+          className="fixed inset-0 z-[60] bg-black/40 backdrop-blur-sm lg:hidden"
           onClick={() => setOpen(false)}
         />
       )}
 
-      <div className={`fixed top-0 left-0 bottom-0 z-[70] w-72 bg-white shadow-2xl transition-transform duration-300 md:hidden flex flex-col ${open ? "translate-x-0" : "-translate-x-full"}`}>
+      {/* Mobile drawer */}
+      <div
+        className={`fixed top-0 right-0 bottom-0 z-[70] w-80 max-w-[85vw] bg-white shadow-2xl transition-transform duration-300 lg:hidden flex flex-col ${
+          open ? "translate-x-0" : "translate-x-full"
+        }`}
+      >
         <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
-          <img src="/logo.png" alt="GRCEye" className="h-12 w-auto object-contain" />
+          <Link href="/" onClick={() => setOpen(false)}>
+            <img src="/logo.png" alt="GRCEye" className="h-10 w-auto object-contain" />
+          </Link>
           <button
             onClick={() => setOpen(false)}
-            className="w-9 h-9 flex items-center justify-center rounded-xl bg-gray-100 text-gray-600"
+            className="w-9 h-9 flex items-center justify-center rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-700 transition-colors"
             aria-label="Close menu"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
-        <nav className="flex-1 px-4 py-5 space-y-1 overflow-y-auto">
-          {links.map(l =>
-            l.hash ? (
-              <a
-                key={l.label}
-                href={l.to}
-                onClick={() => setOpen(false)}
-                className="flex items-center px-4 py-3 rounded-xl text-gray-700 hover:bg-blue-50 hover:text-blue-700 font-medium text-sm transition-colors"
-              >
-                {l.label}
-              </a>
-            ) : (
-              <Link
-                key={l.label}
-                href={l.to}
-                className={`flex items-center px-4 py-3 rounded-xl font-medium text-sm transition-colors ${
-                  pathname === (l.activeOn ?? l.to)
-                    ? "bg-blue-50 text-blue-700"
-                    : "text-gray-700 hover:bg-blue-50 hover:text-blue-700"
-                }`}
-              >
-                {l.label}
-              </Link>
-            )
-          )}
+        <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
+          {NAV_LINKS.map(l => (
+            <Link
+              key={l.to}
+              href={l.to}
+              className={`flex items-center px-4 py-3 rounded-xl font-medium text-sm transition-colors ${
+                isActive(l.to)
+                  ? "bg-blue-50 text-blue-700"
+                  : "text-gray-700 hover:bg-gray-50"
+              }`}
+            >
+              {l.label}
+            </Link>
+          ))}
         </nav>
 
-        <div className="px-4 py-5 border-t border-gray-100 space-y-3">
+        <div className="px-4 py-5 border-t border-gray-100 space-y-2.5">
           <Link
             href="/register"
-            className="flex items-center justify-center gap-2 w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold px-4 py-3 rounded-xl transition-colors shadow-sm text-sm"
+            className="flex items-center justify-center gap-2 w-full bg-gradient-to-br from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-semibold px-4 py-3 rounded-xl transition-all shadow-sm text-sm"
             onClick={() => setOpen(false)}
           >
-            Start free trial <ArrowRight className="w-4 h-4" />
+            Start free trial
+            <ArrowRight className="w-4 h-4" />
           </Link>
           <Link
             href="/login"
-            className="flex items-center justify-center gap-2 w-full bg-gray-50 border border-gray-200 text-gray-700 font-semibold px-4 py-3 rounded-xl transition-colors text-sm"
+            className="flex items-center justify-center gap-2 w-full bg-gray-50 hover:bg-gray-100 border border-gray-200 text-gray-700 font-semibold px-4 py-3 rounded-xl transition-colors text-sm"
             onClick={() => setOpen(false)}
           >
             Sign in

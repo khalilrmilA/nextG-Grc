@@ -529,15 +529,9 @@ export default function LandingView() {
     <div className="min-h-screen bg-[#f0f9ff] text-gray-900">
       <ScrollProgress />
 
-      <PublicNav links={[
-        { to: "#how-it-works", label: "How it works", hash: true },
-        { to: "/features-landing", label: "Features" },
-        { to: "/solutions", label: "Solutions" },
-        { to: "#frameworks", label: "Frameworks", hash: true },
-        { to: "/faq", label: "FAQ" },
-      ]} />
+      <PublicNav />
 
-      <section className="relative pt-28 sm:pt-32 pb-16 sm:pb-24 px-4 sm:px-6 text-center overflow-hidden">
+      <section className="relative pt-12 sm:pt-16 pb-16 sm:pb-24 px-4 sm:px-6 text-center overflow-hidden">
         <div className="absolute inset-0 opacity-[0.04] pointer-events-none [background-image:linear-gradient(rgba(99,102,241,.2)_1px,transparent_1px),linear-gradient(90deg,rgba(99,102,241,.2)_1px,transparent_1px)] [background-size:40px_40px]" />
         <div className="absolute inset-0 bg-gradient-to-b from-sky-100/80 via-[#f0f9ff]/90 to-[#f0f9ff] pointer-events-none" />
         <div className="absolute -top-32 -left-32 w-[500px] h-[500px] bg-blue-300/30 rounded-full blur-3xl animate-blob pointer-events-none" />

@@ -17,14 +17,9 @@ const NEWS_ITEMS = [
 export default function NewsView() {
   return (
     <div className="min-h-screen bg-white text-gray-900">
-      <PublicNav links={[
-        { to: "/features-landing", label: "Features" },
-        { to: "/blog", label: "Blog" },
-        { to: "/news", label: "News", activeOn: "/news" },
-        { to: "/faq", label: "FAQ" },
-      ]} />
+      <PublicNav />
 
-      <section className="pt-32 pb-16 px-6 text-center bg-gradient-to-b from-slate-50 via-white to-white">
+      <section className="pt-16 pb-16 px-6 text-center bg-gradient-to-b from-slate-50 via-white to-white">
         <div className="max-w-3xl mx-auto">
           <h1 className="text-5xl md:text-6xl font-extrabold text-gray-900 leading-tight tracking-tight mb-4">
             Framework & Regulatory News

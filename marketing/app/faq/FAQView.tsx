@@ -37,14 +37,9 @@ function FAQAccordion({ category, items }: { category: string; items: Array<{ q:
 export default function FAQView() {
   return (
     <div className="min-h-screen bg-white text-gray-900">
-      <PublicNav links={[
-        { to: "/features-landing", label: "Features" },
-        { to: "/solutions", label: "Solutions" },
-        { to: "/faq", label: "FAQ", activeOn: "/faq" },
-        { to: "/blog", label: "Blog" },
-      ]} />
+      <PublicNav />
 
-      <section className="pt-32 pb-16 px-6 text-center bg-gradient-to-b from-slate-50 via-white to-white">
+      <section className="pt-16 pb-16 px-6 text-center bg-gradient-to-b from-slate-50 via-white to-white">
         <div className="max-w-3xl mx-auto">
           <h1 className="text-5xl font-extrabold text-gray-900 leading-tight tracking-tight mb-4">
             Frequently Asked Questions

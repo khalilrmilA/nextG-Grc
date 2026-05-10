@@ -57,15 +57,7 @@ export default function ContactView() {
 
   return (
     <div className="min-h-screen bg-[#f0f9ff] text-gray-900">
-      <PublicNav links={[
-        { to: "/", label: "Home" },
-        { to: "/features-landing", label: "Features" },
-        { to: "/solutions", label: "Solutions" },
-        { to: "/faq", label: "FAQ" },
-        { to: "/contact", label: "Contact", activeOn: "/contact" },
-      ]} />
-
-      <div className="h-20" />
+      <PublicNav />
 
       <section className="max-w-4xl mx-auto px-6 pt-12 pb-8 text-center">
         <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-blue-50 border border-blue-100 text-blue-700 text-xs font-semibold mb-4">
