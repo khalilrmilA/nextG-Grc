@@ -1,9 +1,16 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+
+  <!-- Core pages -->
   <url>
     <loc>https://grceye.com</loc>
     <changefreq>weekly</changefreq>
     <priority>1.0</priority>
+  </url>
+  <url>
+    <loc>https://grceye.com/how-it-works</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.9</priority>
   </url>
   <url>
     <loc>https://grceye.com/features-landing</loc>
@@ -35,47 +42,81 @@
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
   </url>
-  <url>
-    <loc>https://grceye.com/datasheets/GRCEye_Datasheet_2026.pdf</loc>
-    <changefreq>monthly</changefreq>
-    <priority>0.6</priority>
-  </url>
 
-  <!-- Blog articles -->
+  <!-- Blog articles — framework & regulation -->
   <url>
     <loc>https://grceye.com/blog/nis2-directive-explained-cisos-2026</loc>
     <lastmod>2026-04-22</lastmod>
     <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
+    <priority>0.8</priority>
   </url>
   <url>
     <loc>https://grceye.com/blog/iso-27001-vs-soc-2-which-first</loc>
     <lastmod>2026-04-15</lastmod>
     <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
+    <priority>0.8</priority>
   </url>
   <url>
     <loc>https://grceye.com/blog/risk-quantification-from-heatmaps-to-monte-carlo</loc>
     <lastmod>2026-04-08</lastmod>
     <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
+    <priority>0.8</priority>
   </url>
   <url>
     <loc>https://grceye.com/blog/dora-compliance-financial-services-2026</loc>
     <lastmod>2026-04-01</lastmod>
     <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
+    <priority>0.8</priority>
   </url>
   <url>
     <loc>https://grceye.com/blog/ciso-guide-vendor-risk-management-tprm-2026</loc>
     <lastmod>2026-03-25</lastmod>
     <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
+    <priority>0.8</priority>
   </url>
   <url>
     <loc>https://grceye.com/blog/eu-ai-act-security-teams-ai-governance</loc>
     <lastmod>2026-03-18</lastmod>
     <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
+    <priority>0.8</priority>
   </url>
+
+  <!-- Blog articles — GRC automation -->
+  <url>
+    <loc>https://grceye.com/blog/grc-automation-2026-cost-of-manual-compliance</loc>
+    <lastmod>2026-05-08</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://grceye.com/blog/ai-powered-grc-automation-iso27001-soc2-nis2</loc>
+    <lastmod>2026-05-05</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://grceye.com/blog/automated-risk-management-monte-carlo-quantification</loc>
+    <lastmod>2026-05-02</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://grceye.com/blog/continuous-compliance-monitoring-vs-annual-audits</loc>
+    <lastmod>2026-04-28</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://grceye.com/blog/vendor-risk-management-automation-ai-contract-review</loc>
+    <lastmod>2026-04-22</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://grceye.com/blog/cross-framework-compliance-iso-nist-soc2-gdpr-dora</loc>
+    <lastmod>2026-04-15</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+
 </urlset>

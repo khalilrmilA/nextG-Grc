@@ -1,28 +1,50 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ArrowRight, Menu, X } from "lucide-react";
+import { ArrowRight, Menu, X, ChevronDown, BookOpen, Newspaper, HelpCircle, MessageSquare } from "lucide-react";
 import LanguageSwitcher from "../LanguageSwitcher";
 
-type NavLink = { to: string; label: string };
+type SimpleLink = { kind: "link"; to: string; label: string };
+type DropdownLink = {
+  kind: "dropdown";
+  label: string;
+  items: { to: string; label: string; description: string; icon: React.ElementType }[];
+};
+type NavItem = SimpleLink | DropdownLink;
 
-const NAV_LINKS: NavLink[] = [
-  { to: "/#how-it-works", label: "How it works" },
-  { to: "/features-landing", label: "Features" },
-  { to: "/solutions",        label: "Solutions" },
-  { to: "/#frameworks",      label: "Frameworks" },
-  { to: "/blog",             label: "Blog" },
-  { to: "/faq",              label: "FAQ" },
-  { to: "/contact",          label: "Contact" },
+const NAV_ITEMS: NavItem[] = [
+  { kind: "link", to: "/how-it-works",    label: "How it works" },
+  { kind: "link", to: "/features-landing", label: "Features"     },
+  { kind: "link", to: "/solutions",        label: "Solutions"    },
+  { kind: "link", to: "/#frameworks",      label: "Frameworks"   },
+  {
+    kind: "dropdown",
+    label: "Resources",
+    items: [
+      { to: "/blog",  label: "Blog",             description: "GRC automation guides & insights",       icon: BookOpen   },
+      { to: "/news",  label: "Regulatory News",  description: "Latest framework & regulation updates", icon: Newspaper  },
+    ],
+  },
+  {
+    kind: "dropdown",
+    label: "Help",
+    items: [
+      { to: "/faq",     label: "FAQ",     description: "Pricing, security & integration answers", icon: HelpCircle    },
+      { to: "/contact", label: "Contact", description: "Sales, demos & support",                  icon: MessageSquare },
+    ],
+  },
 ];
 
 export default function PublicNav() {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen]       = useState(false);
   const [scrolled, setScrolled] = useState(false);
+  const [activeDropdown, setActiveDropdown] = useState<string | null>(null);
+  const [mobileExpanded, setMobileExpanded] = useState<string | null>(null);
   const pathname = usePathname();
+  const dropdownRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => { setOpen(false); }, [pathname]);
+  useEffect(() => { setOpen(false); setActiveDropdown(null); }, [pathname]);
 
   useEffect(() => {
     document.body.style.overflow = open ? "hidden" : "";
@@ -36,25 +58,22 @@ export default function PublicNav() {
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
 
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    function onClick(e: MouseEvent) {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+        setActiveDropdown(null);
+      }
+    }
+    document.addEventListener("mousedown", onClick);
+    return () => document.removeEventListener("mousedown", onClick);
+  }, []);
+
   const isActive = (to: string) => !to.includes("#") && pathname === to;
-
-  function NavItem({ link, mobile = false }: { link: NavLink; mobile?: boolean }) {
-    const active = isActive(link.to);
-    const isHash = link.to.startsWith("/#");
-    const baseDesktop = `px-3 py-1.5 text-sm font-medium rounded-md transition-all ${
-      active ? "text-blue-600 bg-blue-50" : "text-gray-600 hover:text-gray-900 hover:bg-gray-50"
+  const linkCls = (to: string) =>
+    `px-3 py-1.5 text-sm font-medium rounded-md transition-all ${
+      isActive(to) ? "text-blue-600 bg-blue-50" : "text-gray-600 hover:text-gray-900 hover:bg-gray-50"
     }`;
-    const baseMobile = `flex items-center px-4 py-3 rounded-xl font-medium text-sm transition-colors ${
-      active ? "bg-blue-50 text-blue-600" : "text-gray-700 hover:bg-gray-50"
-    }`;
-    const cls = mobile ? baseMobile : baseDesktop;
-
-    return isHash ? (
-      <a href={link.to} onClick={() => setOpen(false)} className={cls}>{link.label}</a>
-    ) : (
-      <Link href={link.to} onClick={() => setOpen(false)} className={cls}>{link.label}</Link>
-    );
-  }
 
   return (
     <>
@@ -65,15 +84,61 @@ export default function PublicNav() {
           scrolled ? "shadow-sm" : ""
         }`}
       >
-        <div className="max-w-6xl mx-auto flex items-center justify-between px-5 sm:px-8 h-16">
+        <div ref={dropdownRef} className="max-w-6xl mx-auto flex items-center justify-between px-5 sm:px-8 h-16">
+
           {/* Logo */}
-          <Link href="/" onClick={() => setOpen(false)} className="flex items-center gap-2 flex-shrink-0">
-            <img src="/logo-horizontal.png" alt="GRCEye — Governance, Risk & Compliance Platform" className="h-9 sm:h-10 w-auto object-contain" />
+          <Link href="/" className="flex items-center gap-2 flex-shrink-0">
+            <img src="/logo-horizontal.png" alt="GRCEye" className="h-9 sm:h-10 w-auto object-contain" />
           </Link>
 
           {/* Desktop nav */}
           <nav className="hidden lg:flex items-center gap-0.5">
-            {NAV_LINKS.map(l => <NavItem key={l.to} link={l} />)}
+            {NAV_ITEMS.map((item) => {
+              if (item.kind === "link") {
+                return item.to.startsWith("/#") ? (
+                  <a key={item.to} href={item.to} className={linkCls(item.to)}>{item.label}</a>
+                ) : (
+                  <Link key={item.to} href={item.to} className={linkCls(item.to)}>{item.label}</Link>
+                );
+              }
+
+              // Dropdown
+              const isOpen = activeDropdown === item.label;
+              return (
+                <div key={item.label} className="relative">
+                  <button
+                    onClick={() => setActiveDropdown(isOpen ? null : item.label)}
+                    className={`flex items-center gap-1 px-3 py-1.5 text-sm font-medium rounded-md transition-all ${
+                      isOpen ? "text-blue-600 bg-blue-50" : "text-gray-600 hover:text-gray-900 hover:bg-gray-50"
+                    }`}
+                  >
+                    {item.label}
+                    <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-200 ${isOpen ? "rotate-180" : ""}`} />
+                  </button>
+
+                  {isOpen && (
+                    <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 w-64 bg-white border border-gray-100 rounded-2xl shadow-xl shadow-gray-900/10 p-2 z-50">
+                      {item.items.map(({ to, label, description, icon: Icon }) => (
+                        <Link
+                          key={to}
+                          href={to}
+                          onClick={() => setActiveDropdown(null)}
+                          className="flex items-start gap-3 px-3 py-2.5 rounded-xl hover:bg-gray-50 transition-colors group"
+                        >
+                          <div className="w-8 h-8 rounded-lg bg-blue-50 flex items-center justify-center flex-shrink-0 mt-0.5 group-hover:bg-blue-100 transition-colors">
+                            <Icon className="w-4 h-4 text-blue-600" />
+                          </div>
+                          <div>
+                            <p className="text-sm font-semibold text-gray-900">{label}</p>
+                            <p className="text-xs text-gray-500 mt-0.5">{description}</p>
+                          </div>
+                        </Link>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </nav>
 
           {/* Desktop CTA */}
@@ -116,10 +181,7 @@ export default function PublicNav() {
 
       {/* Mobile overlay */}
       {open && (
-        <div
-          className="fixed inset-0 z-[60] bg-black/40 backdrop-blur-sm lg:hidden"
-          onClick={() => setOpen(false)}
-        />
+        <div className="fixed inset-0 z-[60] bg-black/40 backdrop-blur-sm lg:hidden" onClick={() => setOpen(false)} />
       )}
 
       {/* Mobile drawer */}
@@ -141,8 +203,51 @@ export default function PublicNav() {
           </button>
         </div>
 
-        <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
-          {NAV_LINKS.map(l => <NavItem key={l.to} link={l} mobile />)}
+        <nav className="flex-1 px-3 py-4 space-y-0.5 overflow-y-auto">
+          {NAV_ITEMS.map((item) => {
+            if (item.kind === "link") {
+              const cls = `flex items-center px-4 py-3 rounded-xl font-medium text-sm transition-colors ${
+                isActive(item.to) ? "bg-blue-50 text-blue-600" : "text-gray-700 hover:bg-gray-50"
+              }`;
+              return item.to.startsWith("/#") ? (
+                <a key={item.to} href={item.to} onClick={() => setOpen(false)} className={cls}>{item.label}</a>
+              ) : (
+                <Link key={item.to} href={item.to} onClick={() => setOpen(false)} className={cls}>{item.label}</Link>
+              );
+            }
+
+            // Mobile accordion dropdown
+            const expanded = mobileExpanded === item.label;
+            return (
+              <div key={item.label}>
+                <button
+                  onClick={() => setMobileExpanded(expanded ? null : item.label)}
+                  className="w-full flex items-center justify-between px-4 py-3 rounded-xl font-medium text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+                >
+                  {item.label}
+                  <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform duration-200 ${expanded ? "rotate-180" : ""}`} />
+                </button>
+                {expanded && (
+                  <div className="mx-2 mb-1 bg-gray-50 rounded-xl overflow-hidden">
+                    {item.items.map(({ to, label, description, icon: Icon }) => (
+                      <Link
+                        key={to}
+                        href={to}
+                        onClick={() => setOpen(false)}
+                        className="flex items-start gap-3 px-4 py-3 hover:bg-gray-100 transition-colors border-b border-gray-100 last:border-0"
+                      >
+                        <Icon className="w-4 h-4 text-blue-600 mt-0.5 flex-shrink-0" />
+                        <div>
+                          <p className="text-sm font-semibold text-gray-900">{label}</p>
+                          <p className="text-xs text-gray-500">{description}</p>
+                        </div>
+                      </Link>
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </nav>
 
         <div className="px-4 py-5 border-t border-gray-100 space-y-2.5">
@@ -151,8 +256,7 @@ export default function PublicNav() {
             onClick={() => setOpen(false)}
             className="flex items-center justify-center gap-2 w-full bg-gradient-to-br from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-semibold px-4 py-3 rounded-xl transition-all shadow-sm text-sm"
           >
-            Start free trial
-            <ArrowRight className="w-4 h-4" />
+            Start free trial <ArrowRight className="w-4 h-4" />
           </Link>
           <Link
             href="/login"

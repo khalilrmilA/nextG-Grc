@@ -11,7 +11,7 @@ Allow: /faq
 Allow: /contact
 Allow: /GRCEye_Datasheet_2026.html
 
-# Block authenticated app
+# Block authenticated app routes
 Disallow: /login
 Disallow: /register
 Disallow: /dashboard
@@ -37,9 +37,6 @@ Disallow: /webhooks
 Disallow: /settings
 Disallow: /help
 Disallow: /cheat
-Disallow: /super-admin
-Disallow: /auditor/
-Disallow: /upload/
 Disallow: /vendor-collab/
 Disallow: /service-down
 

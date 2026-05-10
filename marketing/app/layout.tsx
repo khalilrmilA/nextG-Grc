@@ -16,7 +16,8 @@ export const metadata: Metadata = {
   description:
     "GRCEye: all-in-one GRC SaaS — 70+ frameworks, AI gap analysis, risk quantification, audits, policies, vendor risk and a public trust center.",
   applicationName: SITE_NAME,
-  authors: [{ name: SITE_NAME }],
+  authors: [{ name: SITE_NAME, url: SITE_URL }],
+  publisher: SITE_NAME,
   icons: {
     icon: "/page.png",
     apple: "/page.png",

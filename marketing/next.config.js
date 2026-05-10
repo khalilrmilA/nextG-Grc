@@ -1,6 +1,17 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
+  async redirects() {
+    return [
+      // Canonical: redirect www → non-www so canonical URL is always grceye.com
+      {
+        source: "/:path*",
+        has: [{ type: "host", value: "www.grceye.com" }],
+        destination: "https://grceye.com/:path*",
+        permanent: true,
+      },
+    ];
+  },
   async rewrites() {
     return [
       // Backend API → FastAPI on port 8000
