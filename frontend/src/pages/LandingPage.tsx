@@ -1,5 +1,6 @@
 import { Link } from "react-router-dom";
 import { useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import SupportChat from "../components/landing/SupportChat";
 import PublicNav from "../components/landing/PublicNav";
 import PublicFooter from "../components/landing/PublicFooter";
@@ -112,15 +113,15 @@ function CountUp({ to, suffix = "", prefix = "" }: { to: number; suffix?: string
 
 // ── Data ─────────────────────────────────────────────────────────────────────
 const FEATURES = [
-  { icon: AlertTriangle, title: "Risk Management",       desc: "Interactive 5×5 heatmaps, risk registers, Monte Carlo simulations, and automated likelihood/impact scoring.", color: "from-red-500 to-rose-600", bg: "bg-red-50", text: "text-red-600" },
-  { icon: CheckCircle,   title: "Compliance Tracking",   desc: "Map controls to 70+ frameworks. Track implementation progress with segmented dashboards and AI gap analysis.", color: "from-blue-500 to-blue-700", bg: "bg-blue-50", text: "text-blue-600" },
-  { icon: ClipboardList, title: "Audit Management",      desc: "Plan, execute, and report on internal and external audits. Assign auditors, track findings, generate PDF reports.", color: "from-purple-500 to-indigo-600", bg: "bg-purple-50", text: "text-purple-600" },
-  { icon: FileText,      title: "Policy Lifecycle",      desc: "Draft, version, approve, publish, and collect employee attestations — end-to-end policy governance in one place.", color: "from-orange-500 to-amber-600", bg: "bg-orange-50", text: "text-orange-600" },
-  { icon: Building2,     title: "Vendor Risk (TPRM)",    desc: "Onboard, tier, and continuously monitor third-party vendors with AI-powered contract review and prescreen questionnaires.", color: "from-indigo-500 to-violet-600", bg: "bg-indigo-50", text: "text-indigo-600" },
-  { icon: BarChart2,     title: "Executive Reporting",   desc: "Board-ready dashboards, automated weekly PDF reports (5 types), and real-time compliance scores.", color: "from-teal-500 to-cyan-600", bg: "bg-teal-50", text: "text-teal-600" },
-  { icon: BookOpen,      title: "Framework Library",     desc: "ISO 27001, SOC 2, GDPR, PCI DSS, HIPAA, NIST CSF, NIST 800-53, CIS Controls v8, DORA, NIS2, AI Act, and 64 more.", color: "from-green-500 to-emerald-600", bg: "bg-green-50", text: "text-green-600" },
-  { icon: Zap,           title: "AI-Powered Workflows",  desc: "Generate policies, analyze contracts, prescreen vendors, and get compliance guidance — all on-premise. Zero data egress.", color: "from-yellow-500 to-orange-500", bg: "bg-yellow-50", text: "text-yellow-600" },
-];
+  { icon: AlertTriangle, key: "risk",       color: "from-red-500 to-rose-600",     bg: "bg-red-50",     text: "text-red-600" },
+  { icon: CheckCircle,   key: "compliance", color: "from-blue-500 to-blue-700",    bg: "bg-blue-50",    text: "text-blue-600" },
+  { icon: ClipboardList, key: "audit",      color: "from-purple-500 to-indigo-600", bg: "bg-purple-50",  text: "text-purple-600" },
+  { icon: FileText,      key: "policy",     color: "from-orange-500 to-amber-600", bg: "bg-orange-50",  text: "text-orange-600" },
+  { icon: Building2,     key: "vendor",     color: "from-indigo-500 to-violet-600", bg: "bg-indigo-50",  text: "text-indigo-600" },
+  { icon: BarChart2,     key: "reporting",  color: "from-teal-500 to-cyan-600",    bg: "bg-teal-50",    text: "text-teal-600" },
+  { icon: BookOpen,      key: "library",    color: "from-green-500 to-emerald-600", bg: "bg-green-50",   text: "text-green-600" },
+  { icon: Zap,           key: "ai",         color: "from-yellow-500 to-orange-500", bg: "bg-yellow-50",  text: "text-yellow-600" },
+] as const;
 
 const ALL_FRAMEWORKS = [
   "ISO 27001:2022", "SOC 2 Type II", "GDPR", "PCI DSS 4.0",
@@ -131,24 +132,24 @@ const ALL_FRAMEWORKS = [
 ];
 
 const TESTIMONIALS = [
-  { quote: "We cut our ISO 27001 certification prep from 18 months to 6. The framework gap analysis alone is worth every cent.", name: "Sarah K.", role: "CISO, FinTech Scale-up", rating: 5, initials: "SK", color: "from-blue-500 to-indigo-600" },
-  { quote: "Finally a GRC tool that doesn't require a PhD to use. Our compliance team was up and running in a day.", name: "Marcus T.", role: "Head of Compliance, SaaS Co.", rating: 5, initials: "MT", color: "from-purple-500 to-pink-600" },
-  { quote: "The vendor risk module saved us countless hours of spreadsheet work. Board-ready reports in one click.", name: "Priya S.", role: "VP Risk, Healthcare Platform", rating: 5, initials: "PS", color: "from-teal-500 to-cyan-600" },
-];
+  { key: "story1", rating: 5, initials: "SK", color: "from-blue-500 to-indigo-600" },
+  { key: "story2", rating: 5, initials: "MT", color: "from-purple-500 to-pink-600" },
+  { key: "story3", rating: 5, initials: "PS", color: "from-teal-500 to-cyan-600" },
+] as const;
 
 const ROLES = [
-  { icon: Shield,        title: "CISO",               color: "from-blue-500 to-blue-700",     desc: "Full visibility across all risk domains, compliance posture, and vendor exposure." },
-  { icon: AlertTriangle, title: "Risk Manager",        color: "from-red-500 to-rose-600",      desc: "Build and maintain the risk register, run Monte Carlo simulations, link risks to assets." },
-  { icon: CheckCircle,   title: "Compliance Manager",  color: "from-green-500 to-emerald-600", desc: "Run multi-framework assessments, track control implementation, manage evidence." },
-  { icon: ClipboardList, title: "Auditor",             color: "from-purple-500 to-indigo-600", desc: "Dedicated portal scoped to assigned assessments. Upload findings, generate reports." },
-  { icon: FileText,      title: "Policy Manager",      color: "from-orange-500 to-amber-600",  desc: "Author and version policies, route for approval, send employee attestations." },
-];
+  { icon: Shield,        key: "ciso",       color: "from-blue-500 to-blue-700"     },
+  { icon: AlertTriangle, key: "risk_mgr",   color: "from-red-500 to-rose-600"      },
+  { icon: CheckCircle,   key: "comp_mgr",   color: "from-green-500 to-emerald-600" },
+  { icon: ClipboardList, key: "auditor",    color: "from-purple-500 to-indigo-600" },
+  { icon: FileText,      key: "policy_mgr", color: "from-orange-500 to-amber-600"  },
+] as const;
 
 const HOW_IT_WORKS = [
-  { step: "01", icon: BookOpen, title: "Connect your frameworks", desc: "Select from 70+ built-in compliance frameworks or build a custom one. GRCEye pre-loads all controls, requirements, and crosswalk mappings automatically.", color: "from-blue-500 to-indigo-600" },
-  { step: "02", icon: Zap,      title: "Assess and close gaps",   desc: "Run AI-powered compliance assessments. The platform identifies gaps, suggests remediation steps, and links evidence across all mapped controls simultaneously.", color: "from-purple-500 to-pink-600" },
-  { step: "03", icon: BarChart2,title: "Report with confidence",  desc: "Generate board-ready PDF reports, share a public Trust Center with customers, and give auditors scoped portal access — all without leaving the platform.", color: "from-teal-500 to-cyan-600" },
-];
+  { step: "01", icon: BookOpen,  key: "step1", color: "from-blue-500 to-indigo-600"   },
+  { step: "02", icon: Zap,       key: "step2", color: "from-purple-500 to-pink-600"   },
+  { step: "03", icon: BarChart2, key: "step3", color: "from-teal-500 to-cyan-600"     },
+] as const;
 
 // ── Mockups ───────────────────────────────────────────────────────────────────
 function DashboardMockup() {
@@ -532,14 +533,21 @@ function ScrollProgress() {
 
 // ── Main Page ─────────────────────────────────────────────────────────────────
 export default function LandingPage() {
-  const typeword = useTypewriter(["security teams", "CISOs", "risk managers", "compliance officers", "modern enterprises"]);
+  const { t } = useTranslation();
+  const typeword = useTypewriter([
+    t("public.landing.typeword1"),
+    t("public.landing.typeword2"),
+    t("public.landing.typeword3"),
+    t("public.landing.typeword4"),
+    t("public.landing.typeword5"),
+  ]);
 
   return (
     <div className="min-h-screen bg-[#f0f9ff] text-gray-900">
       <SEO
         title="GRCEye — Governance, Risk & Compliance Platform"
         titleOverride
-        description="The all-in-one GRC SaaS platform. 70+ compliance frameworks, AI gap analysis, risk quantification, audits, policies, vendor risk and a public trust center — built for security teams and CISOs."
+        description={t("public.landing.hero_subtitle")}
         path="/"
         keywords="GRC platform, governance risk compliance, ISO 27001, SOC 2, NIST CSF, GDPR, NIS2, DORA, risk management software, compliance automation, AI compliance, vendor risk management, TPRM, audit software, policy management"
       />
@@ -547,11 +555,11 @@ export default function LandingPage() {
 
       {/* ── Nav ── */}
       <PublicNav links={[
-        { to: "#how-it-works", label: "How it works", hash: true },
-        { to: "/features-landing", label: "Features" },
-        { to: "/solutions", label: "Solutions" },
-        { to: "#frameworks", label: "Frameworks", hash: true },
-        { to: "/faq", label: "FAQ" },
+        { to: "#how-it-works",     label: t("public.nav.how_it_works"), hash: true },
+        { to: "/features-landing", label: t("public.nav.features") },
+        { to: "/solutions",        label: t("public.nav.solutions") },
+        { to: "#frameworks",       label: t("public.nav.frameworks"), hash: true },
+        { to: "/faq",              label: t("public.nav.faq") },
       ]} />
 
       {/* ── Hero ── */}
@@ -569,22 +577,20 @@ export default function LandingPage() {
           {/* Badge */}
           <div className="animate-fade-in-up inline-flex items-center gap-2 bg-white/80 border border-blue-200 text-blue-700 text-xs font-semibold px-4 py-1.5 rounded-full mb-6 shadow-sm backdrop-blur-sm">
             <Sparkles className="w-3.5 h-3.5 text-yellow-500 animate-pulse" />
-            70+ compliance frameworks · On-premise AI · Zero data egress
+            {t("public.landing.hero_badge")}
             <span className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse" />
           </div>
 
           {/* Headline with typewriter */}
           <h1 className="animate-fade-in-up animation-delay-200 text-4xl sm:text-5xl md:text-6xl font-extrabold text-gray-900 leading-tight tracking-tight mb-4">
-            Enterprise GRC for{" "}
+            {t("public.landing.hero_title_pre")}{" "}
             <br className="hidden sm:block" />
             <span className="gradient-text-animated">{typeword}</span>
             <span className="typing-cursor" />
           </h1>
 
           <p className="animate-fade-in-up animation-delay-400 text-lg sm:text-xl text-gray-500 leading-relaxed mb-10 max-w-2xl mx-auto">
-            One platform for risk management, compliance tracking, audit workflows,
-            policy governance, and vendor risk — powered by private AI that never
-            leaves your infrastructure.
+            {t("public.landing.hero_subtitle")}
           </p>
 
           {/* CTA buttons */}
@@ -593,23 +599,23 @@ export default function LandingPage() {
               to="/register"
               className="glow-btn flex items-center justify-center gap-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-bold px-8 py-4 rounded-2xl transition-all text-base shadow-lg shadow-blue-500/30"
             >
-              Start 14-day free trial <ArrowRight className="w-4 h-4" />
+              {t("public.landing.cta_trial")} <ArrowRight className="w-4 h-4 rtl:rotate-180" />
             </Link>
             <Link
               to="/login"
               className="flex items-center justify-center gap-2 bg-white/80 backdrop-blur-sm border border-sky-200 text-gray-700 hover:bg-white font-semibold px-8 py-4 rounded-2xl transition-all text-base hover:-translate-y-0.5 shadow-sm"
             >
-              Sign in to dashboard <ChevronRight className="w-4 h-4" />
+              {t("public.landing.cta_signin")} <ChevronRight className="w-4 h-4 rtl:rotate-180" />
             </Link>
           </div>
-          <p className="animate-fade-in-up animation-delay-800 mt-4 text-xs text-gray-400">No credit card required · 14-day free trial · Cancel anytime</p>
+          <p className="animate-fade-in-up animation-delay-800 mt-4 text-xs text-gray-400">{t("public.landing.no_card")}</p>
 
           {/* Animated stats */}
           <div className="animate-fade-in-up animation-delay-1000 mt-14 grid grid-cols-3 gap-4 max-w-md mx-auto">
             {[
-              { value: 70, suffix: "+", label: "Frameworks" },
-              { value: 3500, suffix: "+", label: "Controls mapped" },
-              { value: 60, suffix: "%", label: "Faster audits" },
+              { value: 70, suffix: "+", label: t("public.landing.stat_frameworks") },
+              { value: 3500, suffix: "+", label: t("public.landing.stat_controls") },
+              { value: 60, suffix: "%", label: t("public.landing.stat_faster") },
             ].map(s => (
               <div key={s.label} className="text-center glass-card rounded-2xl py-4 px-2 border border-white/80 shadow-sm">
                 <p className="text-2xl sm:text-3xl font-extrabold text-gray-900">
@@ -628,14 +634,14 @@ export default function LandingPage() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-12 items-center">
             <Reveal direction="left">
               <div className="inline-flex items-center gap-2 text-blue-600 text-xs font-semibold bg-blue-50 border border-blue-100 px-3 py-1.5 rounded-full mb-4">
-                <BarChart2 className="w-3.5 h-3.5" /> Command Center
+                <BarChart2 className="w-3.5 h-3.5" /> {t("public.landing.command_center")}
               </div>
-              <h2 className="text-2xl sm:text-3xl font-extrabold text-gray-900 mb-4">Your entire GRC posture at a glance</h2>
+              <h2 className="text-2xl sm:text-3xl font-extrabold text-gray-900 mb-4">{t("public.landing.dashboard_title")}</h2>
               <p className="text-gray-500 leading-relaxed mb-6">
-                Real-time visibility into every domain — compliance scores, open risks, contract deadlines, audit progress, and policy attestation rates — all in one screen.
+                {t("public.landing.dashboard_desc")}
               </p>
               <ul className="space-y-3">
-                {["Live compliance score per framework","Critical risk and contract expiry alerts","Audit completion and finding status","Framework coverage progress bars","Role-specific views for each team member"].map(f => (
+                {[t("public.landing.dash_b1"), t("public.landing.dash_b2"), t("public.landing.dash_b3"), t("public.landing.dash_b4"), t("public.landing.dash_b5")].map(f => (
                   <li key={f} className="flex items-start gap-2 text-sm text-gray-600">
                     <span className="w-5 h-5 rounded-full bg-green-100 flex items-center justify-center flex-shrink-0 mt-0.5">
                       <CheckCircle className="w-3 h-3 text-green-600" />
@@ -658,10 +664,10 @@ export default function LandingPage() {
           <Reveal>
             <div className="text-center mb-16">
               <div className="inline-flex items-center gap-2 text-indigo-600 text-xs font-semibold bg-indigo-50 border border-indigo-100 px-3 py-1.5 rounded-full mb-4">
-                <Zap className="w-3.5 h-3.5" /> Quick setup
+                <Zap className="w-3.5 h-3.5" /> {t("public.landing.quick_setup")}
               </div>
-              <h2 className="text-2xl sm:text-3xl font-extrabold text-gray-900 mb-3">How GRCEye works</h2>
-              <p className="text-gray-500 max-w-xl mx-auto">From setup to board report in three straightforward steps.</p>
+              <h2 className="text-2xl sm:text-3xl font-extrabold text-gray-900 mb-3">{t("public.landing.hiw_title")}</h2>
+              <p className="text-gray-500 max-w-xl mx-auto">{t("public.landing.hiw_subtitle")}</p>
             </div>
           </Reveal>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
@@ -675,8 +681,8 @@ export default function LandingPage() {
                     <step.icon className="w-6 h-6 text-white" />
                   </div>
                   <div className="text-xs font-black text-gray-300 mb-1 tracking-widest">{step.step}</div>
-                  <h3 className="text-lg font-bold text-gray-900 mb-2">{step.title}</h3>
-                  <p className="text-gray-500 text-sm leading-relaxed">{step.desc}</p>
+                  <h3 className="text-lg font-bold text-gray-900 mb-2">{t(`public.landing.hiw_${step.key}`)}</h3>
+                  <p className="text-gray-500 text-sm leading-relaxed">{t(`public.landing.hiw_${step.key}_desc`)}</p>
                 </div>
               </Reveal>
             ))}
@@ -689,8 +695,8 @@ export default function LandingPage() {
         <div className="max-w-7xl mx-auto">
           <Reveal>
             <div className="text-center mb-16">
-              <h2 className="text-2xl sm:text-3xl font-extrabold text-gray-900 mb-3">Every module, purpose-built</h2>
-              <p className="text-gray-500 max-w-xl mx-auto">GRCEye covers the full lifecycle. See what each module looks like in practice.</p>
+              <h2 className="text-2xl sm:text-3xl font-extrabold text-gray-900 mb-3">{t("public.landing.modules_title")}</h2>
+              <p className="text-gray-500 max-w-xl mx-auto">{t("public.landing.modules_subtitle")}</p>
             </div>
           </Reveal>
 
@@ -698,12 +704,12 @@ export default function LandingPage() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-10 mb-24 items-center">
             <Reveal direction="left">
               <div className="inline-flex items-center gap-2 text-red-600 text-xs font-semibold bg-red-50 border border-red-100 px-3 py-1.5 rounded-full mb-4">
-                <AlertTriangle className="w-3.5 h-3.5" /> Risk Management
+                <AlertTriangle className="w-3.5 h-3.5" /> {t("public.mod.risk_badge")}
               </div>
-              <h3 className="text-xl sm:text-2xl font-bold text-gray-900 mb-3">Quantify and treat risk — not just log it</h3>
-              <p className="text-gray-500 leading-relaxed mb-4">Go beyond basic risk registers. GRCEye combines a visual 5×5 heatmap with Monte Carlo simulation, producing ALE, SLE, P90/P95 figures your board can act on.</p>
+              <h3 className="text-xl sm:text-2xl font-bold text-gray-900 mb-3">{t("public.mod.risk_title")}</h3>
+              <p className="text-gray-500 leading-relaxed mb-4">{t("public.mod.risk_desc")}</p>
               <ul className="space-y-2">
-                {["Interactive heatmap with owner + next-review tracking","Monte Carlo quantification — ALE, SLE, P90, P95","Custom risk matrices: 3×3, 5×5, or fully configurable","Risk scenarios: Threat → Vuln → Asset → Control chains","Formal risk acceptance workflow with expiration"].map(f => (
+                {[t("public.mod.risk_b1"), t("public.mod.risk_b2"), t("public.mod.risk_b3"), t("public.mod.risk_b4"), t("public.mod.risk_b5")].map(f => (
                   <li key={f} className="flex items-start gap-2 text-sm text-gray-600">
                     <CheckCircle className="w-4 h-4 text-green-500 flex-shrink-0 mt-0.5" />{f}
                   </li>
@@ -718,12 +724,12 @@ export default function LandingPage() {
             <Reveal direction="left" delay={100} className="order-2 md:order-1"><ComplianceMockup /></Reveal>
             <Reveal direction="right" className="order-1 md:order-2">
               <div className="inline-flex items-center gap-2 text-blue-600 text-xs font-semibold bg-blue-50 border border-blue-100 px-3 py-1.5 rounded-full mb-4">
-                <CheckCircle className="w-3.5 h-3.5" /> Compliance & Frameworks
+                <CheckCircle className="w-3.5 h-3.5" /> {t("public.mod.compliance_badge")}
               </div>
-              <h3 className="text-xl sm:text-2xl font-bold text-gray-900 mb-3">70+ frameworks, one assessment workflow</h3>
-              <p className="text-gray-500 leading-relaxed mb-4">Run simultaneous assessments across ISO 27001, SOC 2, GDPR, PCI DSS, and any other framework. Evidence uploaded once applies to all mapped controls.</p>
+              <h3 className="text-xl sm:text-2xl font-bold text-gray-900 mb-3">{t("public.mod.compliance_title")}</h3>
+              <p className="text-gray-500 leading-relaxed mb-4">{t("public.mod.compliance_desc")}</p>
               <ul className="space-y-2">
-                {["70+ built-in frameworks with pre-mapped controls","AI-powered gap analysis with remediation guidance","Cross-framework evidence reuse — no duplication","Customizable frameworks: fork, edit, add controls","Auditor portal with scoped, read-only access"].map(f => (
+                {[t("public.mod.compliance_b1"), t("public.mod.compliance_b2"), t("public.mod.compliance_b3"), t("public.mod.compliance_b4"), t("public.mod.compliance_b5")].map(f => (
                   <li key={f} className="flex items-start gap-2 text-sm text-gray-600">
                     <CheckCircle className="w-4 h-4 text-green-500 flex-shrink-0 mt-0.5" />{f}
                   </li>
@@ -736,12 +742,12 @@ export default function LandingPage() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-10 mb-24 items-center">
             <Reveal direction="left">
               <div className="inline-flex items-center gap-2 text-purple-600 text-xs font-semibold bg-purple-50 border border-purple-100 px-3 py-1.5 rounded-full mb-4">
-                <ClipboardList className="w-3.5 h-3.5" /> Audit Management
+                <ClipboardList className="w-3.5 h-3.5" /> {t("public.mod.audit_badge")}
               </div>
-              <h3 className="text-xl sm:text-2xl font-bold text-gray-900 mb-3">Full audit lifecycle from planning to report</h3>
-              <p className="text-gray-500 leading-relaxed mb-4">Manage internal and external audits end-to-end. Assign auditors, build control checklists, record findings, track remediation, and generate PDF reports.</p>
+              <h3 className="text-xl sm:text-2xl font-bold text-gray-900 mb-3">{t("public.mod.audit_title")}</h3>
+              <p className="text-gray-500 leading-relaxed mb-4">{t("public.mod.audit_desc")}</p>
               <ul className="space-y-2">
-                {["Internal and external audit types","Auditor portal: scoped to assigned audits only","Finding severity: Critical / High / Medium / Low","Remediation tracking with owner assignment","One-click PDF audit report generation"].map(f => (
+                {[t("public.mod.audit_b1"), t("public.mod.audit_b2"), t("public.mod.audit_b3"), t("public.mod.audit_b4"), t("public.mod.audit_b5")].map(f => (
                   <li key={f} className="flex items-start gap-2 text-sm text-gray-600">
                     <CheckCircle className="w-4 h-4 text-green-500 flex-shrink-0 mt-0.5" />{f}
                   </li>
@@ -756,12 +762,12 @@ export default function LandingPage() {
             <Reveal direction="left" delay={100} className="order-2 md:order-1"><PolicyMockup /></Reveal>
             <Reveal direction="right" className="order-1 md:order-2">
               <div className="inline-flex items-center gap-2 text-orange-600 text-xs font-semibold bg-orange-50 border border-orange-100 px-3 py-1.5 rounded-full mb-4">
-                <FileText className="w-3.5 h-3.5" /> Policy & Document Management
+                <FileText className="w-3.5 h-3.5" /> {t("public.mod.policy_badge")}
               </div>
-              <h3 className="text-xl sm:text-2xl font-bold text-gray-900 mb-3">AI-generated policies, versioned and attested</h3>
-              <p className="text-gray-500 leading-relaxed mb-4">Stop writing policies from scratch. GRCEye's AI generates 29 audit-ready document types — tailored to your organization's industry, size, and frameworks — in seconds.</p>
+              <h3 className="text-xl sm:text-2xl font-bold text-gray-900 mb-3">{t("public.mod.policy_title")}</h3>
+              <p className="text-gray-500 leading-relaxed mb-4">{t("public.mod.policy_desc")}</p>
               <ul className="space-y-2">
-                {["AI generates 29 document types in seconds","Full version history with approval tracking","Employee attestation with email reminders","Policy approval workflow before publishing","Link policies to framework controls"].map(f => (
+                {[t("public.mod.policy_b1"), t("public.mod.policy_b2"), t("public.mod.policy_b3"), t("public.mod.policy_b4"), t("public.mod.policy_b5")].map(f => (
                   <li key={f} className="flex items-start gap-2 text-sm text-gray-600">
                     <CheckCircle className="w-4 h-4 text-green-500 flex-shrink-0 mt-0.5" />{f}
                   </li>
@@ -775,12 +781,12 @@ export default function LandingPage() {
             <Reveal direction="left" delay={100} className="order-2 md:order-1"><AIMockup /></Reveal>
             <Reveal direction="right" className="order-1 md:order-2">
               <div className="inline-flex items-center gap-2 text-indigo-600 text-xs font-semibold bg-indigo-50 border border-indigo-100 px-3 py-1.5 rounded-full mb-4">
-                <Cpu className="w-3.5 h-3.5" /> On-Premise AI
+                <Cpu className="w-3.5 h-3.5" /> {t("public.mod.ai_badge")}
               </div>
-              <h3 className="text-xl sm:text-2xl font-bold text-gray-900 mb-3">Powerful AI — entirely inside your infrastructure</h3>
-              <p className="text-gray-500 leading-relaxed mb-4">GRCEye's AI runs on Ollama inside your own servers. Your contracts, policies, and compliance data never touch an external API.</p>
+              <h3 className="text-xl sm:text-2xl font-bold text-gray-900 mb-3">{t("public.mod.ai_title")}</h3>
+              <p className="text-gray-500 leading-relaxed mb-4">{t("public.mod.ai_desc")}</p>
               <ul className="space-y-2">
-                {["Document generator: 29 GRC document types","Contract clause analysis: 6-section structured review","Vendor prescreen: 15-question AI questionnaire","Compliance gap analysis with remediation suggestions","GRC assistant chatbot for instant guidance"].map(f => (
+                {[t("public.mod.ai_b1"), t("public.mod.ai_b2"), t("public.mod.ai_b3"), t("public.mod.ai_b4"), t("public.mod.ai_b5")].map(f => (
                   <li key={f} className="flex items-start gap-2 text-sm text-gray-600">
                     <CheckCircle className="w-4 h-4 text-green-500 flex-shrink-0 mt-0.5" />{f}
                   </li>
@@ -793,12 +799,12 @@ export default function LandingPage() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-10 items-center">
             <Reveal direction="left">
               <div className="inline-flex items-center gap-2 text-violet-600 text-xs font-semibold bg-violet-50 border border-violet-100 px-3 py-1.5 rounded-full mb-4">
-                <MessageSquare className="w-3.5 h-3.5" /> Vendor Risk (TPRM)
+                <MessageSquare className="w-3.5 h-3.5" /> {t("public.mod.vendor_badge")}
               </div>
-              <h3 className="text-xl sm:text-2xl font-bold text-gray-900 mb-3">Close vendor contracts faster with real-time collaboration</h3>
-              <p className="text-gray-500 leading-relaxed mb-4">The vendor module handles the full third-party risk lifecycle — from onboarding and AI prescreening through contract review, CISO approval, and ongoing monitoring.</p>
+              <h3 className="text-xl sm:text-2xl font-bold text-gray-900 mb-3">{t("public.mod.vendor_title")}</h3>
+              <p className="text-gray-500 leading-relaxed mb-4">{t("public.mod.vendor_desc")}</p>
               <ul className="space-y-2">
-                {["Vendor onboarding with risk tiers: Critical / High / Medium / Low","AI prescreen: 15-question analysis before onboarding","Contract upload → AI review → CISO approval workflow","Risk cartography: 6-dimension visual heatmap per vendor"].map(f => (
+                {[t("public.mod.vendor_b1"), t("public.mod.vendor_b2"), t("public.mod.vendor_b3"), t("public.mod.vendor_b4")].map(f => (
                   <li key={f} className="flex items-start gap-2 text-sm text-gray-600">
                     <CheckCircle className="w-4 h-4 text-green-500 flex-shrink-0 mt-0.5" />{f}
                   </li>
@@ -815,19 +821,19 @@ export default function LandingPage() {
         <div className="max-w-7xl mx-auto">
           <Reveal>
             <div className="text-center mb-14">
-              <h2 className="text-2xl sm:text-3xl font-extrabold text-gray-900 mb-3">Built for every role on your team</h2>
-              <p className="text-gray-500 max-w-xl mx-auto">9 built-in roles with tailored access. Each person sees exactly what they need.</p>
+              <h2 className="text-2xl sm:text-3xl font-extrabold text-gray-900 mb-3">{t("public.landing.roles_title")}</h2>
+              <p className="text-gray-500 max-w-xl mx-auto">{t("public.landing.roles_subtitle")}</p>
             </div>
           </Reveal>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
-            {ROLES.map(({ icon: Icon, title, color, desc }, i) => (
-              <Reveal key={title} delay={i * 100}>
+            {ROLES.map(({ icon: Icon, key, color }, i) => (
+              <Reveal key={key} delay={i * 100}>
                 <div className="gradient-border bg-white rounded-2xl p-6 card-hover h-full">
                   <div className={`w-12 h-12 bg-gradient-to-br ${color} rounded-2xl flex items-center justify-center mb-4 shadow-lg`}>
                     <Icon className="w-5 h-5 text-white" />
                   </div>
-                  <h3 className="font-bold text-gray-900 mb-2">{title}</h3>
-                  <p className="text-xs text-gray-500 leading-relaxed">{desc}</p>
+                  <h3 className="font-bold text-gray-900 mb-2">{t(`public.landing.role_${key}`)}</h3>
+                  <p className="text-xs text-gray-500 leading-relaxed">{t(`public.landing.role_${key}_desc`)}</p>
                 </div>
               </Reveal>
             ))}
@@ -844,10 +850,10 @@ export default function LandingPage() {
         <div className="relative max-w-5xl mx-auto">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-8 text-center text-white">
             {[
-              { icon: Shield,     to: 70,   suffix: "+", label: "Compliance frameworks",   sub: "pre-loaded controls & crosswalks" },
-              { icon: Activity,   to: 3500, suffix: "+", label: "Pre-mapped controls",      sub: "across all frameworks" },
-              { icon: TrendingUp, to: 60,   suffix: "%", label: "Faster audit prep",        sub: "vs. manual spreadsheet work" },
-              { icon: Database,   to: 0,    suffix: "",  label: "Data sent to external AI", sub: "on-premise model, zero egress" },
+              { icon: Shield,     to: 70,   suffix: "+", label: t("public.landing.stats_frameworks_label"), sub: t("public.landing.stats_frameworks_sub") },
+              { icon: Activity,   to: 3500, suffix: "+", label: t("public.landing.stats_controls_label"),   sub: t("public.landing.stats_controls_sub") },
+              { icon: TrendingUp, to: 60,   suffix: "%", label: t("public.landing.stats_faster_label"),     sub: t("public.landing.stats_faster_sub") },
+              { icon: Database,   to: 0,    suffix: "",  label: t("public.landing.stats_egress_label"),     sub: t("public.landing.stats_egress_sub") },
             ].map((s, i) => (
               <Reveal key={s.label} delay={i * 120}>
                 <div className="glass-card rounded-2xl px-4 py-6 border border-white/20">
@@ -871,19 +877,19 @@ export default function LandingPage() {
         <div className="max-w-7xl mx-auto">
           <Reveal>
             <div className="text-center mb-14">
-              <h2 className="text-2xl sm:text-3xl font-extrabold text-gray-900 mb-3">Everything your GRC team needs</h2>
-              <p className="text-gray-500 max-w-xl mx-auto">From risk to compliance to audit — one integrated workflow, no spreadsheets required.</p>
+              <h2 className="text-2xl sm:text-3xl font-extrabold text-gray-900 mb-3">{t("public.landing.features_title")}</h2>
+              <p className="text-gray-500 max-w-xl mx-auto">{t("public.landing.features_subtitle")}</p>
             </div>
           </Reveal>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
-            {FEATURES.map(({ icon: Icon, title, desc, color, bg, text }, i) => (
-              <Reveal key={title} delay={i * 60}>
+            {FEATURES.map(({ icon: Icon, key, color, bg, text }, i) => (
+              <Reveal key={key} delay={i * 60}>
                 <div className="gradient-border bg-white rounded-2xl p-6 card-hover h-full group cursor-default">
                   <div className={`w-12 h-12 ${bg} rounded-2xl flex items-center justify-center mb-4 group-hover:bg-gradient-to-br group-hover:${color} transition-all duration-300`}>
                     <Icon className={`w-5 h-5 ${text} group-hover:text-white transition-colors duration-300`} />
                   </div>
-                  <h3 className="font-bold text-gray-900 mb-2 group-hover:text-blue-600 transition-colors">{title}</h3>
-                  <p className="text-sm text-gray-500 leading-relaxed">{desc}</p>
+                  <h3 className="font-bold text-gray-900 mb-2 group-hover:text-blue-600 transition-colors">{t(`public.landing.feat_${key}`)}</h3>
+                  <p className="text-sm text-gray-500 leading-relaxed">{t(`public.landing.feat_${key}_desc`)}</p>
                 </div>
               </Reveal>
             ))}
@@ -905,10 +911,10 @@ export default function LandingPage() {
         <div className="max-w-5xl mx-auto text-center mb-12">
           <Reveal>
             <div className="inline-flex items-center gap-2 text-blue-400 text-xs font-semibold bg-blue-500/10 border border-blue-500/20 px-3 py-1.5 rounded-full mb-4">
-              <BookOpen className="w-3.5 h-3.5" /> Framework Library
+              <BookOpen className="w-3.5 h-3.5" /> {t("public.landing.framework_lib")}
             </div>
-            <h2 className="text-2xl sm:text-3xl font-extrabold text-white mb-3">Built for every framework</h2>
-            <p className="text-slate-400 max-w-xl mx-auto">Pre-loaded with controls, crosswalk mappings, and evidence requirements for 70+ global frameworks.</p>
+            <h2 className="text-2xl sm:text-3xl font-extrabold text-white mb-3">{t("public.landing.framework_title")}</h2>
+            <p className="text-slate-400 max-w-xl mx-auto">{t("public.landing.framework_subtitle")}</p>
           </Reveal>
         </div>
 
@@ -928,9 +934,9 @@ export default function LandingPage() {
 
         <div className="max-w-3xl mx-auto grid grid-cols-1 sm:grid-cols-3 gap-5">
           {[
-            { icon: Lock,  label: "ISO/IEC certified",  value: "ISO 27001 · ISO 27002 · ISO 42001", color: "from-blue-500 to-indigo-600" },
-            { icon: Award, label: "Regulatory",         value: "GDPR · HIPAA · PCI DSS · DORA · NIS2", color: "from-purple-500 to-pink-600" },
-            { icon: Globe, label: "Industry standards", value: "SOC 2 · CIS v8 · NIST · CSA CCM", color: "from-teal-500 to-cyan-600" },
+            { icon: Lock,  label: t("public.landing.iso_certified"),      value: "ISO 27001 · ISO 27002 · ISO 42001",   color: "from-blue-500 to-indigo-600" },
+            { icon: Award, label: t("public.landing.regulatory"),         value: "GDPR · HIPAA · PCI DSS · DORA · NIS2", color: "from-purple-500 to-pink-600" },
+            { icon: Globe, label: t("public.landing.industry_standards"), value: "SOC 2 · CIS v8 · NIST · CSA CCM",       color: "from-teal-500 to-cyan-600" },
           ].map((s, i) => (
             <Reveal key={s.label} delay={i * 100}>
               <div className="bg-slate-800 rounded-2xl p-5 text-left border border-slate-700 hover:border-slate-600 hover:bg-slate-700/60 transition-all">
@@ -951,29 +957,29 @@ export default function LandingPage() {
           <Reveal>
             <div className="text-center mb-14">
               <div className="inline-flex items-center gap-2 text-yellow-600 text-xs font-semibold bg-yellow-50 border border-yellow-100 px-3 py-1.5 rounded-full mb-4">
-                <Star className="w-3.5 h-3.5 fill-yellow-500 text-yellow-500" /> Customer stories
+                <Star className="w-3.5 h-3.5 fill-yellow-500 text-yellow-500" /> {t("public.landing.stories_badge")}
               </div>
-              <h2 className="text-2xl sm:text-3xl font-extrabold text-gray-900 mb-3">Trusted by security teams</h2>
-              <p className="text-gray-500">From fast-growing startups to regulated enterprises.</p>
+              <h2 className="text-2xl sm:text-3xl font-extrabold text-gray-900 mb-3">{t("public.landing.stories_title")}</h2>
+              <p className="text-gray-500">{t("public.landing.stories_subtitle")}</p>
             </div>
           </Reveal>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {TESTIMONIALS.map((t, i) => (
-              <Reveal key={t.name} delay={i * 120}>
+            {TESTIMONIALS.map((story, i) => (
+              <Reveal key={story.key} delay={i * 120}>
                 <div className="gradient-border bg-white rounded-2xl p-6 card-hover h-full flex flex-col">
                   <div className="flex gap-0.5 mb-4">
-                    {Array.from({ length: t.rating }).map((_, j) => (
+                    {Array.from({ length: story.rating }).map((_, j) => (
                       <Star key={j} className="w-4 h-4 text-yellow-400 fill-yellow-400" />
                     ))}
                   </div>
-                  <p className="text-gray-700 text-sm leading-relaxed mb-5 flex-1">"{t.quote}"</p>
+                  <p className="text-gray-700 text-sm leading-relaxed mb-5 flex-1">"{t(`public.landing.${story.key}_quote`)}"</p>
                   <div className="flex items-center gap-3 pt-4 border-t border-gray-100">
-                    <div className={`w-9 h-9 rounded-full bg-gradient-to-br ${t.color} flex items-center justify-center text-white text-xs font-bold shadow-sm flex-shrink-0`}>
-                      {t.initials}
+                    <div className={`w-9 h-9 rounded-full bg-gradient-to-br ${story.color} flex items-center justify-center text-white text-xs font-bold shadow-sm flex-shrink-0`}>
+                      {story.initials}
                     </div>
                     <div>
-                      <p className="text-sm font-semibold text-gray-900">{t.name}</p>
-                      <p className="text-xs text-gray-500">{t.role}</p>
+                      <p className="text-sm font-semibold text-gray-900">{t(`public.landing.${story.key}_name`)}</p>
+                      <p className="text-xs text-gray-500">{t(`public.landing.${story.key}_role`)}</p>
                     </div>
                   </div>
                 </div>
@@ -987,14 +993,14 @@ export default function LandingPage() {
       <section className="py-24 px-4 sm:px-6 bg-white">
         <div className="max-w-6xl mx-auto">
           <Reveal>
-            <h2 className="text-2xl sm:text-3xl font-extrabold text-gray-900 text-center mb-12">Explore further</h2>
+            <h2 className="text-2xl sm:text-3xl font-extrabold text-gray-900 text-center mb-12">{t("public.landing.explore_title")}</h2>
           </Reveal>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
             {[
-              { to: "/features-landing", title: "Features",  icon: Zap,          desc: "Deep-dive into every module — Risk, Compliance, Audit, Policy, Vendor, AI, and Governance.", cta: "Explore features →", color: "from-blue-500 to-indigo-600" },
-              { to: "/solutions",        title: "Solutions", icon: Building2,     desc: "GRCEye for SaaS, Healthcare, FinTech, and Enterprise — use cases and workflows by industry.", cta: "View solutions →", color: "from-purple-500 to-pink-600" },
-              { to: "/blog",             title: "Blog",      icon: FileText,      desc: "Insights on compliance strategy, risk management, and best practices from the GRCEye team.", cta: "Read articles →", color: "from-teal-500 to-cyan-600" },
-              { to: "/faq",              title: "FAQ",       icon: MessageSquare, desc: "Common questions about GRCEye features, deployment, and getting started.", cta: "View FAQ →", color: "from-orange-500 to-amber-500" },
+              { to: "/features-landing", title: t("public.nav.features"),  icon: Zap,          desc: t("public.landing.explore_features_desc"),  cta: t("public.landing.explore_features_cta"),  color: "from-blue-500 to-indigo-600" },
+              { to: "/solutions",        title: t("public.nav.solutions"), icon: Building2,    desc: t("public.landing.explore_solutions_desc"), cta: t("public.landing.explore_solutions_cta"), color: "from-purple-500 to-pink-600" },
+              { to: "/blog",             title: t("public.nav.blog"),      icon: FileText,     desc: t("public.landing.explore_blog_desc"),      cta: t("public.landing.explore_blog_cta"),      color: "from-teal-500 to-cyan-600" },
+              { to: "/faq",              title: t("public.nav.faq"),       icon: MessageSquare, desc: t("public.landing.explore_faq_desc"),       cta: t("public.landing.explore_faq_cta"),       color: "from-orange-500 to-amber-500" },
             ].map((item, i) => (
               <Reveal key={item.title} delay={i * 80}>
                 <Link to={item.to} className="group gradient-border bg-white rounded-2xl p-7 card-hover block h-full">
@@ -1025,22 +1031,22 @@ export default function LandingPage() {
           <div className="relative max-w-2xl mx-auto text-center text-white">
             <div className="inline-flex items-center gap-2 bg-white/15 border border-white/20 text-white text-xs font-semibold px-4 py-1.5 rounded-full mb-6 backdrop-blur-sm">
               <Sparkles className="w-3.5 h-3.5 text-yellow-300 animate-pulse" />
-              14-day free trial · No credit card · Full access
+              {t("public.landing.cta_badge")}
             </div>
-            <h2 className="text-3xl sm:text-4xl font-extrabold mb-4 leading-tight">Start your GRC journey today</h2>
-            <p className="text-blue-100 mb-10 text-lg">Join hundreds of security teams who replaced spreadsheets with GRCEye.</p>
+            <h2 className="text-3xl sm:text-4xl font-extrabold mb-4 leading-tight">{t("public.landing.cta_title")}</h2>
+            <p className="text-blue-100 mb-10 text-lg">{t("public.landing.cta_subtitle")}</p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
               <Link
                 to="/register"
                 className="glow-btn flex items-center justify-center gap-2 bg-white text-blue-700 font-bold px-8 py-4 rounded-2xl hover:bg-blue-50 transition-all text-base shadow-xl"
               >
-                Start free trial <ArrowRight className="w-4 h-4" />
+                {t("public.landing.cta_trial_btn")} <ArrowRight className="w-4 h-4 rtl:rotate-180" />
               </Link>
               <a
-                href="mailto:sales@grceye.io"
+                href="mailto:sales@grceye.com"
                 className="flex items-center justify-center gap-2 bg-white/10 border border-white/30 text-white font-semibold px-8 py-4 rounded-2xl hover:bg-white/20 transition-all text-base backdrop-blur-sm"
               >
-                Talk to sales
+                {t("public.landing.cta_sales_btn")}
               </a>
             </div>
           </div>

@@ -1,6 +1,7 @@
 import PublicFooter from "../components/landing/PublicFooter";
 import { useState } from "react";
 import { Link } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import { ArrowRight, Send, Mail, MessageSquare, Building2, CheckCircle, AlertCircle } from "lucide-react";
 import PublicNav from "../components/landing/PublicNav";
 import SupportChat from "../components/landing/SupportChat";
@@ -10,6 +11,7 @@ import axios from "axios";
 const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:8000/api/v1";
 
 export default function ContactPage() {
+  const { t } = useTranslation();
   const [form, setForm] = useState({
     name: "",
     email: "",
@@ -41,7 +43,7 @@ export default function ContactPage() {
       setForm({ name: "", email: "", company: "", subject: "", message: "" });
     } catch (err: unknown) {
       const detail = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
-      setError(typeof detail === "string" ? detail : "Could not send your message. Please try again or email sales@grceye.io directly.");
+      setError(typeof detail === "string" ? detail : t("public.contact.error"));
     } finally {
       setSubmitting(false);
     }
@@ -58,7 +60,7 @@ export default function ContactPage() {
   return (
     <div className="min-h-screen bg-[#f0f9ff] text-gray-900">
       <SEO
-        title="Contact us"
+        title={t("public.contact.hero_title")}
         description="Talk to the GRCEye team. Sales, support, partnerships, demos. We typically reply within one business day."
         path="/contact"
         keywords="contact GRCEye, GRC demo, GRC sales contact, GRCEye support"
@@ -66,11 +68,11 @@ export default function ContactPage() {
       />
 
       <PublicNav links={[
-        { to: "/", label: "Home" },
-        { to: "/features-landing", label: "Features" },
-        { to: "/solutions", label: "Solutions" },
-        { to: "/faq", label: "FAQ" },
-        { to: "/contact", label: "Contact", activeOn: "/contact" },
+        { to: "/",                 label: t("public.nav.home") },
+        { to: "/features-landing", label: t("public.nav.features") },
+        { to: "/solutions",        label: t("public.nav.solutions") },
+        { to: "/faq",              label: t("public.nav.faq") },
+        { to: "/contact",          label: t("public.nav.contact"), activeOn: "/contact" },
       ]} />
 
       {/* Spacer for fixed nav */}
@@ -80,13 +82,13 @@ export default function ContactPage() {
       <section className="max-w-4xl mx-auto px-6 pt-12 pb-8 text-center">
         <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-blue-50 border border-blue-100 text-blue-700 text-xs font-semibold mb-4">
           <MessageSquare className="w-3.5 h-3.5" />
-          We&apos;d love to hear from you
+          {t("public.contact.hero_subtitle")}
         </div>
         <h1 className="text-4xl sm:text-5xl font-extrabold tracking-tight text-gray-900 mb-4">
-          Get in touch
+          {t("public.contact.hero_title")}
         </h1>
         <p className="text-lg text-gray-600 max-w-2xl mx-auto">
-          Questions about GRCEye, a custom demo for your team, or a partnership idea? Tell us what you need — we typically reply within one business day.
+          {t("public.contact.hero_subtitle")}
         </p>
       </section>
 
@@ -99,8 +101,8 @@ export default function ContactPage() {
               <div className="w-16 h-16 rounded-full bg-green-50 border border-green-100 flex items-center justify-center mx-auto mb-4">
                 <CheckCircle className="w-8 h-8 text-green-600" />
               </div>
-              <h2 className="text-2xl font-bold text-gray-900 mb-2">Message sent</h2>
-              <p className="text-gray-600 mb-6">Thanks — we received your message and will get back to you shortly.</p>
+              <h2 className="text-2xl font-bold text-gray-900 mb-2">{t("public.contact.success")}</h2>
+              <p className="text-gray-600 mb-6">{t("public.contact.success")}</p>
               <button
                 type="button"
                 onClick={() => setSuccess(false)}
@@ -117,7 +119,7 @@ export default function ContactPage() {
               <div className="grid sm:grid-cols-2 gap-4">
                 <div>
                   <label htmlFor="contact-name" className="block text-xs font-semibold text-gray-700 mb-1.5">
-                    Your name <span className="text-red-500">*</span>
+                    {t("public.contact.name_label")} <span className="text-red-500">*</span>
                   </label>
                   <input
                     id="contact-name"
@@ -131,7 +133,7 @@ export default function ContactPage() {
                 </div>
                 <div>
                   <label htmlFor="contact-email" className="block text-xs font-semibold text-gray-700 mb-1.5">
-                    Work email <span className="text-red-500">*</span>
+                    {t("public.contact.email_label")} <span className="text-red-500">*</span>
                   </label>
                   <input
                     id="contact-email"
@@ -147,7 +149,7 @@ export default function ContactPage() {
 
               <div className="grid sm:grid-cols-2 gap-4">
                 <div>
-                  <label htmlFor="contact-company" className="block text-xs font-semibold text-gray-700 mb-1.5">Company</label>
+                  <label htmlFor="contact-company" className="block text-xs font-semibold text-gray-700 mb-1.5">{t("public.contact.company_label")}</label>
                   <input
                     id="contact-company"
                     type="text"
@@ -178,7 +180,7 @@ export default function ContactPage() {
 
               <div>
                 <label htmlFor="contact-message" className="block text-xs font-semibold text-gray-700 mb-1.5">
-                  Message <span className="text-red-500">*</span>
+                  {t("public.contact.message_label")} <span className="text-red-500">*</span>
                 </label>
                 <textarea
                   id="contact-message"
@@ -206,10 +208,10 @@ export default function ContactPage() {
                 disabled={submitting}
                 className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-6 py-3 bg-blue-600 text-white text-sm font-semibold rounded-xl hover:bg-blue-700 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
               >
-                {submitting ? "Sending…" : (
+                {submitting ? t("public.contact.sending") : (
                   <>
-                    Send message
-                    <Send className="w-4 h-4" />
+                    {t("public.contact.send")}
+                    <Send className="w-4 h-4 rtl:scale-x-[-1]" />
                   </>
                 )}
               </button>
@@ -227,11 +229,11 @@ export default function ContactPage() {
             <ul className="space-y-2 text-sm">
               <li>
                 <p className="text-xs text-gray-500">Sales</p>
-                <a href="mailto:sales@grceye.io" className="text-blue-600 hover:underline font-medium">sales@grceye.io</a>
+                <a href="mailto:sales@grceye.com" className="text-blue-600 hover:underline font-medium">sales@grceye.com</a>
               </li>
               <li>
                 <p className="text-xs text-gray-500">Support</p>
-                <a href="mailto:support@grceye.io" className="text-blue-600 hover:underline font-medium">support@grceye.io</a>
+                <a href="mailto:support@grceye.com" className="text-blue-600 hover:underline font-medium">support@grceye.com</a>
               </li>
             </ul>
           </div>

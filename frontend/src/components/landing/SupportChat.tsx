@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from "react";
+import { useTranslation } from "react-i18next";
 import {
   MessageSquare, X, Send, Loader2, ChevronDown, RotateCcw,
   Sparkles, Shield, CheckCircle, FileText, AlertTriangle, Building2,
@@ -12,12 +13,12 @@ interface Message {
 }
 
 const QUICK_QUESTIONS = [
-  { icon: Shield,        label: "What is GRCEye?",          text: "What is GRCEye and what problems does it solve?" },
-  { icon: CheckCircle,   label: "Compliance frameworks",    text: "Which compliance frameworks does GRCEye support?" },
-  { icon: FileText,      label: "AI features",              text: "What AI features does GRCEye include?" },
-  { icon: AlertTriangle, label: "Risk management",          text: "How does risk management work in GRCEye?" },
-  { icon: Building2,     label: "Vendor risk (TPRM)",       text: "How does GRCEye handle vendor risk and third-party management?" },
-];
+  { icon: Shield,        labelKey: "q_what",       textKey: "q_what_text" },
+  { icon: CheckCircle,   labelKey: "q_frameworks", textKey: "q_frameworks_text" },
+  { icon: FileText,      labelKey: "q_ai",         textKey: "q_ai_text" },
+  { icon: AlertTriangle, labelKey: "q_risk",       textKey: "q_risk_text" },
+  { icon: Building2,     labelKey: "q_vendor",     textKey: "q_vendor_text" },
+] as const;
 
 // Topics the frontend refuses before even calling the API
 const BLOCKED_KEYWORDS = [
@@ -128,6 +129,7 @@ function RenderContent({ text }: { text: string }) {
 }
 
 export default function SupportChat() {
+  const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const [minimized, setMinimized] = useState(false);
   const [input, setInput] = useState("");
@@ -136,7 +138,7 @@ export default function SupportChat() {
     {
       id: "welcome",
       role: "assistant",
-      content: "Hi! I'm the GRCEye support assistant.\n\nI can answer questions about the platform, compliance frameworks, risk management, auditing, and all things GRC.\n\nWhat would you like to know?",
+      content: t("public.chat.welcome"),
     },
   ]);
 
@@ -163,7 +165,7 @@ export default function SupportChat() {
       setMessages(prev => [
         ...prev,
         { id: genId(), role: "user", content: trimmed },
-        { id, role: "assistant", content: "I can only help with GRC topics and GRCEye platform questions. For technical or developer questions please contact support@grceye.io." },
+        { id, role: "assistant", content: t("public.chat.blocked") },
       ]);
       return;
     }
@@ -201,8 +203,8 @@ export default function SupportChat() {
     } catch (err: any) {
       if (err?.name === "AbortError") return;
       const errMsg = err?.message?.includes("429")
-        ? "You've sent too many messages. Please wait a few minutes."
-        : "I couldn't reach the support service right now. Please try again or email support@grceye.io.";
+        ? t("public.chat.err_too_many")
+        : t("public.chat.err_unreachable");
       setMessages(prev =>
         prev.map(m => m.id === assistantId
           ? { ...m, content: errMsg, loading: false }
@@ -229,7 +231,7 @@ export default function SupportChat() {
     setMessages([{
       id: "welcome",
       role: "assistant",
-      content: "Chat cleared. What would you like to know about GRCEye?",
+      content: t("public.chat.cleared"),
     }]);
   }
 
@@ -238,19 +240,19 @@ export default function SupportChat() {
     return (
       <button
         onClick={() => setOpen(true)}
-        className="fixed bottom-4 right-4 sm:bottom-6 sm:right-6 z-50 flex items-center gap-2.5 bg-gradient-to-br from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white pl-4 pr-5 py-3 rounded-2xl shadow-xl shadow-blue-500/30 transition-all hover:scale-105 hover:shadow-blue-500/40 group"
-        title="GRCEye Support"
+        className="fixed bottom-4 right-4 sm:bottom-6 sm:right-6 rtl:right-auto rtl:left-4 sm:rtl:left-6 z-50 flex items-center gap-2.5 bg-gradient-to-br from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white pl-4 pr-5 py-3 rounded-2xl shadow-xl shadow-blue-500/30 transition-all hover:scale-105 hover:shadow-blue-500/40 group"
+        title={t("public.chat.title")}
       >
         <MessageSquare className="w-5 h-5" />
-        <span className="text-sm font-semibold">Support</span>
-        <span className="absolute -top-1 -right-1 w-3.5 h-3.5 bg-green-400 rounded-full border-2 border-white animate-pulse" />
+        <span className="text-sm font-semibold">{t("public.chat.button")}</span>
+        <span className="absolute -top-1 -right-1 rtl:-right-auto rtl:-left-1 w-3.5 h-3.5 bg-green-400 rounded-full border-2 border-white animate-pulse" />
       </button>
     );
   }
 
   // ── Open state ───────────────────────────────────────────────────────────────
   return (
-    <div className="fixed bottom-0 right-0 sm:bottom-6 sm:right-6 z-50 flex flex-col w-full sm:w-[400px] max-h-[100dvh] sm:max-h-[640px] bg-white sm:rounded-3xl shadow-2xl shadow-black/20 border-t sm:border border-sky-100 overflow-hidden">
+    <div className="fixed bottom-0 right-0 sm:bottom-6 sm:right-6 rtl:right-auto rtl:left-0 sm:rtl:left-6 z-50 flex flex-col w-full sm:w-[400px] max-h-[100dvh] sm:max-h-[640px] bg-white sm:rounded-3xl shadow-2xl shadow-black/20 border-t sm:border border-sky-100 overflow-hidden">
 
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3.5 bg-gradient-to-r from-blue-600 to-indigo-600 text-white flex-shrink-0">
@@ -259,21 +261,21 @@ export default function SupportChat() {
             <MessageSquare className="w-4 h-4" />
           </div>
           <div>
-            <p className="text-sm font-semibold leading-none">GRCEye Support</p>
+            <p className="text-sm font-semibold leading-none">{t("public.chat.title")}</p>
             <div className="flex items-center gap-1 mt-0.5">
               <span className="w-1.5 h-1.5 bg-green-400 rounded-full animate-pulse" />
-              <span className="text-xs text-blue-100">GRC & platform questions</span>
+              <span className="text-xs text-blue-100">{t("public.chat.subtitle")}</span>
             </div>
           </div>
         </div>
         <div className="flex items-center gap-1">
-          <button onClick={clear} className="w-7 h-7 rounded-lg flex items-center justify-center text-white/70 hover:bg-white/20 transition-colors" title="Clear chat">
+          <button onClick={clear} className="w-7 h-7 rounded-lg flex items-center justify-center text-white/70 hover:bg-white/20 transition-colors" title={t("public.chat.clear")}>
             <RotateCcw className="w-3.5 h-3.5" />
           </button>
-          <button onClick={() => setMinimized(m => !m)} className="w-7 h-7 rounded-lg flex items-center justify-center text-white/70 hover:bg-white/20 transition-colors" title="Minimize">
+          <button onClick={() => setMinimized(m => !m)} className="w-7 h-7 rounded-lg flex items-center justify-center text-white/70 hover:bg-white/20 transition-colors" title={t("public.chat.minimize")}>
             <ChevronDown className={`w-4 h-4 transition-transform ${minimized ? "rotate-180" : ""}`} />
           </button>
-          <button onClick={() => setOpen(false)} className="w-7 h-7 rounded-lg flex items-center justify-center text-white/70 hover:bg-white/20 transition-colors" title="Close">
+          <button onClick={() => setOpen(false)} className="w-7 h-7 rounded-lg flex items-center justify-center text-white/70 hover:bg-white/20 transition-colors" title={t("public.chat.close")}>
             <X className="w-4 h-4" />
           </button>
         </div>
@@ -313,15 +315,15 @@ export default function SupportChat() {
           {/* Quick questions — only on welcome screen */}
           {messages.length === 1 && (
             <div className="px-4 pb-2 grid grid-cols-1 gap-1.5 flex-shrink-0">
-              <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide px-1 mb-0.5">Common questions</p>
-              {QUICK_QUESTIONS.map(({ icon: Icon, label, text }) => (
+              <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide px-1 mb-0.5">{t("public.chat.common")}</p>
+              {QUICK_QUESTIONS.map(({ icon: Icon, labelKey, textKey }) => (
                 <button
-                  key={label}
-                  onClick={() => send(text)}
-                  className="flex items-center gap-2 px-3 py-2 bg-sky-50 hover:bg-blue-50 border border-sky-100 hover:border-blue-200 rounded-xl text-xs text-gray-600 hover:text-blue-700 font-medium transition-colors text-left"
+                  key={labelKey}
+                  onClick={() => send(t(`public.chat.${textKey}`))}
+                  className="flex items-center gap-2 px-3 py-2 bg-sky-50 hover:bg-blue-50 border border-sky-100 hover:border-blue-200 rounded-xl text-xs text-gray-600 hover:text-blue-700 font-medium transition-colors text-left rtl:text-right"
                 >
                   <Icon className="w-3.5 h-3.5 flex-shrink-0 text-blue-500" />
-                  {label}
+                  {t(`public.chat.${labelKey}`)}
                 </button>
               ))}
             </div>
@@ -336,12 +338,12 @@ export default function SupportChat() {
                 value={input}
                 onChange={e => setInput(e.target.value)}
                 onKeyDown={handleKeyDown}
-                placeholder="Ask about GRCEye or GRC topics…"
+                placeholder={t("public.chat.placeholder")}
                 className="flex-1 bg-transparent resize-none text-sm text-gray-800 placeholder-gray-400 focus:outline-none max-h-28 leading-relaxed"
                 style={{ minHeight: "24px" }}
               />
               {loading ? (
-                <button onClick={stop} className="flex-shrink-0 w-8 h-8 rounded-xl bg-red-100 hover:bg-red-200 text-red-600 flex items-center justify-center transition-colors" title="Stop">
+                <button onClick={stop} className="flex-shrink-0 w-8 h-8 rounded-xl bg-red-100 hover:bg-red-200 text-red-600 flex items-center justify-center transition-colors" title={t("public.chat.stop")}>
                   <Loader2 className="w-4 h-4 animate-spin" />
                 </button>
               ) : (
@@ -349,13 +351,13 @@ export default function SupportChat() {
                   onClick={() => send(input)}
                   disabled={!input.trim()}
                   className="flex-shrink-0 w-8 h-8 rounded-xl bg-blue-600 hover:bg-blue-700 disabled:bg-gray-200 disabled:text-gray-400 text-white flex items-center justify-center transition-colors"
-                  title="Send (Enter)"
+                  title={t("public.chat.send")}
                 >
-                  <Send className="w-3.5 h-3.5" />
+                  <Send className="w-3.5 h-3.5 rtl:scale-x-[-1]" />
                 </button>
               )}
             </div>
-            <p className="text-center text-[10px] text-gray-300 mt-1.5">GRC & platform questions only · Enter to send</p>
+            <p className="text-center text-[10px] text-gray-300 mt-1.5">{t("public.chat.footer")}</p>
           </div>
         </>
       )}

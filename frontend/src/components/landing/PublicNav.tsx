@@ -4,7 +4,9 @@
  */
 import { useState, useEffect } from "react";
 import { Link, useLocation } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import { ArrowRight, Menu, X } from "lucide-react";
+import LanguageSwitcher from "../LanguageSwitcher";
 
 interface NavLink {
   to: string;
@@ -18,6 +20,7 @@ interface PublicNavProps {
 }
 
 export default function PublicNav({ links }: PublicNavProps) {
+  const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const location = useLocation();
 
@@ -58,19 +61,21 @@ export default function PublicNav({ links }: PublicNavProps) {
 
           {/* Desktop CTA */}
           <div className="hidden md:flex items-center gap-3">
-            <Link to="/login" className="text-sm text-gray-600 hover:text-gray-900 font-medium transition-colors">Sign in</Link>
+            <LanguageSwitcher compact />
+            <Link to="/login" className="text-sm text-gray-600 hover:text-gray-900 font-medium transition-colors">{t("public.nav.sign_in")}</Link>
             <Link to="/register" className="flex items-center gap-1.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold px-4 py-2 rounded-xl transition-all shadow-sm hover:-translate-y-0.5 hover:shadow-md">
-              Start free trial <ArrowRight className="w-3.5 h-3.5" />
+              {t("public.nav.start_trial")} <ArrowRight className="w-3.5 h-3.5 rtl:rotate-180" />
             </Link>
           </div>
 
-          {/* Mobile: Sign in + Hamburger */}
-          <div className="flex md:hidden items-center gap-2">
-            <Link to="/login" className="text-sm text-gray-600 font-medium px-3 py-1.5">Sign in</Link>
+          {/* Mobile: Lang + Sign in + Hamburger */}
+          <div className="flex md:hidden items-center gap-1">
+            <LanguageSwitcher compact />
+            <Link to="/login" className="text-sm text-gray-600 font-medium px-2 py-1.5">{t("public.nav.sign_in")}</Link>
             <button
               onClick={() => setOpen(true)}
               className="w-9 h-9 flex items-center justify-center rounded-xl bg-white border border-sky-200 text-gray-700 shadow-sm"
-              aria-label="Open menu"
+              aria-label={t("public.nav.open_menu")}
             >
               <Menu className="w-5 h-5" />
             </button>
@@ -94,7 +99,7 @@ export default function PublicNav({ links }: PublicNavProps) {
           <button
             onClick={() => setOpen(false)}
             className="w-9 h-9 flex items-center justify-center rounded-xl bg-gray-100 text-gray-600"
-            aria-label="Close menu"
+            aria-label={t("public.nav.close_menu")}
           >
             <X className="w-5 h-5" />
           </button>
@@ -135,14 +140,14 @@ export default function PublicNav({ links }: PublicNavProps) {
             className="flex items-center justify-center gap-2 w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold px-4 py-3 rounded-xl transition-colors shadow-sm text-sm"
             onClick={() => setOpen(false)}
           >
-            Start free trial <ArrowRight className="w-4 h-4" />
+            {t("public.nav.start_trial")} <ArrowRight className="w-4 h-4 rtl:rotate-180" />
           </Link>
           <Link
             to="/login"
             className="flex items-center justify-center gap-2 w-full bg-gray-50 border border-gray-200 text-gray-700 font-semibold px-4 py-3 rounded-xl transition-colors text-sm"
             onClick={() => setOpen(false)}
           >
-            Sign in
+            {t("public.nav.sign_in")}
           </Link>
         </div>
       </div>

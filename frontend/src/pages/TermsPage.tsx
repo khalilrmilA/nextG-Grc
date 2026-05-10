@@ -1,4 +1,5 @@
 import PublicFooter from "../components/landing/PublicFooter";
+import { useTranslation } from "react-i18next";
 import PublicNav from "../components/landing/PublicNav";
 import SEO from "../components/seo/SEO";
 
@@ -27,7 +28,7 @@ We reserve the right to modify, suspend, or discontinue any part of the Service 
 
 3.2 Authorised Users. Only individuals authorised by the account owner ("Authorised Users") may access the Service. You are responsible for ensuring Authorised Users comply with these Terms.
 
-3.3 Account Security. You must notify us immediately at support@grceye.io if you suspect unauthorised access to your account. We are not liable for losses arising from unauthorised use where you have not exercised reasonable care.`,
+3.3 Account Security. You must notify us immediately at support@grceye.com if you suspect unauthorised access to your account. We are not liable for losses arising from unauthorised use where you have not exercised reasonable care.`,
   },
   {
     id: "acceptable-use",
@@ -119,7 +120,7 @@ Some jurisdictions do not allow the exclusion of certain warranties or the limit
     title: "13. Term and Termination",
     body: `13.1 Term. These Terms remain in effect while you use the Service.
 
-13.2 Termination by You. You may cancel your subscription at any time through your account settings or by contacting support@grceye.io. Cancellation takes effect at the end of the current billing period.
+13.2 Termination by You. You may cancel your subscription at any time through your account settings or by contacting support@grceye.com. Cancellation takes effect at the end of the current billing period.
 
 13.3 Termination by GRCEye. We may terminate or suspend your access immediately for material breach of these Terms, or with 30 days' notice for any other reason.
 
@@ -152,13 +153,14 @@ Any disputes arising from or related to these Terms or the Service will be subje
     title: "16. Contact",
     body: `If you have any questions about these Terms, please contact us:
 
-Email: legal@grceye.io
-Support: support@grceye.io
-Contact form: grceye.io/contact`,
+Email: legal@grceye.com
+Support: support@grceye.com
+Contact form: grceye.com/contact`,
   },
 ];
 
 export default function TermsPage() {
+  const { t } = useTranslation();
   return (
     <div className="min-h-screen bg-white text-gray-900">
       <SEO
@@ -169,11 +171,11 @@ export default function TermsPage() {
       />
 
       <PublicNav links={[
-        { to: "/",                label: "Home"     },
-        { to: "/features-landing", label: "Features" },
-        { to: "/solutions",        label: "Solutions" },
-        { to: "/faq",             label: "FAQ"      },
-        { to: "/contact",         label: "Contact"  },
+        { to: "/",                 label: t("public.nav.home")      },
+        { to: "/features-landing", label: t("public.nav.features")  },
+        { to: "/solutions",        label: t("public.nav.solutions") },
+        { to: "/faq",              label: t("public.nav.faq")       },
+        { to: "/contact",          label: t("public.nav.contact")   },
       ]} />
 
       <div className="h-20" />

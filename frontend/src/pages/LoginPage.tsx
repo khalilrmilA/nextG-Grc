@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import { Eye, EyeOff, Loader2, X } from "lucide-react";
 import { authSession, DEMO_USERS, type UserRole, type PlanTier } from "../store/auth";
 import LanguageSwitcher from "../components/LanguageSwitcher";
@@ -14,6 +15,7 @@ function calculateDaysRemaining(trialEndsAt?: string): number {
 }
 
 export default function LoginPage() {
+  const { t } = useTranslation();
   const [email, setEmail]       = useState("");
   const [password, setPassword] = useState("");
   const [showPwd, setShowPwd]   = useState(false);
@@ -37,7 +39,7 @@ export default function LoginPage() {
       await authApi.forgotPassword(forgotEmail.trim().toLowerCase());
       setForgotSent(true);
     } catch {
-      setForgotError("Something went wrong. Please try again.");
+      setForgotError(t("public.login.err_reset_generic"));
     } finally {
       setForgotLoading(false);
     }
@@ -105,11 +107,11 @@ export default function LoginPage() {
       authSession.logout();
       const status = (err as { response?: { status?: number } })?.response?.status;
       if (status === 401 || status === 403) {
-        setError("Invalid email or password. Please try again.");
+        setError(t("public.login.err_invalid"));
       } else if (status === 422) {
-        setError("Invalid request. Please check your input.");
+        setError(t("public.login.err_invalid_request"));
       } else {
-        setError("Unable to sign in. Please try again.");
+        setError(t("public.login.err_generic"));
       }
     } finally {
       setLoading(false);
@@ -118,7 +120,7 @@ export default function LoginPage() {
 
   return (
     <>
-    <SEO title="Sign in" description="Sign in to GRCEye." path="/login" noIndex />
+    <SEO title={t("public.login.submit")} description="Sign in to GRCEye." path="/login" noIndex />
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center p-4">
       <div className="w-full max-w-sm">
 
@@ -130,8 +132,8 @@ export default function LoginPage() {
 
         {/* Card */}
         <div className="bg-white rounded-2xl shadow-2xl p-8">
-          <h2 className="text-lg font-semibold text-gray-900 mb-1">Welcome back</h2>
-          <p className="text-sm text-gray-400 mb-6">Sign in to your account to continue.</p>
+          <h2 className="text-lg font-semibold text-gray-900 mb-1">{t("public.login.welcome_back")}</h2>
+          <p className="text-sm text-gray-400 mb-6">{t("public.login.subtitle")}</p>
 
           {error && (
             <div className="mb-4 px-4 py-3 bg-red-50 border border-red-200 rounded-xl text-red-700 text-sm">
@@ -142,7 +144,7 @@ export default function LoginPage() {
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
               <label htmlFor="login-email" className="block text-xs font-medium text-gray-700 mb-1.5">
-                Email address
+                {t("public.login.email_label")}
               </label>
               <input
                 id="login-email"
@@ -151,7 +153,7 @@ export default function LoginPage() {
                 onChange={e => setEmail(e.target.value)}
                 required
                 autoFocus
-                placeholder="you@company.com"
+                placeholder={t("public.login.email_placeholder")}
                 className="w-full px-3.5 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
               />
             </div>
@@ -159,10 +161,10 @@ export default function LoginPage() {
             <div>
               <div className="flex items-center justify-between mb-1.5">
                 <label htmlFor="login-password" className="block text-xs font-medium text-gray-700">
-                  Password
+                  {t("public.login.password_label")}
                 </label>
                 <button type="button" onClick={() => { setShowForgot(true); setForgotEmail(email); }} className="text-xs text-blue-600 hover:underline">
-                  Forgot password?
+                  {t("public.login.forgot")}
                 </button>
               </div>
               <div className="relative">
@@ -172,7 +174,7 @@ export default function LoginPage() {
                   value={password}
                   onChange={e => setPassword(e.target.value)}
                   required
-                  placeholder="••••••••"
+                  placeholder={t("public.login.password_placeholder")}
                   className="w-full px-3.5 py-2.5 pr-10 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
                 />
                 <button
@@ -190,13 +192,13 @@ export default function LoginPage() {
               disabled={loading}
               className="w-full bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white font-medium py-2.5 px-4 rounded-xl text-sm transition-colors flex items-center justify-center gap-2 mt-2"
             >
-              {loading ? <><Loader2 className="w-4 h-4 animate-spin" /> Signing in…</> : "Sign in"}
+              {loading ? <><Loader2 className="w-4 h-4 animate-spin" /> {t("public.login.submitting")}</> : t("public.login.submit")}
             </button>
           </form>
 
             <div className="flex items-center gap-3 my-5">
             <div className="flex-1 h-px bg-gray-100" />
-            <span className="text-xs text-gray-400">New to GRCEye?</span>
+            <span className="text-xs text-gray-400">{t("public.login.divider")}</span>
             <div className="flex-1 h-px bg-gray-100" />
           </div>
 
@@ -204,21 +206,21 @@ export default function LoginPage() {
             to="/register"
             className="block w-full text-center py-2.5 border border-gray-200 rounded-xl text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
           >
-            Create an account
+            {t("public.login.create_account")}
           </Link>
         </div>
 
         <div className="mt-6 space-y-2">
           <div className="flex items-center justify-between">
             <Link to="/" className="text-xs text-blue-600 hover:underline">
-              Back to home
+              {t("public.login.back_home")}
             </Link>
             <p className="text-xs text-slate-500">
               © {new Date().getFullYear()} GRCEye
             </p>
           </div>
           <p className="text-center text-xs text-slate-600">
-            Powered by <span className="font-semibold">SilentWolf</span>
+            {t("public.footer.powered_by")} <span className="font-semibold">SilentWolf</span>
           </p>
         </div>
       </div>
@@ -229,28 +231,28 @@ export default function LoginPage() {
       <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
         <div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-sm">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="text-base font-semibold text-gray-900">Reset your password</h3>
+            <h3 className="text-base font-semibold text-gray-900">{t("public.login.reset_title")}</h3>
             <button type="button" onClick={closeForgot} className="text-gray-400 hover:text-gray-600"><X className="w-4 h-4" /></button>
           </div>
           {forgotSent ? (
             <div className="text-sm text-green-700 bg-green-50 border border-green-200 rounded-xl p-4">
-              If an account exists for that email, a temporary password has been sent. Check your inbox and change it after logging in.
+              {t("public.login.reset_sent")}
             </div>
           ) : (
             <form onSubmit={handleForgotSubmit} className="space-y-4">
-              <p className="text-sm text-gray-500">Enter your account email and we'll send you a temporary password.</p>
+              <p className="text-sm text-gray-500">{t("public.login.reset_intro")}</p>
               <input
                 type="email"
                 required
                 value={forgotEmail}
                 onChange={e => setForgotEmail(e.target.value)}
-                placeholder="you@company.com"
+                placeholder={t("public.login.email_placeholder")}
                 className="w-full px-3.5 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
               {forgotError && <p className="text-xs text-red-500">{forgotError}</p>}
               <button type="submit" disabled={forgotLoading}
                 className="w-full py-2.5 bg-blue-600 text-white text-sm font-medium rounded-xl hover:bg-blue-700 transition-colors disabled:opacity-50">
-                {forgotLoading ? "Sending…" : "Send temporary password"}
+                {forgotLoading ? t("public.login.reset_sending") : t("public.login.reset_submit")}
               </button>
             </form>
           )}

@@ -190,8 +190,8 @@ export default function RegisterPage() {
           <div className="w-14 h-14 bg-blue-500 rounded-2xl flex items-center justify-center mb-3 shadow-lg">
             <Shield className="w-8 h-8 text-white" />
           </div>
-          <h1 className="text-3xl font-bold text-white">{t("auth.sign_up_subtitle").split(".")[0]}</h1>
-          <p className="text-slate-400 mt-1 text-sm">14-day free trial · No credit card required</p>
+          <h1 className="text-3xl font-bold text-white">{t("public.register.seo_title")}</h1>
+          <p className="text-slate-400 mt-1 text-sm">{t("public.register.tagline")}</p>
           <div className="mt-3"><LanguageSwitcher /></div>
         </div>
 
@@ -222,30 +222,30 @@ export default function RegisterPage() {
           {step === 1 && (
             <div className="space-y-5">
               <div>
-                <h2 className="text-xl font-bold text-gray-900">Your account</h2>
-                <p className="text-sm text-gray-500 mt-0.5">Tell us about yourself and your organization</p>
+                <h2 className="text-xl font-bold text-gray-900">{t("public.register.step1_title")}</h2>
+                <p className="text-sm text-gray-500 mt-0.5">{t("public.register.step1_subtitle")}</p>
               </div>
 
               <div className="grid grid-cols-2 gap-4">
-                <Field label="First name">
+                <Field label={t("public.register.first_name")}>
                   <input type="text" value={form.first_name} onChange={set("first_name")} required autoFocus
-                    className={INPUT} placeholder="Jane" />
+                    className={INPUT} placeholder={t("public.register.first_name_placeholder")} />
                 </Field>
-                <Field label="Last name">
+                <Field label={t("public.register.last_name")}>
                   <input type="text" value={form.last_name} onChange={set("last_name")} required
-                    className={INPUT} placeholder="Smith" />
+                    className={INPUT} placeholder={t("public.register.last_name_placeholder")} />
                 </Field>
               </div>
 
-              <Field label="Work email">
+              <Field label={t("public.register.work_email")}>
                 <input type="email" value={form.email} onChange={set("email")} required
-                  className={INPUT} placeholder="jane@company.com" />
+                  className={INPUT} placeholder={t("public.register.work_email_placeholder")} />
               </Field>
 
-              <Field label="Password">
+              <Field label={t("public.register.password")}>
                 <div className="relative">
                   <input type={showPw ? "text" : "password"} value={form.password} onChange={set("password")}
-                    required minLength={8} className={INPUT + " pr-10"} placeholder="Min 8 characters" />
+                    required minLength={8} className={INPUT + " pr-10"} placeholder={t("public.register.password_placeholder")} />
                   <button type="button" onClick={() => setShowPw(!showPw)}
                     className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
                     {showPw ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
@@ -263,9 +263,9 @@ export default function RegisterPage() {
                 )}
               </Field>
 
-              <Field label="Organization name">
+              <Field label={t("public.register.org_name")}>
                 <input type="text" value={form.organization_name} onChange={set("organization_name")} required
-                  className={INPUT} placeholder="Acme Corp" />
+                  className={INPUT} placeholder={t("public.register.org_name_placeholder")} />
                 {form.organization_slug && (
                   <p className="text-xs text-gray-400 mt-1">
                     URL: <span className="font-mono text-blue-600">grcplatform.com/{form.organization_slug}</span>
@@ -274,21 +274,21 @@ export default function RegisterPage() {
               </Field>
 
               <div className="grid grid-cols-2 gap-4">
-                <Field label="Country">
+                <Field label={t("public.register.country")}>
                   <select value={form.country} onChange={set("country")} className={SELECT}>
-                    <option value="">Select country</option>
+                    <option value="">{t("public.register.country_placeholder")}</option>
                     {COUNTRIES.map((c) => <option key={c.code} value={c.code}>{c.label}</option>)}
                   </select>
                 </Field>
-                <Field label="Industry">
+                <Field label={t("public.register.industry")}>
                   <select value={form.industry} onChange={set("industry")} className={SELECT}>
-                    <option value="">Select industry</option>
+                    <option value="">{t("public.register.industry_placeholder")}</option>
                     {INDUSTRIES.map((i) => <option key={i.value} value={i.value}>{i.label}</option>)}
                   </select>
                 </Field>
               </div>
 
-              <Field label="Organization size">
+              <Field label={t("public.register.org_size")}>
                 <div className="grid grid-cols-4 gap-2">
                   {ORG_SIZES.map((s) => (
                     <button key={s.value} type="button" onClick={() => setForm((f) => ({ ...f, org_size: s.value }))}
@@ -307,7 +307,7 @@ export default function RegisterPage() {
               <button type="button" disabled={!step1Valid}
                 onClick={() => setStep(2)}
                 className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 disabled:cursor-not-allowed text-white font-semibold py-3 px-4 rounded-lg flex items-center justify-center gap-2 transition-colors">
-                Continue <ChevronRight className="w-4 h-4" />
+                {t("public.register.continue")} <ChevronRight className="w-4 h-4 rtl:rotate-180" />
               </button>
             </div>
           )}
@@ -316,10 +316,9 @@ export default function RegisterPage() {
           {step === 2 && (
             <div className="space-y-5">
               <div>
-                <h2 className="text-xl font-bold text-gray-900">Select your framework</h2>
+                <h2 className="text-xl font-bold text-gray-900">{t("public.register.step2_title")}</h2>
                 <p className="text-sm text-gray-500 mt-0.5">
-                  Choose your <strong>primary framework</strong> (radio) — your dashboard and document checklist will be built around it.
-                  Optionally add <strong>secondary frameworks</strong> (checkboxes) for cross-framework tracking.
+                  {t("public.register.step2_subtitle_pre")} <strong>{t("public.register.step2_subtitle_primary")}</strong> {t("public.register.step2_subtitle_mid")} <strong>{t("public.register.step2_subtitle_secondary")}</strong> {t("public.register.step2_subtitle_post")}
                 </p>
               </div>
 
@@ -331,11 +330,11 @@ export default function RegisterPage() {
                 </div>
               ) : frameworks.length === 0 ? (
                 <div className="text-center py-8 text-gray-400">
-                  <p>Could not load frameworks.</p>
+                  <p>{t("public.register.load_failed")}</p>
                   <button type="button" onClick={() => {
                     setFwLoading(true);
                     frameworksApi.list().then(setFrameworks).finally(() => setFwLoading(false));
-                  }} className="text-blue-600 text-sm mt-2 hover:underline">Retry</button>
+                  }} className="text-blue-600 text-sm mt-2 hover:underline">{t("public.register.retry")}</button>
                 </div>
               ) : (
                 <div className="grid grid-cols-2 gap-3 max-h-96 overflow-y-auto pr-1">
@@ -362,10 +361,10 @@ export default function RegisterPage() {
 
               {primaryFw && (
                 <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg text-sm text-blue-800">
-                  <strong>Primary:</strong> {primaryFw.name} ({primaryFw.control_count} controls)
+                  <strong>{t("public.register.primary")}</strong> {primaryFw.name} ({primaryFw.control_count} {t("public.register.controls")})
                   {secondaryFwIds.length > 0 && (
                     <span className="ml-2 text-blue-600">
-                      +{secondaryFwIds.length} secondary framework{secondaryFwIds.length > 1 ? "s" : ""}
+                      +{secondaryFwIds.length} {t("public.register.secondary")}{secondaryFwIds.length > 1 ? "s" : ""}
                     </span>
                   )}
                 </div>
@@ -374,12 +373,12 @@ export default function RegisterPage() {
               <div className="flex gap-3">
                 <button type="button" onClick={() => setStep(1)}
                   className="flex-1 border border-gray-300 hover:bg-gray-50 text-gray-700 font-medium py-3 rounded-lg flex items-center justify-center gap-2">
-                  <ChevronLeft className="w-4 h-4" /> Back
+                  <ChevronLeft className="w-4 h-4 rtl:rotate-180" /> {t("public.register.back")}
                 </button>
                 <button type="button" disabled={!step2Valid}
                   onClick={() => setStep(3)}
                   className="flex-1 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 disabled:cursor-not-allowed text-white font-semibold py-3 rounded-lg flex items-center justify-center gap-2">
-                  Continue <ChevronRight className="w-4 h-4" />
+                  {t("public.register.continue")} <ChevronRight className="w-4 h-4 rtl:rotate-180" />
                 </button>
               </div>
             </div>
@@ -389,26 +388,26 @@ export default function RegisterPage() {
           {step === 3 && (
             <div className="space-y-5">
               <div>
-                <h2 className="text-xl font-bold text-gray-900">Review & start</h2>
-                <p className="text-sm text-gray-500 mt-0.5">Confirm your details then launch your GRC workspace</p>
+                <h2 className="text-xl font-bold text-gray-900">{t("public.register.step3_title")}</h2>
+                <p className="text-sm text-gray-500 mt-0.5">{t("public.register.step3_subtitle")}</p>
               </div>
 
               <div className="bg-gray-50 rounded-xl p-5 space-y-3 text-sm">
-                <ReviewRow label="Name" value={`${form.first_name} ${form.last_name}`} />
-                <ReviewRow label="Email" value={form.email} />
-                <ReviewRow label="Organization" value={form.organization_name} />
+                <ReviewRow label={t("public.register.review_name")} value={`${form.first_name} ${form.last_name}`} />
+                <ReviewRow label={t("public.register.review_email")} value={form.email} />
+                <ReviewRow label={t("public.register.review_org")} value={form.organization_name} />
                 {form.industry && (
-                  <ReviewRow label="Industry" value={INDUSTRIES.find((i) => i.value === form.industry)?.label ?? form.industry} />
+                  <ReviewRow label={t("public.register.review_industry")} value={INDUSTRIES.find((i) => i.value === form.industry)?.label ?? form.industry} />
                 )}
                 {form.org_size && (
-                  <ReviewRow label="Size" value={`${form.org_size} employees`} />
+                  <ReviewRow label={t("public.register.review_size")} value={`${form.org_size} ${t("public.register.review_size_suffix")}`} />
                 )}
                 {primaryFw && (
-                  <ReviewRow label="Primary Framework" value={`${primaryFw.name} (${primaryFw.control_count} controls)`} />
+                  <ReviewRow label={t("public.register.review_primary")} value={`${primaryFw.name} (${primaryFw.control_count} ${t("public.register.controls")})`} />
                 )}
                 {secondaryFwIds.length > 0 && (
                   <ReviewRow
-                    label="Secondary Frameworks"
+                    label={t("public.register.review_secondary")}
                     value={secondaryFwIds
                       .map((id) => frameworks.find((f) => f.id === id)?.short_name ?? id)
                       .join(", ")}
@@ -416,32 +415,32 @@ export default function RegisterPage() {
                 )}
                 {!primaryFwId && (
                   <div className="text-amber-600 text-xs mt-1">
-                    No framework selected — you can set this later in Settings.
+                    {t("public.register.no_framework")}
                   </div>
                 )}
               </div>
 
               <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 text-sm text-blue-800 space-y-1">
-                <div className="font-semibold">What happens next:</div>
+                <div className="font-semibold">{t("public.register.next_steps")}</div>
                 <ul className="space-y-0.5 text-blue-700">
-                  <li>✓ Your GRC workspace is created instantly</li>
-                  {primaryFwId && <li>✓ A compliance assessment is auto-created for {primaryFw?.short_name}</li>}
-                  <li>✓ 14-day free trial begins — no credit card needed</li>
-                  <li>✓ Upload your documents to start gap analysis</li>
+                  <li>✓ {t("public.register.ns1")}</li>
+                  {primaryFwId && <li>✓ {t("public.register.ns2")} {primaryFw?.short_name}</li>}
+                  <li>✓ {t("public.register.ns3")}</li>
+                  <li>✓ {t("public.register.ns4")}</li>
                 </ul>
               </div>
 
               <div className="flex gap-3">
                 <button type="button" onClick={() => setStep(2)}
                   className="flex-1 border border-gray-300 hover:bg-gray-50 text-gray-700 font-medium py-3 rounded-lg flex items-center justify-center gap-2">
-                  <ChevronLeft className="w-4 h-4" /> Back
+                  <ChevronLeft className="w-4 h-4 rtl:rotate-180" /> {t("public.register.back")}
                 </button>
                 <button type="button" onClick={handleSubmit} disabled={loading}
                   className="flex-1 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 disabled:opacity-60 text-white font-semibold py-3 rounded-lg flex items-center justify-center gap-2 shadow-lg">
                   {loading ? (
-                    <><div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> Creating workspace...</>
+                    <><div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> {t("public.register.creating")}</>
                   ) : (
-                    <><Check className="w-4 h-4" /> Start Free Trial</>
+                    <><Check className="w-4 h-4" /> {t("public.register.finish")}</>
                   )}
                 </button>
               </div>

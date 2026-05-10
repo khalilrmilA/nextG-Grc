@@ -8,7 +8,7 @@ interface Props {
 }
 
 export default function LanguageSwitcher({ compact = false }: Props) {
-  const { i18n } = useTranslation();
+  const { i18n, t } = useTranslation();
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
@@ -35,7 +35,7 @@ export default function LanguageSwitcher({ compact = false }: Props) {
         type="button"
         onClick={() => setOpen((v) => !v)}
         className="flex items-center gap-1.5 px-2 py-1.5 rounded-lg text-sm font-medium text-gray-500 hover:bg-gray-100 hover:text-gray-700 transition-colors"
-        aria-label="Switch language"
+        aria-label={t("public.nav.switch_language")}
       >
         <Globe className="w-4 h-4 flex-shrink-0" />
         {!compact && (
