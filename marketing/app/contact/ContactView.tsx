@@ -43,13 +43,13 @@ export default function ContactView() {
       if (!resp.ok) {
         const data = await resp.json().catch(() => ({}));
         const detail = (data as { detail?: string })?.detail;
-        throw new Error(typeof detail === "string" ? detail : "Could not send your message. Please try again or email sales@grceye.io directly.");
+        throw new Error(typeof detail === "string" ? detail : "Could not send your message. Please try again or email sales@grceye.com directly.");
       }
       setSuccess(true);
       setForm({ name: "", email: "", company: "", subject: "", message: "" });
     } catch (err: unknown) {
       const e = err as { message?: string };
-      setError(e.message ?? "Could not send your message. Please try again or email sales@grceye.io directly.");
+      setError(e.message ?? "Could not send your message. Please try again or email sales@grceye.com directly.");
     } finally {
       setSubmitting(false);
     }
@@ -206,11 +206,11 @@ export default function ContactView() {
             <ul className="space-y-2 text-sm">
               <li>
                 <p className="text-xs text-gray-500">Sales</p>
-                <a href="mailto:sales@grceye.io" className="text-blue-600 hover:underline font-medium">sales@grceye.io</a>
+                <a href="mailto:sales@grceye.com" className="text-blue-600 hover:underline font-medium">sales@grceye.com</a>
               </li>
               <li>
                 <p className="text-xs text-gray-500">Support</p>
-                <a href="mailto:support@grceye.io" className="text-blue-600 hover:underline font-medium">support@grceye.io</a>
+                <a href="mailto:support@grceye.com" className="text-blue-600 hover:underline font-medium">support@grceye.com</a>
               </li>
             </ul>
           </div>

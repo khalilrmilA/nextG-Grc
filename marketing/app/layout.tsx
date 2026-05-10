@@ -47,8 +47,8 @@ const ORG_JSON_LD = {
   description: "All-in-one Governance, Risk and Compliance SaaS platform.",
   sameAs: [],
   contactPoint: [
-    { "@type": "ContactPoint", contactType: "sales", email: "sales@grceye.io", availableLanguage: ["en", "fr"] },
-    { "@type": "ContactPoint", contactType: "customer support", email: "support@grceye.io", availableLanguage: ["en", "fr"] },
+    { "@type": "ContactPoint", contactType: "sales", email: "sales@grceye.com", availableLanguage: ["en", "fr"] },
+    { "@type": "ContactPoint", contactType: "customer support", email: "support@grceye.com", availableLanguage: ["en", "fr"] },
   ],
 };
 

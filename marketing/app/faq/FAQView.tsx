@@ -84,7 +84,7 @@ export default function FAQView() {
           <h2 className="text-3xl font-extrabold text-gray-900 mb-4">Still have questions?</h2>
           <p className="text-gray-600 mb-8 leading-relaxed">Can&apos;t find the answer you&apos;re looking for? Our support team is here to help you get started.</p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <a href="mailto:support@grceye.io" className="flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold px-8 py-3.5 rounded-xl transition-colors shadow-sm">
+            <a href="mailto:support@grceye.com" className="flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold px-8 py-3.5 rounded-xl transition-colors shadow-sm">
               Email support <ArrowRight className="w-4 h-4" />
             </a>
             <Link href="/register" className="flex items-center justify-center gap-2 bg-white border border-gray-200 text-gray-700 hover:bg-gray-50 font-semibold px-8 py-3.5 rounded-xl transition-colors">

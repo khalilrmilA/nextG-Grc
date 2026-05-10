@@ -161,7 +161,7 @@ export default function SupportChat() {
       setMessages(prev => [
         ...prev,
         { id: genId(), role: "user", content: trimmed },
-        { id: genId(), role: "assistant", content: "I can only help with GRC topics and GRCEye platform questions. For technical or developer questions please contact support@grceye.io." },
+        { id: genId(), role: "assistant", content: "I can only help with GRC topics and GRCEye platform questions. For technical or developer questions please contact support@grceye.com." },
       ]);
       return;
     }
@@ -201,7 +201,7 @@ export default function SupportChat() {
       if (e?.name === "AbortError") return;
       const errMsg = e?.message?.includes("429")
         ? "You've sent too many messages. Please wait a few minutes."
-        : "I couldn't reach the support service right now. Please try again or email support@grceye.io.";
+        : "I couldn't reach the support service right now. Please try again or email support@grceye.com.";
       setMessages(prev =>
         prev.map(m => m.id === assistantId
           ? { ...m, content: errMsg, loading: false }

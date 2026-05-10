@@ -794,29 +794,32 @@ export default function LandingView() {
         </div>
       </section>
 
-      <section className="py-20 px-4 sm:px-6 relative overflow-hidden">
-        <div className="absolute inset-0 bg-slate-900" />
-        <div className="absolute inset-0 opacity-[0.03] [background-image:linear-gradient(rgba(255,255,255,.15)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,.15)_1px,transparent_1px)] [background-size:40px_40px]" />
-        <div className="absolute top-0 right-0 w-[400px] h-[400px] bg-white/5 rounded-full blur-3xl animate-blob pointer-events-none" />
-        <div className="absolute bottom-0 left-0 w-[300px] h-[300px] bg-indigo-400/10 rounded-full blur-3xl animate-blob animation-delay-2000 pointer-events-none" />
+      <section className="py-20 px-4 sm:px-6 bg-slate-950 relative overflow-hidden">
+        <div className="absolute inset-0 opacity-[0.025] [background-image:linear-gradient(rgba(255,255,255,.15)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,.15)_1px,transparent_1px)] [background-size:48px_48px]" />
+        <div className="absolute -top-32 left-1/4 w-96 h-96 bg-blue-600/10 rounded-full blur-3xl pointer-events-none" />
+        <div className="absolute -bottom-32 right-1/4 w-80 h-80 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none" />
         <div className="relative max-w-5xl mx-auto">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-8 text-center text-white">
+          <Reveal>
+            <p className="text-center text-xs font-bold uppercase tracking-widest text-slate-500 mb-10">Platform by the numbers</p>
+          </Reveal>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             {[
-              { icon: Shield,     to: 70,   suffix: "+", label: "Compliance frameworks",   sub: "pre-loaded controls & crosswalks" },
-              { icon: Activity,   to: 3500, suffix: "+", label: "Pre-mapped controls",      sub: "across all frameworks" },
-              { icon: TrendingUp, to: 60,   suffix: "%", label: "Faster audit prep",        sub: "vs. manual spreadsheet work" },
-              { icon: Database,   to: 0,    suffix: "",  label: "Data sent to external AI", sub: "on-premise model, zero egress" },
+              { icon: Shield,     to: 70,   suffix: "+", label: "Compliance frameworks",   sub: "pre-loaded controls & crosswalks", accent: "from-blue-500 to-indigo-500",   iconBg: "bg-blue-500/15",  iconColor: "text-blue-400"   },
+              { icon: Activity,   to: 3500, suffix: "+", label: "Pre-mapped controls",      sub: "across all frameworks",           accent: "from-violet-500 to-purple-500", iconBg: "bg-violet-500/15", iconColor: "text-violet-400" },
+              { icon: TrendingUp, to: 60,   suffix: "%", label: "Faster audit prep",        sub: "vs. manual spreadsheet work",     accent: "from-teal-500 to-cyan-500",     iconBg: "bg-teal-500/15",   iconColor: "text-teal-400"   },
+              { icon: Database,   to: 0,    suffix: "",  label: "Data sent to external AI", sub: "on-premise model, zero egress",   accent: "from-green-500 to-emerald-500", iconBg: "bg-green-500/15",  iconColor: "text-green-400"  },
             ].map((s, i) => (
-              <Reveal key={s.label} delay={i * 120}>
-                <div className="glass-card rounded-2xl px-4 py-6 border border-white/20">
-                  <div className="w-10 h-10 rounded-xl bg-white/15 flex items-center justify-center mx-auto mb-4">
-                    <s.icon className="w-5 h-5 text-blue-200" />
+              <Reveal key={s.label} delay={i * 100}>
+                <div className="relative bg-slate-900 rounded-2xl p-6 border border-slate-800 hover:border-slate-700 transition-colors overflow-hidden group text-center">
+                  <div className={`absolute top-0 left-0 right-0 h-[3px] bg-gradient-to-r ${s.accent}`} />
+                  <div className={`w-11 h-11 ${s.iconBg} rounded-xl flex items-center justify-center mx-auto mb-5`}>
+                    <s.icon className={`w-5 h-5 ${s.iconColor}`} />
                   </div>
-                  <p className="text-3xl sm:text-4xl font-black mb-1">
+                  <p className={`text-4xl sm:text-5xl font-black mb-2 bg-gradient-to-br ${s.accent} bg-clip-text text-transparent`}>
                     <CountUp to={s.to} suffix={s.suffix} />
                   </p>
-                  <p className="text-sm font-semibold text-blue-100 mb-0.5">{s.label}</p>
-                  <p className="text-xs text-blue-300/70">{s.sub}</p>
+                  <p className="text-sm font-semibold text-white mb-1">{s.label}</p>
+                  <p className="text-xs text-slate-500 leading-snug">{s.sub}</p>
                 </div>
               </Reveal>
             ))}
@@ -989,7 +992,7 @@ export default function LandingView() {
                 Start free trial <ArrowRight className="w-4 h-4" />
               </Link>
               <a
-                href="mailto:sales@grceye.io"
+                href="mailto:sales@grceye.com"
                 className="flex items-center justify-center gap-2 bg-white/10 border border-white/30 text-white font-semibold px-8 py-4 rounded-2xl hover:bg-white/20 transition-all text-base backdrop-blur-sm"
               >
                 Talk to sales
