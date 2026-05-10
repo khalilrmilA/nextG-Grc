@@ -33,7 +33,7 @@ function isBlocked(text: string): boolean {
   return BLOCKED_KEYWORDS.some(kw => lower.includes(kw));
 }
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1";
+const API_BASE = "/api/v1";
 
 type StreamCbs = { onToken: (t: string) => void; onDone: () => void };
 
