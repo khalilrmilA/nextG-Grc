@@ -29,25 +29,26 @@ export default function LanguageSwitcher({ compact = false }: Props) {
     return () => document.removeEventListener("mousedown", handleClick);
   }, []);
 
+  const flagFor = (code: string) => code === "en" ? "🇬🇧" : code === "fr" ? "🇫🇷" : "🇸🇦";
+
   return (
     <div ref={ref} className="relative">
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="flex items-center gap-1.5 px-2 py-1.5 rounded-lg text-sm font-medium text-gray-500 hover:bg-gray-100 hover:text-gray-700 transition-colors"
+        className={`flex items-center gap-1.5 rounded-xl border border-sky-200 bg-white text-gray-700 hover:border-blue-400 hover:text-blue-700 hover:shadow-sm transition-all font-semibold ${
+          compact ? "px-2.5 py-1.5 text-xs" : "px-3 py-2 text-sm"
+        }`}
         aria-label={t("public.nav.switch_language")}
+        title={t("public.nav.switch_language")}
       >
-        <Globe className="w-4 h-4 flex-shrink-0" />
-        {!compact && (
-          <span className="hidden sm:inline">{current.nativeLabel}</span>
-        )}
-        {compact && (
-          <span className="text-xs font-bold uppercase">{current.code}</span>
-        )}
+        <span className="text-base leading-none" aria-hidden>{flagFor(current.code)}</span>
+        <Globe className={`flex-shrink-0 ${compact ? "w-3.5 h-3.5" : "w-4 h-4"}`} />
+        <span className="uppercase tracking-wide">{current.code}</span>
       </button>
 
       {open && (
-        <div className="absolute right-0 top-9 w-44 bg-white rounded-xl shadow-xl border border-gray-100 z-50 overflow-hidden py-1">
+        <div className="absolute right-0 rtl:right-auto rtl:left-0 top-[calc(100%+6px)] w-48 bg-white rounded-xl shadow-xl border border-gray-100 z-50 overflow-hidden py-1">
           {LANGUAGES.map((lang) => (
             <button
               key={lang.code}
@@ -59,12 +60,10 @@ export default function LanguageSwitcher({ compact = false }: Props) {
                   : "text-gray-700 hover:bg-gray-50"
               }`}
             >
-              <span className="text-base leading-none">
-                {lang.code === "en" ? "🇬🇧" : lang.code === "fr" ? "🇫🇷" : "🇸🇦"}
-              </span>
+              <span className="text-base leading-none" aria-hidden>{flagFor(lang.code)}</span>
               <span>{lang.nativeLabel}</span>
               {lang.rtl && (
-                <span className="ml-auto text-xs text-gray-400">RTL</span>
+                <span className="ml-auto rtl:ml-0 rtl:mr-auto text-[10px] font-bold text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded">RTL</span>
               )}
             </button>
           ))}

@@ -14,7 +14,7 @@ export const metadata: Metadata = {
       "The all-in-one GRC SaaS platform with 70+ frameworks, AI gap analysis, risk quantification, audits, policies and vendor risk.",
     url: "/",
     type: "website",
-    images: ["/logo.png"],
+    images: ["/logo-horizontal.png"],
   },
   twitter: {
     title: "GRCEye — Governance, Risk & Compliance Platform",

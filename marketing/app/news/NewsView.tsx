@@ -2,19 +2,22 @@
 import PublicFooter from "@/components/landing/PublicFooter";
 import { ArrowRight, Zap, Calendar } from "lucide-react";
 import PublicNav from "@/components/landing/PublicNav";
+import { useI18n } from "@/i18n";
 
 const NEWS_ITEMS = [
-  { id: 1, title: "EU AI Act Enforcement Timeline Extended — What It Means for Your Controls", excerpt: "The enforcement date for high-risk AI systems has been pushed to Q4 2026. We break down the implications for AI governance frameworks and what compliance teams need to do now.", date: "2026-03-18", category: "Regulation", type: "update" },
-  { id: 2, title: "NIST CSF 2.0 Now Includes Governance Function — Framework Update", excerpt: "NIST released the final version of the Cybersecurity Framework 2.0 with a new 'Govern' function at the core. GRCEye now includes the updated controls and cross-walks.", date: "2026-03-12", category: "Framework Update", type: "important" },
-  { id: 3, title: "GDPR Fines Hit €1.2B in Q1 2026 — Enforcement Accelerates", excerpt: "The first quarter of 2026 saw record GDPR penalties. Analysis shows DPA and consent management failures are the top reasons. Ensure your contracts are audit-ready.", date: "2026-03-08", category: "Enforcement", type: "alert" },
-  { id: 4, title: "NIS2 Directive: 90% of EU Financial Entities Now Comply", excerpt: "New compliance statistics show broad adoption of NIS2 controls across the EU financial sector. We've updated our NIS2 control templates with the latest requirement mappings.", date: "2026-03-01", category: "Compliance", type: "update" },
-  { id: 5, title: "ISO 27001:2022 Revision — New Annex A Controls Added", excerpt: "ISO released clarifications on 12 new Annex A controls in response to the 2022 revision. GRCEye's ISO 27001 framework now reflects these additions with evidence templates.", date: "2026-02-24", category: "Framework Update", type: "important" },
-  { id: 6, title: "DORA Q2 2026: ICT Third-Party Monitoring Requirements", excerpt: "The Digital Operational Resilience Act now requires quarterly monitoring reports for all critical ICT service providers. We've added DORA-specific vendor assessment templates.", date: "2026-02-18", category: "Regulation", type: "important" },
-  { id: 7, title: "SOC 2 Type II Audit Report Timing — New Guidance Released", excerpt: "The AICPA clarified timing requirements for SOC 2 Type II reports. Reports must cover at least 6 months. See our updated SOC 2 framework guidance.", date: "2026-02-10", category: "Guidance", type: "update" },
-  { id: 8, title: "CIS Controls v9 Released — Major Update to Control Set", excerpt: "The Center for Internet Security released CIS Controls v9 with restructured controls and new cloud security focus. GRCEye's CIS framework is now updated.", date: "2026-02-03", category: "Framework Update", type: "important" },
-];
+  { id: 1, key: "n1", date: "2026-03-18", category: "Regulation",       categoryKey: "cat_regulation",       type: "update" },
+  { id: 2, key: "n2", date: "2026-03-12", category: "Framework Update", categoryKey: "cat_framework_update", type: "important" },
+  { id: 3, key: "n3", date: "2026-03-08", category: "Enforcement",      categoryKey: "cat_enforcement",      type: "alert" },
+  { id: 4, key: "n4", date: "2026-03-01", category: "Compliance",       categoryKey: "cat_compliance",       type: "update" },
+  { id: 5, key: "n5", date: "2026-02-24", category: "Framework Update", categoryKey: "cat_framework_update", type: "important" },
+  { id: 6, key: "n6", date: "2026-02-18", category: "Regulation",       categoryKey: "cat_regulation",       type: "important" },
+  { id: 7, key: "n7", date: "2026-02-10", category: "Guidance",         categoryKey: "cat_guidance",         type: "update" },
+  { id: 8, key: "n8", date: "2026-02-03", category: "Framework Update", categoryKey: "cat_framework_update", type: "important" },
+] as const;
 
 export default function NewsView() {
+  const { t, lang } = useI18n();
+  const dateLocale = lang === "fr" ? "fr-FR" : lang === "ar" ? "ar" : "en-US";
   return (
     <div className="min-h-screen bg-white text-gray-900">
       <PublicNav />
@@ -22,10 +25,10 @@ export default function NewsView() {
       <section className="pt-16 pb-16 px-6 text-center bg-gradient-to-b from-slate-50 via-white to-white">
         <div className="max-w-3xl mx-auto">
           <h1 className="text-5xl md:text-6xl font-extrabold text-gray-900 leading-tight tracking-tight mb-4">
-            Framework & Regulatory News
+            {t("public.news.hero_title")}
           </h1>
           <p className="text-xl text-gray-500">
-            Stay updated on the latest compliance updates, regulatory changes, and framework releases.
+            {t("public.news.hero_subtitle")}
           </p>
         </div>
       </section>
@@ -47,20 +50,20 @@ export default function NewsView() {
                     item.category === 'Framework Update' ? 'bg-purple-50 text-purple-700' :
                     'bg-blue-50 text-blue-700'
                   }`}>
-                    {item.category}
+                    {t(`public.news.${item.categoryKey}`)}
                   </span>
                 </div>
                 <div className="flex items-center gap-2 text-sm text-gray-500">
                   <Calendar className="w-4 h-4" />
-                  <span>{new Date(item.date).toLocaleDateString()}</span>
+                  <span>{new Date(item.date).toLocaleDateString(dateLocale)}</span>
                 </div>
               </div>
               <h3 className="text-xl font-bold text-gray-900 mb-3 group-hover:text-blue-600 transition-colors line-clamp-2">
-                {item.title}
+                {t(`public.news.${item.key}_title`)}
               </h3>
-              <p className="text-gray-600 mb-4">{item.excerpt}</p>
+              <p className="text-gray-600 mb-4">{t(`public.news.${item.key}_excerpt`)}</p>
               <div className="inline-flex items-center gap-2 text-blue-600 font-semibold text-sm group-hover:gap-3 transition-all">
-                Read more <ArrowRight className="w-4 h-4" />
+                {t("public.news.read_more")} <ArrowRight className="w-4 h-4 rtl:rotate-180" />
               </div>
             </div>
           ))}
@@ -71,18 +74,18 @@ export default function NewsView() {
         <div className="max-w-2xl mx-auto text-center">
           <div className="flex items-center justify-center gap-2 mb-4">
             <Zap className="w-5 h-5 text-blue-600" />
-            <span className="text-sm font-semibold text-blue-600">Stay Informed</span>
+            <span className="text-sm font-semibold text-blue-600">{t("public.blog.newsletter_title")}</span>
           </div>
-          <h2 className="text-3xl font-extrabold text-gray-900 mb-4">Get Regulatory Updates</h2>
-          <p className="text-gray-600 mb-8">Subscribe to get notified about framework changes, regulatory updates, and compliance deadlines.</p>
+          <h2 className="text-3xl font-extrabold text-gray-900 mb-4">{t("public.blog.newsletter_title")}</h2>
+          <p className="text-gray-600 mb-8">{t("public.blog.newsletter_subtitle")}</p>
           <div className="flex flex-col sm:flex-row gap-3">
             <input
               type="email"
-              placeholder="your@email.com"
+              placeholder={t("public.blog.email_placeholder")}
               className="flex-1 px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-600"
             />
             <button className="bg-blue-600 hover:bg-blue-700 text-white font-semibold px-6 py-3 rounded-lg transition-colors whitespace-nowrap">
-              Subscribe
+              {t("public.blog.subscribe")}
             </button>
           </div>
         </div>

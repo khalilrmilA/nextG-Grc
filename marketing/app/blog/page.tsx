@@ -14,7 +14,7 @@ export const metadata: Metadata = {
       "In-depth articles on GRC: NIS2 compliance, risk quantification, contract review with AI, auditor portals and how to build custom frameworks.",
     url: "/blog",
     type: "website",
-    images: ["/logo.png"],
+    images: ["/logo-horizontal.png"],
   },
 };
 

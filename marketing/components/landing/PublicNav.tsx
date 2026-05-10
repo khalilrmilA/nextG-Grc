@@ -3,20 +3,23 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { ArrowRight, Menu, X } from "lucide-react";
-
-const NAV_LINKS = [
-  { to: "/features-landing", label: "Features" },
-  { to: "/solutions",        label: "Solutions" },
-  { to: "/faq",              label: "FAQ" },
-  { to: "/blog",             label: "Blog" },
-  { to: "/news",             label: "News" },
-  { to: "/contact",          label: "Contact" },
-];
+import { useI18n } from "../../i18n";
+import LanguageSwitcher from "../LanguageSwitcher";
 
 export default function PublicNav() {
+  const { t } = useI18n();
   const [open, setOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
   const pathname = usePathname();
+
+  const NAV_LINKS = [
+    { to: "/features-landing", label: t("public.nav.features") },
+    { to: "/solutions",        label: t("public.nav.solutions") },
+    { to: "/faq",              label: t("public.nav.faq") },
+    { to: "/blog",             label: t("public.nav.blog") },
+    { to: "/news",             label: t("public.nav.news") },
+    { to: "/contact",          label: t("public.nav.contact") },
+  ];
 
   useEffect(() => { setOpen(false); }, [pathname]);
 
@@ -51,7 +54,7 @@ export default function PublicNav() {
         >
           {/* Logo */}
           <Link href="/" onClick={() => setOpen(false)} className="flex items-center gap-2 flex-shrink-0">
-            <img src="/logo.png" alt="GRCEye" className="h-9 sm:h-10 w-auto object-contain" />
+            <img src="/logo-horizontal.png" alt="GRCEye — Governance, Risk & Compliance Platform" className="h-9 sm:h-10 w-auto object-contain" />
           </Link>
 
           {/* Desktop nav */}
@@ -73,33 +76,35 @@ export default function PublicNav() {
 
           {/* Desktop CTA */}
           <div className="hidden lg:flex items-center gap-1.5">
+            <LanguageSwitcher compact />
             <Link
               href="/login"
               className="px-3.5 py-2 text-sm font-medium text-gray-700 hover:text-gray-900 transition-colors rounded-lg hover:bg-gray-50"
             >
-              Sign in
+              {t("public.nav.sign_in")}
             </Link>
             <Link
               href="/register"
               className="group flex items-center gap-1.5 bg-gradient-to-br from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white text-sm font-semibold pl-4 pr-3.5 py-2 rounded-lg transition-all shadow-sm hover:shadow-md hover:shadow-blue-500/30"
             >
-              Start free trial
-              <ArrowRight className="w-3.5 h-3.5 transition-transform group-hover:translate-x-0.5" />
+              {t("public.nav.start_trial")}
+              <ArrowRight className="w-3.5 h-3.5 transition-transform group-hover:translate-x-0.5 rtl:rotate-180" />
             </Link>
           </div>
 
           {/* Mobile (hamburger) */}
           <div className="flex lg:hidden items-center gap-2">
+            <LanguageSwitcher compact />
             <Link
               href="/register"
               className="hidden sm:inline-flex items-center gap-1 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold px-3 py-1.5 rounded-lg shadow-sm"
             >
-              Start trial
+              {t("public.nav.start_trial")}
             </Link>
             <button
               onClick={() => setOpen(true)}
               className="w-9 h-9 flex items-center justify-center rounded-lg bg-gray-50 hover:bg-gray-100 border border-gray-200 text-gray-700 transition-colors"
-              aria-label="Open menu"
+              aria-label={t("public.nav.open_menu")}
             >
               <Menu className="w-5 h-5" />
             </button>
@@ -123,12 +128,12 @@ export default function PublicNav() {
       >
         <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
           <Link href="/" onClick={() => setOpen(false)}>
-            <img src="/logo.png" alt="GRCEye" className="h-10 w-auto object-contain" />
+            <img src="/logo-horizontal.png" alt="GRCEye — Governance, Risk & Compliance Platform" className="h-10 w-auto object-contain" />
           </Link>
           <button
             onClick={() => setOpen(false)}
             className="w-9 h-9 flex items-center justify-center rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-700 transition-colors"
-            aria-label="Close menu"
+            aria-label={t("public.nav.close_menu")}
           >
             <X className="w-5 h-5" />
           </button>
@@ -156,15 +161,15 @@ export default function PublicNav() {
             className="flex items-center justify-center gap-2 w-full bg-gradient-to-br from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-semibold px-4 py-3 rounded-xl transition-all shadow-sm text-sm"
             onClick={() => setOpen(false)}
           >
-            Start free trial
-            <ArrowRight className="w-4 h-4" />
+            {t("public.nav.start_trial")}
+            <ArrowRight className="w-4 h-4 rtl:rotate-180" />
           </Link>
           <Link
             href="/login"
             className="flex items-center justify-center gap-2 w-full bg-gray-50 hover:bg-gray-100 border border-gray-200 text-gray-700 font-semibold px-4 py-3 rounded-xl transition-colors text-sm"
             onClick={() => setOpen(false)}
           >
-            Sign in
+            {t("public.nav.sign_in")}
           </Link>
         </div>
       </div>

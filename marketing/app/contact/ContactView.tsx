@@ -5,10 +5,12 @@ import Link from "next/link";
 import { ArrowRight, Send, Mail, MessageSquare, Building2, CheckCircle, AlertCircle } from "lucide-react";
 import PublicNav from "@/components/landing/PublicNav";
 import SupportChat from "@/components/landing/SupportChat";
+import { useI18n } from "@/i18n";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1";
 
 export default function ContactView() {
+  const { t } = useI18n();
   const [form, setForm] = useState({
     name: "",
     email: "",
@@ -43,13 +45,13 @@ export default function ContactView() {
       if (!resp.ok) {
         const data = await resp.json().catch(() => ({}));
         const detail = (data as { detail?: string })?.detail;
-        throw new Error(typeof detail === "string" ? detail : "Could not send your message. Please try again or email sales@grceye.com directly.");
+        throw new Error(typeof detail === "string" ? detail : t("public.contact.err_could_not_send"));
       }
       setSuccess(true);
       setForm({ name: "", email: "", company: "", subject: "", message: "" });
     } catch (err: unknown) {
       const e = err as { message?: string };
-      setError(e.message ?? "Could not send your message. Please try again or email sales@grceye.com directly.");
+      setError(e.message ?? t("public.contact.err_could_not_send"));
     } finally {
       setSubmitting(false);
     }
@@ -62,13 +64,13 @@ export default function ContactView() {
       <section className="max-w-4xl mx-auto px-6 pt-12 pb-8 text-center">
         <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-blue-50 border border-blue-100 text-blue-700 text-xs font-semibold mb-4">
           <MessageSquare className="w-3.5 h-3.5" />
-          We&apos;d love to hear from you
+          {t("public.contact.hero_badge")}
         </div>
         <h1 className="text-4xl sm:text-5xl font-extrabold tracking-tight text-gray-900 mb-4">
-          Get in touch
+          {t("public.contact.hero_title_alt")}
         </h1>
         <p className="text-lg text-gray-600 max-w-2xl mx-auto">
-          Questions about GRCEye, a custom demo for your team, or a partnership idea? Tell us what you need — we typically reply within one business day.
+          {t("public.contact.hero_subtitle_alt")}
         </p>
       </section>
 
@@ -79,25 +81,25 @@ export default function ContactView() {
               <div className="w-16 h-16 rounded-full bg-green-50 border border-green-100 flex items-center justify-center mx-auto mb-4">
                 <CheckCircle className="w-8 h-8 text-green-600" />
               </div>
-              <h2 className="text-2xl font-bold text-gray-900 mb-2">Message sent</h2>
-              <p className="text-gray-600 mb-6">Thanks — we received your message and will get back to you shortly.</p>
+              <h2 className="text-2xl font-bold text-gray-900 mb-2">{t("public.contact.message_sent")}</h2>
+              <p className="text-gray-600 mb-6">{t("public.contact.thanks")}</p>
               <button
                 type="button"
                 onClick={() => setSuccess(false)}
                 className="inline-flex items-center gap-2 px-5 py-2.5 bg-blue-600 text-white text-sm font-semibold rounded-xl hover:bg-blue-700 transition-colors"
               >
-                Send another message
-                <ArrowRight className="w-4 h-4" />
+                {t("public.contact.send_another")}
+                <ArrowRight className="w-4 h-4 rtl:rotate-180" />
               </button>
             </div>
           ) : (
             <form onSubmit={handleSubmit} className="space-y-5">
-              <h2 className="text-xl font-bold text-gray-900">Send us a message</h2>
+              <h2 className="text-xl font-bold text-gray-900">{t("public.contact.send_us_msg")}</h2>
 
               <div className="grid sm:grid-cols-2 gap-4">
                 <div>
                   <label htmlFor="contact-name" className="block text-xs font-semibold text-gray-700 mb-1.5">
-                    Your name <span className="text-red-500">*</span>
+                    {t("public.contact.your_name")} <span className="text-red-500">*</span>
                   </label>
                   <input
                     id="contact-name"
@@ -105,13 +107,13 @@ export default function ContactView() {
                     required
                     value={form.name}
                     onChange={e => update("name", e.target.value)}
-                    placeholder="Jane Doe"
+                    placeholder={t("public.contact.name_placeholder")}
                     className="w-full px-3.5 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
                   />
                 </div>
                 <div>
                   <label htmlFor="contact-email" className="block text-xs font-semibold text-gray-700 mb-1.5">
-                    Work email <span className="text-red-500">*</span>
+                    {t("public.contact.work_email")} <span className="text-red-500">*</span>
                   </label>
                   <input
                     id="contact-email"
@@ -119,7 +121,7 @@ export default function ContactView() {
                     required
                     value={form.email}
                     onChange={e => update("email", e.target.value)}
-                    placeholder="jane@company.com"
+                    placeholder={t("public.contact.email_placeholder")}
                     className="w-full px-3.5 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
                   />
                 </div>
@@ -127,38 +129,38 @@ export default function ContactView() {
 
               <div className="grid sm:grid-cols-2 gap-4">
                 <div>
-                  <label htmlFor="contact-company" className="block text-xs font-semibold text-gray-700 mb-1.5">Company</label>
+                  <label htmlFor="contact-company" className="block text-xs font-semibold text-gray-700 mb-1.5">{t("public.contact.company_label")}</label>
                   <input
                     id="contact-company"
                     type="text"
                     value={form.company}
                     onChange={e => update("company", e.target.value)}
-                    placeholder="Acme Corp"
+                    placeholder={t("public.contact.company_placeholder")}
                     className="w-full px-3.5 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
                   />
                 </div>
                 <div>
-                  <label htmlFor="contact-subject" className="block text-xs font-semibold text-gray-700 mb-1.5">Subject</label>
+                  <label htmlFor="contact-subject" className="block text-xs font-semibold text-gray-700 mb-1.5">{t("public.contact.subject_label")}</label>
                   <select
                     id="contact-subject"
                     value={form.subject}
                     onChange={e => update("subject", e.target.value)}
                     className="w-full px-3.5 py-2.5 border border-gray-200 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
                   >
-                    <option value="">Choose a topic…</option>
-                    <option>Request a demo</option>
-                    <option>Pricing / sales</option>
-                    <option>Technical support</option>
-                    <option>Partnerships</option>
-                    <option>Press / media</option>
-                    <option>Other</option>
+                    <option value="">{t("public.contact.subject_choose")}</option>
+                    <option>{t("public.contact.subject_demo")}</option>
+                    <option>{t("public.contact.subject_pricing")}</option>
+                    <option>{t("public.contact.subject_support")}</option>
+                    <option>{t("public.contact.subject_partnerships")}</option>
+                    <option>{t("public.contact.subject_press")}</option>
+                    <option>{t("public.contact.subject_other")}</option>
                   </select>
                 </div>
               </div>
 
               <div>
                 <label htmlFor="contact-message" className="block text-xs font-semibold text-gray-700 mb-1.5">
-                  Message <span className="text-red-500">*</span>
+                  {t("public.contact.message_label")} <span className="text-red-500">*</span>
                 </label>
                 <textarea
                   id="contact-message"
@@ -168,7 +170,7 @@ export default function ContactView() {
                   rows={6}
                   value={form.message}
                   onChange={e => update("message", e.target.value)}
-                  placeholder="Tell us a bit about what you need…"
+                  placeholder={t("public.contact.message_placeholder")}
                   className="w-full px-3.5 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all resize-none"
                 />
                 <p className="text-xs text-gray-400 mt-1">{form.message.length}/5000</p>
@@ -186,10 +188,10 @@ export default function ContactView() {
                 disabled={submitting}
                 className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-6 py-3 bg-blue-600 text-white text-sm font-semibold rounded-xl hover:bg-blue-700 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
               >
-                {submitting ? "Sending…" : (
+                {submitting ? t("public.contact.sending") : (
                   <>
-                    Send message
-                    <Send className="w-4 h-4" />
+                    {t("public.contact.send_msg")}
+                    <Send className="w-4 h-4 rtl:scale-x-[-1]" />
                   </>
                 )}
               </button>
@@ -201,15 +203,15 @@ export default function ContactView() {
           <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
             <div className="flex items-center gap-2 text-sm font-semibold text-gray-900 mb-3">
               <Mail className="w-4 h-4 text-blue-600" />
-              Email us directly
+              {t("public.contact.sidebar_email_directly")}
             </div>
             <ul className="space-y-2 text-sm">
               <li>
-                <p className="text-xs text-gray-500">Sales</p>
+                <p className="text-xs text-gray-500">{t("public.contact.sidebar_sales")}</p>
                 <a href="mailto:sales@grceye.com" className="text-blue-600 hover:underline font-medium">sales@grceye.com</a>
               </li>
               <li>
-                <p className="text-xs text-gray-500">Support</p>
+                <p className="text-xs text-gray-500">{t("public.contact.sidebar_support")}</p>
                 <a href="mailto:support@grceye.com" className="text-blue-600 hover:underline font-medium">support@grceye.com</a>
               </li>
             </ul>
@@ -218,21 +220,21 @@ export default function ContactView() {
           <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
             <div className="flex items-center gap-2 text-sm font-semibold text-gray-900 mb-3">
               <Building2 className="w-4 h-4 text-blue-600" />
-              Looking to try it?
+              {t("public.contact.sidebar_try_title")}
             </div>
-            <p className="text-sm text-gray-600 mb-3">Skip the wait — start a 14-day free trial. No credit card required.</p>
+            <p className="text-sm text-gray-600 mb-3">{t("public.contact.sidebar_try_desc")}</p>
             <Link
               href="/register"
               className="inline-flex items-center gap-2 text-sm font-semibold text-blue-600 hover:text-blue-700"
             >
-              Create an account
-              <ArrowRight className="w-4 h-4" />
+              {t("public.contact.sidebar_create")}
+              <ArrowRight className="w-4 h-4 rtl:rotate-180" />
             </Link>
           </div>
 
           <div className="bg-blue-50 border border-blue-100 rounded-2xl p-6">
-            <p className="text-sm font-semibold text-blue-900 mb-1">Response time</p>
-            <p className="text-sm text-blue-800">We typically reply within one business day.</p>
+            <p className="text-sm font-semibold text-blue-900 mb-1">{t("public.contact.sidebar_response_title")}</p>
+            <p className="text-sm text-blue-800">{t("public.contact.sidebar_response_desc")}</p>
           </div>
         </aside>
       </section>

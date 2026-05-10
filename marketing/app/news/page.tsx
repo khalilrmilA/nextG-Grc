@@ -14,7 +14,7 @@ export const metadata: Metadata = {
       "Track the latest GRC regulatory changes — EU AI Act, NIST CSF 2.0, GDPR enforcement, NIS2 deadlines, ISO 27001 updates and DORA milestones.",
     url: "/news",
     type: "website",
-    images: ["/logo.png"],
+    images: ["/logo-horizontal.png"],
   },
 };
 

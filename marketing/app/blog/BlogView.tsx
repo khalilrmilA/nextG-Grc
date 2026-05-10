@@ -4,15 +4,22 @@ import Link from "next/link";
 import { useState } from "react";
 import { Calendar, ArrowUpRight, Clock } from "lucide-react";
 import PublicNav from "@/components/landing/PublicNav";
+import { useI18n } from "@/i18n";
 import { POSTS, CATEGORIES } from "./posts";
 
 export default function BlogView() {
+  const { t, lang } = useI18n();
+  const dateLocale = lang === "fr" ? "fr-FR" : lang === "ar" ? "ar" : "en-US";
   const [activeCat, setActiveCat] = useState<string>("All");
 
   const featured = POSTS.find(p => p.featured) ?? POSTS[0];
   const filtered = activeCat === "All"
     ? POSTS.filter(p => p.slug !== featured.slug)
     : POSTS.filter(p => p.slug !== featured.slug && p.category === activeCat);
+
+  // Localize the "All" pill; other category labels stay in EN since they
+  // come from the post taxonomy.
+  const localizeCat = (cat: string) => cat === "All" ? t("public.blog.cat_all") : cat;
 
   return (
     <div className="min-h-screen bg-white text-gray-900">
@@ -22,10 +29,10 @@ export default function BlogView() {
       <section className="pt-16 pb-16 px-6 text-center bg-gradient-to-b from-slate-50 via-white to-white">
         <div className="max-w-3xl mx-auto">
           <h1 className="text-5xl md:text-6xl font-extrabold text-gray-900 leading-tight tracking-tight mb-4">
-            GRC Insights & Best Practices
+            {t("public.blog.hero_title")}
           </h1>
           <p className="text-xl text-gray-500">
-            Compliance guidance, risk strategies, and vendor management insights from the GRCEye team.
+            {t("public.blog.hero_subtitle")}
           </p>
         </div>
       </section>
@@ -36,7 +43,7 @@ export default function BlogView() {
           <Link href={`/blog/${featured.slug}`} className="block group">
             <div className="bg-gradient-to-br from-blue-600 to-indigo-700 text-white rounded-3xl p-10 sm:p-12 group-hover:shadow-2xl group-hover:-translate-y-0.5 transition-all">
               <div className="flex flex-wrap items-center gap-3 mb-5">
-                <span className="inline-block bg-blue-400/30 backdrop-blur-sm text-white text-xs font-bold px-3 py-1 rounded-full">Featured</span>
+                <span className="inline-block bg-blue-400/30 backdrop-blur-sm text-white text-xs font-bold px-3 py-1 rounded-full">{t("public.blog.featured")}</span>
                 <span className="inline-block bg-white/15 text-white text-xs font-medium px-3 py-1 rounded-full">{featured.category}</span>
                 <div className="flex items-center gap-1.5 text-xs text-white/80">
                   <Clock className="w-3.5 h-3.5" />
@@ -52,12 +59,12 @@ export default function BlogView() {
                   </div>
                   <div>
                     <p className="font-semibold text-sm">{featured.author}</p>
-                    <p className="text-xs text-blue-200">{new Date(featured.date).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" })}</p>
+                    <p className="text-xs text-blue-200">{new Date(featured.date).toLocaleDateString(dateLocale, { year: "numeric", month: "short", day: "numeric" })}</p>
                   </div>
                 </div>
                 <div className="flex items-center gap-2 text-sm font-semibold opacity-90 group-hover:gap-3 transition-all">
-                  Read article
-                  <ArrowUpRight className="w-5 h-5" />
+                  {t("public.news.read_more")}
+                  <ArrowUpRight className="w-5 h-5 rtl:scale-x-[-1]" />
                 </div>
               </div>
             </div>
@@ -79,7 +86,7 @@ export default function BlogView() {
                     : "bg-gray-100 text-gray-700 hover:bg-gray-200"
                 }`}
               >
-                {cat}
+                {localizeCat(cat)}
               </button>
             ))}
           </div>
@@ -90,7 +97,7 @@ export default function BlogView() {
       <section className="px-6 pb-24">
         <div className="max-w-5xl mx-auto">
           {filtered.length === 0 ? (
-            <p className="text-center text-gray-500 py-16">No articles in this category yet.</p>
+            <p className="text-center text-gray-500 py-16">{t("public.blog.no_articles")}</p>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
               {filtered.map((post) => (
@@ -115,7 +122,7 @@ export default function BlogView() {
                   <div className="flex items-center justify-between pt-4 border-t border-gray-200">
                     <div className="flex items-center gap-2 text-xs text-gray-500">
                       <Calendar className="w-4 h-4" />
-                      <span>{new Date(post.date).toLocaleDateString()}</span>
+                      <span>{new Date(post.date).toLocaleDateString(dateLocale)}</span>
                     </div>
                     <span className="text-xs text-gray-500">{post.readTime}</span>
                   </div>
@@ -129,16 +136,16 @@ export default function BlogView() {
       {/* Newsletter */}
       <section className="px-6 py-24 bg-gradient-to-br from-slate-50 to-blue-50">
         <div className="max-w-2xl mx-auto text-center">
-          <h2 className="text-3xl font-extrabold text-gray-900 mb-4">Stay updated</h2>
-          <p className="text-gray-600 mb-8">Get GRC insights and compliance updates delivered to your inbox every week.</p>
+          <h2 className="text-3xl font-extrabold text-gray-900 mb-4">{t("public.blog.newsletter_title")}</h2>
+          <p className="text-gray-600 mb-8">{t("public.blog.newsletter_subtitle")}</p>
           <div className="flex flex-col sm:flex-row gap-3">
             <input
               type="email"
-              placeholder="your@email.com"
+              placeholder={t("public.blog.email_placeholder")}
               className="flex-1 px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-600"
             />
             <button className="bg-blue-600 hover:bg-blue-700 text-white font-semibold px-6 py-3 rounded-lg transition-colors">
-              Subscribe
+              {t("public.blog.subscribe")}
             </button>
           </div>
         </div>

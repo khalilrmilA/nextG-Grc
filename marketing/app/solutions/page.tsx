@@ -14,7 +14,7 @@ export const metadata: Metadata = {
       "GRCEye for SaaS, FinTech, Healthcare and Enterprise. Role-based workflows for CISOs, risk managers, compliance officers, auditors and policy managers.",
     url: "/solutions",
     type: "website",
-    images: ["/logo.png"],
+    images: ["/logo-horizontal.png"],
   },
 };
 

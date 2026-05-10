@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import { SITE_URL, SITE_NAME } from "./constants";
+import { I18nProvider } from "../i18n";
 
 export const viewport: Viewport = {
   themeColor: "#2563eb",
@@ -17,8 +18,8 @@ export const metadata: Metadata = {
   applicationName: SITE_NAME,
   authors: [{ name: SITE_NAME }],
   icons: {
-    icon: "/logo.png",
-    apple: "/logo.png",
+    icon: "/logo-vertical.png",
+    apple: "/logo-vertical.png",
   },
   robots: {
     index: true,
@@ -29,12 +30,12 @@ export const metadata: Metadata = {
   openGraph: {
     type: "website",
     siteName: SITE_NAME,
-    images: [{ url: "/logo.png", alt: "GRCEye logo" }],
+    images: [{ url: "/logo-horizontal.png", alt: "GRCEye — Governance, Risk & Compliance Platform" }],
     locale: "en_US",
   },
   twitter: {
     card: "summary_large_image",
-    images: ["/logo.png"],
+    images: ["/logo-horizontal.png"],
   },
 };
 
@@ -43,7 +44,7 @@ const ORG_JSON_LD = {
   "@type": "Organization",
   name: "GRCEye",
   url: SITE_URL,
-  logo: `${SITE_URL}/logo.png`,
+  logo: `${SITE_URL}/logo-horizontal.png`,
   description: "All-in-one Governance, Risk and Compliance SaaS platform.",
   sameAs: [],
   contactPoint: [
@@ -66,7 +67,7 @@ export default function RootLayout({ children }: { readonly children: React.Reac
         <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(ORG_JSON_LD) }} />
         <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(SITE_JSON_LD) }} />
       </head>
-      <body>{children}</body>
+      <body><I18nProvider>{children}</I18nProvider></body>
     </html>
   );
 }

@@ -14,7 +14,7 @@ export const metadata: Metadata = {
       "Explore every GRCEye module: risk register, Monte Carlo risk quantification, multi-framework compliance, AI gap analysis, audits, policies, vendor risk and more.",
     url: "/features-landing",
     type: "website",
-    images: ["/logo.png"],
+    images: ["/logo-horizontal.png"],
   },
 };
 

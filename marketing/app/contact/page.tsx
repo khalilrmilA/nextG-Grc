@@ -13,7 +13,7 @@ export const metadata: Metadata = {
       "Talk to the GRCEye team. Sales, support, partnerships, demos. We typically reply within one business day.",
     url: "/contact",
     type: "website",
-    images: ["/logo.png"],
+    images: ["/logo-horizontal.png"],
   },
 };
 

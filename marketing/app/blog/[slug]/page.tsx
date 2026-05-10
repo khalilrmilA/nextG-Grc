@@ -29,13 +29,13 @@ export async function generateMetadata({ params }: { params: { slug: string } })
       publishedTime: new Date(post.date).toISOString(),
       authors: [post.author],
       tags: post.keywords.split(",").map(k => k.trim()),
-      images: ["/logo.png"],
+      images: ["/logo-horizontal.png"],
     },
     twitter: {
       card: "summary_large_image",
       title: post.metaTitle,
       description: post.metaDescription,
-      images: ["/logo.png"],
+      images: ["/logo-horizontal.png"],
     },
   };
 }
@@ -51,7 +51,7 @@ export default function ArticlePage({ params }: { params: { slug: string } }) {
     "@type": "Article",
     headline: post.metaTitle,
     description: post.metaDescription,
-    image: "https://grceye.com/logo.png",
+    image: "https://grceye.com/logo-horizontal.png",
     datePublished: new Date(post.date).toISOString(),
     dateModified: new Date(post.date).toISOString(),
     author: {
@@ -62,7 +62,7 @@ export default function ArticlePage({ params }: { params: { slug: string } }) {
     publisher: {
       "@type": "Organization",
       name: "GRCEye",
-      logo: { "@type": "ImageObject", url: "https://grceye.com/logo.png" },
+      logo: { "@type": "ImageObject", url: "https://grceye.com/logo-horizontal.png" },
     },
     mainEntityOfPage: { "@type": "WebPage", "@id": url },
     keywords: post.keywords,
