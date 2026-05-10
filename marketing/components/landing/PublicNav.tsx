@@ -38,19 +38,17 @@ export default function PublicNav() {
 
   return (
     <>
-      {/* Top spacing so content doesn't hide behind the floating nav */}
-      <div className="h-20" aria-hidden />
+      {/* Top spacing so content doesn't hide behind the fixed nav */}
+      <div className="h-16" aria-hidden />
 
       <header
-        className={`fixed top-3 sm:top-4 inset-x-0 z-50 px-3 sm:px-6 transition-all duration-300 ${
-          scrolled ? "scale-[0.99]" : ""
+        className={`fixed top-0 inset-x-0 z-50 transition-all duration-300 ${
+          scrolled
+            ? "bg-white/95 backdrop-blur-xl border-b border-gray-100 shadow-sm"
+            : ""
         }`}
       >
-        <div
-          className={`max-w-6xl mx-auto bg-white/90 backdrop-blur-xl border border-gray-200/70 rounded-2xl flex items-center justify-between px-3 sm:px-5 h-14 transition-all duration-300 ${
-            scrolled ? "shadow-lg shadow-blue-900/5" : "shadow-md shadow-blue-900/[0.03]"
-          }`}
-        >
+        <div className="max-w-6xl mx-auto flex items-center justify-between px-5 sm:px-8 h-16">
           {/* Logo */}
           <Link href="/" onClick={() => setOpen(false)} className="flex items-center gap-2 flex-shrink-0">
             <img src="/logo-horizontal.png" alt="GRCEye — Governance, Risk & Compliance Platform" className="h-9 sm:h-10 w-auto object-contain" />
@@ -112,7 +110,7 @@ export default function PublicNav() {
             </Link>
             <button
               onClick={() => setOpen(true)}
-              className="w-9 h-9 flex items-center justify-center rounded-lg bg-gray-50 hover:bg-gray-100 border border-gray-200 text-gray-700 transition-colors"
+              className="w-9 h-9 flex items-center justify-center rounded-lg hover:bg-gray-100 text-gray-700 transition-colors"
               aria-label="Open menu"
             >
               <Menu className="w-5 h-5" />

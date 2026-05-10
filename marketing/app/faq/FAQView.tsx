@@ -14,7 +14,7 @@ function FAQAccordion({ category, ids }: { category: string; ids: readonly strin
 
   return (
     <div className="mb-12">
-      <h3 className="text-xl font-bold text-gray-900 mb-5 pb-3 border-b border-gray-100">{localizedCategory}</h3>
+      <h2 className="text-xl font-bold text-gray-900 mb-5 pb-3 border-b border-gray-100">{localizedCategory}</h2>
       <div className="space-y-3">
         {ids.map((id, idx) => (
           <div key={id} className="border border-gray-200 rounded-xl overflow-hidden hover:border-blue-200 transition-colors">

@@ -4,7 +4,7 @@ import LandingView from "./LandingView";
 export const metadata: Metadata = {
   title: { absolute: "GRCEye — Governance, Risk & Compliance Platform" },
   description:
-    "The all-in-one GRC SaaS platform. 70+ compliance frameworks, AI gap analysis, risk quantification, audits, policies, vendor risk and a public trust center — built for security teams and CISOs.",
+    "All-in-one GRC SaaS for CISOs and security teams. 70+ frameworks, AI gap analysis, risk quantification, audits, policies, vendor risk and a trust center.",
   keywords:
     "GRC platform, governance risk compliance, ISO 27001, SOC 2, NIST CSF, GDPR, NIS2, DORA, risk management software, compliance automation, AI compliance, vendor risk management, TPRM, audit software, policy management",
   alternates: { canonical: "https://grceye.com/" },

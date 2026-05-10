@@ -14,7 +14,7 @@ export const metadata: Metadata = {
     template: "%s | GRCEye",
   },
   description:
-    "GRCEye is the all-in-one GRC SaaS platform: 70+ compliance frameworks, AI gap analysis, risk quantification, audits, policies, vendor risk and a public trust center.",
+    "GRCEye: all-in-one GRC SaaS — 70+ frameworks, AI gap analysis, risk quantification, audits, policies, vendor risk and a public trust center.",
   applicationName: SITE_NAME,
   authors: [{ name: SITE_NAME }],
   icons: {
