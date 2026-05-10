@@ -18,8 +18,8 @@ export const metadata: Metadata = {
   applicationName: SITE_NAME,
   authors: [{ name: SITE_NAME }],
   icons: {
-    icon: "/logo-vertical.png",
-    apple: "/logo-vertical.png",
+    icon: "/page.png",
+    apple: "/page.png",
   },
   robots: {
     index: true,
