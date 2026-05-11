@@ -35,6 +35,7 @@ from app.api.v1.endpoints import (
     public_upload,
     public_chat,
     public_contact,
+    support,
 )
 
 api_router = APIRouter()
@@ -73,3 +74,4 @@ api_router.include_router(contract_collab.router, prefix="/contract-collab", tag
 api_router.include_router(public_upload.router, prefix="/public", tags=["Public Upload"])
 api_router.include_router(public_chat.router, prefix="/public", tags=["Public Support Chat"])
 api_router.include_router(public_contact.router, prefix="/public", tags=["Public Contact Form"])
+api_router.include_router(support.router, prefix="/support/tickets", tags=["Support Tickets"])

@@ -44,6 +44,7 @@ import ContractCollaborationPage from "./pages/ContractCollaborationPage";
 import VendorCollaborationPage from "./pages/VendorCollaborationPage";
 import EvidenceUploadPage from "./pages/EvidenceUploadPage";
 import CompanyAdminPage from "./pages/CompanyAdminPage";
+import SupportPage from "./pages/SupportPage";
 
 function PrivateRoute({ children, requiredModule }: { readonly children: React.ReactNode; requiredModule?: string }) {
   const user = useAuthStore((u) => u);
@@ -202,6 +203,7 @@ export default function App() {
         <Route path="regulatory" element={<RoleRoute path="/regulatory"><RegulatoryUpdatesPage /></RoleRoute>} />
         <Route path="activity-log" element={<RoleRoute path="/activity-log"><ActivityLogPage /></RoleRoute>} />
         <Route path="webhooks" element={<RoleRoute path="/webhooks"><WebhooksPage /></RoleRoute>} />
+        <Route path="support" element={<SupportPage />} />
         <Route path="company-admin" element={<CompanyAdminPage />} />
         <Route path="cheat" element={<CheatSheetPage />} />
         <Route path="settings" element={<SettingsPage />} />

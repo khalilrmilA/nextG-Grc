@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useNavigate, Navigate } from "react-router-dom";
 import { authSession } from "../store/auth";
 import {
@@ -17,7 +17,16 @@ import {
   Users, Shield, BookOpen, LogOut, Settings, Sparkles, CreditCard,
   ToggleLeft, ToggleRight, Trash2, Upload,
   Plus, AlertCircle, Loader2, X, CheckCircle, ThumbsUp, ThumbsDown, Pencil,
+  Headphones, MessageSquare, Video, Send, PhoneOff, ChevronRight, RefreshCw,
 } from "lucide-react";
+import {
+  supportApi,
+  type SupportTicketListItem,
+  type SupportTicketDetail,
+  type ChatSessionData,
+  type TicketStatus,
+  type TicketPriority,
+} from "../api/endpoints";
 
 // ── Mock data (offline / demo fallback) ──────────────────────────────────────
 
@@ -1125,17 +1134,299 @@ function SubscriptionsTab() {
   );
 }
 
+// ── Support Tickets Tab ───────────────────────────────────────────────────────
+
+const STATUS_STYLES: Record<TicketStatus, string> = {
+  open:         "bg-blue-100 text-blue-700",
+  in_progress:  "bg-amber-100 text-amber-700",
+  waiting_user: "bg-purple-100 text-purple-700",
+  resolved:     "bg-emerald-100 text-emerald-700",
+  closed:       "bg-gray-100 text-gray-500",
+};
+const PRIORITY_STYLES: Record<TicketPriority, string> = {
+  low:    "bg-gray-100 text-gray-500",
+  medium: "bg-blue-100 text-blue-700",
+  high:   "bg-amber-100 text-amber-700",
+  urgent: "bg-red-100 text-red-700",
+};
+
+function AdminChatPanel({
+  ticketId,
+  onChatUpdate,
+}: { ticketId: string; onChatUpdate: (s: ChatSessionData) => void }) {
+  const [msgs, setMsgs] = useState<{ id: string; content: string; is_support: boolean; sender_name: string; created_at: string }[]>([]);
+  const [input, setInput]   = useState("");
+  const [wsReady, setWsReady] = useState(false);
+  const wsRef   = useRef<WebSocket | null>(null);
+  const bottomRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: "smooth" }); }, [msgs]);
+
+  useEffect(() => {
+    const token = localStorage.getItem("access_token") || sessionStorage.getItem("access_token") || "";
+    const wsBase = (import.meta.env.VITE_API_URL ?? "http://localhost:8000/api/v1").replace(/^http/, "ws");
+    const ws = new WebSocket(`${wsBase}/support/tickets/${ticketId}/chat/ws?token=${token}`);
+    wsRef.current = ws;
+    ws.onopen  = () => setWsReady(true);
+    ws.onclose = () => setWsReady(false);
+    ws.onmessage = (e) => {
+      try {
+        const data = JSON.parse(e.data);
+        if (data.type === "message") setMsgs(prev => [...prev, data]);
+        if (data.type === "chat_ended") onChatUpdate({ id: "", ticket_id: ticketId, status: "ended", requested_at: null, started_at: null, ended_at: null });
+      } catch { /* ignore */ }
+    };
+    return () => ws.close();
+  }, [ticketId]);
+
+  function send() {
+    const c = input.trim();
+    if (!c || !wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return;
+    wsRef.current.send(JSON.stringify({ content: c }));
+    setInput("");
+  }
+
+  async function end() {
+    try { const s = await supportApi.updateChat(ticketId, "end"); onChatUpdate(s); wsRef.current?.close(); } catch { /* ignore */ }
+  }
+
+  return (
+    <div className="flex flex-col h-72 border border-blue-200 rounded-xl overflow-hidden mt-4">
+      <div className="flex items-center gap-2 px-3 py-2 bg-blue-600 text-white">
+        <Video className="w-4 h-4" />
+        <span className="text-sm font-semibold flex-1">Live Chat</span>
+        {wsReady ? <span className="flex items-center gap-1 text-xs text-blue-200"><span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />Live</span>
+          : <span className="text-xs text-blue-300">Connecting…</span>}
+        <button onClick={end} className="p-1 rounded-lg hover:bg-blue-700" title="End chat"><PhoneOff className="w-4 h-4" /></button>
+      </div>
+      <div className="flex-1 overflow-y-auto p-3 space-y-2 bg-gray-50">
+        {msgs.length === 0 && <p className="text-center text-xs text-gray-400 mt-6">Chat started — write to the user.</p>}
+        {msgs.map(m => (
+          <div key={m.id} className={`flex ${m.is_support ? "justify-end" : "justify-start"}`}>
+            <div className={`max-w-xs px-3 py-2 rounded-2xl text-sm ${m.is_support ? "bg-blue-600 text-white" : "bg-white border border-gray-200"}`}>
+              {!m.is_support && <p className="text-xs font-semibold text-blue-600 mb-0.5">{m.sender_name}</p>}
+              <p>{m.content}</p>
+            </div>
+          </div>
+        ))}
+        <div ref={bottomRef} />
+      </div>
+      <div className="flex items-center gap-2 px-3 py-2 border-t border-gray-100 bg-white">
+        <input value={input} onChange={e => setInput(e.target.value)} onKeyDown={e => e.key === "Enter" && send()}
+          placeholder="Reply to user…" disabled={!wsReady}
+          className="flex-1 border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+        <button onClick={send} disabled={!wsReady || !input.trim()} className="p-2 bg-blue-600 text-white rounded-xl hover:bg-blue-700 disabled:opacity-50">
+          <Send className="w-4 h-4" />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function SupportTicketDetail({ ticket: init, onBack, onUpdated }: {
+  ticket: SupportTicketDetail; onBack: () => void; onUpdated: (t: SupportTicketDetail) => void;
+}) {
+  const [ticket, setTicket]   = useState(init);
+  const [newMsg, setNewMsg]   = useState("");
+  const [sending, setSending] = useState(false);
+  const [chatSession, setChat] = useState<ChatSessionData | null>(ticket.chat_session);
+  const [reqChat, setReqChat] = useState(false);
+  const bottomRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: "smooth" }); }, [ticket.messages]);
+
+  async function reload() {
+    try { const t = await supportApi.get(ticket.id); setTicket(t); setChat(t.chat_session); onUpdated(t); } catch { /* ignore */ }
+  }
+
+  async function sendMsg(e: React.FormEvent) {
+    e.preventDefault();
+    if (!newMsg.trim()) return;
+    setSending(true);
+    try {
+      const msg = await supportApi.postMessage(ticket.id, newMsg.trim());
+      setTicket(prev => ({ ...prev, messages: [...prev.messages, msg] }));
+      setNewMsg("");
+    } catch { /* ignore */ } finally { setSending(false); }
+  }
+
+  async function updateStatus(s: TicketStatus) {
+    try { const t = await supportApi.update(ticket.id, { status: s }); setTicket(t); onUpdated(t); } catch { /* ignore */ }
+  }
+
+  async function startChat() {
+    setReqChat(true);
+    try { const s = await supportApi.requestChat(ticket.id); setChat(s); } catch { /* ignore */ } finally { setReqChat(false); }
+  }
+
+  const fmtDate = (iso: string) => new Date(iso).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
+
+  return (
+    <div className="flex flex-col h-full">
+      <div className="flex items-center gap-3 mb-4">
+        <button onClick={onBack} className="p-1.5 rounded-lg hover:bg-gray-100"><ChevronRight className="w-4 h-4 rotate-180 text-gray-500" /></button>
+        <div className="flex-1">
+          <h3 className="font-bold text-gray-900">{ticket.title}</h3>
+          <p className="text-xs text-gray-400">{ticket.user.first_name} {ticket.user.last_name} · {ticket.user.role} · {fmtDate(ticket.created_at)}</p>
+        </div>
+        <button onClick={reload} className="p-1.5 rounded-lg hover:bg-gray-100" title="Refresh"><RefreshCw className="w-4 h-4 text-gray-400" /></button>
+      </div>
+
+      <div className="flex items-center gap-2 mb-4 flex-wrap">
+        <span className={`px-2 py-0.5 rounded-full text-xs font-semibold capitalize ${STATUS_STYLES[ticket.status]}`}>{ticket.status.replace("_"," ")}</span>
+        <span className={`px-2 py-0.5 rounded-full text-xs font-semibold capitalize ${PRIORITY_STYLES[ticket.priority]}`}>{ticket.priority}</span>
+        <div className="flex-1" />
+        {/* Status controls */}
+        {(["open","in_progress","waiting_user","resolved","closed"] as TicketStatus[]).map(s => (
+          s !== ticket.status && (
+            <button key={s} onClick={() => updateStatus(s)}
+              className="px-2 py-1 text-xs font-semibold rounded-lg border border-gray-200 hover:bg-gray-100 capitalize">
+              → {s.replace("_"," ")}
+            </button>
+          )
+        ))}
+      </div>
+
+      <div className="bg-gray-50 rounded-xl px-4 py-3 mb-4">
+        <p className="text-xs font-semibold text-gray-400 mb-1">Description</p>
+        <p className="text-sm text-gray-700 whitespace-pre-wrap">{ticket.description}</p>
+      </div>
+
+      {/* Chat controls */}
+      {(!chatSession || chatSession.status === "ended") && (
+        <button onClick={startChat} disabled={reqChat}
+          className="flex items-center gap-2 px-4 py-2 mb-3 bg-blue-50 text-blue-700 border border-blue-200 rounded-xl text-sm font-semibold hover:bg-blue-100 disabled:opacity-60">
+          {reqChat ? <Loader2 className="w-4 h-4 animate-spin" /> : <Video className="w-4 h-4" />}
+          Request Live Chat
+        </button>
+      )}
+      {chatSession && chatSession.status === "pending" && (
+        <div className="flex items-center gap-2 bg-amber-50 border border-amber-200 rounded-xl px-4 py-2.5 mb-3">
+          <Video className="w-4 h-4 text-amber-600" />
+          <p className="text-sm text-amber-800 font-semibold flex-1">Chat request sent — waiting for user to accept…</p>
+        </div>
+      )}
+      {chatSession && chatSession.status === "active" && <AdminChatPanel ticketId={ticket.id} onChatUpdate={setChat} />}
+
+      {/* Messages */}
+      <div className="flex-1 overflow-y-auto space-y-3 pr-1 mb-3">
+        {ticket.messages.length === 0 && <p className="text-center text-sm text-gray-400 py-6">No messages yet.</p>}
+        {ticket.messages.map(msg => (
+          <div key={msg.id} className={`flex ${msg.is_support ? "justify-end" : "justify-start"}`}>
+            <div className={`max-w-[80%] rounded-2xl px-4 py-3 ${msg.is_support ? "bg-blue-600 text-white" : "bg-white border border-gray-200"}`}>
+              <div className={`text-xs font-semibold mb-1 ${msg.is_support ? "text-blue-200" : "text-blue-600"}`}>
+                {msg.is_support ? "Support" : `${msg.sender.first_name} ${msg.sender.last_name}`} · {fmtDate(msg.created_at)}
+              </div>
+              <p className="text-sm whitespace-pre-wrap">{msg.content}</p>
+            </div>
+          </div>
+        ))}
+        <div ref={bottomRef} />
+      </div>
+
+      <form onSubmit={sendMsg} className="flex gap-2">
+        <input value={newMsg} onChange={e => setNewMsg(e.target.value)} placeholder="Reply to user…"
+          className="flex-1 border border-gray-200 rounded-xl px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+        <button type="submit" disabled={sending || !newMsg.trim()}
+          className="px-4 py-2 bg-blue-600 text-white rounded-xl hover:bg-blue-700 disabled:opacity-50 flex items-center gap-1 text-sm font-semibold">
+          {sending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />} Reply
+        </button>
+      </form>
+    </div>
+  );
+}
+
+function SupportTab() {
+  const [tickets, setTickets]   = useState<SupportTicketListItem[]>([]);
+  const [selected, setSelected] = useState<SupportTicketDetail | null>(null);
+  const [loading, setLoading]   = useState(true);
+  const [statusFilter, setStatus] = useState("all");
+
+  const load = useCallback(async () => {
+    try {
+      const data = await supportApi.list(statusFilter !== "all" ? { status: statusFilter } : {});
+      setTickets(data);
+    } catch { /* ignore */ } finally { setLoading(false); }
+  }, [statusFilter]);
+
+  useEffect(() => { load(); }, [load]);
+
+  async function open(id: string) {
+    try { setSelected(await supportApi.get(id)); } catch { /* ignore */ }
+  }
+
+  const fmtDate = (iso: string) => new Date(iso).toLocaleString(undefined, { dateStyle: "short", timeStyle: "short" });
+
+  return (
+    <div className="grid lg:grid-cols-5 gap-6 h-[calc(100vh-160px)]">
+      {/* List */}
+      <div className="lg:col-span-2 flex flex-col gap-3">
+        <div className="flex gap-1 flex-wrap">
+          {["all","open","in_progress","waiting_user","resolved","closed"].map(s => (
+            <button key={s} onClick={() => setStatus(s)}
+              className={`px-2.5 py-1 rounded-full text-xs font-semibold capitalize transition-colors ${statusFilter === s ? "bg-indigo-600 text-white" : "bg-white border border-gray-200 text-gray-600 hover:bg-gray-50"}`}>
+              {s.replace("_"," ")}
+            </button>
+          ))}
+        </div>
+        {loading ? (
+          <div className="flex justify-center py-12"><Loader2 className="w-6 h-6 animate-spin text-indigo-500" /></div>
+        ) : tickets.length === 0 ? (
+          <div className="text-center py-12 text-gray-400">
+            <Headphones className="w-8 h-8 mx-auto mb-2 opacity-30" /><p className="text-sm">No tickets</p>
+          </div>
+        ) : (
+          <div className="overflow-y-auto space-y-2">
+            {tickets.map(t => (
+              <button key={t.id} onClick={() => open(t.id)}
+                className={`w-full text-left border rounded-xl px-4 py-3 hover:shadow-sm transition-all ${selected?.id === t.id ? "border-indigo-400 bg-indigo-50" : "border-gray-200 bg-white"}`}>
+                <div className="flex items-start justify-between gap-2 mb-1.5">
+                  <p className="font-semibold text-gray-900 text-sm leading-snug">{t.title}</p>
+                  <ChevronRight className="w-4 h-4 text-gray-400 flex-shrink-0" />
+                </div>
+                <p className="text-xs text-gray-500 mb-1.5">{t.user.first_name} {t.user.last_name}</p>
+                <div className="flex gap-1.5 flex-wrap">
+                  <span className={`px-1.5 py-0.5 rounded-full text-xs font-semibold capitalize ${STATUS_STYLES[t.status]}`}>{t.status.replace("_"," ")}</span>
+                  <span className={`px-1.5 py-0.5 rounded-full text-xs font-semibold capitalize ${PRIORITY_STYLES[t.priority]}`}>{t.priority}</span>
+                  {t.has_chat && <span className="flex items-center gap-0.5 text-xs text-blue-600 font-semibold"><Video className="w-3 h-3" />Chat</span>}
+                </div>
+                <p className="text-xs text-gray-400 mt-1.5">{fmtDate(t.updated_at)} · {t.message_count} msgs</p>
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Detail */}
+      <div className="lg:col-span-3">
+        {selected ? (
+          <div className="bg-white border border-gray-200 rounded-2xl p-5 h-full flex flex-col">
+            <SupportTicketDetail ticket={selected} onBack={() => setSelected(null)}
+              onUpdated={(t) => { setSelected(t); setTickets(prev => prev.map(x => x.id === t.id ? { ...x, status: t.status, message_count: t.messages.length } : x)); }} />
+          </div>
+        ) : (
+          <div className="flex bg-gray-50 border border-gray-200 rounded-2xl h-full items-center justify-center text-gray-400 flex-col gap-3">
+            <MessageSquare className="w-8 h-8 opacity-30" />
+            <p className="text-sm font-semibold">Select a ticket</p>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ── Main Page ─────────────────────────────────────────────────────────────────
 
-type TabId = "users" | "access" | "frameworks" | "subscriptions" | "ai-access" | "settings";
+type TabId = "users" | "access" | "frameworks" | "subscriptions" | "ai-access" | "support" | "settings";
 
 const TABS: { id: TabId; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
-  { id: "users",         label: "Users",          icon: Users       },
-  { id: "access",        label: "Access Control", icon: Shield      },
-  { id: "frameworks",    label: "Frameworks",     icon: BookOpen    },
-  { id: "subscriptions", label: "Subscriptions",  icon: CreditCard  },
-  { id: "ai-access",     label: "AI Requests",    icon: Sparkles    },
-  { id: "settings",      label: "Settings",       icon: Settings    },
+  { id: "users",         label: "Users",           icon: Users      },
+  { id: "access",        label: "Access Control",  icon: Shield     },
+  { id: "frameworks",    label: "Frameworks",      icon: BookOpen   },
+  { id: "subscriptions", label: "Subscriptions",   icon: CreditCard },
+  { id: "ai-access",     label: "AI Requests",     icon: Sparkles   },
+  { id: "support",       label: "Support Tickets", icon: Headphones },
+  { id: "settings",      label: "Settings",        icon: Settings   },
 ];
 
 export default function SuperAdminPage() {
@@ -1206,12 +1497,13 @@ export default function SuperAdminPage() {
               {TABS.find(t => t.id === activeTab)?.label}
             </h1>
             <p className="text-xs text-gray-400 mt-0.5">
-              {activeTab === "users" && "Manage users and roles across all tenants"}
-              {activeTab === "access" && "Control which modules each tenant can access"}
+              {activeTab === "users"      && "Manage users and roles across all tenants"}
+              {activeTab === "access"     && "Control which modules each tenant can access"}
               {activeTab === "frameworks" && "Upload and manage compliance frameworks"}
               {activeTab === "subscriptions" && "Manage tenant plans, statuses, and trial expiry dates"}
-              {activeTab === "ai-access" && "Review and approve AI feature access requests"}
-              {activeTab === "settings" && "Platform configuration and credentials"}
+              {activeTab === "ai-access"    && "Review and approve AI feature access requests"}
+              {activeTab === "support"      && "View and respond to user support tickets"}
+              {activeTab === "settings"     && "Platform configuration and credentials"}
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -1226,6 +1518,7 @@ export default function SuperAdminPage() {
           {activeTab === "frameworks"    && <FrameworksTab />}
           {activeTab === "subscriptions" && <SubscriptionsTab />}
           {activeTab === "ai-access"     && <AiAccessTab />}
+          {activeTab === "support"       && <SupportTab />}
           {activeTab === "settings"   && <SettingsTab />}
         </main>
       </div>

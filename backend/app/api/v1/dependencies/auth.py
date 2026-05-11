@@ -120,6 +120,24 @@ async def get_current_user_optional(
         return None
 
 
+async def get_current_user_ws(token: str, db: AsyncSession) -> User:
+    """Authenticate a WebSocket connection using a raw token string."""
+    from app.core.security import decode_token
+    from sqlalchemy import select
+    try:
+        payload = decode_token(token)
+    except Exception:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
+    user_id: str | None = payload.get("sub")
+    if not user_id:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
+    result = await db.execute(select(User).where(User.id == user_id))
+    user = result.scalar_one_or_none()
+    if not user or not user.is_active:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found or inactive")
+    return user
+
+
 async def get_tenant_id_optional(
     current_user: User | None = Depends(get_current_user_optional),
     db: AsyncSession = Depends(get_db),

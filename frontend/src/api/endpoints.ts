@@ -1128,3 +1128,92 @@ export const riskQuantApi = {
   quantify: (data: { risk_id: string; annual_loss_min: number; annual_loss_max: number; annual_loss_most_likely: number; probability_percent: number; control_effectiveness: number }) =>
     apiClient.post("/risks/quantify", data).then((r) => r.data),
 };
+
+// ─── Support Tickets ─────────────────────────
+
+export type TicketStatus = "open" | "in_progress" | "waiting_user" | "resolved" | "closed";
+export type TicketPriority = "low" | "medium" | "high" | "urgent";
+export type ChatStatus = "pending" | "active" | "ended";
+
+export interface TicketSender {
+  id: string;
+  first_name: string;
+  last_name: string;
+  role: string;
+}
+
+export interface TicketMessage {
+  id: string;
+  ticket_id: string;
+  content: string;
+  is_support: boolean;
+  sender: TicketSender;
+  created_at: string;
+}
+
+export interface ChatSessionData {
+  id: string;
+  ticket_id: string;
+  status: ChatStatus;
+  requested_at: string | null;
+  started_at: string | null;
+  ended_at: string | null;
+}
+
+export interface SupportTicketDetail {
+  id: string;
+  tenant_id: string;
+  user_id: string;
+  title: string;
+  description: string;
+  status: TicketStatus;
+  priority: TicketPriority;
+  created_at: string;
+  updated_at: string;
+  user: TicketSender;
+  messages: TicketMessage[];
+  chat_session: ChatSessionData | null;
+}
+
+export interface SupportTicketListItem {
+  id: string;
+  tenant_id: string;
+  user_id: string;
+  title: string;
+  status: TicketStatus;
+  priority: TicketPriority;
+  created_at: string;
+  updated_at: string;
+  user: TicketSender;
+  message_count: number;
+  has_chat: boolean;
+}
+
+export const supportApi = {
+  list: (params?: { status?: string; priority?: string }) =>
+    apiClient.get<SupportTicketListItem[]>("/support/tickets", { params }).then((r) => r.data),
+
+  get: (id: string) =>
+    apiClient.get<SupportTicketDetail>(`/support/tickets/${id}`).then((r) => r.data),
+
+  create: (data: { title: string; description: string; priority: TicketPriority }) =>
+    apiClient.post<SupportTicketDetail>("/support/tickets", data).then((r) => r.data),
+
+  update: (id: string, data: { status?: TicketStatus; priority?: TicketPriority }) =>
+    apiClient.patch<SupportTicketDetail>(`/support/tickets/${id}`, data).then((r) => r.data),
+
+  delete: (id: string) =>
+    apiClient.delete(`/support/tickets/${id}`),
+
+  postMessage: (ticketId: string, content: string) =>
+    apiClient.post<TicketMessage>(`/support/tickets/${ticketId}/messages`, { content }).then((r) => r.data),
+
+  getChatStatus: (ticketId: string) =>
+    apiClient.get<ChatSessionData | null>(`/support/tickets/${ticketId}/chat`).then((r) => r.data),
+
+  requestChat: (ticketId: string) =>
+    apiClient.post<ChatSessionData>(`/support/tickets/${ticketId}/chat`).then((r) => r.data),
+
+  updateChat: (ticketId: string, action: "accept" | "end") =>
+    apiClient.patch<ChatSessionData>(`/support/tickets/${ticketId}/chat`, null, { params: { action } }).then((r) => r.data),
+};

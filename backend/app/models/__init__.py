@@ -33,6 +33,7 @@ from app.models.notification import (
     NotificationChannel, NotificationStatus,
 )
 from app.models.evidence_upload_token import EvidenceUploadToken
+from app.models.support import SupportTicket, TicketMessage, ChatSession, TicketStatus, TicketPriority, ChatStatus
 
 __all__ = [
     "Tenant", "User", "UserRole",
@@ -55,4 +56,5 @@ __all__ = [
     "Notification", "NotificationPreference", "NotificationType",
     "NotificationChannel", "NotificationStatus",
     "EvidenceUploadToken",
+    "SupportTicket", "TicketMessage", "ChatSession", "TicketStatus", "TicketPriority", "ChatStatus",
 ]

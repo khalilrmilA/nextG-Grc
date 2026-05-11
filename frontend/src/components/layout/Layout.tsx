@@ -17,7 +17,7 @@ import {
   ChevronRight, Bell, Settings, HelpCircle, Lock,
   Crown, X, Trash2, Wand2, Menu,
   AlertCircle, Info, ShieldAlert, ClipboardCheck, RefreshCw,
-  Eye, Users,
+  Eye, Users, Headphones,
 } from "lucide-react";
 
 // roles: null = visible to all authenticated non-auditor users
@@ -40,6 +40,7 @@ const NAV_GROUPS = [
       { to: "/policy-generator", icon: Wand2,          label: "Doc Generator",      module: "policy-generator", roles: ["tenant_admin","ciso","policy_manager","viewer"] },
       { to: "/vendors",          icon: Building2,      label: "3rd Parties (TPRM)", module: "vendors",          roles: ["tenant_admin","ciso","vendor_manager","viewer"] },
       { to: "/reports",          icon: ClipboardCheck, label: "Reports",            module: "reports",          roles: null },
+      { to: "/support",          icon: Headphones,     label: "Support",            module: "support",          roles: null },
     ],
   },
 ];
@@ -71,6 +72,7 @@ const PAGE_LABELS: Record<string, string> = {
   webhooks:   "Webhooks",
   settings:   "Settings",
   help:       "Help & Support",
+  support:    "Support",
 };
 
 function roleIcon(role: string) {
