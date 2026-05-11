@@ -55,6 +55,7 @@ export default function LoginPage() {
   function redirectAfterLogin(role?: string) {
     if (role === "auditor")          navigate("/auditor/portal");
     else if (role === "super_admin") navigate("/super-admin");
+    else if (role === "tenant_admin") navigate("/dashboard");
     else                             navigate("/dashboard");
   }
 
@@ -91,6 +92,7 @@ export default function LoginPage() {
           authSession.login({
             ...current,
             role: (profile.role as UserRole),
+            roles: (profile as { roles?: string[] }).roles ?? [],
             daysRemaining: current.plan === "free_trial" ? daysRemaining : undefined,
             tenant_id: profile.tenant_id,
             primary_framework_id: profile.primary_framework_id,
