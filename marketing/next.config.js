@@ -23,7 +23,12 @@ const nextConfig = {
       { source: "/register", destination: "http://localhost:4000/register" },
       // Vite static assets used by the dashboard
       { source: "/assets/:path*", destination: "http://localhost:4000/assets/:path*" },
-      { source: "/src/:path*", destination: "http://localhost:4000/src/:path*" },
+      { source: "/src/:path*",    destination: "http://localhost:4000/src/:path*" },
+      // Vite dev-server magic paths (HMR client, pre-bundled deps, plugins)
+      { source: "/@vite/:path*",         destination: "http://localhost:4000/@vite/:path*" },
+      { source: "/@react-refresh",       destination: "http://localhost:4000/@react-refresh" },
+      { source: "/@fs/:path*",           destination: "http://localhost:4000/@fs/:path*" },
+      { source: "/node_modules/:path*",  destination: "http://localhost:4000/node_modules/:path*" },
     ];
   },
 };

@@ -13,7 +13,7 @@ export default defineConfig({
     host: "0.0.0.0",
     port: 4000,
     strictPort: true,
-    allowedHosts: ["localhost", "127.0.0.1", "www.grceye.com", "grceye.com"],
+    allowedHosts: true,
     proxy: {
       "/api": {
         target: "http://localhost:8000",

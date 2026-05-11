@@ -3,13 +3,24 @@
 
 User-agent: *
 Allow: /
-Allow: /features-landing
+Allow: /how-it-works
+Allow: /features
 Allow: /solutions
+Allow: /frameworks
 Allow: /blog
 Allow: /news
 Allow: /faq
 Allow: /contact
 Allow: /GRCEye_Datasheet_2026.html
+
+# Favicon + manifest (must be publicly crawlable for Google rich results)
+Allow: /favicon.ico
+Allow: /favicon-16x16.png
+Allow: /favicon-32x32.png
+Allow: /android-chrome-192x192.png
+Allow: /android-chrome-512x512.png
+Allow: /apple-touch-icon.png
+Allow: /site.webmanifest
 
 # Block authenticated app routes
 Disallow: /login
@@ -19,7 +30,6 @@ Disallow: /risks
 Disallow: /risk-scenarios
 Disallow: /risk-quantification
 Disallow: /compliance
-Disallow: /frameworks
 Disallow: /audits
 Disallow: /policies
 Disallow: /policy-generator

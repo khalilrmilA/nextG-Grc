@@ -115,9 +115,10 @@ async def get_accessible_modules(tenant_id: str, db: AsyncSession) -> list[str]:
 @router.post("/login", response_model=TokenResponse)
 @limiter.limit("10/minute")
 async def login(request: Request, body: LoginRequest, db: AsyncSession = Depends(get_db)):
-    email_hash = _hash_email_for_log(body.email)
+    normalized_email = body.email.strip().lower()
+    email_hash = _hash_email_for_log(normalized_email)
     try:
-        result = await db.execute(select(User).where(User.email == body.email))
+        result = await db.execute(select(User).where(User.email == normalized_email))
         user = result.scalar_one_or_none()
 
         # Constant-ish handling: any user-existence / password / activation failure
@@ -153,6 +154,8 @@ async def login(request: Request, body: LoginRequest, db: AsyncSession = Depends
 @router.post("/register", response_model=TokenResponse, status_code=status.HTTP_201_CREATED)
 @limiter.limit("5/hour")
 async def register(request: Request, body: RegisterRequest, db: AsyncSession = Depends(get_db)):
+    # Normalize email to lowercase before storing — login form always sends lowercase
+    body.email = body.email.strip().lower()
     # Check email uniqueness — generic 400 to avoid enumeration via this endpoint.
     existing = await db.execute(select(User).where(User.email == body.email))
     if existing.scalar_one_or_none():
