@@ -6,7 +6,8 @@ import Link from "next/link";
 import {
   ArrowRight, CheckCircle2, TrendingUp, Clock, BarChart3, Zap,
   Building2, Heart, BarChart2, Globe, Shield, FileText,
-  AlertTriangle, Users, Lock, DollarSign, Star,
+  AlertTriangle, Users, Lock, DollarSign,
+  ClipboardCheck, Search, Cpu,
 } from "lucide-react";
 
 const INDUSTRIES = [
@@ -133,21 +134,15 @@ const CEO_BENEFITS = [
 
 const STAKEHOLDERS = [
   {
-    role: "CEO / Board",
-    icon: "👔",
-    highlight: true,
-    points: [
-      "Live compliance score — no need to ask the CISO",
-      "Risk exposure in euros and dollars, not heatmap colours",
-      "30-second board report whenever you need it",
-      "Audit-ready proof for investors and regulators",
-      "Trust Center as a competitive differentiator",
-    ],
-  },
-  {
     role: "CISO",
-    icon: "🛡️",
+    icon: Shield,
+    accent: "from-violet-500 to-purple-600",
+    border: "border-violet-200",
+    bg: "bg-white",
+    iconBg: "bg-violet-600",
+    textAccent: "text-violet-700",
     highlight: false,
+    badge: null,
     points: [
       "Full programme visibility across all frameworks",
       "AI gap analysis and remediation tracking",
@@ -157,8 +152,14 @@ const STAKEHOLDERS = [
   },
   {
     role: "Compliance Manager",
-    icon: "📋",
+    icon: ClipboardCheck,
+    accent: "from-emerald-500 to-teal-600",
+    border: "border-emerald-200",
+    bg: "bg-white",
+    iconBg: "bg-emerald-600",
+    textAccent: "text-emerald-700",
     highlight: false,
+    badge: null,
     points: [
       "Evidence collection automated, not manual",
       "AI writes remediation steps so you fix faster",
@@ -168,8 +169,14 @@ const STAKEHOLDERS = [
   },
   {
     role: "Sales Team",
-    icon: "📈",
+    icon: TrendingUp,
+    accent: "from-amber-500 to-orange-500",
+    border: "border-amber-200",
+    bg: "bg-white",
+    iconBg: "bg-amber-500",
+    textAccent: "text-amber-700",
     highlight: false,
+    badge: null,
     points: [
       "Share the Trust Center on every enterprise call",
       "Security questionnaires answered in minutes",
@@ -178,8 +185,14 @@ const STAKEHOLDERS = [
   },
   {
     role: "Engineering",
-    icon: "⚙️",
+    icon: Cpu,
+    accent: "from-sky-500 to-cyan-600",
+    border: "border-sky-200",
+    bg: "bg-white",
+    iconBg: "bg-sky-600",
+    textAccent: "text-sky-700",
     highlight: false,
+    badge: null,
     points: [
       "200+ fewer hours per audit cycle",
       "No more last-minute audit evidence requests",
@@ -188,8 +201,14 @@ const STAKEHOLDERS = [
   },
   {
     role: "External Auditors",
-    icon: "🔍",
+    icon: Search,
+    accent: "from-rose-500 to-pink-600",
+    border: "border-rose-200",
+    bg: "bg-white",
+    iconBg: "bg-rose-600",
+    textAccent: "text-rose-700",
     highlight: false,
+    badge: null,
     points: [
       "Scoped portal — no email attachments",
       "12 months of continuous evidence, not a 6-week pack",
@@ -366,30 +385,34 @@ export default function SolutionsView() {
             </p>
           </div>
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
-            {STAKEHOLDERS.map(({ role, icon, highlight, points }) => (
+            {STAKEHOLDERS.map(({ role, icon: Icon, accent, border, bg, iconBg, textAccent, highlight, badge, points }) => (
               <div
                 key={role}
-                className={`rounded-2xl p-6 border transition-shadow hover:shadow-md ${
-                  highlight
-                    ? "border-blue-200 bg-gradient-to-br from-blue-50 to-indigo-50 ring-1 ring-blue-200"
-                    : "border-gray-200 bg-white"
-                }`}
+                className={`rounded-2xl border overflow-hidden transition-all hover:shadow-lg hover:-translate-y-0.5 ${border} ${bg} ${highlight ? "ring-1 ring-blue-300 shadow-md" : ""}`}
               >
-                <div className="flex items-center gap-2 mb-4">
-                  <span className="text-2xl">{icon}</span>
-                  <h3 className={`font-bold ${highlight ? "text-blue-900" : "text-gray-900"}`}>{role}</h3>
-                  {highlight && (
-                    <span className="ml-auto text-xs font-semibold bg-blue-600 text-white px-2 py-0.5 rounded-full">CEO-first</span>
-                  )}
+                {/* coloured top bar */}
+                <div className={`h-1 w-full bg-gradient-to-r ${accent}`} />
+                <div className="p-6">
+                  <div className="flex items-center gap-3 mb-4">
+                    <div className={`w-9 h-9 ${iconBg} rounded-xl flex items-center justify-center flex-shrink-0 shadow-sm`}>
+                      <Icon className="w-4 h-4 text-white" />
+                    </div>
+                    <h3 className="font-bold text-gray-900 text-sm">{role}</h3>
+                    {badge && (
+                      <span className={`ml-auto text-xs font-semibold bg-gradient-to-r ${accent} text-white px-2.5 py-0.5 rounded-full`}>
+                        {badge}
+                      </span>
+                    )}
+                  </div>
+                  <ul className="space-y-2.5">
+                    {points.map((p) => (
+                      <li key={p} className="flex items-start gap-2.5 text-sm text-gray-600">
+                        <CheckCircle2 className={`w-4 h-4 mt-0.5 flex-shrink-0 ${textAccent}`} />
+                        {p}
+                      </li>
+                    ))}
+                  </ul>
                 </div>
-                <ul className="space-y-2">
-                  {points.map((p) => (
-                    <li key={p} className="flex items-start gap-2 text-sm text-gray-600">
-                      <CheckCircle2 className={`w-4 h-4 mt-0.5 flex-shrink-0 ${highlight ? "text-blue-500" : "text-emerald-500"}`} />
-                      {p}
-                    </li>
-                  ))}
-                </ul>
               </div>
             ))}
           </div>
@@ -429,34 +452,7 @@ export default function SolutionsView() {
         </div>
       </section>
 
-      {/* ── Social proof ── */}
-      <section className="py-16 px-6 bg-white">
-        <div className="max-w-4xl mx-auto grid sm:grid-cols-2 gap-6">
-          {[
-            {
-              quote: "We went from a spreadsheet-based compliance programme to a board-ready Trust Center in under a month. Our last SOC 2 audit took 5 days, not 6 weeks.",
-              name: "James K.",
-              role: "CTO, Series B SaaS — London",
-            },
-            {
-              quote: "The first board meeting after we deployed GRCEye, I showed a live risk score and a 30-second PDF report. The conversation shifted from 'are we compliant?' to 'how do we use this competitively?'",
-              name: "Sarah M.",
-              role: "CEO, FinTech — Amsterdam",
-            },
-          ].map(({ quote, name, role }) => (
-            <div key={name} className="bg-gradient-to-br from-blue-600 to-indigo-700 rounded-2xl p-6 text-white">
-              <Star className="w-5 h-5 text-yellow-300 mb-3 fill-yellow-300" />
-              <p className="text-sm leading-relaxed italic mb-4 text-blue-100">&quot;{quote}&quot;</p>
-              <div>
-                <p className="font-semibold text-sm">{name}</p>
-                <p className="text-blue-300 text-xs">{role}</p>
-              </div>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      {/* ── CTA ── */}
+{/* ── CTA ── */}
       <section className="py-20 px-6 bg-gradient-to-br from-blue-600 to-indigo-700 text-white">
         <div className="max-w-3xl mx-auto text-center">
           <h2 className="text-3xl sm:text-4xl font-extrabold mb-4">
