@@ -757,10 +757,13 @@ export interface AuditorAssignmentRecord {
 }
 
 export const usersApi = {
-  listUsers: () =>
+  list: () =>
     apiClient
-      .get<{ id: string; first_name: string; last_name: string; email: string; role: string }[]>("/users")
+      .get<{ id: string; first_name: string; last_name: string; email: string; role: string; roles: string[]; is_active: boolean; expires_at?: string | null }[]>("/users")
       .then((r) => r.data),
+
+  /** @deprecated use list() */
+  listUsers: () => usersApi.list(),
 
   listAuditors: () =>
     apiClient.get<AuditorUser[]>("/users/auditors").then((r) => r.data),
@@ -771,11 +774,8 @@ export const usersApi = {
     const last_name = parts.slice(1).join(" ") || "-";
     return apiClient
       .post<AuditorUser>("/users/auditors", {
-        first_name,
-        last_name,
-        email: data.email,
-        temporary_password: data.password,
-        expires_at: data.expires_at ?? null,
+        first_name, last_name, email: data.email,
+        temporary_password: data.password, expires_at: data.expires_at ?? null,
       })
       .then((r) => r.data);
   },
@@ -792,14 +792,22 @@ export const usersApi = {
   deleteAuditor: (auditor_id: string) =>
     apiClient.delete(`/users/auditors/${auditor_id}`),
 
-  createUser: (data: { email: string; first_name: string; last_name: string; role: string; expires_at?: string | null }) =>
-    apiClient.post<AuditorUser & { temporary_password: string }>("/users/create", data).then((r) => r.data),
+  /** Create a new team member with one or more roles. Returns the one-time temporary password. */
+  createUser: (data: { email: string; first_name: string; last_name: string; roles: string[]; expires_at?: string | null }) =>
+    apiClient.post<{ id: string; email: string; first_name: string; last_name: string; role: string; roles: string[]; is_active: boolean; temporary_password: string }>("/users/create", data).then((r) => r.data),
 
+  update: (user_id: string, data: { is_active?: boolean; roles?: string[] }) =>
+    apiClient.patch<{ id: string; email: string; first_name: string; last_name: string; role: string; roles: string[]; is_active: boolean }>(`/users/${user_id}`, data).then((r) => r.data),
+
+  /** @deprecated use update() */
   updateUser: (user_id: string, data: { is_active?: boolean; role?: string }) =>
-    apiClient.patch<{ id: string; email: string; first_name: string; last_name: string; role: string; is_active: boolean; expires_at?: string | null }>(`/users/${user_id}`, data).then((r) => r.data),
+    usersApi.update(user_id, { is_active: data.is_active, roles: data.role ? [data.role] : undefined }),
 
-  deleteUser: (user_id: string) =>
+  delete: (user_id: string) =>
     apiClient.delete(`/users/${user_id}`),
+
+  /** @deprecated use delete() */
+  deleteUser: (user_id: string) => usersApi.delete(user_id),
 
   resetPassword: (user_id: string) =>
     apiClient.post<{ temporary_password: string }>(`/users/${user_id}/reset-password`, {}).then((r) => r.data),

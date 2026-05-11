@@ -70,6 +70,7 @@ class UserProfileResponse(BaseModel):
     first_name: str
     last_name: str
     role: str
+    roles: list[str] = []   # all assigned roles (multi-role support)
     tenant_id: str
     tenant_name: str
     primary_framework_id: str | None = None
@@ -293,6 +294,7 @@ async def get_profile(
         first_name=current_user.first_name,
         last_name=current_user.last_name,
         role=current_user.role,
+        roles=current_user.roles or [],
         tenant_id=effective_tenant_id,
         tenant_name=tenant.name if tenant else "",
         primary_framework_id=tenant.primary_framework_id if tenant else None,

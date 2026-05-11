@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { Outlet, NavLink, useNavigate, useLocation } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
-import { useAuthStore, authSession, PLAN_FEATURES, type PlanTier } from "../../store/auth";
+import { useAuthStore, authSession, PLAN_FEATURES, getUserRoles, type PlanTier } from "../../store/auth";
 import AIAssistant from "../ai/AIAssistant";
 import LanguageSwitcher from "../LanguageSwitcher";
 import OnboardingTour from "../onboarding/OnboardingTour";
@@ -20,24 +20,26 @@ import {
   Eye,
 } from "lucide-react";
 
+// roles: null = visible to all authenticated non-auditor users
+// tenant_admin always has access everywhere; ciso is now a regular (but broad) role
 const NAV_GROUPS = [
   {
     label: "Core",
     items: [
-      { to: "/dashboard",        icon: LayoutDashboard, label: "Dashboard",         module: "dashboard"  },
-      { to: "/risks",            icon: AlertTriangle,   label: "Risk Register",     module: "risks"      },
-      { to: "/compliance",       icon: CheckSquare,     label: "Compliance",        module: "compliance" },
-      { to: "/frameworks",       icon: BookOpen,        label: "Frameworks",        module: "frameworks" },
+      { to: "/dashboard",  icon: LayoutDashboard, label: "Dashboard",     module: "dashboard",  roles: null },
+      { to: "/risks",      icon: AlertTriangle,   label: "Risk Register", module: "risks",      roles: ["tenant_admin","ciso","risk_manager","compliance_manager","control_owner","viewer"] },
+      { to: "/compliance", icon: CheckSquare,     label: "Compliance",    module: "compliance", roles: ["tenant_admin","ciso","risk_manager","compliance_manager","policy_manager","control_owner","viewer"] },
+      { to: "/frameworks", icon: BookOpen,        label: "Frameworks",    module: "frameworks", roles: ["tenant_admin","ciso","compliance_manager","policy_manager","viewer"] },
     ],
   },
   {
     label: "Operations",
     items: [
-      { to: "/audits",           icon: ClipboardList,  label: "Audits",              module: "audits"   },
-      { to: "/policies",         icon: FileText,       label: "Policies",            module: "policies" },
-      { to: "/policy-generator", icon: Wand2,          label: "Doc Generator",       module: "policy-generator" },
-      { to: "/vendors",          icon: Building2,      label: "3rd Parties (TPRM)",  module: "vendors"  },
-      { to: "/reports",          icon: ClipboardCheck, label: "Reports",             module: "reports"  },
+      { to: "/audits",           icon: ClipboardList,  label: "Audits",             module: "audits",           roles: ["tenant_admin","ciso","compliance_manager","viewer"] },
+      { to: "/policies",         icon: FileText,       label: "Policies",           module: "policies",         roles: ["tenant_admin","ciso","compliance_manager","policy_manager","viewer"] },
+      { to: "/policy-generator", icon: Wand2,          label: "Doc Generator",      module: "policy-generator", roles: ["tenant_admin","ciso","policy_manager","viewer"] },
+      { to: "/vendors",          icon: Building2,      label: "3rd Parties (TPRM)", module: "vendors",          roles: ["tenant_admin","ciso","vendor_manager","viewer"] },
+      { to: "/reports",          icon: ClipboardCheck, label: "Reports",            module: "reports",          roles: null },
     ],
   },
 ];
@@ -409,9 +411,8 @@ export default function Layout() {
 
   const { primaryFramework } = useFramework();
   const plan        = user?.plan ?? "free_trial";
-  const isAdmin     = user?.role === "ciso";
+  const isAdmin     = user?.role === "tenant_admin";
   const isSuperAdmin = user?.role === "super_admin";
-  // Everyone except auditors gets full access to all modules
   const isUser      = user?.role !== "auditor" && user?.role !== "super_admin";
 
   const badge = (isSuperAdmin || isAdmin) ? planBadgeStyle("enterprise") : planBadgeStyle(plan);
@@ -524,8 +525,10 @@ export default function Layout() {
                 {t(`nav.${group.label.toLowerCase()}` as never, group.label)}
               </p>
               <div className="space-y-0.5">
-                {group.items.map(({ to, icon: Icon, label, module }) => {
-                  const locked = false; // accessible is always null — no module gating
+                {group.items.map(({ to, icon: Icon, label, module, roles }) => {
+                  const userRoles = getUserRoles(user);
+                  if (roles && !userRoles.some(r => roles.includes(r))) return null;
+                  const locked = false; // reserved for subscription-based module gating
                   if (locked) {
                     return (
                       <button

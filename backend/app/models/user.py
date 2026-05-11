@@ -2,12 +2,13 @@
 import enum
 from datetime import datetime
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-from sqlalchemy import DateTime, String, Boolean, ForeignKey, Enum as SAEnum
+from sqlalchemy import DateTime, String, Boolean, ForeignKey, Enum as SAEnum, JSON
 from app.core.database import Base
 
 
 class UserRole(str, enum.Enum):
     SUPER_ADMIN = "super_admin"       # Platform admin (internal)
+    TENANT_ADMIN = "tenant_admin"     # Company/tenant owner — manages all users
     CISO = "ciso"                     # Chief Information Security Officer
     RISK_MANAGER = "risk_manager"     # Risk management team
     COMPLIANCE_MANAGER = "compliance_manager"
@@ -31,6 +32,9 @@ class User(Base):
     role: Mapped[UserRole] = mapped_column(
         SAEnum(UserRole, native_enum=False), nullable=False, default=UserRole.VIEWER
     )
+    # Multi-role support: list of UserRole strings (e.g. ["ciso", "risk_manager"])
+    # When non-empty, access is the union of all listed roles.
+    roles: Mapped[list] = mapped_column(JSON, nullable=False, default=list, server_default="[]")
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     is_verified: Mapped[bool] = mapped_column(Boolean, default=False)
     expires_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)

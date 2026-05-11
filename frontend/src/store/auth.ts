@@ -1,10 +1,11 @@
-export type UserRole = "super_admin" | "ciso" | "risk_manager" | "compliance_manager" | "auditor" | "policy_manager" | "vendor_manager" | "control_owner" | "viewer";
+export type UserRole = "super_admin" | "tenant_admin" | "ciso" | "risk_manager" | "compliance_manager" | "auditor" | "policy_manager" | "vendor_manager" | "control_owner" | "viewer";
 export type PlanTier = "free_trial" | "starter" | "professional" | "enterprise";
 
 export interface AuthUser {
   email: string;
   name: string;
   role: UserRole;
+  roles?: string[];           // all assigned roles (multi-role; falls back to [role] if absent)
   plan: PlanTier;
   daysRemaining?: number;
   org: string;
@@ -18,6 +19,17 @@ export interface AuthUser {
   primary_assessment_id?: string | null;
   // Access control — modules accessible to this tenant
   accessible_modules?: string[];
+}
+
+/** Returns the full list of roles for a user (multi-role aware). */
+export function getUserRoles(user: AuthUser | null): string[] {
+  if (!user) return [];
+  return user.roles?.length ? user.roles : [user.role];
+}
+
+/** Returns true if the user has ANY of the specified roles. */
+export function hasAnyRole(user: AuthUser | null, allowedRoles: string[]): boolean {
+  return getUserRoles(user).some(r => allowedRoles.includes(r));
 }
 
 export const PLAN_FEATURES: Record<PlanTier, {
