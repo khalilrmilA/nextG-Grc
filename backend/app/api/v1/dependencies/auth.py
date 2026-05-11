@@ -91,13 +91,12 @@ async def get_tenant_id(
 ) -> str:
     """Extract tenant_id from the current user.
 
-    Viewer role always reads from the seeded demo tenant — regardless of which
-    tenant the account itself belongs to. This lets any tenant create a viewer
-    account to showcase the platform with full demo data.
+    Viewer accounts that belong to the demo tenant are redirected to demo data.
+    Viewer accounts on real tenants see their own tenant's data (read-only).
     """
     if current_user.role == UserRole.VIEWER:
         demo_id = await _get_demo_tenant_id(db)
-        if demo_id:
+        if demo_id and current_user.tenant_id == demo_id:
             return demo_id
     return current_user.tenant_id
 
@@ -133,6 +132,6 @@ async def get_tenant_id_optional(
         return None
     if current_user.role == UserRole.VIEWER:
         demo_id = await _get_demo_tenant_id(db)
-        if demo_id:
+        if demo_id and current_user.tenant_id == demo_id:
             return demo_id
     return current_user.tenant_id

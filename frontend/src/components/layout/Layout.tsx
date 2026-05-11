@@ -368,6 +368,7 @@ export default function Layout() {
   const navigate = useNavigate();
   const location = useLocation();
   const { t } = useTranslation();
+  const qc = useQueryClient();
   const segment  = location.pathname.split("/")[1] || "dashboard";
   const pageLabel = t(`nav.${segment}` as never, PAGE_LABELS[segment] ?? segment);
   const [appearance] = useAppearance();
@@ -635,7 +636,7 @@ export default function Layout() {
           ))}
           <button
             type="button"
-            onClick={() => { authSession.logout(); navigate("/login"); }}
+            onClick={() => { authSession.logout(); qc.clear(); navigate("/login"); }}
             className={`flex items-center gap-3 px-3 py-2.5 w-full rounded-xl text-sm font-medium transition-all ${sc.logout}`}
           >
             <LogOut className="w-4 h-4" />
