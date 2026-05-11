@@ -1,11 +1,15 @@
-"""Support ticket endpoints with real-time chat via WebSocket."""
+"""Support ticket endpoints with real-time chat via WebSocket and SSE notifications."""
 from __future__ import annotations
+import asyncio
 import enum
+import json
 from datetime import datetime, timezone
 from typing import Optional
-from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Request, WebSocket, WebSocketDisconnect, Query, status
+from fastapi.responses import StreamingResponse, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
+from sqlalchemy.orm import selectinload
 from pydantic import BaseModel
 
 from app.core.database import get_db
@@ -45,6 +49,52 @@ class _ChatManager:
 
 
 _manager = _ChatManager()
+
+
+class _NotifyManager:
+    """SSE-based notification manager — works through any WAF/proxy (plain HTTP)."""
+
+    def __init__(self):
+        self._user_queues: dict[str, list[asyncio.Queue]] = {}
+        self._admin_queues: list[asyncio.Queue] = []
+
+    def subscribe_user(self, user_id: str) -> asyncio.Queue:
+        q: asyncio.Queue = asyncio.Queue(maxsize=50)
+        self._user_queues.setdefault(user_id, []).append(q)
+        return q
+
+    def subscribe_admin(self) -> asyncio.Queue:
+        q: asyncio.Queue = asyncio.Queue(maxsize=50)
+        self._admin_queues.append(q)
+        return q
+
+    def unsubscribe_user(self, user_id: str, q: asyncio.Queue):
+        qs = self._user_queues.get(user_id, [])
+        if q in qs:
+            qs.remove(q)
+        if not qs:
+            self._user_queues.pop(user_id, None)
+
+    def unsubscribe_admin(self, q: asyncio.Queue):
+        if q in self._admin_queues:
+            self._admin_queues.remove(q)
+
+    async def notify_user(self, user_id: str, payload: dict):
+        for q in list(self._user_queues.get(user_id, [])):
+            try:
+                q.put_nowait(payload)
+            except asyncio.QueueFull:
+                pass
+
+    async def notify_admins(self, payload: dict):
+        for q in list(self._admin_queues):
+            try:
+                q.put_nowait(payload)
+            except asyncio.QueueFull:
+                pass
+
+
+_notify = _NotifyManager()
 
 
 # ── Pydantic schemas ────────────────────────────────────────────────────────
@@ -129,6 +179,20 @@ def _is_support(user: User) -> bool:
     return user.role in (UserRole.SUPER_ADMIN,)
 
 
+async def _fetch_full(ticket_id: str, db: AsyncSession) -> SupportTicket:
+    """Re-fetch ticket with all relationships eagerly loaded (avoids MissingGreenlet on updated_at)."""
+    result = await db.execute(
+        select(SupportTicket)
+        .where(SupportTicket.id == ticket_id)
+        .options(
+            selectinload(SupportTicket.user),
+            selectinload(SupportTicket.messages).selectinload(TicketMessage.sender),
+            selectinload(SupportTicket.chat_session),
+        )
+    )
+    return result.scalar_one()
+
+
 async def _get_ticket(ticket_id: str, user: User, db: AsyncSession, require_write: bool = False) -> SupportTicket:
     result = await db.execute(
         select(SupportTicket)
@@ -145,6 +209,48 @@ async def _get_ticket(ticket_id: str, user: User, db: AsyncSession, require_writ
 
 # ── Routes ──────────────────────────────────────────────────────────────────
 
+@router.get("/notify/stream")
+async def notify_stream(
+    request: Request,
+    token: str = Query(...),
+    db: AsyncSession = Depends(get_db),
+):
+    """SSE notification channel — works through any WAF/proxy (plain HTTP GET)."""
+    try:
+        user = await get_current_user_ws(token=token, db=db)
+    except Exception:
+        return Response(status_code=401)
+
+    is_admin = _is_support(user)
+    queue = _notify.subscribe_admin() if is_admin else _notify.subscribe_user(user.id)
+
+    async def event_stream():
+        try:
+            while True:
+                if await request.is_disconnected():
+                    break
+                try:
+                    payload = await asyncio.wait_for(queue.get(), timeout=20)
+                    yield f"data: {json.dumps(payload)}\n\n"
+                except asyncio.TimeoutError:
+                    yield ": keepalive\n\n"
+        finally:
+            if is_admin:
+                _notify.unsubscribe_admin(queue)
+            else:
+                _notify.unsubscribe_user(user.id, queue)
+
+    return StreamingResponse(
+        event_stream(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache, no-transform",
+            "X-Accel-Buffering": "no",
+            "Connection": "keep-alive",
+        },
+    )
+
+
 @router.post("", response_model=TicketOut, status_code=201)
 async def create_ticket(
     body: TicketCreate,
@@ -160,8 +266,7 @@ async def create_ticket(
     )
     db.add(ticket)
     await db.flush()
-    await db.refresh(ticket, ["user", "messages", "chat_session"])
-    return ticket
+    return await _fetch_full(ticket.id, db)
 
 
 @router.get("", response_model=list[TicketListItem])
@@ -209,11 +314,8 @@ async def get_ticket(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    ticket = await _get_ticket(ticket_id, current_user, db)
-    await db.refresh(ticket, ["user", "messages", "chat_session"])
-    for msg in ticket.messages:
-        await db.refresh(msg, ["sender"])
-    return ticket
+    await _get_ticket(ticket_id, current_user, db)
+    return await _fetch_full(ticket_id, db)
 
 
 @router.patch("/{ticket_id}", response_model=TicketOut)
@@ -229,13 +331,11 @@ async def update_ticket(
         raise HTTPException(status_code=403, detail="Only support staff can update ticket status")
     if body.status is not None:
         ticket.status = body.status
+        await _manager.broadcast(ticket_id, {"type": "status_changed", "status": body.status.value})
     if body.priority is not None:
         ticket.priority = body.priority
     await db.flush()
-    await db.refresh(ticket, ["user", "messages", "chat_session"])
-    for msg in ticket.messages:
-        await db.refresh(msg, ["sender"])
-    return ticket
+    return await _fetch_full(ticket_id, db)
 
 
 @router.delete("/{ticket_id}", status_code=204)
@@ -294,15 +394,24 @@ async def post_message(
     await db.flush()
     await db.refresh(msg, ["sender"])
 
-    # broadcast to any active WS listeners
-    await _manager.broadcast(ticket_id, {
+    payload = {
         "type": "message",
         "id": msg.id,
+        "ticket_id": ticket_id,
+        "ticket_title": ticket.title,
         "content": msg.content,
         "is_support": msg.is_support,
         "sender_name": f"{current_user.first_name} {current_user.last_name}",
         "created_at": msg.created_at.isoformat(),
-    })
+    }
+    # Broadcast to live-chat participants
+    await _manager.broadcast(ticket_id, payload)
+    # Real-time notification: support replied → notify the ticket owner
+    if is_sup:
+        await _notify.notify_user(ticket.user_id, payload)
+    # Real-time notification: user replied → notify all connected super-admins
+    else:
+        await _notify.notify_admins(payload)
     return msg
 
 

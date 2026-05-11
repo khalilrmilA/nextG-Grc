@@ -145,23 +145,71 @@ const DEMO_NOTIFICATIONS: AppNotification[] = [
 // ── NotificationBell component ────────────────────────────────────────────────
 function NotificationBell() {
   const [open, setOpen] = useState(false);
+  const [supportUnread, setSupportUnread] = useState<{ title: string; content: string; ticketId: string }[]>([]);
   const ref = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
   const { t } = useTranslation();
   const qc = useQueryClient();
+
+  // Real-time support ticket reply notifications (SSE — works through any WAF/proxy)
+  useEffect(() => {
+    if (typeof Notification !== "undefined" && Notification.permission === "default") {
+      Notification.requestPermission();
+    }
+    const token = localStorage.getItem("access_token") || sessionStorage.getItem("access_token") || "";
+    if (!token) return;
+    const apiBase = import.meta.env.VITE_API_URL ?? `${window.location.origin}/api/v1`;
+    const es = new EventSource(`${apiBase}/support/tickets/notify/stream?token=${encodeURIComponent(token)}`);
+
+    es.onmessage = (e) => {
+      try {
+        const data = JSON.parse(e.data);
+        if (data.type === "message" && data.is_support) {
+          setSupportUnread(prev => [...prev, {
+            title: data.ticket_title as string,
+            content: data.content as string,
+            ticketId: data.ticket_id as string,
+          }]);
+          // Beep
+          try {
+            const ctx = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            osc.connect(gain); gain.connect(ctx.destination);
+            gain.gain.setValueAtTime(0.25, ctx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.5);
+            osc.type = "sine";
+            osc.frequency.setValueAtTime(880, ctx.currentTime);
+            osc.frequency.exponentialRampToValueAtTime(440, ctx.currentTime + 0.5);
+            osc.start(ctx.currentTime); osc.stop(ctx.currentTime + 0.5);
+          } catch { /* ignore */ }
+          if (typeof Notification !== "undefined" && Notification.permission === "granted") {
+            new Notification("Support replied to your ticket", {
+              body: `"${data.ticket_title}" — ${data.content}`,
+              icon: "/favicon.ico",
+            });
+          }
+        }
+      } catch { /* ignore */ }
+    };
+
+    es.onerror = () => {};
+    return () => { es.close(); };
+  }, []);
 
   // Try to fetch real notifications; fall back to demo data on error
   const { data, isError } = useQuery({
     queryKey: ["notifications"],
     queryFn: () => notificationsApi.list({ limit: 20 }),
     retry: false,
-    refetchInterval: 30_000, // poll every 30s for new alerts
+    refetchInterval: 30_000,
   });
 
   const notifications: AppNotification[] = isError || !data ? DEMO_NOTIFICATIONS : data.items;
-  const unreadCount = isError || !data
+  const backendUnread = isError || !data
     ? DEMO_NOTIFICATIONS.filter(n => n.status === "unread").length
     : data.unread_count;
+  const unreadCount = backendUnread + supportUnread.length;
 
   const markRead = useMutation({
     mutationFn: (id: string) => notificationsApi.markRead(id),
@@ -202,11 +250,14 @@ function NotificationBell() {
     <div ref={ref} className="relative">
       <button
         type="button"
-        onClick={() => setOpen(v => !v)}
+        onClick={() => { setOpen(v => !v); if (!open && supportUnread.length > 0) setSupportUnread([]); }}
         className="relative w-8 h-8 rounded-lg flex items-center justify-center text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition-colors"
         aria-label="Notifications"
       >
-        <Bell className="w-4 h-4" />
+        <Bell className={`w-4 h-4 ${supportUnread.length > 0 ? "animate-bounce text-red-500" : ""}`} />
+        {supportUnread.length > 0 && (
+          <span className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 bg-red-500 rounded-full animate-ping" />
+        )}
         {unreadCount > 0 && (
           <span className="absolute -top-0.5 -right-0.5 min-w-[16px] h-4 flex items-center justify-center bg-red-500 text-white text-[10px] font-bold rounded-full px-1">
             {unreadCount > 9 ? "9+" : unreadCount}
@@ -255,6 +306,30 @@ function NotificationBell() {
               </button>
             </div>
           </div>
+
+          {/* Support reply notifications (real-time) */}
+          {supportUnread.length > 0 && (
+            <div className="divide-y divide-blue-50">
+              {supportUnread.map((s, i) => (
+                <button
+                  key={i}
+                  type="button"
+                  onClick={() => { setSupportUnread([]); setOpen(false); navigate("/support"); }}
+                  className="w-full flex items-start gap-3 px-4 py-3 bg-blue-50 hover:bg-blue-100 text-left transition-colors"
+                >
+                  <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center flex-shrink-0 mt-0.5">
+                    <Bell className="w-4 h-4 text-blue-600" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-bold text-blue-700">Support replied to your ticket</p>
+                    <p className="text-xs font-semibold text-gray-800 mt-0.5 truncate">"{s.title}"</p>
+                    <p className="text-xs text-gray-500 mt-0.5 line-clamp-2">{s.content}</p>
+                  </div>
+                  <span className="flex-shrink-0 w-2 h-2 rounded-full bg-blue-500 mt-1.5" />
+                </button>
+              ))}
+            </div>
+          )}
 
           {/* List */}
           <div className="max-h-[420px] overflow-y-auto divide-y divide-gray-50">

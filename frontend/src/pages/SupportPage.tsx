@@ -9,7 +9,7 @@ import {
 } from "../api/endpoints";
 import {
   Headphones, Plus, ChevronRight, MessageSquare, Clock,
-  Loader2, Send, Video, PhoneOff, RefreshCw, X,
+  Loader2, Send, Video, PhoneOff, RefreshCw, X, Bell,
 } from "lucide-react";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -47,6 +47,45 @@ function PriorityBadge({ priority }: { priority: TicketPriority }) {
 
 function fmtDate(iso: string) {
   return new Date(iso).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
+}
+
+function playBeep() {
+  try {
+    const ctx = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    gain.gain.setValueAtTime(0.25, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.4);
+    osc.type = "sine";
+    osc.frequency.setValueAtTime(880, ctx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(440, ctx.currentTime + 0.4);
+    osc.start(ctx.currentTime);
+    osc.stop(ctx.currentTime + 0.4);
+  } catch { /* ignore */ }
+}
+
+function fireNotification(title: string, body: string) {
+  playBeep();
+  if (typeof Notification === "undefined") return;
+  if (Notification.permission === "granted") {
+    new Notification(title, { body, icon: "/favicon.ico" });
+  }
+}
+
+function requestNotifyPermission() {
+  if (typeof Notification !== "undefined" && Notification.permission === "default") {
+    Notification.requestPermission();
+  }
+}
+
+function getApiBase() {
+  return import.meta.env.VITE_API_URL ?? `${window.location.origin}/api/v1`;
+}
+
+function getToken() {
+  return localStorage.getItem("access_token") || sessionStorage.getItem("access_token") || "";
 }
 
 // ── Create Ticket Modal ───────────────────────────────────────────────────────
@@ -142,10 +181,8 @@ function ChatPanel({
   const wsRef = useRef<WebSocket | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
 
-  // Scroll to bottom whenever messages change
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: "smooth" }); }, [msgs]);
 
-  // Connect WebSocket when chat is active
   useEffect(() => {
     if (chatSession.status !== "active") return;
     const token = localStorage.getItem("access_token") || sessionStorage.getItem("access_token") || "";
@@ -160,6 +197,7 @@ function ChatPanel({
         const data = JSON.parse(e.data);
         if (data.type === "message") {
           setMsgs(prev => [...prev, data]);
+          if (data.is_support) fireNotification("Support replied", data.content);
         } else if (data.type === "chat_ended") {
           onChatUpdate({ ...chatSession, status: "ended" });
         }
@@ -187,7 +225,6 @@ function ChatPanel({
 
   return (
     <div className="flex flex-col h-80 border border-blue-200 rounded-2xl overflow-hidden mt-4">
-      {/* Header */}
       <div className="flex items-center gap-2 px-4 py-2.5 bg-blue-600 text-white">
         <Video className="w-4 h-4" />
         <span className="text-sm font-semibold flex-1">Live Chat with Support</span>
@@ -199,7 +236,6 @@ function ChatPanel({
         </button>
       </div>
 
-      {/* Messages */}
       <div className="flex-1 overflow-y-auto p-3 space-y-2 bg-gray-50">
         {msgs.length === 0 && (
           <p className="text-center text-xs text-gray-400 mt-8">Chat started — say hello!</p>
@@ -215,7 +251,6 @@ function ChatPanel({
         <div ref={bottomRef} />
       </div>
 
-      {/* Input */}
       <div className="flex items-center gap-2 px-3 py-2 border-t border-gray-100 bg-white">
         <input
           value={input} onChange={e => setInput(e.target.value)}
@@ -252,10 +287,31 @@ function TicketDetail({
   const [sending, setSending] = useState(false);
   const [chatSession, setChat] = useState<ChatSessionData | null>(ticket.chat_session);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const lastMsgIdRef = useRef<string | null>(ticket.messages.at(-1)?.id ?? null);
 
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: "smooth" }); }, [ticket.messages]);
 
-  // Poll chat status when session is pending (user waiting for request)
+  // Poll for new messages every 8s (catch support replies without live chat)
+  useEffect(() => {
+    const id = setInterval(async () => {
+      try {
+        const msgs = await supportApi.getMessages(ticket.id);
+        const latestId = msgs.at(-1)?.id ?? null;
+        if (latestId && latestId !== lastMsgIdRef.current) {
+          const newOnes = msgs.filter(m => !ticket.messages.find(x => x.id === m.id));
+          newOnes.filter(m => m.is_support).forEach(m => {
+            fireNotification("Support replied", m.content);
+          });
+          lastMsgIdRef.current = latestId;
+          setTicket(prev => ({ ...prev, messages: msgs }));
+          onUpdated({ ...ticket, messages: msgs });
+        }
+      } catch { /* ignore */ }
+    }, 8000);
+    return () => clearInterval(id);
+  }, [ticket.id]);
+
+  // Poll chat status when pending
   useEffect(() => {
     if (!chatSession || chatSession.status !== "pending") return;
     const id = setInterval(async () => {
@@ -283,6 +339,7 @@ function TicketDetail({
     try {
       const msg = await supportApi.postMessage(ticket.id, newMsg.trim());
       setTicket(prev => ({ ...prev, messages: [...prev.messages, msg] }));
+      lastMsgIdRef.current = msg.id;
       setNewMsg("");
     } catch { /* ignore */ } finally {
       setSending(false);
@@ -298,7 +355,6 @@ function TicketDetail({
 
   return (
     <div className="flex flex-col h-full">
-      {/* Back + title */}
       <div className="flex items-center gap-3 mb-6">
         <button onClick={onBack} className="p-2 rounded-xl hover:bg-gray-100 transition-colors">
           <ChevronRight className="w-5 h-5 rotate-180 text-gray-500" />
@@ -316,13 +372,11 @@ function TicketDetail({
         </button>
       </div>
 
-      {/* Description */}
       <div className="bg-gray-50 rounded-2xl px-5 py-4 mb-5">
         <p className="text-sm font-semibold text-gray-500 mb-1">Description</p>
         <p className="text-sm text-gray-700 whitespace-pre-wrap">{ticket.description}</p>
       </div>
 
-      {/* Chat request banner */}
       {chatSession && chatSession.status === "pending" && (
         <div className="flex items-center gap-3 bg-blue-50 border border-blue-200 rounded-2xl px-5 py-3.5 mb-4">
           <Video className="w-5 h-5 text-blue-600 flex-shrink-0" />
@@ -336,12 +390,10 @@ function TicketDetail({
         </div>
       )}
 
-      {/* Live chat panel */}
       {chatSession && chatSession.status === "active" && (
         <ChatPanel ticket={ticket} chatSession={chatSession} onChatUpdate={setChat} />
       )}
 
-      {/* Messages */}
       <div className="flex-1 overflow-y-auto space-y-3 pr-1 mb-4">
         {ticket.messages.length === 0 && (
           <p className="text-center text-sm text-gray-400 py-8">No messages yet. Start by writing below.</p>
@@ -359,7 +411,6 @@ function TicketDetail({
         <div ref={bottomRef} />
       </div>
 
-      {/* Reply box */}
       {ticket.status !== "closed" && ticket.status !== "resolved" && (
         <form onSubmit={sendMessage} className="flex gap-2">
           <input
@@ -389,22 +440,59 @@ export default function SupportPage() {
   const [loading, setLoading]         = useState(true);
   const [showCreate, setShowCreate]   = useState(false);
   const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [unread, setUnread]           = useState<Set<string>>(new Set());
 
-  const load = useCallback(async () => {
+  const selectedIdRef = useRef<string | null>(null);
+  useEffect(() => { selectedIdRef.current = selected?.id ?? null; }, [selected?.id]);
+
+  // Request browser notification permission on mount
+  useEffect(() => { requestNotifyPermission(); }, []);
+
+  // Real-time notification SSE stream (works through any WAF/proxy)
+  useEffect(() => {
+    const token = getToken();
+    if (!token) return;
+    const es = new EventSource(`${getApiBase()}/support/tickets/notify/stream?token=${encodeURIComponent(token)}`);
+
+    es.onmessage = (e) => {
+      try {
+        const data = JSON.parse(e.data);
+        if (data.type === "message" && data.is_support) {
+          // Support replied to one of our tickets
+          const ticketId = data.ticket_id as string;
+          if (selectedIdRef.current !== ticketId) {
+            setUnread(prev => new Set([...prev, ticketId]));
+            fireNotification("Support replied", `"${data.ticket_title}" — ${data.content}`);
+          }
+          // Refresh the ticket list count
+          setTickets(prev => prev.map(t =>
+            t.id === ticketId ? { ...t, message_count: t.message_count + 1 } : t
+          ));
+        }
+      } catch { /* ignore */ }
+    };
+
+    es.onerror = () => {};
+    return () => { es.close(); };
+  }, []);
+
+  const load = useCallback(async (silent = false) => {
     try {
       const data = await supportApi.list(statusFilter !== "all" ? { status: statusFilter } : {});
       setTickets(data);
     } catch { /* ignore */ } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }, [statusFilter]);
 
+  // Initial load + re-load when filter changes
   useEffect(() => { load(); }, [load]);
 
   async function openTicket(id: string) {
     try {
       const detail = await supportApi.get(id);
       setSelected(detail);
+      setUnread(prev => { const next = new Set(prev); next.delete(id); return next; });
     } catch { /* ignore */ }
   }
 
@@ -430,6 +518,7 @@ export default function SupportPage() {
   }
 
   const STATUSES = ["all", "open", "in_progress", "waiting_user", "resolved", "closed"];
+  const totalUnread = unread.size;
 
   return (
     <div className="p-8 max-w-7xl mx-auto space-y-6">
@@ -440,7 +529,14 @@ export default function SupportPage() {
             <Headphones className="w-5 h-5 text-blue-600" />
           </div>
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">Support</h1>
+            <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
+              Support
+              {totalUnread > 0 && (
+                <span className="flex items-center gap-1 px-2 py-0.5 bg-red-100 text-red-600 rounded-full text-xs font-bold">
+                  <Bell className="w-3 h-3" />{totalUnread} new
+                </span>
+              )}
+            </h1>
             <p className="text-sm text-gray-500">Submit and track your support requests</p>
           </div>
         </div>
@@ -481,31 +577,44 @@ export default function SupportPage() {
             </div>
           ) : (
             <div className="space-y-2">
-              {tickets.map(ticket => (
-                <button
-                  key={ticket.id}
-                  onClick={() => openTicket(ticket.id)}
-                  className={`w-full text-left border rounded-2xl px-5 py-4 hover:shadow-sm transition-all group ${selected?.id === ticket.id ? "border-blue-400 bg-blue-50" : "border-gray-200 bg-white hover:border-gray-300"}`}
-                >
-                  <div className="flex items-start justify-between gap-2 mb-2">
-                    <p className="font-semibold text-gray-900 text-sm leading-snug group-hover:text-blue-700 transition-colors">{ticket.title}</p>
-                    <ChevronRight className="w-4 h-4 text-gray-400 flex-shrink-0 mt-0.5" />
-                  </div>
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <StatusBadge status={ticket.status} />
-                    <PriorityBadge priority={ticket.priority} />
-                    {ticket.has_chat && (
-                      <span className="flex items-center gap-1 text-xs text-blue-600 font-semibold">
-                        <Video className="w-3 h-3" />Chat
-                      </span>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-3 mt-2 text-xs text-gray-400">
-                    <span className="flex items-center gap-1"><MessageSquare className="w-3 h-3" />{ticket.message_count}</span>
-                    <span className="flex items-center gap-1"><Clock className="w-3 h-3" />{fmtDate(ticket.updated_at)}</span>
-                  </div>
-                </button>
-              ))}
+              {tickets.map(ticket => {
+                const hasUnread = unread.has(ticket.id);
+                return (
+                  <button
+                    key={ticket.id}
+                    onClick={() => openTicket(ticket.id)}
+                    className={`w-full text-left border rounded-2xl px-5 py-4 hover:shadow-sm transition-all group ${selected?.id === ticket.id ? "border-blue-400 bg-blue-50" : hasUnread ? "border-blue-300 bg-blue-50/50" : "border-gray-200 bg-white hover:border-gray-300"}`}
+                  >
+                    <div className="flex items-start justify-between gap-2 mb-2">
+                      <div className="flex items-center gap-2 flex-1 min-w-0">
+                        {hasUnread && (
+                          <span className="flex-shrink-0 w-2 h-2 rounded-full bg-blue-500 animate-pulse" />
+                        )}
+                        <p className="font-semibold text-gray-900 text-sm leading-snug group-hover:text-blue-700 transition-colors truncate">{ticket.title}</p>
+                      </div>
+                      <ChevronRight className="w-4 h-4 text-gray-400 flex-shrink-0 mt-0.5" />
+                    </div>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <StatusBadge status={ticket.status} />
+                      <PriorityBadge priority={ticket.priority} />
+                      {hasUnread && (
+                        <span className="flex items-center gap-1 text-xs text-blue-600 font-semibold">
+                          <Bell className="w-3 h-3" />New reply
+                        </span>
+                      )}
+                      {ticket.has_chat && (
+                        <span className="flex items-center gap-1 text-xs text-blue-600 font-semibold">
+                          <Video className="w-3 h-3" />Chat
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-3 mt-2 text-xs text-gray-400">
+                      <span className="flex items-center gap-1"><MessageSquare className="w-3 h-3" />{ticket.message_count}</span>
+                      <span className="flex items-center gap-1"><Clock className="w-3 h-3" />{fmtDate(ticket.updated_at)}</span>
+                    </div>
+                  </button>
+                );
+              })}
             </div>
           )}
         </div>

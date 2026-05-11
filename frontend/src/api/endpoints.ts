@@ -1205,6 +1205,9 @@ export const supportApi = {
   delete: (id: string) =>
     apiClient.delete(`/support/tickets/${id}`),
 
+  getMessages: (ticketId: string) =>
+    apiClient.get<TicketMessage[]>(`/support/tickets/${ticketId}/messages`).then((r) => r.data),
+
   postMessage: (ticketId: string, content: string) =>
     apiClient.post<TicketMessage>(`/support/tickets/${ticketId}/messages`, { content }).then((r) => r.data),
 

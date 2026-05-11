@@ -17,7 +17,7 @@ import {
   Users, Shield, BookOpen, LogOut, Settings, Sparkles, CreditCard,
   ToggleLeft, ToggleRight, Trash2, Upload,
   Plus, AlertCircle, Loader2, X, CheckCircle, ThumbsUp, ThumbsDown, Pencil,
-  Headphones, MessageSquare, Video, Send, PhoneOff, ChevronRight, RefreshCw,
+  Headphones, MessageSquare, Video, Send, PhoneOff, ChevronRight, RefreshCw, Bell,
 } from "lucide-react";
 import {
   supportApi,
@@ -1336,80 +1336,119 @@ function SupportTicketDetail({ ticket: init, onBack, onUpdated }: {
   );
 }
 
-function SupportTab() {
+function SupportTab({
+  unread,
+  onMarkRead,
+  onTicketUpdate,
+}: {
+  unread: Set<string>;
+  onMarkRead: (id: string) => void;
+  onTicketUpdate: (ticketId: string) => void;
+}) {
   const [tickets, setTickets]   = useState<SupportTicketListItem[]>([]);
   const [selected, setSelected] = useState<SupportTicketDetail | null>(null);
   const [loading, setLoading]   = useState(true);
   const [statusFilter, setStatus] = useState("all");
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (silent = false) => {
     try {
       const data = await supportApi.list(statusFilter !== "all" ? { status: statusFilter } : {});
       setTickets(data);
-    } catch { /* ignore */ } finally { setLoading(false); }
+    } catch { /* ignore */ } finally { if (!silent) setLoading(false); }
   }, [statusFilter]);
 
   useEffect(() => { load(); }, [load]);
 
+  // Refresh ticket list when a new message arrives (from parent WS)
+  useEffect(() => {
+    if (unread.size > 0) {
+      setTickets(prev => prev.map(t =>
+        unread.has(t.id) ? { ...t, message_count: t.message_count + 1 } : t
+      ));
+    }
+  }, [unread]);
+
   async function open(id: string) {
-    try { setSelected(await supportApi.get(id)); } catch { /* ignore */ }
+    try {
+      setSelected(await supportApi.get(id));
+      onMarkRead(id);
+    } catch { /* ignore */ }
   }
 
   const fmtDate = (iso: string) => new Date(iso).toLocaleString(undefined, { dateStyle: "short", timeStyle: "short" });
+  const totalUnread = unread.size;
 
   return (
-    <div className="grid lg:grid-cols-5 gap-6 h-[calc(100vh-160px)]">
-      {/* List */}
-      <div className="lg:col-span-2 flex flex-col gap-3">
-        <div className="flex gap-1 flex-wrap">
-          {["all","open","in_progress","waiting_user","resolved","closed"].map(s => (
-            <button key={s} onClick={() => setStatus(s)}
-              className={`px-2.5 py-1 rounded-full text-xs font-semibold capitalize transition-colors ${statusFilter === s ? "bg-indigo-600 text-white" : "bg-white border border-gray-200 text-gray-600 hover:bg-gray-50"}`}>
-              {s.replace("_"," ")}
-            </button>
-          ))}
+    <div className="space-y-3">
+      {totalUnread > 0 && (
+        <div className="flex items-center gap-2 px-3 py-2 bg-blue-50 border border-blue-200 rounded-xl text-sm text-blue-700 font-semibold">
+          <Bell className="w-4 h-4" />{totalUnread} ticket{totalUnread > 1 ? "s" : ""} with new user replies
         </div>
-        {loading ? (
-          <div className="flex justify-center py-12"><Loader2 className="w-6 h-6 animate-spin text-indigo-500" /></div>
-        ) : tickets.length === 0 ? (
-          <div className="text-center py-12 text-gray-400">
-            <Headphones className="w-8 h-8 mx-auto mb-2 opacity-30" /><p className="text-sm">No tickets</p>
-          </div>
-        ) : (
-          <div className="overflow-y-auto space-y-2">
-            {tickets.map(t => (
-              <button key={t.id} onClick={() => open(t.id)}
-                className={`w-full text-left border rounded-xl px-4 py-3 hover:shadow-sm transition-all ${selected?.id === t.id ? "border-indigo-400 bg-indigo-50" : "border-gray-200 bg-white"}`}>
-                <div className="flex items-start justify-between gap-2 mb-1.5">
-                  <p className="font-semibold text-gray-900 text-sm leading-snug">{t.title}</p>
-                  <ChevronRight className="w-4 h-4 text-gray-400 flex-shrink-0" />
-                </div>
-                <p className="text-xs text-gray-500 mb-1.5">{t.user.first_name} {t.user.last_name}</p>
-                <div className="flex gap-1.5 flex-wrap">
-                  <span className={`px-1.5 py-0.5 rounded-full text-xs font-semibold capitalize ${STATUS_STYLES[t.status]}`}>{t.status.replace("_"," ")}</span>
-                  <span className={`px-1.5 py-0.5 rounded-full text-xs font-semibold capitalize ${PRIORITY_STYLES[t.priority]}`}>{t.priority}</span>
-                  {t.has_chat && <span className="flex items-center gap-0.5 text-xs text-blue-600 font-semibold"><Video className="w-3 h-3" />Chat</span>}
-                </div>
-                <p className="text-xs text-gray-400 mt-1.5">{fmtDate(t.updated_at)} · {t.message_count} msgs</p>
+      )}
+      <div className="grid lg:grid-cols-5 gap-6 h-[calc(100vh-200px)]">
+        {/* List */}
+        <div className="lg:col-span-2 flex flex-col gap-3">
+          <div className="flex gap-1 flex-wrap">
+            {["all","open","in_progress","waiting_user","resolved","closed"].map(s => (
+              <button key={s} onClick={() => setStatus(s)}
+                className={`px-2.5 py-1 rounded-full text-xs font-semibold capitalize transition-colors ${statusFilter === s ? "bg-indigo-600 text-white" : "bg-white border border-gray-200 text-gray-600 hover:bg-gray-50"}`}>
+                {s.replace("_"," ")}
               </button>
             ))}
           </div>
-        )}
-      </div>
+          {loading ? (
+            <div className="flex justify-center py-12"><Loader2 className="w-6 h-6 animate-spin text-indigo-500" /></div>
+          ) : tickets.length === 0 ? (
+            <div className="text-center py-12 text-gray-400">
+              <Headphones className="w-8 h-8 mx-auto mb-2 opacity-30" /><p className="text-sm">No tickets</p>
+            </div>
+          ) : (
+            <div className="overflow-y-auto space-y-2">
+              {tickets.map(t => {
+                const hasUnread = unread.has(t.id);
+                return (
+                  <button key={t.id} onClick={() => open(t.id)}
+                    className={`w-full text-left border rounded-xl px-4 py-3 hover:shadow-sm transition-all ${selected?.id === t.id ? "border-indigo-400 bg-indigo-50" : hasUnread ? "border-blue-300 bg-blue-50/50" : "border-gray-200 bg-white"}`}>
+                    <div className="flex items-start justify-between gap-2 mb-1.5">
+                      <div className="flex items-center gap-2 flex-1 min-w-0">
+                        {hasUnread && <span className="flex-shrink-0 w-2 h-2 rounded-full bg-blue-500 animate-pulse" />}
+                        <p className="font-semibold text-gray-900 text-sm leading-snug truncate">{t.title}</p>
+                      </div>
+                      <ChevronRight className="w-4 h-4 text-gray-400 flex-shrink-0" />
+                    </div>
+                    <p className="text-xs text-gray-500 mb-1.5">{t.user.first_name} {t.user.last_name}</p>
+                    <div className="flex gap-1.5 flex-wrap">
+                      <span className={`px-1.5 py-0.5 rounded-full text-xs font-semibold capitalize ${STATUS_STYLES[t.status]}`}>{t.status.replace("_"," ")}</span>
+                      <span className={`px-1.5 py-0.5 rounded-full text-xs font-semibold capitalize ${PRIORITY_STYLES[t.priority]}`}>{t.priority}</span>
+                      {hasUnread && <span className="flex items-center gap-0.5 text-xs text-blue-600 font-semibold"><Bell className="w-3 h-3" />New reply</span>}
+                      {t.has_chat && <span className="flex items-center gap-0.5 text-xs text-blue-600 font-semibold"><Video className="w-3 h-3" />Chat</span>}
+                    </div>
+                    <p className="text-xs text-gray-400 mt-1.5">{fmtDate(t.updated_at)} · {t.message_count} msgs</p>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
 
-      {/* Detail */}
-      <div className="lg:col-span-3">
-        {selected ? (
-          <div className="bg-white border border-gray-200 rounded-2xl p-5 h-full flex flex-col">
-            <SupportTicketDetail ticket={selected} onBack={() => setSelected(null)}
-              onUpdated={(t) => { setSelected(t); setTickets(prev => prev.map(x => x.id === t.id ? { ...x, status: t.status, message_count: t.messages.length } : x)); }} />
-          </div>
-        ) : (
-          <div className="flex bg-gray-50 border border-gray-200 rounded-2xl h-full items-center justify-center text-gray-400 flex-col gap-3">
-            <MessageSquare className="w-8 h-8 opacity-30" />
-            <p className="text-sm font-semibold">Select a ticket</p>
-          </div>
-        )}
+        {/* Detail */}
+        <div className="lg:col-span-3">
+          {selected ? (
+            <div className="bg-white border border-gray-200 rounded-2xl p-5 h-full flex flex-col">
+              <SupportTicketDetail ticket={selected} onBack={() => setSelected(null)}
+                onUpdated={(t) => {
+                  setSelected(t);
+                  onTicketUpdate(t.id);
+                  setTickets(prev => prev.map(x => x.id === t.id ? { ...x, status: t.status, message_count: t.messages.length } : x));
+                }} />
+            </div>
+          ) : (
+            <div className="flex bg-gray-50 border border-gray-200 rounded-2xl h-full items-center justify-center text-gray-400 flex-col gap-3">
+              <MessageSquare className="w-8 h-8 opacity-30" />
+              <p className="text-sm font-semibold">Select a ticket</p>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
@@ -1431,6 +1470,7 @@ const TABS: { id: TabId; label: string; icon: React.ComponentType<{ className?: 
 
 export default function SuperAdminPage() {
   const [activeTab, setActiveTab] = useState<TabId>("users");
+  const [supportUnread, setSupportUnread] = useState<Set<string>>(new Set());
   const navigate = useNavigate();
   const user = authSession.getUser();
 
@@ -1438,10 +1478,52 @@ export default function SuperAdminPage() {
     return <Navigate to="/login" replace />;
   }
 
+  // ── Always-on SSE notification stream (works through any WAF/proxy) ──────────
+  useEffect(() => {
+    if (typeof Notification !== "undefined" && Notification.permission === "default") {
+      Notification.requestPermission();
+    }
+    const token = localStorage.getItem("access_token") || sessionStorage.getItem("access_token") || "";
+    if (!token) return;
+    const apiBase = import.meta.env.VITE_API_URL ?? `${window.location.origin}/api/v1`;
+    const es = new EventSource(`${apiBase}/support/tickets/notify/stream?token=${encodeURIComponent(token)}`);
+
+    es.onmessage = (e) => {
+      try {
+        const data = JSON.parse(e.data);
+        if (data.type === "message" && !data.is_support) {
+          setSupportUnread(prev => new Set([...prev, data.ticket_id as string]));
+          // Beep
+          try {
+            const ctx = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            osc.connect(gain); gain.connect(ctx.destination);
+            gain.gain.setValueAtTime(0.25, ctx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.4);
+            osc.frequency.setValueAtTime(660, ctx.currentTime);
+            osc.start(ctx.currentTime); osc.stop(ctx.currentTime + 0.4);
+          } catch { /* ignore */ }
+          if (typeof Notification !== "undefined" && Notification.permission === "granted") {
+            new Notification("User replied to ticket", {
+              body: `"${data.ticket_title}" — ${data.sender_name}: ${data.content}`,
+              icon: "/favicon.ico",
+            });
+          }
+        }
+      } catch { /* ignore */ }
+    };
+
+    es.onerror = () => {};
+    return () => { es.close(); };
+  }, []);
+
   function handleLogout() {
     authSession.logout();
     navigate("/login");
   }
+
+  const supportUnreadCount = supportUnread.size;
 
   return (
     <div className="min-h-screen bg-gray-50 flex">
@@ -1452,21 +1534,44 @@ export default function SuperAdminPage() {
         </div>
 
         <nav className="flex-1 px-3 py-4 space-y-1">
-          {TABS.map(({ id, label, icon: Icon }) => (
-            <button
-              key={id}
-              type="button"
-              onClick={() => setActiveTab(id)}
-              className={`flex items-center gap-3 px-3 py-2.5 w-full rounded-xl text-sm font-medium transition-all text-left ${
-                activeTab === id
-                  ? "bg-indigo-600 text-white shadow-lg shadow-indigo-600/20"
-                  : "text-slate-400 hover:bg-slate-800 hover:text-white"
-              }`}
-            >
-              <Icon className="w-4 h-4 flex-shrink-0" />
-              {label}
-            </button>
-          ))}
+          {TABS.map(({ id, label, icon: Icon }) => {
+            const isSupportWithBadge = id === "support" && supportUnreadCount > 0;
+            return (
+              <button
+                key={id}
+                type="button"
+                onClick={() => {
+                  setActiveTab(id);
+                  if (id === "support") setSupportUnread(new Set());
+                }}
+                className={`flex items-center gap-3 px-3 py-2.5 w-full rounded-xl text-sm font-medium transition-all text-left ${
+                  activeTab === id
+                    ? "bg-indigo-600 text-white shadow-lg shadow-indigo-600/20"
+                    : isSupportWithBadge
+                      ? "text-red-400 hover:bg-slate-800 hover:text-red-300"
+                      : "text-slate-400 hover:bg-slate-800 hover:text-white"
+                }`}
+              >
+                <div className="relative flex-shrink-0">
+                  <Icon className={`w-4 h-4 ${isSupportWithBadge ? "animate-bounce" : ""}`} />
+                  {isSupportWithBadge && (
+                    <span className="absolute -top-1.5 -right-1.5 w-3.5 h-3.5 bg-red-500 rounded-full border border-slate-900 animate-ping" />
+                  )}
+                  {isSupportWithBadge && (
+                    <span className="absolute -top-1.5 -right-1.5 w-3.5 h-3.5 bg-red-500 rounded-full border border-slate-900 flex items-center justify-center text-[8px] text-white font-bold">
+                      {supportUnreadCount > 9 ? "9+" : supportUnreadCount}
+                    </span>
+                  )}
+                </div>
+                {label}
+                {isSupportWithBadge && (
+                  <span className="ml-auto px-1.5 py-0.5 bg-red-500 text-white text-[10px] font-bold rounded-full">
+                    {supportUnreadCount}
+                  </span>
+                )}
+              </button>
+            );
+          })}
         </nav>
 
         <div className="px-3 pb-5 pt-3 border-t border-slate-700/60">
@@ -1518,7 +1623,7 @@ export default function SuperAdminPage() {
           {activeTab === "frameworks"    && <FrameworksTab />}
           {activeTab === "subscriptions" && <SubscriptionsTab />}
           {activeTab === "ai-access"     && <AiAccessTab />}
-          {activeTab === "support"       && <SupportTab />}
+          {activeTab === "support"       && <SupportTab unread={supportUnread} onMarkRead={(id) => setSupportUnread(prev => { const n = new Set(prev); n.delete(id); return n; })} onTicketUpdate={() => {}} />}
           {activeTab === "settings"   && <SettingsTab />}
         </main>
       </div>
