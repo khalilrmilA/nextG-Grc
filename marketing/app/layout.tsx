@@ -19,8 +19,12 @@ export const metadata: Metadata = {
   authors: [{ name: SITE_NAME, url: SITE_URL }],
   publisher: SITE_NAME,
   icons: {
-    icon: "/page.png",
-    apple: "/page.png",
+    icon: [
+      { url: "/icon.png", sizes: "512x512", type: "image/png" },
+    ],
+    apple: [
+      { url: "/apple-icon.png", sizes: "512x512", type: "image/png" },
+    ],
   },
   robots: {
     index: true,
