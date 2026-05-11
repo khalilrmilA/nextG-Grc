@@ -46,7 +46,7 @@ class Framework(Base):
     applicable_regions: Mapped[list] = mapped_column(JSON, default=list)  # ["global", "EU"]
     applicable_industries: Mapped[list] = mapped_column(JSON, default=list)
     status: Mapped[FrameworkStatus] = mapped_column(
-        SAEnum(FrameworkStatus), default=FrameworkStatus.ACTIVE
+        SAEnum(FrameworkStatus, values_callable=lambda x: [e.value for e in x]), default=FrameworkStatus.ACTIVE
     )
     is_builtin: Mapped[bool] = mapped_column(Boolean, default=True)  # False = custom tenant framework
 

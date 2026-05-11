@@ -42,10 +42,10 @@ class Vendor(Base):
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     risk_tier: Mapped[VendorRiskTier] = mapped_column(
-        SAEnum(VendorRiskTier), default=VendorRiskTier.MEDIUM
+        SAEnum(VendorRiskTier, values_callable=lambda x: [e.value for e in x]), default=VendorRiskTier.MEDIUM
     )
     status: Mapped[VendorStatus] = mapped_column(
-        SAEnum(VendorStatus), default=VendorStatus.ACTIVE
+        SAEnum(VendorStatus, values_callable=lambda x: [e.value for e in x]), default=VendorStatus.ACTIVE
     )
 
     # Vendor manager

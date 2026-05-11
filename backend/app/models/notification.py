@@ -60,10 +60,10 @@ class Notification(Base):
         String(36), ForeignKey("users.id"), nullable=False, index=True
     )
     type: Mapped[NotificationType] = mapped_column(
-        SAEnum(NotificationType), nullable=False, index=True
+        SAEnum(NotificationType, values_callable=lambda x: [e.value for e in x]), nullable=False, index=True
     )
     status: Mapped[NotificationStatus] = mapped_column(
-        SAEnum(NotificationStatus), nullable=False, default=NotificationStatus.UNREAD, index=True
+        SAEnum(NotificationStatus, values_callable=lambda x: [e.value for e in x]), nullable=False, default=NotificationStatus.UNREAD, index=True
     )
     title: Mapped[str] = mapped_column(String(255), nullable=False)
     message: Mapped[str] = mapped_column(Text, nullable=False)
@@ -83,10 +83,10 @@ class NotificationPreference(Base):
         String(36), ForeignKey("users.id"), nullable=False, index=True
     )
     notification_type: Mapped[NotificationType] = mapped_column(
-        SAEnum(NotificationType), nullable=False
+        SAEnum(NotificationType, values_callable=lambda x: [e.value for e in x]), nullable=False
     )
     channel: Mapped[NotificationChannel] = mapped_column(
-        SAEnum(NotificationChannel), nullable=False
+        SAEnum(NotificationChannel, values_callable=lambda x: [e.value for e in x]), nullable=False
     )
     enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
 

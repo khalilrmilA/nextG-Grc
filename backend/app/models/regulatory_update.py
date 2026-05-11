@@ -30,8 +30,8 @@ class RegulatoryUpdate(Base):
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     source: Mapped[str | None] = mapped_column(String(255), nullable=True)  # e.g. "ISO", "NIST", "EU Parliament"
     regulation_name: Mapped[str | None] = mapped_column(String(255), nullable=True)  # e.g. "GDPR", "NIS2"
-    impact: Mapped[UpdateImpact] = mapped_column(SAEnum(UpdateImpact), default=UpdateImpact.MEDIUM)
-    status: Mapped[UpdateStatus] = mapped_column(SAEnum(UpdateStatus), default=UpdateStatus.NEW)
+    impact: Mapped[UpdateImpact] = mapped_column(SAEnum(UpdateImpact, values_callable=lambda x: [e.value for e in x]), default=UpdateImpact.MEDIUM)
+    status: Mapped[UpdateStatus] = mapped_column(SAEnum(UpdateStatus, values_callable=lambda x: [e.value for e in x]), default=UpdateStatus.NEW)
     effective_date: Mapped[str | None] = mapped_column(String(20), nullable=True)
     deadline: Mapped[str | None] = mapped_column(String(20), nullable=True)
     url: Mapped[str | None] = mapped_column(String(500), nullable=True)

@@ -34,9 +34,9 @@ class Asset(Base):
         String(36), ForeignKey("tenants.id"), nullable=False, index=True
     )
     name: Mapped[str] = mapped_column(String(255), nullable=False)
-    asset_type: Mapped[AssetType] = mapped_column(SAEnum(AssetType), nullable=False)
+    asset_type: Mapped[AssetType] = mapped_column(SAEnum(AssetType, values_callable=lambda x: [e.value for e in x]), nullable=False)
     criticality: Mapped[AssetCriticality] = mapped_column(
-        SAEnum(AssetCriticality), default=AssetCriticality.MEDIUM
+        SAEnum(AssetCriticality, values_callable=lambda x: [e.value for e in x]), default=AssetCriticality.MEDIUM
     )
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     owner_id: Mapped[str | None] = mapped_column(

@@ -45,9 +45,9 @@ class Audit(Base):
     )
     title: Mapped[str] = mapped_column(String(255), nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
-    audit_type: Mapped[AuditType] = mapped_column(SAEnum(AuditType), nullable=False)
+    audit_type: Mapped[AuditType] = mapped_column(SAEnum(AuditType, values_callable=lambda x: [e.value for e in x]), nullable=False)
     status: Mapped[AuditStatus] = mapped_column(
-        SAEnum(AuditStatus), default=AuditStatus.PLANNING
+        SAEnum(AuditStatus, values_callable=lambda x: [e.value for e in x]), default=AuditStatus.PLANNING
     )
 
     # Auditor
@@ -94,10 +94,10 @@ class AuditFinding(Base):
     title: Mapped[str] = mapped_column(String(500), nullable=False)
     description: Mapped[str] = mapped_column(Text, nullable=False)
     severity: Mapped[FindingSeverity] = mapped_column(
-        SAEnum(FindingSeverity), nullable=False
+        SAEnum(FindingSeverity, values_callable=lambda x: [e.value for e in x]), nullable=False
     )
     status: Mapped[FindingStatus] = mapped_column(
-        SAEnum(FindingStatus), default=FindingStatus.OPEN
+        SAEnum(FindingStatus, values_callable=lambda x: [e.value for e in x]), default=FindingStatus.OPEN
     )
 
     # Linked control

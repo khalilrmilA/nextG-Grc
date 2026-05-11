@@ -375,6 +375,33 @@ export default function Layout() {
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [showDemoToast, setShowDemoToast] = useState(false);
 
+  // Refresh profile + roles from server on every app load.
+  // This ensures role changes made by the admin take effect on the user's
+  // next page visit without requiring a manual logout.
+  useEffect(() => {
+    if (!user) return;
+    import("../../api/endpoints").then(({ authApi }) => {
+      authApi.getProfile().then((profile) => {
+        const current = authSession.getUser();
+        if (!current) return;
+        authSession.login({
+          ...current,
+          role: profile.role as import("../../store/auth").UserRole,
+          roles: profile.roles ?? [],
+          org: profile.tenant_name || current.org,
+          name: [profile.first_name, profile.last_name].filter(Boolean).join(" ") || current.name,
+          tenant_id: profile.tenant_id,
+          primary_framework_id: profile.primary_framework_id,
+          selected_framework_ids: profile.selected_framework_ids,
+          org_size: profile.org_size,
+          primary_assessment_id: profile.primary_assessment_id,
+          accessible_modules: profile.accessible_modules,
+        });
+      }).catch(() => {/* ignore — token may have expired, login flow handles it */});
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Sync plan from subscription API on mount (corrects stale localStorage sessions)
   useEffect(() => {
     if (!user) return;

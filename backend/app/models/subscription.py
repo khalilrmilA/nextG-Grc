@@ -10,6 +10,14 @@ class SubscriptionTier(str, enum.Enum):
     PROFESSIONAL = "professional"
     ENTERPRISE = "enterprise"
 
+    @classmethod
+    def _missing_(cls, value: object):
+        if isinstance(value, str):
+            for member in cls:
+                if member.value == value.lower():
+                    return member
+        return None
+
 
 class SubscriptionStatus(str, enum.Enum):
     TRIALING = "trialing"
@@ -17,6 +25,14 @@ class SubscriptionStatus(str, enum.Enum):
     PAST_DUE = "past_due"
     CANCELED = "canceled"
     PAUSED = "paused"
+
+    @classmethod
+    def _missing_(cls, value: object):
+        if isinstance(value, str):
+            for member in cls:
+                if member.value == value.lower():
+                    return member
+        return None
 
 
 # Feature limits per tier
@@ -74,10 +90,12 @@ class Subscription(Base):
         String(36), ForeignKey("tenants.id"), nullable=False, unique=True
     )
     tier: Mapped[SubscriptionTier] = mapped_column(
-        SAEnum(SubscriptionTier), nullable=False, default=SubscriptionTier.STARTER
+        SAEnum(SubscriptionTier, values_callable=lambda x: [e.value for e in x]),
+        nullable=False, default=SubscriptionTier.STARTER
     )
     status: Mapped[SubscriptionStatus] = mapped_column(
-        SAEnum(SubscriptionStatus), default=SubscriptionStatus.TRIALING
+        SAEnum(SubscriptionStatus, values_callable=lambda x: [e.value for e in x]),
+        default=SubscriptionStatus.TRIALING
     )
 
     # Stripe

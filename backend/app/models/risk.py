@@ -47,7 +47,7 @@ class Risk(Base):
     )
 
     status: Mapped[RiskStatus] = mapped_column(
-        SAEnum(RiskStatus), default=RiskStatus.IDENTIFIED
+        SAEnum(RiskStatus, values_callable=lambda x: [e.value for e in x]), default=RiskStatus.IDENTIFIED
     )
 
     # Scoring (qualitative: 1-5 scale)
@@ -71,7 +71,7 @@ class Risk(Base):
         return None
 
     severity: Mapped[RiskSeverity | None] = mapped_column(
-        SAEnum(RiskSeverity), nullable=True
+        SAEnum(RiskSeverity, values_callable=lambda x: [e.value for e in x]), nullable=True
     )
 
     # Linked framework controls
@@ -122,7 +122,7 @@ class RiskTreatment(Base):
         String(36), ForeignKey("risks.id"), nullable=False, unique=True
     )
     treatment_option: Mapped[RiskTreatmentOption] = mapped_column(
-        SAEnum(RiskTreatmentOption), nullable=False
+        SAEnum(RiskTreatmentOption, values_callable=lambda x: [e.value for e in x]), nullable=False
     )
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     due_date: Mapped[str | None] = mapped_column(String(20), nullable=True)

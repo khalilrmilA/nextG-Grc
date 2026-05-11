@@ -45,10 +45,10 @@ class ActionItem(Base):
     due_date: Mapped[str | None] = mapped_column(String(20), nullable=True)
 
     priority: Mapped[ActionItemPriority] = mapped_column(
-        SAEnum(ActionItemPriority), default=ActionItemPriority.MEDIUM
+        SAEnum(ActionItemPriority, values_callable=lambda x: [e.value for e in x]), default=ActionItemPriority.MEDIUM
     )
     status: Mapped[ActionItemStatus] = mapped_column(
-        SAEnum(ActionItemStatus), default=ActionItemStatus.OPEN
+        SAEnum(ActionItemStatus, values_callable=lambda x: [e.value for e in x]), default=ActionItemStatus.OPEN
     )
     ai_generated: Mapped[bool] = mapped_column(Boolean, default=True)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)

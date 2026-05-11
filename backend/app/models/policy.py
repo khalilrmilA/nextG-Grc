@@ -37,7 +37,7 @@ class Policy(Base):
         String(36), ForeignKey("users.id"), nullable=True
     )
     status: Mapped[PolicyStatus] = mapped_column(
-        SAEnum(PolicyStatus), default=PolicyStatus.DRAFT
+        SAEnum(PolicyStatus, values_callable=lambda x: [e.value for e in x]), default=PolicyStatus.DRAFT
     )
 
     # Linked framework controls this policy satisfies
@@ -105,7 +105,7 @@ class PolicyAttestation(Base):
         String(36), ForeignKey("users.id"), nullable=False
     )
     status: Mapped[AttestationStatus] = mapped_column(
-        SAEnum(AttestationStatus), default=AttestationStatus.PENDING
+        SAEnum(AttestationStatus, values_callable=lambda x: [e.value for e in x]), default=AttestationStatus.PENDING
     )
     due_date: Mapped[str | None] = mapped_column(String(20), nullable=True)
     acknowledged_at: Mapped[str | None] = mapped_column(String(30), nullable=True)

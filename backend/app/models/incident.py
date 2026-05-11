@@ -39,9 +39,9 @@ class Incident(Base):
     tenant_id: Mapped[str] = mapped_column(String(36), ForeignKey("tenants.id"), nullable=False, index=True)
     title: Mapped[str] = mapped_column(String(500), nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
-    category: Mapped[IncidentCategory] = mapped_column(SAEnum(IncidentCategory), default=IncidentCategory.OTHER)
-    severity: Mapped[IncidentSeverity] = mapped_column(SAEnum(IncidentSeverity), default=IncidentSeverity.MEDIUM)
-    status: Mapped[IncidentStatus] = mapped_column(SAEnum(IncidentStatus), default=IncidentStatus.OPEN)
+    category: Mapped[IncidentCategory] = mapped_column(SAEnum(IncidentCategory, values_callable=lambda x: [e.value for e in x]), default=IncidentCategory.OTHER)
+    severity: Mapped[IncidentSeverity] = mapped_column(SAEnum(IncidentSeverity, values_callable=lambda x: [e.value for e in x]), default=IncidentSeverity.MEDIUM)
+    status: Mapped[IncidentStatus] = mapped_column(SAEnum(IncidentStatus, values_callable=lambda x: [e.value for e in x]), default=IncidentStatus.OPEN)
 
     # Who
     reporter_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("users.id"), nullable=True)

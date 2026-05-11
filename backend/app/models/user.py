@@ -30,7 +30,7 @@ class User(Base):
     first_name: Mapped[str] = mapped_column(String(100), nullable=False)
     last_name: Mapped[str] = mapped_column(String(100), nullable=False)
     role: Mapped[UserRole] = mapped_column(
-        SAEnum(UserRole, native_enum=False), nullable=False, default=UserRole.VIEWER
+        SAEnum(UserRole, values_callable=lambda x: [e.value for e in x], native_enum=False), nullable=False, default=UserRole.VIEWER
     )
     # Multi-role support: list of UserRole strings (e.g. ["ciso", "risk_manager"])
     # When non-empty, access is the union of all listed roles.

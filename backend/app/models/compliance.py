@@ -48,7 +48,7 @@ class ComplianceAssessment(Base):
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     status: Mapped[AssessmentStatus] = mapped_column(
-        SAEnum(AssessmentStatus), default=AssessmentStatus.DRAFT
+        SAEnum(AssessmentStatus, values_callable=lambda x: [e.value for e in x]), default=AssessmentStatus.DRAFT
     )
     lead_assessor_id: Mapped[str | None] = mapped_column(
         String(36), ForeignKey("users.id"), nullable=True
@@ -99,7 +99,7 @@ class ControlAssessment(Base):
         String(36), ForeignKey("framework_controls.id"), nullable=False
     )
     status: Mapped[ControlStatus] = mapped_column(
-        SAEnum(ControlStatus), default=ControlStatus.NOT_STARTED
+        SAEnum(ControlStatus, values_callable=lambda x: [e.value for e in x]), default=ControlStatus.NOT_STARTED
     )
     owner_id: Mapped[str | None] = mapped_column(
         String(36), ForeignKey("users.id"), nullable=True
@@ -139,7 +139,7 @@ class Evidence(Base):
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     evidence_type: Mapped[EvidenceType] = mapped_column(
-        SAEnum(EvidenceType), default=EvidenceType.DOCUMENT
+        SAEnum(EvidenceType, values_callable=lambda x: [e.value for e in x]), default=EvidenceType.DOCUMENT
     )
 
     # File storage
