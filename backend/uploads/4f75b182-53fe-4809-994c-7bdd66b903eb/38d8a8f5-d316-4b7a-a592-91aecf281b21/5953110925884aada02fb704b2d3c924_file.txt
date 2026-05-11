@@ -1,0 +1,570 @@
+=== UPTIME / BOOT ===
+2026-03-02 11:57:18
+up 9 weeks, 6 days, 8 hours, 29 minutes
+=== BOOTS RECORDED ===
+-6 fb1e05edc70e4968a2417ece8fc9842b Tue 2025-12-23 16:21:00 UTC—Wed 2026-01-21 21:55:22 UTC
+-5 c20634e94a8f4bdea247771e40a7d681 Wed 2026-01-21 21:55:48 UTC—Wed 2026-01-21 22:10:10 UTC
+-4 438837c20dbc489caea57cdc331b747e Wed 2026-01-21 22:10:45 UTC—Wed 2026-01-21 22:28:34 UTC
+-3 7b71933e102b47d197a27a0ca0dc696c Wed 2026-01-21 22:29:03 UTC—Sat 2026-01-24 20:25:35 UTC
+-2 26f41a0b24cd4ab9a4a41b1959768ab2 Sat 2026-01-24 20:26:42 UTC—Sat 2026-02-14 18:22:07 UTC
+-1 306db9c43aa64456957f8131b9ab744c Sat 2026-02-14 18:25:42 UTC—Mon 2026-03-02 11:56:36 UTC
+ 0 b9245277de3346f0856f3e00bd3395fa Mon 2026-03-02 11:57:28 UTC—Sun 2026-05-10 20:26:21 UTC
+=== LAST LOGINS ===
+sysadmin pts/1        10.233.133.5     Wed Apr 29 12:35:59 2026 - Wed Apr 29 13:10:52 2026  (00:34)
+reboot   system boot  5.15.0-171-gener Mon Mar  2 11:57:25 2026   still running
+sysadmin pts/4        10.212.133.12    Mon Mar  2 11:52:15 2026 - Mon Mar  2 11:55:43 2026  (00:03)
+sysadmin pts/0        10.212.133.12    Sat Feb 14 18:29:12 2026 - Sat Feb 14 18:39:17 2026  (00:10)
+reboot   system boot  5.15.0-170-gener Sat Feb 14 18:24:54 2026 - Mon Mar  2 11:56:24 2026 (15+17:31)
+reboot   system boot  5.15.0-164-gener Sat Jan 24 20:26:27 2026 - Sat Feb 14 18:21:56 2026 (20+21:55)
+sysadmin pts/0        10.212.133.11    Sat Jan 24 20:23:28 2026 - Sat Jan 24 20:23:59 2026  (00:00)
+sysadmin pts/0        10.212.133.19    Thu Jan 22 10:23:00 2026 - Thu Jan 22 12:30:51 2026  (02:07)
+sysadmin pts/0        10.212.133.10    Wed Jan 21 22:30:50 2026 - Wed Jan 21 22:41:46 2026  (00:10)
+reboot   system boot  5.15.0-164-gener Wed Jan 21 22:29:00 2026 - Sat Jan 24 20:25:34 2026 (2+21:56)
+sysadmin pts/0        10.212.133.10    Wed Jan 21 22:15:12 2026 - Wed Jan 21 22:27:59 2026  (00:12)
+reboot   system boot  5.15.0-164-gener Wed Jan 21 22:10:41 2026 - Wed Jan 21 22:28:34 2026  (00:17)
+sysadmin pts/0        10.212.133.10    Wed Jan 21 21:57:14 2026 - Wed Jan 21 22:09:36 2026  (00:12)
+reboot   system boot  5.15.0-164-gener Wed Jan 21 21:55:44 2026 - Wed Jan 21 22:10:10 2026  (00:14)
+sysadmin pts/1        10.212.133.10    Wed Jan 21 21:01:25 2026 - Wed Jan 21 21:54:45 2026  (00:53)
+sysadmin pts/1        10.212.133.14    Fri Jan 16 21:31:09 2026 - Fri Jan 16 22:09:12 2026  (00:38)
+sysadmin pts/2        10.212.133.12    Wed Jan 14 18:26:29 2026 - Wed Jan 14 18:39:35 2026  (00:13)
+sysadmin pts/1        10.212.133.12    Wed Jan 14 16:19:45 2026 - Wed Jan 14 18:32:30 2026  (02:12)
+sysadmin pts/1        10.212.133.10    Tue Jan 13 15:59:23 2026 - Tue Jan 13 16:48:02 2026  (00:48)
+sysadmin pts/1        10.212.133.16    Tue Jan 13 11:49:35 2026 - Tue Jan 13 14:28:53 2026  (02:39)
+sysadmin pts/1        10.212.133.12    Mon Jan 12 21:02:38 2026 - Mon Jan 12 21:34:47 2026  (00:32)
+sysadmin pts/2        10.212.133.10    Tue Dec 30 19:51:49 2025 - Tue Dec 30 20:31:25 2025  (00:39)
+sysadmin pts/1        10.212.133.19    Tue Dec 30 10:44:16 2025 - Tue Dec 30 20:56:40 2025  (10:12)
+sysadmin pts/4        10.212.133.15    Mon Dec 29 14:19:01 2025 - Mon Dec 29 15:15:25 2025  (00:56)
+sysadmin pts/1        10.212.133.15    Mon Dec 29 10:41:42 2025 - Mon Dec 29 14:18:32 2025  (03:36)
+sysadmin pts/0        10.212.133.12    Sat Dec 27 17:56:58 2025 - Sat Dec 27 21:00:20 2025  (03:03)
+sysadmin pts/0        10.212.133.10    Wed Dec 24 18:30:41 2025 - Wed Dec 24 21:42:43 2025  (03:12)
+sysadmin pts/0        10.212.133.19    Wed Dec 24 15:02:39 2025 - Wed Dec 24 17:33:41 2025  (02:31)
+sysadmin pts/0        10.212.133.14    Wed Dec 24 14:53:46 2025 - Wed Dec 24 14:53:57 2025  (00:00)
+sysadmin tty1                          Tue Dec 23 16:21:50 2025 - down                     (29+05:33)
+=== FAILED LOGINS ===
+
+btmp begins Fri May  1 00:00:01 2026
+=== APT HISTORY ===
+=== DPKG CHANGES ===
+/var/log/dpkg.log.1:2026-03-16 12:25:04 install linux-modules-5.15.0-173-generic:amd64 <none> 5.15.0-173.183
+/var/log/dpkg.log.1:2026-03-16 12:25:07 install linux-image-5.15.0-173-generic:amd64 <none> 5.15.0-173.183
+/var/log/dpkg.log.1:2026-03-16 12:25:09 install linux-modules-extra-5.15.0-173-generic:amd64 <none> 5.15.0-173.183
+/var/log/dpkg.log.1:2026-03-16 12:25:28 install linux-headers-5.15.0-173:all <none> 5.15.0-173.183
+/var/log/dpkg.log.1:2026-03-16 12:25:45 install linux-headers-5.15.0-173-generic:amd64 <none> 5.15.0-173.183
+=== RECENT CONFIG CHANGES ===
+  9438222      4 -rw-r--r--   1 root     root          317 May  8 07:00 /etc/systemd/system/snap-code-238.mount
+  9438124      4 -rw-r--r--   1 root     root          329 May 10 15:06 /etc/systemd/system/snap-firefox-8274.mount
+  9444131      8 -rw-r--r--   1 root     root         6191 May 10 07:36 /etc/apt/trusted.gpg.d/google-chrome.gpg
+  9438689      4 -rw-r-----   1 root     lp            683 May 10 18:51 /etc/cups/subscriptions.conf.O
+  9438557      4 -rw-r-----   1 root     lp            683 May 10 19:49 /etc/cups/subscriptions.conf
+=== LISTENING PORTS ===
+State  Recv-Q Send-Q Local Address:Port  Peer Address:PortProcess                                                                                                                                                                                                                                                                     
+LISTEN 0      511        127.0.0.1:39498      0.0.0.0:*    users:(("code",pid=467906,fd=47))                                                                                                                                                                                                                                          
+LISTEN 0      511          0.0.0.0:80         0.0.0.0:*    users:(("nginx",pid=643835,fd=7),("nginx",pid=643834,fd=7),("nginx",pid=643833,fd=7),("nginx",pid=643832,fd=7),("nginx",pid=643831,fd=7),("nginx",pid=643829,fd=7),("nginx",pid=643828,fd=7),("nginx",pid=643827,fd=7),("nginx",pid=643803,fd=7))                          
+LISTEN 0      128          0.0.0.0:22         0.0.0.0:*    users:(("sshd",pid=760596,fd=3))                                                                                                                                                                                                                                           
+LISTEN 0      2048       127.0.0.1:8150       0.0.0.0:*    users:(("gitlab-kas",pid=643842,fd=6))                                                                                                                                                                                                                                     
+LISTEN 0      2048       127.0.0.1:8151       0.0.0.0:*    users:(("gitlab-kas",pid=643842,fd=7))                                                                                                                                                                                                                                     
+LISTEN 0      2048       127.0.0.1:8153       0.0.0.0:*    users:(("gitlab-kas",pid=643842,fd=11))                                                                                                                                                                                                                                    
+LISTEN 0      2048       127.0.0.1:8154       0.0.0.0:*    users:(("gitlab-kas",pid=643842,fd=9))                                                                                                                                                                                                                                     
+LISTEN 0      2048       127.0.0.1:8155       0.0.0.0:*    users:(("gitlab-kas",pid=643842,fd=10))                                                                                                                                                                                                                                    
+LISTEN 0      1024       127.0.0.1:8080       0.0.0.0:*    users:(("bundle",pid=2588730,fd=19),("bundle",pid=2588684,fd=19),("bundle",pid=2541012,fd=19),("bundle",pid=2540958,fd=19),("bundle",pid=2540919,fd=19),("bundle",pid=2540859,fd=19),("bundle",pid=2540853,fd=19),("bundle",pid=2540849,fd=19),("bundle",pid=643817,fd=19))
+LISTEN 0      2048       127.0.0.1:8082       0.0.0.0:*    users:(("ruby",pid=643941,fd=10))                                                                                                                                                                                                                                          
+LISTEN 0      2048       127.0.0.1:8092       0.0.0.0:*    users:(("bundle",pid=643939,fd=24))                                                                                                                                                                                                                                        
+LISTEN 0      2048         0.0.0.0:3002       0.0.0.0:*    users:(("docker-proxy",pid=3703969,fd=8))                                                                                                                                                                                                                                  
+LISTEN 0      2048         0.0.0.0:5433       0.0.0.0:*    users:(("docker-proxy",pid=1015993,fd=8))                                                                                                                                                                                                                                  
+LISTEN 0      2048         0.0.0.0:5601       0.0.0.0:*    users:(("docker-proxy",pid=700328,fd=8))                                                                                                                                                                                                                                   
+LISTEN 0      128        127.0.0.1:631        0.0.0.0:*    users:(("cupsd",pid=3659543,fd=7))                                                                                                                                                                                                                                         
+LISTEN 0      511          0.0.0.0:8060       0.0.0.0:*    users:(("nginx",pid=643835,fd=8),("nginx",pid=643834,fd=8),("nginx",pid=643833,fd=8),("nginx",pid=643832,fd=8),("nginx",pid=643831,fd=8),("nginx",pid=643829,fd=8),("nginx",pid=643828,fd=8),("nginx",pid=643827,fd=8),("nginx",pid=643803,fd=8))                          
+LISTEN 0      2048         0.0.0.0:9000       0.0.0.0:*    users:(("docker-proxy",pid=1016051,fd=8))                                                                                                                                                                                                                                  
+LISTEN 0      2048         0.0.0.0:9001       0.0.0.0:*    users:(("docker-proxy",pid=1016081,fd=8))                                                                                                                                                                                                                                  
+LISTEN 0      2048         0.0.0.0:9200       0.0.0.0:*    users:(("docker-proxy",pid=700243,fd=8))                                                                                                                                                                                                                                   
+LISTEN 0      4096       127.0.0.1:11434      0.0.0.0:*    users:(("ollama",pid=1331,fd=3))                                                                                                                                                                                                                                           
+LISTEN 0      4096       127.0.0.1:9050       0.0.0.0:*    users:(("tor",pid=1353,fd=6))                                                                                                                                                                                                                                              
+LISTEN 0      2048       127.0.0.1:9187       0.0.0.0:*    users:(("postgres_export",pid=643807,fd=3))                                                                                                                                                                                                                                
+LISTEN 0      4096   127.0.0.53%lo:53         0.0.0.0:*    users:(("systemd-resolve",pid=1121,fd=14))                                                                                                                                                                                                                                 
+LISTEN 0      2048       127.0.0.1:9168       0.0.0.0:*    users:(("gitlab-exporter",pid=643810,fd=5))                                                                                                                                                                                                                                
+LISTEN 0      2048       127.0.0.1:9121       0.0.0.0:*    users:(("redis_exporter",pid=643797,fd=3))                                                                                                                                                                                                                                 
+LISTEN 0      2048       127.0.0.1:9090       0.0.0.0:*    users:(("prometheus",pid=643838,fd=6))                                                                                                                                                                                                                                     
+LISTEN 0      2048       127.0.0.1:9093       0.0.0.0:*    users:(("alertmanager",pid=643806,fd=7))                                                                                                                                                                                                                                   
+LISTEN 0      2048       127.0.0.1:9100       0.0.0.0:*    users:(("node_exporter",pid=643839,fd=3))                                                                                                                                                                                                                                  
+LISTEN 0      2048       127.0.0.1:9229       0.0.0.0:*    users:(("gitlab-workhors",pid=643844,fd=3))                                                                                                                                                                                                                                
+LISTEN 0      2048       127.0.0.1:9236       0.0.0.0:*    users:(("gitaly",pid=643841,fd=10),("gitaly",pid=643841,fd=8))                                                                                                                                                                                                             
+LISTEN 0      128             [::]:22            [::]:*    users:(("sshd",pid=760596,fd=4))                                                                                                                                                                                                                                           
+LISTEN 0      2                  *:3389             *:*    users:(("xrdp",pid=1405,fd=11))                                                                                                                                                                                                                                            
+LISTEN 0      2048            [::]:3002          [::]:*    users:(("docker-proxy",pid=3703976,fd=8))                                                                                                                                                                                                                                  
+LISTEN 0      2048            [::]:5433          [::]:*    users:(("docker-proxy",pid=1016012,fd=8))                                                                                                                                                                                                                                  
+LISTEN 0      2048            [::]:5601          [::]:*    users:(("docker-proxy",pid=700334,fd=8))                                                                                                                                                                                                                                   
+LISTEN 0      2              [::1]:3350          [::]:*    users:(("xrdp-sesman",pid=1344,fd=7))                                                                                                                                                                                                                                      
+LISTEN 0      2048            [::]:9000          [::]:*    users:(("docker-proxy",pid=1016060,fd=8))                                                                                                                                                                                                                                  
+LISTEN 0      2048            [::]:9001          [::]:*    users:(("docker-proxy",pid=1016088,fd=8))                                                                                                                                                                                                                                  
+LISTEN 0      2048            [::]:9200          [::]:*    users:(("docker-proxy",pid=700249,fd=8))                                                                                                                                                                                                                                   
+LISTEN 0      2048               *:9094             *:*    users:(("alertmanager",pid=643806,fd=3))                                                                                                                                                                                                                                   
+LISTEN 0      128            [::1]:631           [::]:*    users:(("cupsd",pid=3659543,fd=6))                                                                                                                                                                                                                                         
+=== JOURNAL ERRORS LAST 10D ===
+May 02 13:51:41 r-000211 kernel: Out of memory: Killed process 130061 (chrome) total-vm:1460014024kB, anon-rss:5908816kB, file-rss:0kB, shmem-rss:0kB, UID:0 pgtables:16164kB oom_score_adj:300
+May 03 05:20:50 r-000211 kernel: Out of memory: Killed process 691684 (chrome) total-vm:1460024264kB, anon-rss:6186628kB, file-rss:0kB, shmem-rss:0kB, UID:0 pgtables:15524kB oom_score_adj:300
+May 03 05:28:23 r-000211 kernel: Out of memory: Killed process 701403 (chrome) total-vm:1460025036kB, anon-rss:6089232kB, file-rss:328kB, shmem-rss:0kB, UID:0 pgtables:14696kB oom_score_adj:300
+May 03 05:30:38 r-000211 kernel: Out of memory: Killed process 707228 (chrome) total-vm:1460024772kB, anon-rss:6132892kB, file-rss:0kB, shmem-rss:0kB, UID:0 pgtables:16648kB oom_score_adj:300
+May 04 01:11:51 r-000211 systemd[1]: Failed to start Refresh fwupd metadata and update motd.
+May 04 13:22:51 r-000211 xrdp[1816002]: [ERROR] Cannot read private key file /etc/xrdp/key.pem: Permission denied
+May 04 13:22:51 r-000211 xrdp[1816002]: [ERROR] libxrdp_force_read: header read error
+May 04 13:22:51 r-000211 xrdp[1816002]: [ERROR] Processing [ITU-T T.125] Connect-Initial failed
+May 04 13:22:51 r-000211 xrdp[1816002]: [ERROR] [MCS Connection Sequence] receive connection request failed
+May 04 13:22:51 r-000211 xrdp[1816002]: [ERROR] xrdp_sec_incoming: xrdp_mcs_incoming failed
+May 04 13:22:51 r-000211 xrdp[1816002]: [ERROR] xrdp_rdp_incoming: xrdp_sec_incoming failed
+May 04 13:22:51 r-000211 xrdp[1816002]: [ERROR] xrdp_process_main_loop: libxrdp_process_incoming failed
+May 04 13:22:51 r-000211 xrdp[1816002]: [ERROR] xrdp_iso_send: trans_write_copy_s failed
+May 04 13:22:51 r-000211 xrdp[1816002]: [ERROR] Sending [ITU T.125] DisconnectProviderUltimatum failed
+May 04 13:22:51 r-000211 xrdp[1816003]: [ERROR] Cannot read private key file /etc/xrdp/key.pem: Permission denied
+May 04 13:23:01 r-000211 xrdp-sesman[1344]: [ERROR] sesman_data_in: scp_process_msg failed
+May 04 13:23:01 r-000211 xrdp-sesman[1344]: [ERROR] sesman_main_loop: trans_check_wait_objs failed, removing trans
+May 04 13:32:12 r-000211 gdm-password][1818381]: gkr-pam: unable to locate daemon control file
+May 04 13:32:32 r-000211 systemd[643746]: Failed to start Notification regarding a crash report.
+May 04 13:41:01 r-000211 systemd[1]: snapd.service: Watchdog timeout (limit 5min)!
+May 04 13:43:51 r-000211 systemd[1]: Failed to start Snap Daemon.
+May 04 13:44:15 r-000211 xrdp[1816003]: [ERROR] xrdp_sec_recv: xrdp_mcs_recv failed
+May 04 13:44:15 r-000211 xrdp[1816003]: [ERROR] xrdp_rdp_recv: xrdp_sec_recv failed
+May 04 13:44:15 r-000211 xrdp[1816003]: [ERROR] libxrdp_process_data: xrdp_rdp_recv failed
+May 04 13:44:15 r-000211 xrdp[1816003]: [ERROR] xrdp_process_data_in: xrdp_process_loop failed
+May 04 13:44:15 r-000211 xrdp[1816003]: [ERROR] xrdp_iso_send: trans_write_copy_s failed
+May 04 13:44:15 r-000211 xrdp[1816003]: [ERROR] Sending [ITU T.125] DisconnectProviderUltimatum failed
+May 04 13:44:17 r-000211 xrdp[1821962]: [ERROR] Cannot read private key file /etc/xrdp/key.pem: Permission denied
+May 04 13:44:18 r-000211 xrdp[1821962]: [ERROR] libxrdp_force_read: header read error
+May 04 13:44:18 r-000211 xrdp[1821962]: [ERROR] Processing [ITU-T T.125] Connect-Initial failed
+May 04 13:44:18 r-000211 xrdp[1821962]: [ERROR] [MCS Connection Sequence] receive connection request failed
+May 04 13:44:18 r-000211 xrdp[1821962]: [ERROR] xrdp_sec_incoming: xrdp_mcs_incoming failed
+May 04 13:44:18 r-000211 xrdp[1821962]: [ERROR] xrdp_rdp_incoming: xrdp_sec_incoming failed
+May 04 13:44:18 r-000211 xrdp[1821962]: [ERROR] xrdp_process_main_loop: libxrdp_process_incoming failed
+May 04 13:44:18 r-000211 xrdp[1821963]: [ERROR] Cannot read private key file /etc/xrdp/key.pem: Permission denied
+May 04 13:44:18 r-000211 xrdp[1821962]: [ERROR] xrdp_iso_send: trans_write_copy_s failed
+May 04 13:44:18 r-000211 xrdp[1821962]: [ERROR] Sending [ITU T.125] DisconnectProviderUltimatum failed
+May 04 13:44:37 r-000211 xrdp-sesman[1344]: [ERROR] sesman_data_in: scp_process_msg failed
+May 04 13:44:37 r-000211 xrdp-sesman[1344]: [ERROR] sesman_main_loop: trans_check_wait_objs failed, removing trans
+May 04 13:47:00 r-000211 systemd[1]: Failed to start Snap Daemon.
+May 04 13:56:01 r-000211 gdm-password][1825218]: gkr-pam: unable to locate daemon control file
+May 04 14:04:33 r-000211 xrdp[1821963]: [ERROR] xrdp_sec_recv: xrdp_mcs_recv failed
+May 04 14:04:33 r-000211 xrdp[1821963]: [ERROR] xrdp_rdp_recv: xrdp_sec_recv failed
+May 04 14:04:33 r-000211 xrdp[1821963]: [ERROR] libxrdp_process_data: xrdp_rdp_recv failed
+May 04 14:04:33 r-000211 xrdp[1821963]: [ERROR] xrdp_process_data_in: xrdp_process_loop failed
+May 04 14:04:33 r-000211 xrdp[1821963]: [ERROR] xrdp_iso_send: trans_write_copy_s failed
+May 04 14:04:33 r-000211 xrdp[1821963]: [ERROR] Sending [ITU T.125] DisconnectProviderUltimatum failed
+May 04 14:14:37 r-000211 xrdp[1843732]: [ERROR] Cannot read private key file /etc/xrdp/key.pem: Permission denied
+May 04 14:14:38 r-000211 xrdp[1843732]: [ERROR] libxrdp_force_read: header read error
+May 04 14:14:38 r-000211 xrdp[1843732]: [ERROR] Processing [ITU-T T.125] Connect-Initial failed
+May 04 14:14:38 r-000211 xrdp[1843732]: [ERROR] [MCS Connection Sequence] receive connection request failed
+May 04 14:14:38 r-000211 xrdp[1843732]: [ERROR] xrdp_sec_incoming: xrdp_mcs_incoming failed
+May 04 14:14:38 r-000211 xrdp[1843732]: [ERROR] xrdp_rdp_incoming: xrdp_sec_incoming failed
+May 04 14:14:38 r-000211 xrdp[1843732]: [ERROR] xrdp_process_main_loop: libxrdp_process_incoming failed
+May 04 14:14:38 r-000211 xrdp[1843732]: [ERROR] xrdp_iso_send: trans_write_copy_s failed
+May 04 14:14:38 r-000211 xrdp[1843732]: [ERROR] Sending [ITU T.125] DisconnectProviderUltimatum failed
+May 04 14:14:38 r-000211 xrdp[1843734]: [ERROR] Cannot read private key file /etc/xrdp/key.pem: Permission denied
+May 04 14:14:58 r-000211 xrdp[1843850]: [ERROR] Cannot read private key file /etc/xrdp/key.pem: Permission denied
+May 04 14:14:58 r-000211 xrdp[1843850]: [ERROR] libxrdp_force_read: header read error
+May 04 14:14:58 r-000211 xrdp[1843850]: [ERROR] Processing [ITU-T T.125] Connect-Initial failed
+May 04 14:14:58 r-000211 xrdp[1843850]: [ERROR] [MCS Connection Sequence] receive connection request failed
+May 04 14:14:58 r-000211 xrdp[1843850]: [ERROR] xrdp_sec_incoming: xrdp_mcs_incoming failed
+May 04 14:14:58 r-000211 xrdp[1843850]: [ERROR] xrdp_rdp_incoming: xrdp_sec_incoming failed
+May 04 14:14:58 r-000211 xrdp[1843850]: [ERROR] xrdp_process_main_loop: libxrdp_process_incoming failed
+May 04 14:14:58 r-000211 xrdp[1843850]: [ERROR] xrdp_iso_send: trans_write_copy_s failed
+May 04 14:14:58 r-000211 xrdp[1843850]: [ERROR] Sending [ITU T.125] DisconnectProviderUltimatum failed
+May 04 14:14:58 r-000211 xrdp[1843851]: [ERROR] Cannot read private key file /etc/xrdp/key.pem: Permission denied
+May 04 14:15:16 r-000211 xrdp-sesman[1344]: [ERROR] sesman_data_in: scp_process_msg failed
+May 04 14:15:16 r-000211 xrdp-sesman[1344]: [ERROR] sesman_main_loop: trans_check_wait_objs failed, removing trans
+May 04 14:15:35 r-000211 gdm-password][1843977]: gkr-pam: unable to locate daemon control file
+May 04 14:27:55 r-000211 xrdp[1843851]: [ERROR] xrdp_sec_recv: xrdp_mcs_recv failed
+May 04 14:27:55 r-000211 xrdp[1843851]: [ERROR] xrdp_rdp_recv: xrdp_sec_recv failed
+May 04 14:27:55 r-000211 xrdp[1843851]: [ERROR] libxrdp_process_data: xrdp_rdp_recv failed
+May 04 14:27:55 r-000211 xrdp[1843851]: [ERROR] xrdp_process_data_in: xrdp_process_loop failed
+May 04 14:27:55 r-000211 xrdp[1843851]: [ERROR] xrdp_iso_send: trans_write_copy_s failed
+May 04 14:27:55 r-000211 xrdp[1843851]: [ERROR] Sending [ITU T.125] DisconnectProviderUltimatum failed
+May 04 15:06:01 r-000211 kernel: Out of memory: Killed process 1887156 (chrome) total-vm:1460025032kB, anon-rss:7968108kB, file-rss:0kB, shmem-rss:0kB, UID:0 pgtables:20344kB oom_score_adj:300
+May 04 15:11:37 r-000211 kernel: Out of memory: Killed process 1890267 (chrome) total-vm:1460024264kB, anon-rss:7892008kB, file-rss:0kB, shmem-rss:0kB, UID:0 pgtables:18920kB oom_score_adj:300
+May 04 15:43:42 r-000211 kernel: Out of memory: Killed process 1917247 (chrome) total-vm:1460025032kB, anon-rss:7753652kB, file-rss:0kB, shmem-rss:0kB, UID:0 pgtables:19648kB oom_score_adj:300
+May 04 18:04:42 r-000211 systemd[1]: snapd.service: Watchdog timeout (limit 5min)!
+May 05 20:14:57 r-000211 xrdp[3239515]: [ERROR] Cannot read private key file /etc/xrdp/key.pem: Permission denied
+May 05 20:14:57 r-000211 xrdp[3239515]: [ERROR] libxrdp_force_read: header read error
+May 05 20:14:57 r-000211 xrdp[3239515]: [ERROR] Processing [ITU-T T.125] Connect-Initial failed
+May 05 20:14:57 r-000211 xrdp[3239515]: [ERROR] [MCS Connection Sequence] receive connection request failed
+May 05 20:14:57 r-000211 xrdp[3239515]: [ERROR] xrdp_sec_incoming: xrdp_mcs_incoming failed
+May 05 20:14:57 r-000211 xrdp[3239515]: [ERROR] xrdp_rdp_incoming: xrdp_sec_incoming failed
+May 05 20:14:57 r-000211 xrdp[3239515]: [ERROR] xrdp_process_main_loop: libxrdp_process_incoming failed
+May 05 20:14:57 r-000211 xrdp[3239515]: [ERROR] xrdp_iso_send: trans_write_copy_s failed
+May 05 20:14:57 r-000211 xrdp[3239515]: [ERROR] Sending [ITU T.125] DisconnectProviderUltimatum failed
+May 05 20:14:57 r-000211 xrdp[3239517]: [ERROR] Cannot read private key file /etc/xrdp/key.pem: Permission denied
+May 05 20:15:05 r-000211 xrdp-sesman[1344]: [ERROR] sesman_data_in: scp_process_msg failed
+May 05 20:15:05 r-000211 xrdp-sesman[1344]: [ERROR] sesman_main_loop: trans_check_wait_objs failed, removing trans
+May 05 20:15:31 r-000211 gdm-password][3239624]: gkr-pam: unable to locate daemon control file
+May 05 20:30:06 r-000211 gdm-password][3245659]: gkr-pam: unable to locate daemon control file
+May 05 21:06:15 r-000211 gdm-password][3257594]: gkr-pam: unable to locate daemon control file
+May 05 21:52:57 r-000211 gdm-password][3269828]: gkr-pam: unable to locate daemon control file
+May 05 22:24:14 r-000211 gdm-password][3277418]: gkr-pam: unable to locate daemon control file
+May 05 23:28:23 r-000211 xrdp[3239517]: [ERROR] xrdp_iso_send: trans_write_copy_s failed
+May 05 23:28:23 r-000211 xrdp[3239517]: [ERROR] Sending [ITU T.125] DisconnectProviderUltimatum failed
+May 07 13:18:24 r-000211 xrdp[927615]: [ERROR] Cannot read private key file /etc/xrdp/key.pem: Permission denied
+May 07 13:18:24 r-000211 xrdp[927615]: [ERROR] libxrdp_force_read: header read error
+May 07 13:18:24 r-000211 xrdp[927615]: [ERROR] Processing [ITU-T T.125] Connect-Initial failed
+May 07 13:18:24 r-000211 xrdp[927615]: [ERROR] [MCS Connection Sequence] receive connection request failed
+May 07 13:18:24 r-000211 xrdp[927615]: [ERROR] xrdp_sec_incoming: xrdp_mcs_incoming failed
+May 07 13:18:24 r-000211 xrdp[927615]: [ERROR] xrdp_rdp_incoming: xrdp_sec_incoming failed
+May 07 13:18:24 r-000211 xrdp[927615]: [ERROR] xrdp_process_main_loop: libxrdp_process_incoming failed
+May 07 13:18:24 r-000211 xrdp[927635]: [ERROR] Cannot read private key file /etc/xrdp/key.pem: Permission denied
+May 07 13:18:24 r-000211 xrdp[927615]: [ERROR] xrdp_iso_send: trans_write_copy_s failed
+May 07 13:18:24 r-000211 xrdp[927615]: [ERROR] Sending [ITU T.125] DisconnectProviderUltimatum failed
+May 07 13:21:16 r-000211 xrdp[927635]: [ERROR] xrdp_rdp_recv: xrdp_channel_process failed
+May 07 13:24:26 r-000211 xrdp-sesman[1344]: [ERROR] sesman_data_in: scp_process_msg failed
+May 07 13:24:26 r-000211 xrdp-sesman[1344]: [ERROR] sesman_main_loop: trans_check_wait_objs failed, removing trans
+May 07 13:24:33 r-000211 gdm-password][933424]: gkr-pam: unable to locate daemon control file
+May 07 13:24:36 r-000211 systemd[643746]: Failed to start Notification regarding a crash report.
+May 07 13:58:35 r-000211 gdm-password][963293]: gkr-pam: unable to locate daemon control file
+May 07 14:08:37 r-000211 gdm-password][972960]: gkr-pam: unable to locate daemon control file
+May 07 14:18:43 r-000211 kernel: Out of memory: Killed process 981022 (chrome) total-vm:1460021568kB, anon-rss:6327512kB, file-rss:0kB, shmem-rss:0kB, UID:0 pgtables:14904kB oom_score_adj:300
+May 07 14:48:41 r-000211 gdm-password][1001167]: gkr-pam: unable to locate daemon control file
+May 07 14:59:27 r-000211 gdm-password][1004369]: gkr-pam: unable to locate daemon control file
+May 07 15:28:26 r-000211 gdm-password][1015211]: gkr-pam: unable to locate daemon control file
+May 07 15:37:24 r-000211 xrdp[927635]: [ERROR] xrdp_sec_recv: xrdp_mcs_recv failed
+May 07 15:37:24 r-000211 xrdp[927635]: [ERROR] xrdp_rdp_recv: xrdp_sec_recv failed
+May 07 15:37:24 r-000211 xrdp[927635]: [ERROR] libxrdp_process_data: xrdp_rdp_recv failed
+May 07 15:37:24 r-000211 xrdp[927635]: [ERROR] xrdp_process_data_in: xrdp_process_loop failed
+May 07 15:37:24 r-000211 xrdp[927635]: [ERROR] xrdp_iso_send: trans_write_copy_s failed
+May 07 15:37:24 r-000211 xrdp[927635]: [ERROR] Sending [ITU T.125] DisconnectProviderUltimatum failed
+May 07 21:06:01 r-000211 systemd[1]: snapd.service: Watchdog timeout (limit 5min)!
+May 08 10:18:50 r-000211 xrdp[2161333]: [ERROR] Cannot read private key file /etc/xrdp/key.pem: Permission denied
+May 08 10:18:50 r-000211 xrdp[2161333]: [ERROR] libxrdp_force_read: header read error
+May 08 10:18:50 r-000211 xrdp[2161333]: [ERROR] Processing [ITU-T T.125] Connect-Initial failed
+May 08 10:18:50 r-000211 xrdp[2161333]: [ERROR] [MCS Connection Sequence] receive connection request failed
+May 08 10:18:50 r-000211 xrdp[2161333]: [ERROR] xrdp_sec_incoming: xrdp_mcs_incoming failed
+May 08 10:18:50 r-000211 xrdp[2161333]: [ERROR] xrdp_rdp_incoming: xrdp_sec_incoming failed
+May 08 10:18:50 r-000211 xrdp[2161333]: [ERROR] xrdp_process_main_loop: libxrdp_process_incoming failed
+May 08 10:18:50 r-000211 xrdp[2161333]: [ERROR] xrdp_iso_send: trans_write_copy_s failed
+May 08 10:18:50 r-000211 xrdp[2161333]: [ERROR] Sending [ITU T.125] DisconnectProviderUltimatum failed
+May 08 10:18:50 r-000211 xrdp[2161334]: [ERROR] Cannot read private key file /etc/xrdp/key.pem: Permission denied
+May 08 10:19:02 r-000211 xrdp-sesman[1344]: [ERROR] pam_authenticate failed: Authentication failure
+May 08 10:19:02 r-000211 xrdp-sesman[1344]: [ERROR] sesman_data_in: scp_process_msg failed
+May 08 10:19:02 r-000211 xrdp-sesman[1344]: [ERROR] sesman_main_loop: trans_check_wait_objs failed, removing trans
+May 08 10:19:13 r-000211 xrdp-sesman[1344]: [ERROR] sesman_data_in: scp_process_msg failed
+May 08 10:19:13 r-000211 xrdp-sesman[1344]: [ERROR] sesman_main_loop: trans_check_wait_objs failed, removing trans
+May 08 10:19:35 r-000211 gdm-password][2162960]: gkr-pam: unable to locate daemon control file
+May 08 10:19:37 r-000211 systemd[643746]: Failed to start Notification regarding a crash report.
+May 08 10:47:53 r-000211 gdm-password][2194152]: gkr-pam: unable to locate daemon control file
+May 08 10:49:43 r-000211 xrdp[2161334]: [ERROR] xrdp_sec_recv: xrdp_mcs_recv failed
+May 08 10:49:43 r-000211 xrdp[2161334]: [ERROR] xrdp_rdp_recv: xrdp_sec_recv failed
+May 08 10:49:43 r-000211 xrdp[2161334]: [ERROR] libxrdp_process_data: xrdp_rdp_recv failed
+May 08 10:49:43 r-000211 xrdp[2161334]: [ERROR] xrdp_process_data_in: xrdp_process_loop failed
+May 08 10:49:43 r-000211 xrdp[2161334]: [ERROR] xrdp_iso_send: trans_write_copy_s failed
+May 08 10:49:43 r-000211 xrdp[2161334]: [ERROR] Sending [ITU T.125] DisconnectProviderUltimatum failed
+May 08 10:52:36 r-000211 systemd[643746]: Failed to start GNOME Shell on X11.
+May 08 10:54:13 r-000211 systemd[643746]: Failed to start GNOME Shell on X11.
+May 08 10:55:48 r-000211 systemd[643746]: Failed to start GNOME Shell on X11.
+May 08 11:03:08 r-000211 systemd[1]: Failed to allocate inotify fd: Too many open files
+May 08 11:03:20 r-000211 systemd[1]: snapd.service: Watchdog timeout (limit 5min)!
+May 08 11:17:26 r-000211 systemd[1]: Failed to start Snap Daemon.
+May 08 11:19:52 r-000211 systemd[1]: Failed to start Snap Daemon.
+May 08 11:20:30 r-000211 systemd[1]: Failed to start Snap Daemon.
+May 08 11:20:54 r-000211 systemd[1]: Failed to start Journal Service.
+May 08 11:21:22 r-000211 systemd[1]: Failed to start Snap Daemon.
+May 08 11:24:01 r-000211 systemd[1]: Failed to start Snap Daemon.
+May 08 11:26:00 r-000211 systemd[1]: Failed to start Journal Service.
+May 08 11:26:17 r-000211 systemd[1]: Failed to start Snap Daemon.
+May 08 11:27:13 r-000211 systemd[1]: Failed to start Snap Daemon.
+May 08 11:29:00 r-000211 systemd[1]: Failed to start Journal Service.
+May 08 11:29:37 r-000211 systemd[1]: Failed to start Snap Daemon.
+May 08 11:29:41 r-000211 systemd[1]: Failed to start Snap Daemon.
+May 08 11:29:41 r-000211 systemd[1]: Failed to start Journal Service.
+May 08 11:29:41 r-000211 systemd[1]: Failed to start Snap Daemon.
+May 08 11:29:59 r-000211 systemd[1]: Failed to start Snap Daemon.
+May 08 11:31:28 r-000211 systemd[1]: Failed to start Journal Service.
+May 08 11:31:34 r-000211 systemd[1]: Failed to start Snap Daemon.
+May 08 10:57:20 r-000211 systemd[643746]: Failed to start GNOME Shell on X11.
+May 08 10:57:35 r-000211 systemd[643746]: Failed to start GNOME Shell on X11.
+May 08 10:57:51 r-000211 systemd[643746]: Failed to start GNOME Shell on X11.
+May 08 10:58:06 r-000211 systemd[643746]: Failed to start GNOME Shell on X11.
+May 08 10:58:24 r-000211 systemd[643746]: Failed to start GNOME Shell on X11.
+May 08 10:58:38 r-000211 systemd[643746]: Failed to start GNOME Shell on X11.
+May 08 10:58:56 r-000211 systemd[643746]: Failed to start GNOME Shell on X11.
+May 08 10:59:10 r-000211 systemd[643746]: Failed to start GNOME Shell on X11.
+May 08 10:59:39 r-000211 systemd[643746]: Failed to start GNOME Shell on X11.
+May 08 10:59:56 r-000211 systemd[643746]: Failed to start GNOME Shell on X11.
+May 08 11:00:10 r-000211 systemd[643746]: Failed to start GNOME Shell on X11.
+May 08 11:00:27 r-000211 systemd[643746]: Failed to start GNOME Shell on X11.
+May 08 11:01:48 r-000211 systemd[1]: systemd-journald.service: Watchdog timeout (limit 3min)!
+May 08 11:05:10 r-000211 systemd[1]: Failed to start Snap Daemon.
+May 08 11:06:43 r-000211 systemd[1]: Failed to start Snap Daemon.
+May 08 11:08:17 r-000211 systemd[1]: Failed to start Snap Daemon.
+May 08 11:09:49 r-000211 systemd[1]: Failed to start Snap Daemon.
+May 08 11:11:20 r-000211 systemd[1]: Failed to start Snap Daemon.
+May 08 11:12:53 r-000211 systemd[1]: Failed to start Snap Daemon.
+May 08 11:13:55 r-000211 systemd[1]: systemd-journald.service: Watchdog timeout (limit 3min)!
+May 08 11:32:50 r-000211 systemd[1]: Failed to start Snap Daemon.
+May 08 11:34:22 r-000211 systemd[1]: Failed to start Snap Daemon.
+May 08 11:35:53 r-000211 systemd[1]: Failed to start Snap Daemon.
+May 08 11:37:25 r-000211 systemd[1]: Failed to start Snap Daemon.
+May 08 11:38:55 r-000211 systemd[1]: Failed to start Snap Daemon.
+May 08 11:40:26 r-000211 systemd[1]: Failed to start Snap Daemon.
+May 08 11:41:58 r-000211 systemd[1]: Failed to start Snap Daemon.
+May 08 11:43:30 r-000211 systemd[1]: Failed to start Snap Daemon.
+May 08 11:45:01 r-000211 systemd[1]: Failed to start Snap Daemon.
+May 08 11:46:32 r-000211 systemd[1]: Failed to start Snap Daemon.
+May 08 11:48:03 r-000211 systemd[1]: Failed to start Snap Daemon.
+May 08 11:49:36 r-000211 systemd[1]: Failed to start Snap Daemon.
+May 08 11:51:10 r-000211 systemd[1]: Failed to start Snap Daemon.
+May 08 11:52:43 r-000211 systemd[1]: Failed to start Snap Daemon.
+May 08 11:55:44 r-000211 systemd[1]: Failed to start Snap Daemon.
+May 08 11:57:16 r-000211 systemd[1]: Failed to start Snap Daemon.
+May 08 11:58:47 r-000211 systemd[1]: Failed to start Snap Daemon.
+May 08 12:14:30 r-000211 systemd[1]: snapd.service: Watchdog timeout (limit 5min)!
+May 08 12:16:33 r-000211 systemd[1]: Failed to start Snap Daemon.
+May 08 12:18:06 r-000211 systemd[1]: Failed to start Snap Daemon.
+May 08 12:19:39 r-000211 systemd[1]: Failed to start Snap Daemon.
+May 08 12:21:11 r-000211 systemd[1]: Failed to start Snap Daemon.
+May 08 12:22:42 r-000211 systemd[1]: Failed to start Snap Daemon.
+May 08 12:24:13 r-000211 systemd[1]: Failed to start Snap Daemon.
+May 08 12:25:46 r-000211 systemd[1]: Failed to start Snap Daemon.
+May 08 12:32:24 r-000211 systemd[1]: snapd.service: Watchdog timeout (limit 5min)!
+May 08 12:49:02 r-000211 systemd[1]: snapd.service: Watchdog timeout (limit 5min)!
+May 08 12:50:41 r-000211 systemd[1]: Failed to start Snap Daemon.
+May 08 12:52:12 r-000211 systemd[1]: Failed to start Snap Daemon.
+May 08 12:53:44 r-000211 systemd[1]: Failed to start Snap Daemon.
+May 08 12:55:16 r-000211 systemd[1]: Failed to start Snap Daemon.
+May 08 12:59:09 r-000211 systemd[1]: Failed to start Snap Daemon.
+May 08 13:27:11 r-000211 systemd[1]: snapd.service: Watchdog timeout (limit 5min)!
+May 08 13:29:09 r-000211 systemd[1]: Failed to start Snap Daemon.
+May 08 13:30:40 r-000211 systemd[1]: Failed to start Snap Daemon.
+May 08 13:32:20 r-000211 systemd[1]: Failed to start Snap Daemon.
+May 08 13:33:51 r-000211 systemd[1]: Failed to start Snap Daemon.
+May 08 13:35:27 r-000211 systemd[1]: Failed to start Snap Daemon.
+May 08 13:36:58 r-000211 systemd[1]: Failed to start Snap Daemon.
+May 08 13:38:56 r-000211 systemd[1]: Failed to start Snap Daemon.
+May 08 13:40:34 r-000211 systemd[1]: Failed to start Snap Daemon.
+May 08 13:42:05 r-000211 systemd[1]: Failed to start Snap Daemon.
+May 08 13:43:36 r-000211 systemd[1]: Failed to start Snap Daemon.
+May 08 13:56:49 r-000211 systemd[1]: systemd-journald.service: Watchdog timeout (limit 3min)!
+May 08 13:59:58 r-000211 systemd[1]: snapd.service: Watchdog timeout (limit 5min)!
+May 08 14:02:21 r-000211 systemd[1]: Failed to start Snap Daemon.
+May 08 14:03:53 r-000211 systemd[1]: Failed to start Snap Daemon.
+May 08 14:04:34 r-000211 systemd[1]: systemd-journald.service: Watchdog timeout (limit 3min)!
+May 08 14:05:24 r-000211 systemd[1]: Failed to start Snap Daemon.
+May 08 14:06:54 r-000211 systemd[1]: Failed to start Snap Daemon.
+May 08 14:08:25 r-000211 systemd[1]: Failed to start Snap Daemon.
+May 08 14:11:32 r-000211 systemd[1]: Failed to start Snap Daemon.
+May 08 14:13:14 r-000211 systemd[1]: Failed to start Snap Daemon.
+May 08 14:14:36 r-000211 kernel: Out of memory: Killed process 2199201 (chrome) total-vm:1460195436kB, anon-rss:246280kB, file-rss:0kB, shmem-rss:0kB, UID:0 pgtables:1732kB oom_score_adj:300
+May 08 14:22:27 r-000211 systemd[1]: snapd.service: Watchdog timeout (limit 5min)!
+May 08 14:27:37 r-000211 systemd[1]: Failed to start Snap Daemon.
+May 08 14:25:13 r-000211 systemd[1]: Failed to start Snap Daemon.
+May 08 14:26:22 r-000211 systemd[1]: systemd-journald.service: Watchdog timeout (limit 3min)!
+May 08 14:47:52 r-000211 systemd[1]: snapd.service: Watchdog timeout (limit 5min)!
+May 08 14:49:57 r-000211 systemd[1]: Failed to start Snap Daemon.
+May 08 14:52:59 r-000211 systemd[1]: Failed to start Snap Daemon.
+May 08 14:54:29 r-000211 systemd[1]: Failed to start Snap Daemon.
+May 08 14:56:03 r-000211 systemd[1]: Failed to start Snap Daemon.
+May 08 14:57:34 r-000211 systemd[1]: Failed to start Snap Daemon.
+May 08 14:59:29 r-000211 systemd[1]: Failed to start Snap Daemon.
+May 08 15:07:23 r-000211 systemd[1]: Failed to start Firmware update daemon.
+May 08 15:07:35 r-000211 systemd[1]: Failed to start Refresh fwupd metadata and update motd.
+May 08 15:29:35 r-000211 systemd[1]: snapd.service: Watchdog timeout (limit 5min)!
+May 08 15:36:55 r-000211 systemd[1]: Failed to start Snap Daemon.
+May 08 15:32:43 r-000211 systemd[1]: Failed to start Snap Daemon.
+May 08 15:34:14 r-000211 systemd[1]: Failed to start Snap Daemon.
+May 08 15:35:43 r-000211 systemd[1]: systemd-journald.service: Watchdog timeout (limit 3min)!
+May 08 15:37:17 r-000211 systemd[1]: Failed to start Snap Daemon.
+May 08 15:38:52 r-000211 systemd[1]: Failed to start Snap Daemon.
+May 08 15:40:34 r-000211 systemd[1]: Failed to start Snap Daemon.
+May 08 15:42:09 r-000211 systemd[1]: Failed to start Snap Daemon.
+May 08 15:43:44 r-000211 systemd[1]: Failed to start Snap Daemon.
+May 08 15:45:28 r-000211 systemd[1]: Failed to start Snap Daemon.
+May 08 15:46:59 r-000211 systemd[1]: Failed to start Snap Daemon.
+May 08 15:48:31 r-000211 systemd[1]: Failed to start Snap Daemon.
+May 08 15:50:15 r-000211 systemd[1]: Failed to start Snap Daemon.
+May 08 15:51:59 r-000211 systemd[1]: Failed to start Snap Daemon.
+May 08 15:55:00 r-000211 systemd[1]: Failed to start Snap Daemon.
+May 08 15:56:35 r-000211 systemd[1]: Failed to start Snap Daemon.
+May 08 15:58:06 r-000211 systemd[1]: Failed to start Snap Daemon.
+May 08 15:59:51 r-000211 systemd[1]: Failed to start Snap Daemon.
+May 08 16:01:23 r-000211 systemd[1]: Failed to start Snap Daemon.
+May 08 16:02:56 r-000211 systemd[1]: Failed to start Snap Daemon.
+May 08 16:04:29 r-000211 systemd[1]: Failed to start Snap Daemon.
+May 08 16:06:00 r-000211 systemd[1]: Failed to start Snap Daemon.
+May 08 16:07:39 r-000211 systemd[1]: Failed to start Snap Daemon.
+May 08 16:09:16 r-000211 systemd[1]: Failed to start Snap Daemon.
+May 08 16:10:48 r-000211 systemd[1]: Failed to start Snap Daemon.
+May 08 16:12:23 r-000211 systemd[1]: Failed to start Snap Daemon.
+May 08 16:13:54 r-000211 systemd[1]: Failed to start Snap Daemon.
+May 08 16:15:33 r-000211 systemd[1]: Failed to start Snap Daemon.
+May 08 16:17:07 r-000211 systemd[1]: Failed to start Snap Daemon.
+May 08 16:18:43 r-000211 systemd[1]: Failed to start Snap Daemon.
+May 08 16:20:18 r-000211 systemd[1]: Failed to start Snap Daemon.
+May 08 16:21:50 r-000211 systemd[1]: Failed to start Snap Daemon.
+May 08 16:23:27 r-000211 systemd[1]: Failed to start Snap Daemon.
+May 08 16:25:02 r-000211 systemd[1]: Failed to start Snap Daemon.
+May 08 16:26:34 r-000211 systemd[1]: Failed to start Snap Daemon.
+May 08 16:28:24 r-000211 systemd[1]: Failed to start Snap Daemon.
+May 08 16:34:12 r-000211 kernel: Out of memory: Killed process 2306884 (chrome) total-vm:1460018836kB, anon-rss:88360kB, file-rss:0kB, shmem-rss:0kB, UID:0 pgtables:1196kB oom_score_adj:300
+May 08 16:30:42 r-000211 systemd[1]: Failed to start Snap Daemon.
+May 08 16:37:14 r-000211 systemd[1]: Failed to start Snap Daemon.
+May 08 16:38:54 r-000211 kernel: Out of memory: Killed process 2301806 (chrome) total-vm:1460081976kB, anon-rss:87232kB, file-rss:0kB, shmem-rss:0kB, UID:0 pgtables:1300kB oom_score_adj:300
+May 08 16:39:15 r-000211 systemd[1]: Failed to start Snap Daemon.
+May 08 17:29:56 r-000211 kernel: INFO: task ThreadPoolForeg:2398956 blocked for more than 120 seconds.
+May 08 17:30:15 r-000211 kernel:       Not tainted 5.15.0-171-generic #181-Ubuntu
+May 08 17:30:15 r-000211 kernel: "echo 0 > /proc/sys/kernel/hung_task_timeout_secs" disables this message.
+May 08 17:33:54 r-000211 kernel: INFO: task ThreadPoolForeg:2379027 blocked for more than 120 seconds.
+May 08 17:33:54 r-000211 kernel:       Not tainted 5.15.0-171-generic #181-Ubuntu
+May 08 17:33:55 r-000211 kernel: "echo 0 > /proc/sys/kernel/hung_task_timeout_secs" disables this message.
+May 08 17:33:55 r-000211 kernel: INFO: task ThreadPoolForeg:2397939 blocked for more than 120 seconds.
+May 08 17:33:55 r-000211 kernel:       Not tainted 5.15.0-171-generic #181-Ubuntu
+May 08 17:33:55 r-000211 kernel: "echo 0 > /proc/sys/kernel/hung_task_timeout_secs" disables this message.
+May 08 17:33:55 r-000211 kernel: INFO: task ThreadPoolForeg:2398552 blocked for more than 120 seconds.
+May 08 17:33:55 r-000211 kernel:       Not tainted 5.15.0-171-generic #181-Ubuntu
+May 08 17:33:55 r-000211 kernel: "echo 0 > /proc/sys/kernel/hung_task_timeout_secs" disables this message.
+May 08 17:33:55 r-000211 kernel: INFO: task ThreadPoolForeg:2399609 blocked for more than 120 seconds.
+May 08 17:33:55 r-000211 kernel:       Not tainted 5.15.0-171-generic #181-Ubuntu
+May 08 17:33:55 r-000211 kernel: "echo 0 > /proc/sys/kernel/hung_task_timeout_secs" disables this message.
+May 08 17:33:55 r-000211 kernel: INFO: task ThreadPoolForeg:2400352 blocked for more than 120 seconds.
+May 08 17:33:55 r-000211 kernel:       Not tainted 5.15.0-171-generic #181-Ubuntu
+May 08 17:33:55 r-000211 kernel: "echo 0 > /proc/sys/kernel/hung_task_timeout_secs" disables this message.
+May 08 17:31:42 r-000211 systemd[1]: systemd-journald.service: Watchdog timeout (limit 3min)!
+May 08 17:34:19 r-000211 kernel: INFO: task ThreadPoolForeg:2379027 blocked for more than 241 seconds.
+May 08 17:34:19 r-000211 kernel:       Not tainted 5.15.0-171-generic #181-Ubuntu
+May 08 17:34:19 r-000211 kernel: "echo 0 > /proc/sys/kernel/hung_task_timeout_secs" disables this message.
+May 08 17:34:21 r-000211 kernel: INFO: task ThreadPoolForeg:2397939 blocked for more than 241 seconds.
+May 08 17:34:21 r-000211 kernel:       Not tainted 5.15.0-171-generic #181-Ubuntu
+May 08 17:34:21 r-000211 kernel: "echo 0 > /proc/sys/kernel/hung_task_timeout_secs" disables this message.
+May 08 17:34:21 r-000211 kernel: INFO: task ThreadPoolForeg:2399609 blocked for more than 241 seconds.
+May 08 17:34:21 r-000211 kernel:       Not tainted 5.15.0-171-generic #181-Ubuntu
+May 08 17:34:21 r-000211 kernel: "echo 0 > /proc/sys/kernel/hung_task_timeout_secs" disables this message.
+May 08 17:34:21 r-000211 kernel: INFO: task ThreadPoolForeg:2399403 blocked for more than 120 seconds.
+May 08 17:34:21 r-000211 kernel:       Not tainted 5.15.0-171-generic #181-Ubuntu
+May 08 17:34:21 r-000211 kernel: "echo 0 > /proc/sys/kernel/hung_task_timeout_secs" disables this message.
+May 08 17:34:21 r-000211 systemd[1]: Failed to start Journal Service.
+May 08 18:04:34 r-000211 systemd[1]: Failed to start Firmware update daemon.
+May 08 18:04:56 r-000211 systemd[1]: Failed to start Refresh fwupd metadata and update motd.
+May 08 18:23:02 r-000211 systemd[1]: snapd.service: Watchdog timeout (limit 5min)!
+May 08 18:25:53 r-000211 systemd[1]: Failed to start Snap Daemon.
+May 08 18:27:23 r-000211 systemd[1]: Failed to start Snap Daemon.
+May 08 18:31:16 r-000211 systemd[1]: Failed to start Snap Daemon.
+May 08 18:33:05 r-000211 systemd[1]: Failed to start Snap Daemon.
+May 08 18:55:51 r-000211 systemd[1]: snapd.service: Watchdog timeout (limit 5min)!
+May 08 18:57:51 r-000211 systemd[1]: Failed to start Snap Daemon.
+May 08 19:08:00 r-000211 systemd[1]: Failed to start Snap Daemon.
+May 08 19:10:42 r-000211 systemd[1]: Failed to start Snap Daemon.
+May 08 19:13:08 r-000211 systemd[1]: Failed to start Snap Daemon.
+May 08 19:13:18 r-000211 systemd[1]: Failed to start Snap Daemon.
+May 08 19:13:24 r-000211 systemd[1]: Failed to start Journal Service.
+May 08 19:13:41 r-000211 systemd[1]: Failed to start Snap Daemon.
+May 08 19:13:44 r-000211 systemd[1]: Failed to start Snap Daemon.
+May 08 19:16:38 r-000211 systemd[1]: Failed to start Journal Service.
+May 08 19:16:40 r-000211 systemd[1]: Failed to start Snap Daemon.
+May 08 19:16:40 r-000211 systemd[1]: Failed to start Snap Daemon.
+May 08 18:59:24 r-000211 systemd[1]: Failed to start Snap Daemon.
+May 08 19:19:39 r-000211 systemd[1]: Failed to start Journal Service.
+May 08 19:20:12 r-000211 systemd[1]: Failed to start Snap Daemon.
+May 08 19:20:12 r-000211 systemd[1]: Failed to start Snap Daemon.
+May 08 19:00:55 r-000211 systemd[1]: Failed to start Snap Daemon.
+May 08 19:02:26 r-000211 systemd[1]: Failed to start Snap Daemon.
+May 08 19:04:01 r-000211 systemd[1]: Failed to start Snap Daemon.
+May 08 19:04:05 r-000211 systemd[1]: systemd-journald.service: Watchdog timeout (limit 3min)!
+May 08 19:20:44 r-000211 systemd[1]: Failed to start Journal Service.
+May 08 19:21:14 r-000211 systemd[1]: Failed to start Snap Daemon.
+May 08 19:22:46 r-000211 systemd[1]: Failed to start Snap Daemon.
+May 08 19:24:16 r-000211 systemd[1]: Failed to start Snap Daemon.
+May 08 19:25:48 r-000211 systemd[1]: Failed to start Snap Daemon.
+May 08 19:27:20 r-000211 systemd[1]: Failed to start Snap Daemon.
+May 08 19:28:54 r-000211 systemd[1]: Failed to start Snap Daemon.
+May 08 19:30:26 r-000211 systemd[1]: Failed to start Snap Daemon.
+May 08 19:32:00 r-000211 systemd[1]: Failed to start Snap Daemon.
+May 08 19:33:31 r-000211 systemd[1]: Failed to start Snap Daemon.
+May 08 19:35:03 r-000211 systemd[1]: Failed to start Snap Daemon.
+May 08 19:36:35 r-000211 systemd[1]: Failed to start Snap Daemon.
+May 08 19:38:08 r-000211 systemd[1]: Failed to start Snap Daemon.
+May 08 19:39:39 r-000211 systemd[1]: Failed to start Snap Daemon.
+May 08 19:44:06 r-000211 kernel: Out of memory: Killed process 2516330 (chrome) total-vm:1460082232kB, anon-rss:80776kB, file-rss:0kB, shmem-rss:0kB, UID:0 pgtables:1264kB oom_score_adj:300
+May 08 19:42:44 r-000211 systemd[1]: Failed to start Snap Daemon.
+May 08 19:44:35 r-000211 systemd[1]: Failed to start Snap Daemon.
+May 08 20:02:33 r-000211 systemd[1]: snapd.service: Watchdog timeout (limit 5min)!
+May 08 20:04:26 r-000211 systemd[1]: Failed to start Snap Daemon.
+May 08 20:05:56 r-000211 systemd[1]: Failed to start Snap Daemon.
+May 08 20:07:34 r-000211 systemd[1]: Failed to start Snap Daemon.
+May 08 20:09:09 r-000211 systemd[1]: Failed to start Snap Daemon.
+May 08 20:12:10 r-000211 systemd[1]: Failed to start Snap Daemon.
+May 08 20:13:42 r-000211 systemd[1]: Failed to start Snap Daemon.
+May 08 20:15:13 r-000211 systemd[1]: Failed to start Snap Daemon.
+May 08 20:16:44 r-000211 systemd[1]: Failed to start Snap Daemon.
+May 08 20:18:14 r-000211 systemd[1]: Failed to start Snap Daemon.
+May 08 20:19:46 r-000211 systemd[1]: Failed to start Snap Daemon.
+May 08 20:21:18 r-000211 systemd[1]: Failed to start Snap Daemon.
+May 08 20:22:51 r-000211 systemd[1]: Failed to start Snap Daemon.
+May 08 20:24:22 r-000211 systemd[1]: Failed to start Snap Daemon.
+May 08 20:25:53 r-000211 systemd[1]: Failed to start Snap Daemon.
+May 08 20:48:13 r-000211 systemd[1]: Failed to start Journal Service.
+May 08 20:41:40 r-000211 systemd[1]: systemd-journald.service: Watchdog timeout (limit 3min)!
+May 08 20:51:49 r-000211 systemd[1]: Failed to start Journal Service.
+May 08 20:54:21 r-000211 systemd[1]: Failed to start Journal Service.
+May 08 20:56:30 r-000211 systemd[1]: Failed to start Journal Service.
+May 08 20:58:45 r-000211 systemd[1]: snapd.service: Watchdog timeout (limit 5min)!
+May 08 21:07:37 r-000211 systemd[1]: Failed to start Snap Daemon.
+May 08 21:07:50 r-000211 systemd[1]: Failed to start Snap Daemon.
+May 08 21:01:38 r-000211 systemd[1]: Failed to start Snap Daemon.
+May 08 21:03:08 r-000211 systemd[1]: Failed to start Snap Daemon.
+May 08 21:04:41 r-000211 systemd[1]: Failed to start Snap Daemon.
+May 08 21:05:39 r-000211 systemd[1]: systemd-journald.service: Watchdog timeout (limit 3min)!
+May 08 21:09:15 r-000211 systemd[1]: Failed to start Snap Daemon.
+May 08 21:12:19 r-000211 systemd[1]: Failed to start Snap Daemon.
+May 08 21:13:50 r-000211 systemd[1]: Failed to start Snap Daemon.
+May 08 21:16:55 r-000211 systemd[1]: Failed to start Snap Daemon.
+May 08 21:18:25 r-000211 systemd[1]: Failed to start Snap Daemon.
+May 08 21:19:57 r-000211 systemd[1]: Failed to start Snap Daemon.
+May 08 21:21:32 r-000211 systemd[1]: Failed to start Snap Daemon.
+May 08 21:23:05 r-000211 systemd[1]: Failed to start Snap Daemon.
+May 08 21:24:38 r-000211 systemd[1]: Failed to start Snap Daemon.
+May 08 21:26:09 r-000211 systemd[1]: Failed to start Snap Daemon.
+May 08 21:27:40 r-000211 systemd[1]: Failed to start Snap Daemon.
+May 08 21:29:11 r-000211 systemd[1]: Failed to start Snap Daemon.
+May 08 21:30:45 r-000211 systemd[1]: Failed to start Snap Daemon.
+May 08 21:32:16 r-000211 systemd[1]: Failed to start Snap Daemon.
+May 08 21:33:39 r-000211 kernel: Out of memory: Killed process 2558977 (chrome) total-vm:1460017884kB, anon-rss:670272kB, file-rss:0kB, shmem-rss:0kB, UID:0 pgtables:2652kB oom_score_adj:300
+May 08 21:34:01 r-000211 systemd[1]: Failed to start Snap Daemon.
+May 08 21:51:34 r-000211 systemd-networkd-wait-online[2605556]: Could not create manager: Too many open files
+May 08 22:01:05 r-000211 systemd[1]: systemd-journald.service: Watchdog timeout (limit 3min)!
+May 08 22:04:24 r-000211 systemd[1]: Failed to start Journal Service.
+May 08 22:17:13 r-000211 systemd[1]: snapd.service: Watchdog timeout (limit 5min)!
+May 08 22:22:18 r-000211 systemd[1]: Failed to start Snap Daemon.
+May 08 22:20:36 r-000211 systemd[1]: Failed to start Snap Daemon.
+May 08 22:20:39 r-000211 systemd[1]: systemd-journald.service: Watchdog timeout (limit 3min)!
+May 08 22:23:41 r-000211 systemd[1]: Failed to start Snap Daemon.
+May 08 22:25:12 r-000211 systemd[1]: Failed to start Snap Daemon.
+May 08 22:26:43 r-000211 systemd[1]: Failed to start Snap Daemon.
+May 08 22:28:15 r-000211 systemd[1]: Failed to start Snap Daemon.
+May 08 22:29:47 r-000211 systemd[1]: Failed to start Snap Daemon.
+May 08 22:31:18 r-000211 systemd[1]: Failed to start Snap Daemon.
+May 08 22:32:49 r-000211 systemd[1]: Failed to start Snap Daemon.
+May 08 22:34:20 r-000211 systemd[1]: Failed to start Snap Daemon.
+May 09 12:37:12 r-000211 xrdp[3343498]: [ERROR] Cannot read private key file /etc/xrdp/key.pem: Permission denied
+May 09 12:37:12 r-000211 xrdp[3343498]: [ERROR] libxrdp_force_read: header read error
+May 09 12:37:12 r-000211 xrdp[3343498]: [ERROR] Processing [ITU-T T.125] Connect-Initial failed
+May 09 12:37:12 r-000211 xrdp[3343498]: [ERROR] [MCS Connection Sequence] receive connection request failed
+May 09 12:37:12 r-000211 xrdp[3343498]: [ERROR] xrdp_sec_incoming: xrdp_mcs_incoming failed
+May 09 12:37:12 r-000211 xrdp[3343498]: [ERROR] xrdp_rdp_incoming: xrdp_sec_incoming failed
+May 09 12:37:12 r-000211 xrdp[3343498]: [ERROR] xrdp_process_main_loop: libxrdp_process_incoming failed
+May 09 12:37:12 r-000211 xrdp[3343498]: [ERROR] xrdp_iso_send: trans_write_copy_s failed
+May 09 12:37:12 r-000211 xrdp[3343498]: [ERROR] Sending [ITU T.125] DisconnectProviderUltimatum failed
+May 09 12:37:12 r-000211 xrdp[3343499]: [ERROR] Cannot read private key file /etc/xrdp/key.pem: Permission denied
+May 09 12:37:23 r-000211 xrdp-sesman[1344]: [ERROR] sesman_data_in: scp_process_msg failed
+May 09 12:37:23 r-000211 xrdp-sesman[1344]: [ERROR] sesman_main_loop: trans_check_wait_objs failed, removing trans
+May 09 12:37:48 r-000211 xrdp[3343499]: [ERROR] xrdp_sec_recv: xrdp_mcs_recv failed
+May 09 12:37:48 r-000211 xrdp[3343499]: [ERROR] xrdp_rdp_recv: xrdp_sec_recv failed
+May 09 12:37:48 r-000211 xrdp[3343499]: [ERROR] libxrdp_process_data: xrdp_rdp_recv failed
+May 09 12:37:48 r-000211 xrdp[3343499]: [ERROR] xrdp_process_data_in: xrdp_process_loop failed
+May 09 12:37:48 r-000211 xrdp[3343499]: [ERROR] xrdp_iso_send: trans_write_copy_s failed
+May 09 12:37:48 r-000211 xrdp[3343499]: [ERROR] Sending [ITU T.125] DisconnectProviderUltimatum failed
+May 10 20:17:02 r-000211 xrdp[466751]: [ERROR] Cannot read private key file /etc/xrdp/key.pem: Permission denied
+May 10 20:17:02 r-000211 xrdp[466751]: [ERROR] libxrdp_force_read: header read error
+May 10 20:17:02 r-000211 xrdp[466751]: [ERROR] Processing [ITU-T T.125] Connect-Initial failed
+May 10 20:17:02 r-000211 xrdp[466751]: [ERROR] [MCS Connection Sequence] receive connection request failed
+May 10 20:17:02 r-000211 xrdp[466751]: [ERROR] xrdp_sec_incoming: xrdp_mcs_incoming failed
+May 10 20:17:02 r-000211 xrdp[466751]: [ERROR] xrdp_rdp_incoming: xrdp_sec_incoming failed
+May 10 20:17:02 r-000211 xrdp[466751]: [ERROR] xrdp_process_main_loop: libxrdp_process_incoming failed
+May 10 20:17:02 r-000211 xrdp[466751]: [ERROR] xrdp_iso_send: trans_write_copy_s failed
+May 10 20:17:02 r-000211 xrdp[466751]: [ERROR] Sending [ITU T.125] DisconnectProviderUltimatum failed
+May 10 20:17:03 r-000211 xrdp[466753]: [ERROR] Cannot read private key file /etc/xrdp/key.pem: Permission denied
+May 10 20:17:17 r-000211 xrdp-sesman[1344]: [ERROR] sesman_data_in: scp_process_msg failed
+May 10 20:17:17 r-000211 xrdp-sesman[1344]: [ERROR] sesman_main_loop: trans_check_wait_objs failed, removing trans
+May 10 20:20:31 r-000211 xrdp-chansrv[3344115]: [ERROR] clipboard_event_selection_request: unknown target text/plain;charset=utf-8
+May 10 20:25:54 r-000211 xrdp-chansrv[3344115]: [ERROR] clipboard_event_selection_request: unknown target text/plain;charset=utf-8

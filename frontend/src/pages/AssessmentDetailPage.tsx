@@ -63,9 +63,10 @@ function UploadTab({
   const [uploading, setUploading] = useState(false);
   const [analyzing, setAnalyzing] = useState(false);
   const [docs, setDocs] = useState(assessment.uploaded_documents);
-  const [analyzeResult, setAnalyzeResult] = useState<null | { controls_analyzed: number; compliance_score: number }>(null);
+  const [analyzeResult, setAnalyzeResult] = useState<null | { compliance_score: number }>(null);
   const [error, setError] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   async function handleFiles(files: FileList | null) {
     if (!files || files.length === 0) return;
@@ -82,19 +83,37 @@ function UploadTab({
     setUploading(false);
   }
 
+  function stopPolling() {
+    if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
+  }
+
   async function runAnalysis() {
     setAnalyzing(true);
     setError("");
     try {
-      const result = await complianceApi.analyzeAssessment(assessment.id);
-      setAnalyzeResult(result);
-      // Reload full assessment
-      const updated = await complianceApi.getResults(assessment.id);
-      onAnalyzed(updated);
+      await complianceApi.analyzeAssessment(assessment.id);
+      // Poll every 4 seconds until the background job finishes
+      pollRef.current = setInterval(async () => {
+        try {
+          const s = await complianceApi.getAnalyzeStatus(assessment.id);
+          if (s.status === "completed") {
+            stopPolling();
+            setAnalyzing(false);
+            setAnalyzeResult({ compliance_score: s.compliance_score ?? 0 });
+            const updated = await complianceApi.getResults(assessment.id);
+            onAnalyzed(updated);
+          } else if (s.status === "failed") {
+            stopPolling();
+            setAnalyzing(false);
+            setError(s.error ?? "Analysis failed. Make sure Ollama is running and the model is available.");
+          }
+        } catch {
+          // transient poll error — keep trying
+        }
+      }, 4000);
     } catch {
-      setError("Analysis failed. Make sure Ollama is running and the model is available.");
-    } finally {
       setAnalyzing(false);
+      setError("Could not start analysis. Make sure documents are uploaded.");
     }
   }
 
@@ -153,7 +172,7 @@ function UploadTab({
 
       {analyzeResult && (
         <div className="bg-green-50 border border-green-200 rounded-xl p-4 text-sm text-green-700">
-          Analysis complete — {analyzeResult.controls_analyzed} controls evaluated, score: {analyzeResult.compliance_score}%
+          Analysis complete — compliance score: {analyzeResult.compliance_score}%
         </div>
       )}
 

@@ -66,6 +66,10 @@ class ComplianceAssessment(Base):
     # Overall score (computed)
     compliance_score: Mapped[float | None] = mapped_column(Float, nullable=True)
 
+    # AI analysis job status: idle | running | completed | failed
+    ai_analysis_status: Mapped[str] = mapped_column(String(20), default="idle", nullable=False, server_default="idle")
+    ai_analysis_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+
     # Relationships
     tenant: Mapped["Tenant"] = relationship(
         "Tenant", back_populates="compliance_assessments"

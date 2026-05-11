@@ -859,17 +859,148 @@ async def upload_document(
     )
 
 
-@router.post("/assessments/{assessment_id}/analyze")
+async def _run_analysis_background(assessment_id: str, tenant_id: str, user_id: str) -> None:
+    """Background worker — runs the full AI analysis with its own DB session."""
+    from app.core.database import AsyncSessionLocal
+    from app.models.framework import ControlRequirement
+
+    async with AsyncSessionLocal() as db:
+        try:
+            result = await db.execute(
+                select(ComplianceAssessment).where(
+                    ComplianceAssessment.id == assessment_id,
+                    ComplianceAssessment.tenant_id == tenant_id,
+                )
+            )
+            assessment = result.scalar_one_or_none()
+            if not assessment:
+                return
+
+            docs_result = await db.execute(
+                select(UploadedDocument).where(UploadedDocument.assessment_id == assessment_id)
+            )
+            docs = docs_result.scalars().all()
+            doc_text = "\n\n---\n\n".join(d.extracted_text or "" for d in docs).strip()
+
+            ctrl_result = await db.execute(
+                select(FrameworkControl)
+                .where(FrameworkControl.framework_id == assessment.framework_id)
+                .order_by(FrameworkControl.sort_order)
+            )
+            controls = ctrl_result.scalars().all()
+
+            # Clear previous results
+            old_cas = (await db.execute(
+                select(ControlAssessment).where(ControlAssessment.assessment_id == assessment_id)
+            )).scalars().all()
+            for ca in old_cas:
+                await db.delete(ca)
+            old_gaps = (await db.execute(
+                select(ComplianceGap).where(ComplianceGap.assessment_id == assessment_id)
+            )).scalars().all()
+            for gap in old_gaps:
+                await db.delete(gap)
+            await db.flush()
+
+            model = settings.OLLAMA_CHAT_MODEL
+            verdicts = await _run_batch_analysis(doc_text, controls, model)
+
+            verdict_map = {
+                "compliant": ControlStatus.IMPLEMENTED,
+                "partial": ControlStatus.PARTIALLY_IMPLEMENTED,
+                "not_covered": ControlStatus.NOT_IMPLEMENTED,
+                "not_applicable": ControlStatus.NOT_APPLICABLE,
+            }
+            verdict_by_cid: dict[str, dict] = {v.get("control_id", ""): v for v in verdicts}
+
+            req_result = await db.execute(
+                select(ControlRequirement).where(
+                    ControlRequirement.control_id.in_([c.id for c in controls])
+                )
+            )
+            req_levels: dict[str, list[str]] = {}
+            for r in req_result.scalars().all():
+                req_levels.setdefault(r.control_id, []).append(r.requirement_level)
+
+            implemented = partial = not_applicable = 0
+
+            for control in controls:
+                v = verdict_by_cid.get(control.control_id, {})
+                verdict_str = v.get("verdict", "not_covered")
+                ctrl_status = verdict_map.get(verdict_str, ControlStatus.NOT_IMPLEMENTED)
+
+                db.add(ControlAssessment(
+                    assessment_id=assessment_id,
+                    control_id=control.id,
+                    status=ctrl_status,
+                    ai_confidence=float(v.get("confidence", 0.0)),
+                    implementation_notes=v.get("explanation"),
+                ))
+
+                if ctrl_status == ControlStatus.IMPLEMENTED:
+                    implemented += 1
+                elif ctrl_status == ControlStatus.PARTIALLY_IMPLEMENTED:
+                    partial += 1
+                elif ctrl_status == ControlStatus.NOT_APPLICABLE:
+                    not_applicable += 1
+
+                if ctrl_status in (ControlStatus.NOT_IMPLEMENTED, ControlStatus.PARTIALLY_IMPLEMENTED):
+                    gap_desc = v.get("gap_description") or f"{control.title} is not adequately addressed."
+                    levels = req_levels.get(control.id, [])
+                    has_must = "must" in levels
+                    is_blocker = ctrl_status == ControlStatus.NOT_IMPLEMENTED and has_must
+                    if is_blocker:
+                        severity, priority = "high", 90
+                    elif ctrl_status == ControlStatus.NOT_IMPLEMENTED:
+                        severity, priority = "medium", 60
+                    elif has_must:
+                        severity, priority = "medium", 50
+                    else:
+                        severity, priority = "low", 30
+                    db.add(ComplianceGap(
+                        assessment_id=assessment_id,
+                        control_id=control.id,
+                        gap_description=gap_desc,
+                        severity=severity,
+                        remediation_steps=f"Implement {control.title} per framework guidance.",
+                        is_certification_blocker=is_blocker,
+                        remediation_priority=priority,
+                    ))
+
+            total = len(controls)
+            scoreable = total - not_applicable
+            score = round((implemented + partial * 0.5) / scoreable * 100, 1) if scoreable > 0 else 0.0
+
+            assessment.compliance_score = score
+            assessment.status = AssessmentStatus.IN_PROGRESS
+            assessment.ai_analysis_status = "completed"
+            assessment.ai_analysis_error = None
+            await db.commit()
+
+        except Exception as exc:
+            try:
+                async with AsyncSessionLocal() as err_db:
+                    err_result = await err_db.execute(
+                        select(ComplianceAssessment).where(ComplianceAssessment.id == assessment_id)
+                    )
+                    a = err_result.scalar_one_or_none()
+                    if a:
+                        a.ai_analysis_status = "failed"
+                        a.ai_analysis_error = str(exc)[:500]
+                        await err_db.commit()
+            except Exception:
+                pass
+
+
+@router.post("/assessments/{assessment_id}/analyze", status_code=202)
 async def analyze_assessment(
     assessment_id: str,
+    background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_roles(UserRole.CISO)),
     tenant_id: str = Depends(get_tenant_id),
 ) -> dict:
-    """
-    Trigger AI analysis of uploaded documents against framework controls.
-    Synchronous — may take 1–5 minutes for large frameworks.
-    """
+    """Start AI analysis as a background job — returns 202 immediately."""
     result = await db.execute(
         select(ComplianceAssessment).where(
             ComplianceAssessment.id == assessment_id,
@@ -880,137 +1011,46 @@ async def analyze_assessment(
     if not assessment:
         raise HTTPException(status_code=404, detail="Assessment not found")
 
+    if assessment.ai_analysis_status == "running":
+        return {"status": "running", "message": "Analysis already in progress"}
+
     docs_result = await db.execute(
         select(UploadedDocument).where(UploadedDocument.assessment_id == assessment_id)
     )
-    docs = docs_result.scalars().all()
-    if not docs:
+    if not docs_result.scalars().all():
         raise HTTPException(status_code=400, detail="No documents uploaded. Upload at least one document first.")
 
-    doc_text = "\n\n---\n\n".join(d.extracted_text or "" for d in docs).strip()
-    if not doc_text:
-        raise HTTPException(status_code=400, detail="No text could be extracted from the uploaded documents.")
+    assessment.ai_analysis_status = "running"
+    assessment.ai_analysis_error = None
+    await db.commit()
 
-    ctrl_result = await db.execute(
-        select(FrameworkControl)
-        .where(FrameworkControl.framework_id == assessment.framework_id)
-        .order_by(FrameworkControl.sort_order)
-    )
-    controls = ctrl_result.scalars().all()
-    if not controls:
-        raise HTTPException(status_code=400, detail="No controls found for this framework.")
+    background_tasks.add_task(_run_analysis_background, assessment_id, tenant_id, current_user.id)
 
-    # Delete previous analysis results
-    old_cas = (await db.execute(
-        select(ControlAssessment).where(ControlAssessment.assessment_id == assessment_id)
-    )).scalars().all()
-    for ca in old_cas:
-        await db.delete(ca)
+    return {"status": "running", "message": "Analysis started"}
 
-    old_gaps = (await db.execute(
-        select(ComplianceGap).where(ComplianceGap.assessment_id == assessment_id)
-    )).scalars().all()
-    for gap in old_gaps:
-        await db.delete(gap)
 
-    await db.flush()
-
-    # Run AI analysis — guard against blowing the daily token budget. The
-    # batch analysis is unmetered per-call (sync workers, no user context),
-    # so we estimate up-front and record a lump sum after.
-    from app.core import ai_quota
-    estimated = ai_quota.estimate_tokens(doc_text) + len(controls) * 200
-    ai_quota.check_quota_or_raise(current_user.id, estimated)
-    model = settings.OLLAMA_CHAT_MODEL
-    verdicts = await _run_batch_analysis(doc_text, controls, model)
-    ai_quota.record_usage(current_user.id, estimated)
-
-    verdict_map = {
-        "compliant": ControlStatus.IMPLEMENTED,
-        "partial": ControlStatus.PARTIALLY_IMPLEMENTED,
-        "not_covered": ControlStatus.NOT_IMPLEMENTED,
-        "not_applicable": ControlStatus.NOT_APPLICABLE,
-    }
-
-    verdict_by_cid: dict[str, dict] = {v.get("control_id", ""): v for v in verdicts}
-
-    # Load requirement levels for severity calculation
-    from app.models.framework import ControlRequirement
-    req_result = await db.execute(
-        select(ControlRequirement).where(
-            ControlRequirement.control_id.in_([c.id for c in controls])
+@router.get("/assessments/{assessment_id}/analyze-status")
+async def get_analyze_status(
+    assessment_id: str,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_roles(UserRole.CISO)),
+    tenant_id: str = Depends(get_tenant_id),
+) -> dict:
+    """Poll for background analysis job status."""
+    result = await db.execute(
+        select(ComplianceAssessment).where(
+            ComplianceAssessment.id == assessment_id,
+            ComplianceAssessment.tenant_id == tenant_id,
         )
     )
-    req_levels: dict[str, list[str]] = {}
-    for r in req_result.scalars().all():
-        req_levels.setdefault(r.control_id, []).append(r.requirement_level)
-
-    implemented = partial = not_applicable = 0
-
-    for control in controls:
-        v = verdict_by_cid.get(control.control_id, {})
-        verdict_str = v.get("verdict", "not_covered")
-        ctrl_status = verdict_map.get(verdict_str, ControlStatus.NOT_IMPLEMENTED)
-
-        ca = ControlAssessment(
-            assessment_id=assessment_id,
-            control_id=control.id,
-            status=ctrl_status,
-            ai_confidence=float(v.get("confidence", 0.0)),
-            implementation_notes=v.get("explanation"),
-        )
-        db.add(ca)
-
-        if ctrl_status == ControlStatus.IMPLEMENTED:
-            implemented += 1
-        elif ctrl_status == ControlStatus.PARTIALLY_IMPLEMENTED:
-            partial += 1
-        elif ctrl_status == ControlStatus.NOT_APPLICABLE:
-            not_applicable += 1
-
-        if ctrl_status in (ControlStatus.NOT_IMPLEMENTED, ControlStatus.PARTIALLY_IMPLEMENTED):
-            gap_desc = v.get("gap_description") or f"{control.title} is not adequately addressed."
-            levels = req_levels.get(control.id, [])
-            has_must = "must" in levels
-            is_blocker = ctrl_status == ControlStatus.NOT_IMPLEMENTED and has_must
-            if is_blocker:
-                severity = "high"
-                priority = 90
-            elif ctrl_status == ControlStatus.NOT_IMPLEMENTED:
-                severity = "medium"
-                priority = 60
-            elif has_must:
-                severity = "medium"
-                priority = 50
-            else:
-                severity = "low"
-                priority = 30
-            db.add(ComplianceGap(
-                assessment_id=assessment_id,
-                control_id=control.id,
-                gap_description=gap_desc,
-                severity=severity,
-                remediation_steps=f"Implement {control.title} per framework guidance.",
-                is_certification_blocker=is_blocker,
-                remediation_priority=priority,
-            ))
-
-    total = len(controls)
-    scoreable = total - not_applicable
-    score = round((implemented + partial * 0.5) / scoreable * 100, 1) if scoreable > 0 else 0.0
-
-    assessment.compliance_score = score
-    assessment.status = AssessmentStatus.IN_PROGRESS
-    await db.flush()
+    assessment = result.scalar_one_or_none()
+    if not assessment:
+        raise HTTPException(status_code=404, detail="Assessment not found")
 
     return {
-        "status": "completed",
-        "compliance_score": score,
-        "controls_analyzed": total,
-        "implemented": implemented,
-        "partial": partial,
-        "not_covered": total - implemented - partial - not_applicable,
-        "not_applicable": not_applicable,
+        "status": assessment.ai_analysis_status,
+        "compliance_score": assessment.compliance_score,
+        "error": assessment.ai_analysis_error,
     }
 
 

@@ -17,7 +17,7 @@ from datetime import datetime, timezone
 from fastapi import HTTPException
 
 # Daily token limit per user (prompt + completion combined). Adjust in one place.
-DAILY_TOKEN_LIMIT = 100_000
+DAILY_TOKEN_LIMIT = 10_000_000  # Local Ollama — no cost, no hard cap needed
 
 # Tokenizer-free estimate: roughly 4 characters per token for English. Used to
 # pre-block huge prompts before we hit Ollama; actual usage replaces the

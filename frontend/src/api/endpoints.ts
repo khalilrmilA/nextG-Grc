@@ -234,8 +234,15 @@ export const complianceApi = {
 
   analyzeAssessment: (assessmentId: string) =>
     apiClient
-      .post<{ status: string; compliance_score: number; controls_analyzed: number }>(
+      .post<{ status: string; message: string }>(
         `/compliance/assessments/${assessmentId}/analyze`
+      )
+      .then((r) => r.data),
+
+  getAnalyzeStatus: (assessmentId: string) =>
+    apiClient
+      .get<{ status: string; compliance_score: number | null; error: string | null }>(
+        `/compliance/assessments/${assessmentId}/analyze-status`
       )
       .then((r) => r.data),
 

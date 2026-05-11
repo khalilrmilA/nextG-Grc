@@ -98,7 +98,10 @@ class ApiClient {
         }
 
         // Server-side failures — backend is broken, not a user error
-        if (status !== undefined && status >= 500) {
+        // Exception: compliance analyze endpoint handles its own errors (long-running background job)
+        const url: string = error.config?.url ?? "";
+        const isAnalyze = url.includes("/compliance/assessments/") && url.includes("/analyze");
+        if (status !== undefined && status >= 500 && !isAnalyze) {
           window.location.href = "/service-down";
           return Promise.reject(error);
         }
