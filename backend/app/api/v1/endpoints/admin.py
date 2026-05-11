@@ -12,7 +12,7 @@ from pydantic import BaseModel, field_serializer
 from app.core.database import get_db
 from app.models.user import User, UserRole
 from app.models.tenant import Tenant
-from app.models.subscription import Subscription
+from app.models.subscription import Subscription, SubscriptionTier, SubscriptionStatus
 from app.models.ai_access import AiAccessRequest, AiUsageQuota
 from app.api.v1.dependencies.auth import require_roles
 from app.workers.tasks.notifications import (
@@ -406,3 +406,98 @@ async def set_user_quota(
         await db.commit()
 
     return {"status": "ok", "quota_id": quota.id}
+
+
+# ── Subscription management ───────────────────────────────────────────────────
+
+class SubscriptionAdminResponse(BaseModel):
+    tenant_id: str
+    tenant_name: str
+    tier: str
+    status: str
+    trial_ends_at: str | None
+
+    model_config = {"from_attributes": True}
+
+
+class UpdateSubscriptionRequest(BaseModel):
+    tier: str | None = None          # starter | professional | enterprise
+    status: str | None = None        # trialing | active | past_due | canceled | paused
+    trial_ends_at: str | None = None # ISO datetime string, or null to clear
+
+
+@router.get("/subscriptions", response_model=list[SubscriptionAdminResponse])
+async def list_subscriptions(
+    db: Annotated[AsyncSession, Depends(get_db)],
+    _: Annotated[User, Depends(_require_super_admin())],
+):
+    """List every tenant with its subscription tier, status, and trial expiry."""
+    result = await db.execute(
+        select(Tenant, Subscription)
+        .outerjoin(Subscription, Subscription.tenant_id == Tenant.id)
+        .where(Tenant.slug != "platform")
+        .order_by(Tenant.name)
+    )
+    rows = result.all()
+    out = []
+    for tenant, sub in rows:
+        out.append(SubscriptionAdminResponse(
+            tenant_id=tenant.id,
+            tenant_name=tenant.name,
+            tier=sub.tier.value if sub else "starter",
+            status=sub.status.value if sub else "trialing",
+            trial_ends_at=sub.trial_ends_at if sub else None,
+        ))
+    return out
+
+
+@router.patch("/subscriptions/{tenant_id}", response_model=SubscriptionAdminResponse)
+async def update_subscription(
+    tenant_id: str,
+    body: UpdateSubscriptionRequest,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    _: Annotated[User, Depends(_require_super_admin())],
+):
+    """Update a tenant's subscription plan, status, and/or trial expiry date."""
+    tenant_result = await db.execute(select(Tenant).where(Tenant.id == tenant_id))
+    tenant = tenant_result.scalar_one_or_none()
+    if not tenant:
+        raise HTTPException(status_code=404, detail="Tenant not found")
+
+    sub_result = await db.execute(select(Subscription).where(Subscription.tenant_id == tenant_id))
+    sub = sub_result.scalar_one_or_none()
+    if not sub:
+        raise HTTPException(status_code=404, detail="Subscription not found for this tenant")
+
+    if body.tier is not None:
+        try:
+            sub.tier = SubscriptionTier(body.tier)
+        except ValueError:
+            raise HTTPException(status_code=400, detail=f"Invalid tier: {body.tier}")
+
+    if body.status is not None:
+        try:
+            sub.status = SubscriptionStatus(body.status)
+        except ValueError:
+            raise HTTPException(status_code=400, detail=f"Invalid status: {body.status}")
+
+    # trial_ends_at: null clears it; a date string sets it
+    if "trial_ends_at" in body.model_fields_set:
+        if body.trial_ends_at is None:
+            sub.trial_ends_at = None
+        else:
+            try:
+                sub.trial_ends_at = body.trial_ends_at  # store as-is (ISO string)
+            except Exception:
+                raise HTTPException(status_code=400, detail="Invalid trial_ends_at date format")
+
+    await db.commit()
+    await db.refresh(sub)
+
+    return SubscriptionAdminResponse(
+        tenant_id=tenant.id,
+        tenant_name=tenant.name,
+        tier=sub.tier.value,
+        status=sub.status.value,
+        trial_ends_at=sub.trial_ends_at,
+    )

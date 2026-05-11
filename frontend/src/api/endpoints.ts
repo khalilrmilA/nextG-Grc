@@ -43,6 +43,7 @@ export interface UserProfile {
   first_name: string;
   last_name: string;
   role: string;
+  roles?: string[];
   tenant_id: string;
   tenant_name: string;
   primary_framework_id: string | null;

@@ -96,6 +96,7 @@ function SuperAdminRoute({ children }: { readonly children: React.ReactNode }) {
 // tenant_admin = only true admin. ciso = broad security oversight role.
 const ADMIN_ROLES = ["tenant_admin"];
 const CISO_AND_ADMIN = [...ADMIN_ROLES, "ciso"];
+// viewer = full read-only access to all modules — write ops blocked at HTTP client level
 const ROUTE_ROLES: Record<string, string[]> = {
   "/risks":               [...CISO_AND_ADMIN, "risk_manager", "compliance_manager", "control_owner", "viewer"],
   "/risk-scenarios":      [...CISO_AND_ADMIN, "risk_manager", "compliance_manager", "control_owner", "viewer"],

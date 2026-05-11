@@ -60,7 +60,7 @@ class ApiClient {
   }
 
   private setupInterceptors(): void {
-    // Request: attach access token; block write requests for viewer (demo) accounts.
+    // Request: attach access token; block write requests for viewer (read-only) accounts.
     this.client.interceptors.request.use(
       (config: InternalAxiosRequestConfig) => {
         const { access } = this.getTokens();
@@ -68,14 +68,14 @@ class ApiClient {
           config.headers.Authorization = `Bearer ${access}`;
         }
 
-        // Viewer role = demo/read-only — block all mutating requests client-side.
+        // Viewer role = read-only — block all mutating requests client-side.
         const method = (config.method ?? "get").toUpperCase();
         const writeMethods = ["POST", "PUT", "PATCH", "DELETE"];
         // Allow auth endpoints (login, change-password, etc.) to pass through.
         const isAuthEndpoint = (config.url ?? "").includes("/auth/");
         if (this.isViewerRole() && writeMethods.includes(method) && !isAuthEndpoint) {
           window.dispatchEvent(new CustomEvent("demo-block"));
-          const err = new Error("Demo accounts are read-only. Sign up to use this feature.") as Error & { isDemoBlock: boolean };
+          const err = new Error("You have read-only access. Contact your administrator to request additional permissions.") as Error & { isDemoBlock: boolean };
           err.isDemoBlock = true;
           return Promise.reject(err);
         }

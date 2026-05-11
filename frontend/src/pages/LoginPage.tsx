@@ -92,7 +92,9 @@ export default function LoginPage() {
           authSession.login({
             ...current,
             role: (profile.role as UserRole),
-            roles: (profile as { roles?: string[] }).roles ?? [],
+            roles: profile.roles ?? [],
+            org: profile.tenant_name || current.org,
+            name: [profile.first_name, profile.last_name].filter(Boolean).join(" ") || current.name,
             daysRemaining: current.plan === "free_trial" ? daysRemaining : undefined,
             tenant_id: profile.tenant_id,
             primary_framework_id: profile.primary_framework_id,

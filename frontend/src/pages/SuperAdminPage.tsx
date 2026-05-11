@@ -6,15 +6,17 @@ import {
   superAdminFrameworksApi,
   superAdminAccessApi,
   superAdminAiAccessApi,
+  superAdminSubscriptionsApi,
   type SuperAdminUser,
   type SuperAdminFramework,
   type AccessControlEntry,
+  type TenantSubscription,
 } from "../api/superadmin";
 import type { AiAccessRequest } from "../types";
 import {
-  Users, Shield, BookOpen, LogOut, Settings, Sparkles,
+  Users, Shield, BookOpen, LogOut, Settings, Sparkles, CreditCard,
   ToggleLeft, ToggleRight, Trash2, Upload,
-  Plus, AlertCircle, Loader2, X, CheckCircle, ThumbsUp, ThumbsDown,
+  Plus, AlertCircle, Loader2, X, CheckCircle, ThumbsUp, ThumbsDown, Pencil,
 } from "lucide-react";
 
 // ── Mock data (offline / demo fallback) ──────────────────────────────────────
@@ -54,19 +56,159 @@ function DemoBanner() {
   );
 }
 
+// ── Subscription helpers (shared by UsersTab + SubscriptionsTab) ──────────────
+
+const TIER_OPTIONS = ["starter", "professional", "enterprise"] as const;
+const STATUS_OPTIONS = ["active", "trialing", "past_due", "canceled", "paused"] as const;
+
+const TIER_COLORS: Record<string, string> = {
+  starter:      "bg-gray-100 text-gray-700",
+  professional: "bg-blue-100 text-blue-700",
+  enterprise:   "bg-purple-100 text-purple-700",
+};
+
+const STATUS_COLORS: Record<string, string> = {
+  active:   "bg-emerald-100 text-emerald-700",
+  trialing: "bg-amber-100 text-amber-700",
+  past_due: "bg-red-100 text-red-700",
+  canceled: "bg-gray-100 text-gray-500",
+  paused:   "bg-orange-100 text-orange-700",
+};
+
+function EditSubscriptionModal({
+  sub,
+  onClose,
+  onSaved,
+}: {
+  readonly sub: TenantSubscription;
+  readonly onClose: () => void;
+  readonly onSaved: (updated: TenantSubscription) => void;
+}) {
+  const [tier, setTier]     = useState(sub.tier);
+  const [status, setStatus] = useState(sub.status);
+  const [expiresAt, setExpiresAt] = useState(
+    sub.trial_ends_at ? sub.trial_ends_at.slice(0, 10) : ""
+  );
+  const [saving, setSaving] = useState(false);
+  const [error, setError]   = useState("");
+
+  async function handleSave(e: React.FormEvent) {
+    e.preventDefault();
+    setSaving(true);
+    setError("");
+    try {
+      const payload: { tier: string; status: string; trial_ends_at?: string | null } = { tier, status };
+      payload.trial_ends_at = (status === "trialing" && expiresAt)
+        ? `${expiresAt}T00:00:00Z`
+        : null;
+      const updated = await superAdminSubscriptionsApi.update(sub.tenant_id, payload);
+      onSaved(updated);
+    } catch {
+      setError("Failed to save. Please try again.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+          <h2 className="font-semibold text-gray-900 flex items-center gap-2">
+            <CreditCard className="w-4 h-4 text-indigo-600" /> Edit Subscription — {sub.tenant_name}
+          </h2>
+          <button type="button" onClick={onClose} className="p-1 rounded-lg hover:bg-gray-100 text-gray-400"><X className="w-4 h-4" /></button>
+        </div>
+
+        <form onSubmit={handleSave} className="p-6 space-y-5">
+          <div>
+            <label className="block text-xs font-medium text-gray-700 mb-2">Plan / Tier</label>
+            <div className="grid grid-cols-3 gap-2">
+              {TIER_OPTIONS.map(t => (
+                <button key={t} type="button" onClick={() => setTier(t)}
+                  className={`py-2.5 rounded-xl text-sm font-medium border-2 transition-all capitalize ${
+                    tier === t ? "border-indigo-600 bg-indigo-600 text-white" : "border-gray-200 text-gray-600 hover:border-indigo-400"
+                  }`}>
+                  {t}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-xs font-medium text-gray-700 mb-2">Status</label>
+            <div className="grid grid-cols-2 gap-2">
+              {STATUS_OPTIONS.map(s => (
+                <button key={s} type="button" onClick={() => setStatus(s)}
+                  className={`py-2.5 rounded-xl text-sm font-medium border-2 transition-all capitalize ${
+                    status === s ? "border-indigo-600 bg-indigo-600 text-white" : "border-gray-200 text-gray-600 hover:border-indigo-400"
+                  }`}>
+                  {s.replace("_", " ")}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {status === "trialing" && (
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">Trial Expiry Date</label>
+              <input type="date" value={expiresAt} onChange={e => setExpiresAt(e.target.value)}
+                className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+              <p className="text-xs text-gray-400 mt-1">Leave blank to clear the expiry date.</p>
+            </div>
+          )}
+
+          {error && (
+            <div className="flex items-center gap-2 text-red-600 text-sm bg-red-50 px-3 py-2.5 rounded-lg">
+              <AlertCircle className="w-4 h-4 flex-shrink-0" /> {error}
+            </div>
+          )}
+
+          <div className="flex gap-3 pt-1">
+            <button type="button" onClick={onClose}
+              className="flex-1 py-2.5 border border-gray-200 rounded-xl text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors">
+              Cancel
+            </button>
+            <button type="submit" disabled={saving}
+              className="flex-1 py-2.5 bg-indigo-600 text-white rounded-xl text-sm font-medium hover:bg-indigo-700 disabled:opacity-60 transition-colors flex items-center justify-center gap-2">
+              {saving ? <><Loader2 className="w-4 h-4 animate-spin" /> Saving…</> : "Save Changes"}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
 // ── Tab: Users ────────────────────────────────────────────────────────────────
 
 function UsersTab() {
-  const [users, setUsers]     = useState<SuperAdminUser[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [isDemo, setIsDemo]   = useState(false);
-  const [busy, setBusy]       = useState<string | null>(null);
+  const [users, setUsers]       = useState<SuperAdminUser[]>([]);
+  const [subs, setSubs]         = useState<Record<string, TenantSubscription>>({});
+  const [loading, setLoading]   = useState(true);
+  const [isDemo, setIsDemo]     = useState(false);
+  const [busy, setBusy]         = useState<string | null>(null);
+  const [editSub, setEditSub]   = useState<TenantSubscription | null>(null);
 
   useEffect(() => {
-    superAdminUsersApi.listAll()
-      .then(data => { setUsers(data); setLoading(false); })
+    Promise.all([
+      superAdminUsersApi.listAll(),
+      superAdminSubscriptionsApi.listAll(),
+    ])
+      .then(([usersData, subsData]) => {
+        setUsers(usersData);
+        const map: Record<string, TenantSubscription> = {};
+        subsData.forEach(s => { map[s.tenant_id] = s; });
+        setSubs(map);
+        setLoading(false);
+      })
       .catch(() => { setUsers(MOCK_USERS); setIsDemo(true); setLoading(false); });
   }, []);
+
+  function handleSubSaved(updated: TenantSubscription) {
+    setSubs(prev => ({ ...prev, [updated.tenant_id]: updated }));
+    setEditSub(null);
+  }
 
   async function toggleActive(u: SuperAdminUser) {
     setBusy(u.id);
@@ -109,75 +251,125 @@ function UsersTab() {
         <table className="w-full text-sm">
           <thead className="bg-gray-50 border-b border-gray-200">
             <tr>
-              {["User", "Tenant", "Role", "Status", "Actions"].map(h => (
+              {["User", "Tenant / Plan", "Role", "Account", "Actions"].map(h => (
                 <th key={h} className="px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">{h}</th>
               ))}
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100 bg-white">
-            {users.map(u => (
-              <tr key={u.id} className="hover:bg-gray-50 transition-colors">
-                <td className="px-5 py-3.5">
-                  <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-full bg-gradient-to-br from-indigo-400 to-purple-500 flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
-                      {u.first_name.charAt(0).toUpperCase()}
+            {users.map(u => {
+              const sub = subs[u.tenant_id];
+              const expiry = sub?.trial_ends_at ? new Date(sub.trial_ends_at) : null;
+              const expired = expiry && expiry < new Date();
+              return (
+                <tr key={u.id} className="hover:bg-gray-50 transition-colors">
+                  {/* User */}
+                  <td className="px-5 py-3.5">
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 rounded-full bg-gradient-to-br from-indigo-400 to-purple-500 flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
+                        {u.first_name.charAt(0).toUpperCase()}
+                      </div>
+                      <div>
+                        <p className="font-medium text-gray-900 leading-none">{u.first_name} {u.last_name}</p>
+                        <p className="text-xs text-gray-400 mt-0.5">{u.email}</p>
+                      </div>
                     </div>
-                    <div>
-                      <p className="font-medium text-gray-900 leading-none">{u.first_name} {u.last_name}</p>
-                      <p className="text-xs text-gray-400 mt-0.5">{u.email}</p>
+                  </td>
+
+                  {/* Tenant + subscription info */}
+                  <td className="px-5 py-3.5">
+                    <div className="flex flex-col gap-1">
+                      <span className="px-2.5 py-1 bg-gray-100 text-gray-700 rounded-lg text-xs font-medium w-fit">{u.tenant_name}</span>
+                      {sub ? (
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span className={`px-2 py-0.5 rounded-full text-xs font-semibold capitalize ${TIER_COLORS[sub.tier] ?? "bg-gray-100 text-gray-600"}`}>
+                            {sub.tier}
+                          </span>
+                          <span className={`px-2 py-0.5 rounded-full text-xs font-semibold capitalize ${STATUS_COLORS[sub.status] ?? "bg-gray-100 text-gray-600"}`}>
+                            {sub.status.replace("_", " ")}
+                          </span>
+                          {expiry && (
+                            <span className={`text-xs ${expired ? "text-red-500 font-medium" : "text-gray-400"}`}>
+                              {expired ? "Expired " : "Expires "}{expiry.toLocaleDateString()}
+                            </span>
+                          )}
+                          {u.role !== "super_admin" && (
+                            <button
+                              type="button"
+                              onClick={() => setEditSub(sub)}
+                              className="flex items-center gap-1 px-2 py-0.5 text-xs font-medium text-indigo-600 border border-indigo-200 rounded-lg hover:bg-indigo-50 transition-colors"
+                            >
+                              <Pencil className="w-3 h-3" /> Edit plan
+                            </button>
+                          )}
+                        </div>
+                      ) : (
+                        <span className="text-xs text-gray-300">No subscription</span>
+                      )}
                     </div>
-                  </div>
-                </td>
-                <td className="px-5 py-3.5">
-                  <span className="px-2.5 py-1 bg-gray-100 text-gray-700 rounded-lg text-xs font-medium">{u.tenant_name}</span>
-                </td>
-                <td className="px-5 py-3.5">
-                  {u.role === "super_admin" || u.role === "admin" ? (
-                    <span className="inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-1 bg-yellow-50 text-yellow-700 border border-yellow-200 rounded-lg">
-                      👑 {u.role === "super_admin" ? "Super Admin" : "Owner"}
-                    </span>
-                  ) : (
-                    <select
-                      value={u.role}
+                  </td>
+
+                  {/* Role */}
+                  <td className="px-5 py-3.5">
+                    {u.role === "super_admin" || u.role === "admin" ? (
+                      <span className="inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-1 bg-yellow-50 text-yellow-700 border border-yellow-200 rounded-lg">
+                        👑 {u.role === "super_admin" ? "Super Admin" : "Owner"}
+                      </span>
+                    ) : (
+                      <select
+                        value={u.role}
+                        disabled={busy === u.id}
+                        onChange={e => changeRole(u, e.target.value)}
+                        className="text-xs border border-gray-200 rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
+                      >
+                        <option value="user">User (Full Access)</option>
+                        <option value="auditor">Auditor (Limited)</option>
+                      </select>
+                    )}
+                  </td>
+
+                  {/* Active toggle */}
+                  <td className="px-5 py-3.5">
+                    <button
+                      type="button"
+                      onClick={() => toggleActive(u)}
                       disabled={busy === u.id}
-                      onChange={e => changeRole(u, e.target.value)}
-                      className="text-xs border border-gray-200 rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
+                      className="flex items-center gap-1.5 text-xs font-medium transition-colors"
                     >
-                      <option value="user">User (Full Access)</option>
-                      <option value="auditor">Auditor (Limited)</option>
-                    </select>
-                  )}
-                </td>
-                <td className="px-5 py-3.5">
-                  <button
-                    type="button"
-                    onClick={() => toggleActive(u)}
-                    disabled={busy === u.id}
-                    className="flex items-center gap-1.5 text-xs font-medium transition-colors"
-                  >
-                    {u.is_active
-                      ? <><ToggleRight className="w-5 h-5 text-emerald-500" /><span className="text-emerald-600">Active</span></>
-                      : <><ToggleLeft className="w-5 h-5 text-gray-400" /><span className="text-gray-500">Disabled</span></>
-                    }
-                  </button>
-                </td>
-                <td className="px-5 py-3.5">
-                  <button
-                    type="button"
-                    onClick={() => deleteUser(u.id)}
-                    disabled={busy === u.id}
-                    className="p-1.5 rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors"
-                    title="Delete user"
-                  >
-                    {busy === u.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
-                  </button>
-                </td>
-              </tr>
-            ))}
+                      {u.is_active
+                        ? <><ToggleRight className="w-5 h-5 text-emerald-500" /><span className="text-emerald-600">Active</span></>
+                        : <><ToggleLeft className="w-5 h-5 text-gray-400" /><span className="text-gray-500">Disabled</span></>
+                      }
+                    </button>
+                  </td>
+
+                  {/* Delete */}
+                  <td className="px-5 py-3.5">
+                    <button
+                      type="button"
+                      onClick={() => deleteUser(u.id)}
+                      disabled={busy === u.id}
+                      className="p-1.5 rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors"
+                      title="Delete user"
+                    >
+                      {busy === u.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+                    </button>
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>
       <p className="text-xs text-gray-400 mt-3">{users.length} user{users.length !== 1 ? "s" : ""} across all tenants</p>
+
+      {editSub && (
+        <EditSubscriptionModal
+          sub={editSub}
+          onClose={() => setEditSub(null)}
+          onSaved={handleSubSaved}
+        />
+      )}
     </div>
   );
 }
@@ -845,16 +1037,105 @@ function AiAccessTab() {
   );
 }
 
+// ── Tab: Subscriptions ────────────────────────────────────────────────────────
+
+function SubscriptionsTab() {
+  const [subs, setSubs]       = useState<TenantSubscription[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [isDemo, setIsDemo]   = useState(false);
+  const [editing, setEditing] = useState<TenantSubscription | null>(null);
+
+  useEffect(() => {
+    superAdminSubscriptionsApi.listAll()
+      .then(data => { setSubs(data); setLoading(false); })
+      .catch(() => { setIsDemo(true); setLoading(false); });
+  }, []);
+
+  function handleSaved(updated: TenantSubscription) {
+    setSubs(prev => prev.map(s => s.tenant_id === updated.tenant_id ? updated : s));
+    setEditing(null);
+  }
+
+  if (loading) return <div className="flex justify-center py-20"><Loader2 className="w-8 h-8 animate-spin text-indigo-500" /></div>;
+
+  return (
+    <div>
+      {isDemo && <DemoBanner />}
+      <div className="overflow-x-auto rounded-xl border border-gray-200 shadow-sm">
+        <table className="w-full text-sm">
+          <thead className="bg-gray-50 border-b border-gray-200">
+            <tr>
+              {["Organization", "Plan", "Status", "Trial Expires", "Actions"].map(h => (
+                <th key={h} className="px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-100 bg-white">
+            {subs.map(s => {
+              const expiry = s.trial_ends_at ? new Date(s.trial_ends_at) : null;
+              const expired = expiry && expiry < new Date();
+              return (
+                <tr key={s.tenant_id} className="hover:bg-gray-50 transition-colors">
+                  <td className="px-5 py-3.5 font-medium text-gray-900">{s.tenant_name}</td>
+                  <td className="px-5 py-3.5">
+                    <span className={`px-2.5 py-1 rounded-full text-xs font-semibold capitalize ${TIER_COLORS[s.tier] ?? "bg-gray-100 text-gray-600"}`}>
+                      {s.tier}
+                    </span>
+                  </td>
+                  <td className="px-5 py-3.5">
+                    <span className={`px-2.5 py-1 rounded-full text-xs font-semibold capitalize ${STATUS_COLORS[s.status] ?? "bg-gray-100 text-gray-600"}`}>
+                      {s.status.replace("_", " ")}
+                    </span>
+                  </td>
+                  <td className="px-5 py-3.5 text-sm">
+                    {expiry ? (
+                      <span className={expired ? "text-red-500 font-medium" : "text-gray-700"}>
+                        {expiry.toLocaleDateString()}
+                        {expired && <span className="ml-1.5 text-xs text-red-400">(expired)</span>}
+                      </span>
+                    ) : (
+                      <span className="text-gray-300">—</span>
+                    )}
+                  </td>
+                  <td className="px-5 py-3.5">
+                    <button
+                      type="button"
+                      onClick={() => setEditing(s)}
+                      className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-indigo-600 border border-indigo-200 rounded-lg hover:bg-indigo-50 transition-colors"
+                    >
+                      <Pencil className="w-3 h-3" /> Edit
+                    </button>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+      <p className="text-xs text-gray-400 mt-3">{subs.length} tenant{subs.length !== 1 ? "s" : ""} total</p>
+
+      {editing && (
+        <EditSubscriptionModal
+          sub={editing}
+          onClose={() => setEditing(null)}
+          onSaved={handleSaved}
+        />
+      )}
+    </div>
+  );
+}
+
 // ── Main Page ─────────────────────────────────────────────────────────────────
 
-type TabId = "users" | "access" | "frameworks" | "ai-access" | "settings";
+type TabId = "users" | "access" | "frameworks" | "subscriptions" | "ai-access" | "settings";
 
 const TABS: { id: TabId; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
-  { id: "users",      label: "Users",          icon: Users    },
-  { id: "access",     label: "Access Control", icon: Shield   },
-  { id: "frameworks", label: "Frameworks",     icon: BookOpen },
-  { id: "ai-access",  label: "AI Requests",    icon: Sparkles },
-  { id: "settings",   label: "Settings",       icon: Settings },
+  { id: "users",         label: "Users",          icon: Users       },
+  { id: "access",        label: "Access Control", icon: Shield      },
+  { id: "frameworks",    label: "Frameworks",     icon: BookOpen    },
+  { id: "subscriptions", label: "Subscriptions",  icon: CreditCard  },
+  { id: "ai-access",     label: "AI Requests",    icon: Sparkles    },
+  { id: "settings",      label: "Settings",       icon: Settings    },
 ];
 
 export default function SuperAdminPage() {
@@ -928,6 +1209,7 @@ export default function SuperAdminPage() {
               {activeTab === "users" && "Manage users and roles across all tenants"}
               {activeTab === "access" && "Control which modules each tenant can access"}
               {activeTab === "frameworks" && "Upload and manage compliance frameworks"}
+              {activeTab === "subscriptions" && "Manage tenant plans, statuses, and trial expiry dates"}
               {activeTab === "ai-access" && "Review and approve AI feature access requests"}
               {activeTab === "settings" && "Platform configuration and credentials"}
             </p>
@@ -940,9 +1222,10 @@ export default function SuperAdminPage() {
         {/* Tab content */}
         <main className="flex-1 p-8">
           {activeTab === "users"      && <UsersTab />}
-          {activeTab === "access"     && <AccessControlTab />}
-          {activeTab === "frameworks" && <FrameworksTab />}
-          {activeTab === "ai-access"  && <AiAccessTab />}
+          {activeTab === "access"        && <AccessControlTab />}
+          {activeTab === "frameworks"    && <FrameworksTab />}
+          {activeTab === "subscriptions" && <SubscriptionsTab />}
+          {activeTab === "ai-access"     && <AiAccessTab />}
           {activeTab === "settings"   && <SettingsTab />}
         </main>
       </div>

@@ -382,9 +382,13 @@ export default function Layout() {
       subscriptionsApi.get().then((sub) => {
         const isTrialing = sub.status === "trialing";
         const newPlan = isTrialing ? "free_trial" : (sub.tier as import("../../store/auth").PlanTier);
-        if (newPlan !== user.plan) {
-          authSession.patchUser({ plan: newPlan, daysRemaining: isTrialing ? user.daysRemaining : undefined });
+        // Calculate real days remaining from trial_ends_at
+        let daysRemaining: number | undefined = undefined;
+        if (isTrialing && sub.trial_ends_at) {
+          const msLeft = new Date(sub.trial_ends_at).getTime() - Date.now();
+          daysRemaining = Math.max(0, Math.ceil(msLeft / 86_400_000));
         }
+        authSession.patchUser({ plan: newPlan, daysRemaining });
       }).catch(() => {/* ignore — best effort */});
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -659,22 +663,19 @@ export default function Layout() {
               <div className="hidden sm:block">
                 <p className="text-xs font-semibold text-gray-800 leading-none">{user?.name ?? "User"}</p>
                 <p className="text-xs text-gray-400 mt-0.5">
-                  {isSuperAdmin ? "Platform Admin" : isAdmin ? `${user?.org} · Owner` : user?.role === "viewer" ? "Demo · Read-only" : user?.org ?? ""}
+                  {isSuperAdmin ? "Platform Admin" : isAdmin ? `${user?.org} · Owner` : user?.role === "viewer" ? `${user?.org ?? ""} · Read-only` : user?.org ?? ""}
                 </p>
               </div>
             </div>
           </div>
         </header>
 
-        {/* Demo mode banner for viewer role */}
+        {/* Read-only banner for viewer role */}
         {user?.role === "viewer" && (
           <div className="flex items-center gap-3 px-4 py-2.5 bg-amber-50 border-b border-amber-200 text-amber-800 text-sm flex-shrink-0">
             <Eye className="w-4 h-4 flex-shrink-0 text-amber-600" />
-            <span className="font-medium">Demo Mode</span>
-            <span className="text-amber-700">— You are viewing read-only demo data. All create, edit, and delete actions are disabled.</span>
-            <a href="/register" className="ml-auto flex-shrink-0 px-3 py-1 bg-amber-600 text-white text-xs font-semibold rounded-lg hover:bg-amber-700 transition-colors">
-              Get full access
-            </a>
+            <span className="font-medium">Read-only Access</span>
+            <span className="text-amber-700">— You can view all data but cannot create, edit, or delete anything. Contact your administrator to request additional permissions.</span>
           </div>
         )}
 
@@ -690,14 +691,11 @@ export default function Layout() {
       {/* Onboarding tour — shown for first 3 visits */}
       <OnboardingTour />
 
-      {/* Demo-block toast — appears when viewer tries to write */}
+      {/* Read-only toast — appears when viewer tries to write */}
       {showDemoToast && (
         <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[200] flex items-center gap-3 bg-gray-900 text-white text-sm font-medium px-5 py-3 rounded-2xl shadow-2xl">
           <Eye className="w-4 h-4 text-amber-400 flex-shrink-0" />
-          <span>Demo accounts are read-only.{" "}
-            <a href="/register" className="underline text-amber-400 hover:text-white">Sign up</a>
-            {" "}to use this feature.
-          </span>
+          <span>You have read-only access. Contact your administrator to request additional permissions.</span>
           <button type="button" onClick={() => setShowDemoToast(false)} className="ml-1 text-gray-400 hover:text-white">
             <X className="w-4 h-4" />
           </button>

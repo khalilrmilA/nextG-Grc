@@ -30,6 +30,14 @@ export interface AccessControlEntry {
   enabled_modules: string[];
 }
 
+export interface TenantSubscription {
+  tenant_id: string;
+  tenant_name: string;
+  tier: string;
+  status: string;
+  trial_ends_at: string | null;
+}
+
 export const superAdminUsersApi = {
   listAll: () =>
     apiClient.get<SuperAdminUser[]>("/admin/users").then((r) => r.data),
@@ -79,6 +87,14 @@ export const superAdminAccessApi = {
     apiClient
       .patch(`/admin/tenant-access/${tenant_id}`, { enabled_modules })
       .then((r) => r.data),
+};
+
+export const superAdminSubscriptionsApi = {
+  listAll: () =>
+    apiClient.get<TenantSubscription[]>("/admin/subscriptions").then((r) => r.data),
+
+  update: (tenant_id: string, data: { tier?: string; status?: string; trial_ends_at?: string | null }) =>
+    apiClient.patch<TenantSubscription>(`/admin/subscriptions/${tenant_id}`, data).then((r) => r.data),
 };
 
 export const superAdminAiAccessApi = {

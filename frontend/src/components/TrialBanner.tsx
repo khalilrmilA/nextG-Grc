@@ -11,15 +11,11 @@ export default function TrialBanner() {
   const [dismissed, setDismissed] = useState(false);
 
   useEffect(() => {
-    // Calculate days remaining from trial_ends_at if available
-    if (!user) return;
-
-    // For now, use daysRemaining from auth store if available
+    if (!user || user.plan !== "free_trial") return;
+    // Use stored daysRemaining (already calculated from trial_ends_at by the subscription sync)
     const days = user.daysRemaining ?? null;
-    if (days !== null) {
-      setDaysRemaining(days);
-      setIsExpired(days <= 0);
-    }
+    setDaysRemaining(days);
+    setIsExpired(days !== null && days <= 0);
   }, [user]);
 
   // Don't show if not in trial or dismissed

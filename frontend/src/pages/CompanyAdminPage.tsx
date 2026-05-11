@@ -18,7 +18,7 @@ const ROLE_OPTIONS = [
   { value: "vendor_manager",     label: "Vendor Manager",      desc: "3rd-party risk management (TPRM) only",                          color: "bg-cyan-100 text-cyan-700 border-cyan-200"      },
   { value: "control_owner",      label: "Control Owner",       desc: "Owns specific controls — risks, compliance, applied controls",    color: "bg-pink-100 text-pink-700 border-pink-200"      },
   { value: "auditor",            label: "Auditor",             desc: "Auditor portal only — assigned audits & compliance checklists",  color: "bg-indigo-100 text-indigo-700 border-indigo-200" },
-  { value: "viewer",             label: "Viewer (Read-only)",  desc: "Read-only access to all modules — no create/edit/delete",        color: "bg-gray-100 text-gray-600 border-gray-200"      },
+  { value: "viewer",             label: "Viewer (Read-only)",  desc: "Full access to all modules — can only view, no create/edit/delete", color: "bg-gray-100 text-gray-600 border-gray-200" },
 ];
 
 function roleDef(value: string) {
