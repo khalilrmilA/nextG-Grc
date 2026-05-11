@@ -102,7 +102,7 @@ const ROUTE_ROLES: Record<string, string[]> = {
   "/risk-scenarios":      [...CISO_AND_ADMIN, "risk_manager", "compliance_manager", "control_owner", "viewer"],
   "/risk-quantification": [...CISO_AND_ADMIN, "risk_manager", "viewer"],
   "/compliance":          [...CISO_AND_ADMIN, "risk_manager", "compliance_manager", "policy_manager", "control_owner", "viewer"],
-  "/frameworks":          [...CISO_AND_ADMIN, "compliance_manager", "policy_manager", "viewer"],
+  "/framework":           [...CISO_AND_ADMIN, "compliance_manager", "policy_manager", "viewer"],
   "/audits":              [...CISO_AND_ADMIN, "compliance_manager", "viewer"],
   "/policies":            [...CISO_AND_ADMIN, "compliance_manager", "policy_manager", "viewer"],
   "/policy-generator":    [...CISO_AND_ADMIN, "policy_manager", "viewer"],
@@ -180,10 +180,10 @@ export default function App() {
         <Route path="compliance/:assessmentId" element={<RoleRoute path="/compliance"><PrivateRoute requiredModule="compliance"><AssessmentDetailPage /></PrivateRoute></RoleRoute>} />
         <Route path="compliance/assessments/:assessmentId/remediation-plan" element={<RoleRoute path="/compliance"><PrivateRoute requiredModule="compliance"><RemediationPlannerPage /></PrivateRoute></RoleRoute>} />
         <Route path="compliance/:assessmentId/traceability" element={<RoleRoute path="/compliance"><PrivateRoute requiredModule="compliance"><TraceabilityPage /></PrivateRoute></RoleRoute>} />
-        <Route path="frameworks" element={<RoleRoute path="/frameworks"><PrivateRoute requiredModule="frameworks"><FrameworksPage /></PrivateRoute></RoleRoute>} />
-        <Route path="frameworks/custom/new" element={<RoleRoute path="/frameworks"><PrivateRoute requiredModule="frameworks"><CustomFrameworkPage /></PrivateRoute></RoleRoute>} />
-        <Route path="frameworks/builder" element={<RoleRoute path="/frameworks"><PrivateRoute requiredModule="frameworks"><FrameworkBuilderPage /></PrivateRoute></RoleRoute>} />
-        <Route path="frameworks/:id/edit" element={<RoleRoute path="/frameworks"><PrivateRoute requiredModule="frameworks"><EditFrameworkPage /></PrivateRoute></RoleRoute>} />
+        <Route path="framework" element={<RoleRoute path="/framework"><PrivateRoute requiredModule="frameworks"><FrameworksPage /></PrivateRoute></RoleRoute>} />
+        <Route path="framework/custom/new" element={<RoleRoute path="/framework"><PrivateRoute requiredModule="frameworks"><CustomFrameworkPage /></PrivateRoute></RoleRoute>} />
+        <Route path="framework/builder" element={<RoleRoute path="/framework"><PrivateRoute requiredModule="frameworks"><FrameworkBuilderPage /></PrivateRoute></RoleRoute>} />
+        <Route path="framework/:id/edit" element={<RoleRoute path="/framework"><PrivateRoute requiredModule="frameworks"><EditFrameworkPage /></PrivateRoute></RoleRoute>} />
         <Route path="audits" element={<RoleRoute path="/audits"><PrivateRoute requiredModule="audits"><AuditsPage /></PrivateRoute></RoleRoute>} />
         <Route path="policies" element={<RoleRoute path="/policies"><PrivateRoute requiredModule="policies"><PoliciesPage /></PrivateRoute></RoleRoute>} />
         <Route path="policy-generator" element={<RoleRoute path="/policy-generator"><PrivateRoute requiredModule="policy-generator"><PolicyGeneratorPage /></PrivateRoute></RoleRoute>} />

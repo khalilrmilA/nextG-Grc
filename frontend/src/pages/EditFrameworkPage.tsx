@@ -133,7 +133,7 @@ export default function EditFrameworkPage() {
   if (error || !fw) {
     return (
       <div className="p-8 max-w-7xl space-y-4">
-        <button type="button" onClick={() => navigate("/frameworks")}
+        <button type="button" onClick={() => navigate("/framework")}
           className="flex items-center gap-1.5 text-sm text-gray-600 hover:text-gray-900">
           <ArrowLeft className="w-4 h-4" /> Back to Frameworks
         </button>
@@ -159,7 +159,7 @@ export default function EditFrameworkPage() {
     <div className="p-8 max-w-7xl space-y-6">
       {/* Header */}
       <div className="flex items-start justify-between gap-4">
-        <button type="button" onClick={() => navigate("/frameworks")}
+        <button type="button" onClick={() => navigate("/framework")}
           className="flex items-center gap-1.5 text-sm text-gray-600 hover:text-gray-900">
           <ArrowLeft className="w-4 h-4" /> Back to Frameworks
         </button>

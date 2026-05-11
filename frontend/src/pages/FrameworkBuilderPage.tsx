@@ -295,7 +295,7 @@ export default function FrameworkBuilderPage() {
           source_framework: c.source_framework,
         })),
       });
-      navigate("/frameworks");
+      navigate("/framework");
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Unknown error";
       setError(`Failed to save: ${msg}`);
@@ -336,7 +336,7 @@ export default function FrameworkBuilderPage() {
       <div className="flex items-center justify-between">
         <div>
           <button
-            onClick={() => navigate("/frameworks")}
+            onClick={() => navigate("/framework")}
             className="text-sm text-gray-500 hover:text-gray-700 flex items-center gap-1 mb-2"
           >
             <ArrowLeft className="w-4 h-4" /> Back to Frameworks

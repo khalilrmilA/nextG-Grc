@@ -474,7 +474,7 @@ export default function CustomFrameworkPage() {
       {/* Header */}
       <div>
         <button
-          onClick={() => navigate("/frameworks")}
+          onClick={() => navigate("/framework")}
           className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-800 mb-3"
         >
           <ArrowLeft className="w-4 h-4" />

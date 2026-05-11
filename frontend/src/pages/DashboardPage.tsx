@@ -865,7 +865,7 @@ export default function DashboardPage() {
           <h2 className="text-xl font-bold text-gray-900 mb-2">{t("dashboard.get_started")}</h2>
           <p className="text-gray-600 mb-6 max-w-md mx-auto">{t("dashboard.select_framework_desc")}</p>
           <Link
-            to="/frameworks"
+            to="/framework"
             className="inline-flex items-center gap-2 bg-purple-600 hover:bg-purple-700 text-white font-semibold px-6 py-3 rounded-xl transition-colors"
           >
             <Plus className="w-5 h-5" />
@@ -1001,7 +1001,7 @@ function WelcomeCard() {
         {[
           { label: t("compliance.new_assessment"), href: "/compliance", icon: Plus },
           { label: t("nav.risks"),  href: "/risks",      icon: AlertTriangle },
-          { label: t("nav.frameworks"),     href: "/frameworks",  icon: BookOpen },
+          { label: t("nav.frameworks"),     href: "/framework",  icon: BookOpen },
           { label: t("nav.audits"),         href: "/audits",      icon: ClipboardList },
           { label: t("nav.policies"),       href: "/policies",    icon: FileText },
         ].map(({ label, href, icon: Icon }) => (

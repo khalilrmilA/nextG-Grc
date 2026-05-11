@@ -79,13 +79,13 @@ const TOUR_STEPS: TourStep[] = [
   },
   {
     id: "frameworks",
-    target: 'a[href="/frameworks"]',
+    target: 'a[href="/framework"]',
     title: "Frameworks Library",
     body: "Browse 73+ built-in frameworks from ISO, NIST, GDPR, PCI DSS, regional laws and more — or build your own custom framework.",
     icon: BookOpen,
     iconColor: "from-purple-500 to-violet-600",
     placement: "right",
-    route: "/frameworks",
+    route: "/framework",
   },
   {
     id: "audits",
