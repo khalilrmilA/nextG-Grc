@@ -17,7 +17,7 @@ import {
   ChevronRight, Bell, Settings, HelpCircle, Lock,
   Crown, X, Trash2, Wand2, Menu,
   AlertCircle, Info, ShieldAlert, ClipboardCheck, RefreshCw,
-  Eye,
+  Eye, Users,
 } from "lucide-react";
 
 // roles: null = visible to all authenticated non-auditor users
@@ -571,6 +571,20 @@ export default function Layout() {
 
         {/* Bottom actions */}
         <div className={`px-3 pb-4 pt-3 border-t ${sc.divider} space-y-0.5`}>
+          {/* Team Management — tenant_admin only */}
+          {user?.role === "tenant_admin" && (
+            <NavLink
+              to="/company-admin"
+              className={({ isActive }) =>
+                `flex items-center gap-3 px-3 py-2.5 w-full rounded-xl text-sm font-medium transition-all ${
+                  isActive ? sc.navActive : sc.bottomItem
+                }`
+              }
+            >
+              <Users className="w-4 h-4" />
+              Team Management
+            </NavLink>
+          )}
           {[
             { to: "/settings", icon: Settings,   label: t("nav.settings") },
             { to: "/help",     icon: HelpCircle, label: t("nav.help")     },

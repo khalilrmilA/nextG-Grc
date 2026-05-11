@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Navigate } from "react-router-dom";
 import { useAuthStore } from "../store/auth";
 import { usersApi } from "../api/endpoints";
@@ -294,8 +294,7 @@ export default function CompanyAdminPage() {
     }
   }, [user.tenant_id]);
 
-  // load on mount
-  useState(() => { loadUsers(); });
+  useEffect(() => { loadUsers(); }, [loadUsers]);
 
   const filtered = users.filter(u =>
     `${u.first_name} ${u.last_name} ${u.email}`.toLowerCase().includes(search.toLowerCase())
