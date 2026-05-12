@@ -355,11 +355,6 @@ aside:hover ::-webkit-scrollbar-thumb:hover {
   text-align: right;
 }
 
-/* ── Main app layout: sidebar on the right ── */
-[dir="rtl"] .flex.h-screen {
-  flex-direction: row-reverse;
-}
-
 /* ── Sidebar: pin to right edge in RTL (overrides Tailwind left-0) ── */
 [dir="rtl"] aside {
   left: auto !important;
@@ -463,8 +458,83 @@ aside:hover ::-webkit-scrollbar-thumb:hover {
 /* ── Search input padding: flip icon-offset padding ── */
 [dir="rtl"] .pl-10 { padding-left: 0; padding-right: 2.5rem; }
 [dir="rtl"] .pl-12 { padding-left: 0; padding-right: 3rem; }
+[dir="rtl"] .pr-10 { padding-right: 0; padding-left: 2.5rem; }
+[dir="rtl"] .pr-12 { padding-right: 0; padding-left: 3rem; }
+[dir="rtl"] .pl-1  { padding-left: 0; padding-right: 0.25rem; }
+[dir="rtl"] .pl-7  { padding-left: 0; padding-right: 1.75rem; }
+[dir="rtl"] .pr-1  { padding-right: 0; padding-left: 0.25rem; }
+[dir="rtl"] .pr-7  { padding-right: 0; padding-left: 1.75rem; }
 
 /* ── Chevron-left also flips in RTL ── */
 [dir="rtl"] .lucide-chevron-left {
   transform: scaleX(-1);
 }
+
+/* ── Additional margin flips ── */
+[dir="rtl"] .ml-4  { margin-left: 0; margin-right: 1rem; }
+[dir="rtl"] .ml-5  { margin-left: 0; margin-right: 1.25rem; }
+[dir="rtl"] .ml-6  { margin-left: 0; margin-right: 1.5rem; }
+[dir="rtl"] .ml-8  { margin-left: 0; margin-right: 2rem; }
+[dir="rtl"] .ml-10 { margin-left: 0; margin-right: 2.5rem; }
+[dir="rtl"] .ml-12 { margin-left: 0; margin-right: 3rem; }
+[dir="rtl"] .ml-16 { margin-left: 0; margin-right: 4rem; }
+[dir="rtl"] .mr-4  { margin-right: 0; margin-left: 1rem; }
+[dir="rtl"] .mr-5  { margin-right: 0; margin-left: 1.25rem; }
+[dir="rtl"] .mr-6  { margin-right: 0; margin-left: 1.5rem; }
+[dir="rtl"] .mr-8  { margin-right: 0; margin-left: 2rem; }
+
+/* ── space-x more values ── */
+[dir="rtl"] .space-x-6 > :not([hidden]) ~ :not([hidden]) { margin-left: 0; margin-right: 1.5rem; }
+[dir="rtl"] .space-x-8 > :not([hidden]) ~ :not([hidden]) { margin-left: 0; margin-right: 2rem; }
+
+/* ── Negative absolute offsets for notification badges ── */
+[dir="rtl"] .-right-0\.5 { right: auto !important; left: -0.125rem; }
+[dir="rtl"] .-right-1    { right: auto !important; left: -0.25rem; }
+[dir="rtl"] .-right-2    { right: auto !important; left: -0.5rem; }
+[dir="rtl"] .-right-3    { right: auto !important; left: -0.75rem; }
+[dir="rtl"] .-left-0\.5  { left: auto !important;  right: -0.125rem; }
+[dir="rtl"] .-left-1     { left: auto !important;  right: -0.25rem; }
+
+/* ── Additional absolute right/left positions ── */
+[dir="rtl"] .absolute.right-2  { right: auto; left: 0.5rem; }
+[dir="rtl"] .absolute.right-3  { right: auto; left: 0.75rem; }
+[dir="rtl"] .absolute.right-4  { right: auto; left: 1rem; }
+[dir="rtl"] .absolute.right-6  { right: auto; left: 1.5rem; }
+[dir="rtl"] .absolute.left-2   { left: auto; right: 0.5rem; }
+[dir="rtl"] .absolute.left-6   { left: auto; right: 1.5rem; }
+[dir="rtl"] .absolute.left-8   { left: auto; right: 2rem; }
+
+/* ── Fixed element centering: toasts using left-1/2 -translate-x-1/2 ── */
+[dir="rtl"] .fixed.left-1\/2 { left: auto; right: 50%; }
+[dir="rtl"] .-translate-x-1\/2 {
+  --tw-translate-x: 50%;
+  transform: translate(var(--tw-translate-x), var(--tw-translate-y)) rotate(var(--tw-rotate))
+    skewX(var(--tw-skew-x)) skewY(var(--tw-skew-y)) scaleX(var(--tw-scale-x)) scaleY(var(--tw-scale-y));
+}
+
+/* ── More icon direction flips ── */
+[dir="rtl"] .lucide-log-out         { transform: scaleX(-1); }
+[dir="rtl"] .lucide-send            { transform: scaleX(-1); }
+[dir="rtl"] .lucide-corner-down-left { transform: scaleX(-1); }
+[dir="rtl"] .lucide-move-right      { transform: scaleX(-1); }
+[dir="rtl"] .lucide-chevron-double-right { transform: scaleX(-1); }
+
+/* ── Additional border flips ── */
+[dir="rtl"] .border-l-blue-500  { border-left-color: transparent; border-right-color: rgb(59 130 246); }
+[dir="rtl"] .border-l-red-500   { border-left-color: transparent; border-right-color: rgb(239 68 68); }
+[dir="rtl"] .border-l-green-500 { border-left-color: transparent; border-right-color: rgb(34 197 94); }
+[dir="rtl"] .border-r-gray-200  { border-right-color: transparent; border-left-color: rgb(229 231 235); }
+
+/* ── Rounded corner flips (additional) ── */
+[dir="rtl"] .rounded-l-lg  { border-radius: 0 0.5rem 0.5rem 0; }
+[dir="rtl"] .rounded-r-lg  { border-radius: 0.5rem 0 0 0.5rem; }
+[dir="rtl"] .rounded-l-md  { border-radius: 0 calc(var(--radius) - 2px) calc(var(--radius) - 2px) 0; }
+[dir="rtl"] .rounded-r-md  { border-radius: calc(var(--radius) - 2px) 0 0 calc(var(--radius) - 2px); }
+
+/* ── Inset overrides for sticky/fixed positioned elements ── */
+[dir="rtl"] .inset-y-0.left-0  { left: auto; right: 0; }
+[dir="rtl"] .left-0.right-auto { left: auto; right: 0; }
+
+/* ── Origin flips for dropdowns/popovers ── */
+[dir="rtl"] .origin-top-right { transform-origin: top left; }
+[dir="rtl"] .origin-top-left  { transform-origin: top right; }

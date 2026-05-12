@@ -548,6 +548,7 @@ function FrameworkManagementModal({
   primaryFrameworkId: string | null;
   onFrameworkAdded: () => void;
 }) {
+  const { t } = useTranslation();
   const queryClient = useQueryClient();
   const [allFrameworks, setAllFrameworks] = useState<Framework[]>([]);
   const [loading, setLoading] = useState(true);
@@ -631,7 +632,7 @@ function FrameworkManagementModal({
       <div className="bg-white rounded-2xl shadow-xl max-w-2xl w-full max-h-[80vh] overflow-y-auto">
         {/* Header */}
         <div className="sticky top-0 bg-white border-b border-gray-100 px-6 py-4 flex items-center justify-between">
-          <h2 className="text-lg font-semibold text-gray-900">Add Framework</h2>
+          <h2 className="text-lg font-semibold text-gray-900">{t("dashboard.add_framework")}</h2>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
             <X className="w-5 h-5" />
           </button>
@@ -641,13 +642,13 @@ function FrameworkManagementModal({
         <div className="p-6 space-y-4">
           {/* Available frameworks list */}
           <div>
-            <h3 className="text-sm font-semibold text-gray-700 mb-3">Select Framework</h3>
+            <h3 className="text-sm font-semibold text-gray-700 mb-3">{t("dashboard.select_framework_modal")}</h3>
             {loading ? (
               <div className="flex justify-center py-8">
                 <Loader2 className="w-5 h-5 animate-spin text-blue-500" />
               </div>
             ) : allFrameworks.length === 0 ? (
-              <p className="text-sm text-gray-400 py-4">No frameworks available.</p>
+              <p className="text-sm text-gray-400 py-4">{t("dashboard.no_frameworks")}</p>
             ) : (
               <div className="grid grid-cols-2 gap-3 max-h-64 overflow-y-auto pr-2">
                 {allFrameworks.map((fw) => (
@@ -662,7 +663,7 @@ function FrameworkManagementModal({
                   >
                     <p className="text-xs font-mono font-bold text-gray-600">{fw.short_name}</p>
                     <p className="text-sm font-medium text-gray-800 mt-0.5">{fw.name}</p>
-                    <p className="text-xs text-gray-400 mt-1">{fw.control_count ?? 0} controls</p>
+                    <p className="text-xs text-gray-400 mt-1">{t("dashboard.controls_count", { count: fw.control_count ?? 0 })}</p>
                   </button>
                 ))}
               </div>
@@ -673,9 +674,9 @@ function FrameworkManagementModal({
           {selectedFramework && (
             <div className="border-t border-gray-100 pt-4">
               <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-                <p className="text-xs text-blue-600 font-medium mb-1">Selected:</p>
+                <p className="text-xs text-blue-600 font-medium mb-1">{t("dashboard.selected_label")}</p>
                 <p className="text-sm font-semibold text-blue-900">{selectedFramework.name}</p>
-                <p className="text-xs text-blue-700 mt-1">{selectedFramework.control_count ?? 0} controls</p>
+                <p className="text-xs text-blue-700 mt-1">{t("dashboard.controls_count", { count: selectedFramework.control_count ?? 0 })}</p>
               </div>
             </div>
           )}
@@ -686,7 +687,7 @@ function FrameworkManagementModal({
               onClick={onClose}
               className="flex-1 px-4 py-2 border border-gray-200 text-gray-700 font-medium text-sm rounded-lg hover:bg-gray-50 transition-colors"
             >
-              Cancel
+              {t("common.cancel")}
             </button>
             <button
               onClick={handleAddFramework}
@@ -694,7 +695,7 @@ function FrameworkManagementModal({
               className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-medium text-sm rounded-lg transition-colors"
             >
               {adding ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
-              Add Framework
+              {t("dashboard.add_framework")}
             </button>
           </div>
         </div>
@@ -782,7 +783,7 @@ function OverviewDashboard({
               </div>
               <div className="text-center">
                 <p className="text-sm font-semibold text-gray-800">{t("dashboard.add_framework")}</p>
-                <p className="text-xs text-gray-400 mt-1">Select from available frameworks</p>
+                <p className="text-xs text-gray-400 mt-1">{t("dashboard.select_from_available")}</p>
               </div>
             </div>
           </button>

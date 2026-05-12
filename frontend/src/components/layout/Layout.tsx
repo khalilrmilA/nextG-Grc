@@ -256,17 +256,17 @@ function NotificationBell() {
       >
         <Bell className={`w-4 h-4 ${supportUnread.length > 0 ? "animate-bounce text-red-500" : ""}`} />
         {supportUnread.length > 0 && (
-          <span className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 bg-red-500 rounded-full animate-ping" />
+          <span className="absolute -top-0.5 -right-0.5 rtl:right-auto rtl:-left-0.5 w-2.5 h-2.5 bg-red-500 rounded-full animate-ping" />
         )}
         {unreadCount > 0 && (
-          <span className="absolute -top-0.5 -right-0.5 min-w-[16px] h-4 flex items-center justify-center bg-red-500 text-white text-[10px] font-bold rounded-full px-1">
+          <span className="absolute -top-0.5 -right-0.5 rtl:right-auto rtl:-left-0.5 min-w-[16px] h-4 flex items-center justify-center bg-red-500 text-white text-[10px] font-bold rounded-full px-1">
             {unreadCount > 9 ? "9+" : unreadCount}
           </span>
         )}
       </button>
 
       {open && (
-        <div className="absolute right-0 top-10 w-[calc(100vw-2rem)] sm:w-96 max-w-[24rem] bg-white rounded-2xl shadow-2xl border border-gray-100 z-50 overflow-hidden">
+        <div className="absolute right-0 rtl:right-auto rtl:left-0 top-10 w-[calc(100vw-2rem)] sm:w-96 max-w-[24rem] bg-white rounded-2xl shadow-2xl border border-gray-100 z-50 overflow-hidden">
           {/* Header */}
           <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
             <div className="flex items-center gap-2">
@@ -539,10 +539,7 @@ export default function Layout() {
   const planSub = resolvePlanSub();
 
   return (
-    <div
-      className="flex h-screen bg-gray-50"
-      style={{ flexDirection: isRTL ? "row-reverse" : "row" }}
-    >
+    <div className="flex h-screen bg-gray-50">
       {/* ── Mobile sidebar backdrop ── */}
       {mobileSidebarOpen && (
         <div
@@ -764,7 +761,7 @@ export default function Layout() {
             {/* Live notification bell */}
             <NotificationBell />
             {/* Avatar */}
-            <div className="flex items-center gap-2.5 pl-3 border-l border-gray-100">
+            <div className="flex items-center gap-2.5 pl-3 rtl:pl-0 rtl:pr-3 border-l rtl:border-l-0 rtl:border-r border-gray-100">
               <div className={`w-8 h-8 rounded-full bg-gradient-to-br ${roleColor} flex items-center justify-center text-white shadow-sm`}>
                 {user ? (
                   <span className="text-sm font-bold">{initials}</span>
@@ -805,7 +802,7 @@ export default function Layout() {
 
       {/* Read-only toast — appears when viewer tries to write */}
       {showDemoToast && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[200] flex items-center gap-3 bg-gray-900 text-white text-sm font-medium px-5 py-3 rounded-2xl shadow-2xl">
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 rtl:left-auto rtl:right-1/2 rtl:translate-x-1/2 z-[200] flex items-center gap-3 bg-gray-900 text-white text-sm font-medium px-5 py-3 rounded-2xl shadow-2xl">
           <Eye className="w-4 h-4 text-amber-400 flex-shrink-0" />
           <span>{t("nav.read_only_toast")}</span>
           <button type="button" onClick={() => setShowDemoToast(false)} className="ml-1 text-gray-400 hover:text-white">

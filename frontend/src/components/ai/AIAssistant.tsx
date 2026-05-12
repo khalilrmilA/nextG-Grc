@@ -255,17 +255,17 @@ export default function AIAssistant() {
     return (
       <button
         onClick={() => setOpen(true)}
-        className="ai-assistant-button fixed bottom-6 right-6 z-50 w-14 h-14 bg-gradient-to-br from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white rounded-2xl shadow-xl shadow-blue-500/30 flex items-center justify-center transition-all hover:scale-110 group"
+        className="ai-assistant-button fixed bottom-6 right-6 rtl:right-auto rtl:left-6 z-50 w-14 h-14 bg-gradient-to-br from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white rounded-2xl shadow-xl shadow-blue-500/30 flex items-center justify-center transition-all hover:scale-110 group"
         title="GRC AI Assistant"
       >
         <Bot className="w-6 h-6" />
-        <span className="absolute -top-1 -right-1 w-3.5 h-3.5 bg-green-400 rounded-full border-2 border-white" />
+        <span className="absolute -top-1 -right-1 rtl:right-auto rtl:-left-1 w-3.5 h-3.5 bg-green-400 rounded-full border-2 border-white" />
       </button>
     );
   }
 
   return (
-    <div className="fixed bottom-6 right-6 z-50 flex flex-col w-[400px] max-h-[620px] bg-white rounded-3xl shadow-2xl shadow-black/20 border border-gray-100 overflow-hidden">
+    <div className="fixed bottom-6 right-6 rtl:right-auto rtl:left-6 z-50 flex flex-col w-[400px] max-h-[620px] bg-white rounded-3xl shadow-2xl shadow-black/20 border border-gray-100 overflow-hidden">
 
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3.5 bg-gradient-to-r from-blue-600 to-indigo-600 text-white flex-shrink-0">

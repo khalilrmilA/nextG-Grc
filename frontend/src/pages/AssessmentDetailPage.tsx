@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import { useTranslation } from "react-i18next";
 import { useParams, useNavigate } from "react-router-dom";
 import {
   ArrowLeft, Upload, FileText, Play, Loader2,
@@ -214,6 +215,7 @@ function ResultsTab({
 }: {
   readonly assessment: AssessmentDetail;
 }) {
+  const { t } = useTranslation();
   const [filter, setFilter] = useState<"all" | "implemented" | "partial" | "gap">("all");
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [policyGap, setPolicyGap] = useState<GapDetail | null>(null);
@@ -627,17 +629,17 @@ function ResultsTab({
                       disabled={saving === ca.id}
                       className="text-xs border border-gray-200 rounded-lg px-2 py-1 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
                     >
-                      <option value="implemented">Compliant</option>
-                      <option value="partially_implemented">Partial</option>
-                      <option value="not_implemented">Gap</option>
-                      {!ca.is_mandatory && <option value="not_applicable">N/A</option>}
+                      <option value="implemented">{t("compliance.status_options.implemented")}</option>
+                      <option value="partially_implemented">{t("compliance.status_options.partially_implemented")}</option>
+                      <option value="not_implemented">{t("compliance.status_options.not_implemented")}</option>
+                      {!ca.is_mandatory && <option value="not_applicable">{t("compliance.status_options.not_applicable")}</option>}
                     </select>
                     {ca.is_mandatory && (
-                      <span className="text-xs text-red-600">N/A not allowed — mandatory control</span>
+                      <span className="text-xs text-red-600">{t("compliance.mandatory_no_na")}</span>
                     )}
                     {saving === ca.id && <Loader2 className="w-3.5 h-3.5 animate-spin text-gray-400" />}
                     {overrides[ca.id] && (
-                      <span className="text-xs text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded">manually overridden</span>
+                      <span className="text-xs text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded">{t("compliance.manually_overridden")}</span>
                     )}
                   </div>
 

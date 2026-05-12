@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { useSearchParams } from "react-router-dom";
 import {
-  Settings, User, Bell, Shield, Key, Globe, Palette,
+  Settings, User, Bell, Shield, Globe, Palette,
   Save, Eye, EyeOff, Check, AlertTriangle,
   Lock, Crown, Trash2, Plus, Loader2, Zap,
   Sun, Moon, Monitor, RotateCcw,
@@ -17,7 +17,7 @@ import AiAccessRequestDialog from "../components/features/ai/AiAccessRequestDial
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-type Tab = "profile" | "organization" | "framework" | "notifications" | "security" | "ai-access" | "api" | "appearance" | "admin";
+type Tab = "profile" | "organization" | "framework" | "notifications" | "security" | "ai-access" | "appearance" | "admin";
 
 // ── Reusable primitives ───────────────────────────────────────────────────────
 
@@ -744,137 +744,6 @@ function AiAccessTab() {
   );
 }
 
-// ── Tab: API & Integrations ───────────────────────────────────────────────────
-
-function ApiTab() {
-  const queryClient = useQueryClient();
-  const [showNew, setShowNew] = useState(false);
-  const [newName, setNewName] = useState("");
-  const [showToken, setShowToken] = useState<string | null>(null);
-  const [copied, setCopied] = useState(false);
-
-  const { data: tokens = [], isLoading } = useQuery({
-    queryKey: ["auth", "api-tokens"],
-    queryFn: authApi.listApiTokens,
-    retry: false,
-  });
-
-  const generateMutation = useMutation({
-    mutationFn: () => authApi.generateApiToken(newName),
-    onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ["auth", "api-tokens"] });
-      setShowToken(data.token);
-      setNewName("");
-      setShowNew(false);
-    },
-  });
-
-  const deleteMutation = useMutation({
-    mutationFn: (tokenName: string) => authApi.deleteApiToken(tokenName),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["auth", "api-tokens"] });
-    },
-  });
-
-  function handleCopyToken() {
-    if (showToken) {
-      navigator.clipboard.writeText(showToken);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    }
-  }
-
-  return (
-    <div className="space-y-6">
-      <div>
-        <h2 className="text-base font-semibold text-gray-900">API Tokens</h2>
-        <p className="text-sm text-gray-500 mt-0.5">Generate API tokens for programmatic access to docs generation and AI features</p>
-      </div>
-
-      {/* Token Display Modal */}
-      {showToken && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl shadow-xl max-w-md w-full p-6">
-            <h3 className="text-lg font-semibold text-gray-900 mb-3">Your API Token</h3>
-            <p className="text-sm text-gray-600 mb-4">Save this token securely. You won't be able to see it again.</p>
-            <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 mb-4 font-mono text-xs break-all text-gray-700">
-              {showToken}
-            </div>
-            <div className="flex gap-2">
-              <button type="button" onClick={handleCopyToken}
-                className="flex-1 px-3 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700">
-                {copied ? "✓ Copied" : "Copy Token"}
-              </button>
-              <button type="button" onClick={() => setShowToken(null)}
-                className="flex-1 px-3 py-2 border border-gray-200 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-50">
-                Done
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      <div className="bg-white border border-gray-200 rounded-xl p-5">
-        <div className="flex items-center justify-between mb-4">
-          <p className="text-sm font-semibold text-gray-800">Active Tokens</p>
-          <button type="button" onClick={() => setShowNew(v => !v)}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 text-white text-xs font-medium rounded-lg hover:bg-blue-700 transition-colors">
-            <Plus className="w-3 h-3" /> Generate Token
-          </button>
-        </div>
-
-        {showNew && (
-          <div className="mb-4 flex gap-2">
-            <input value={newName} onChange={e => setNewName(e.target.value)} placeholder="Token name (e.g. CI/CD Pipeline)"
-              className="flex-1 px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-            <button type="button" onClick={() => generateMutation.mutate()} disabled={!newName.trim() || generateMutation.isPending}
-              className="px-3 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-60 flex items-center gap-1">
-              {generateMutation.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : <Plus className="w-3 h-3" />}
-              Create
-            </button>
-            <button type="button" onClick={() => setShowNew(false)}
-              className="px-3 py-2 text-gray-500 text-sm rounded-lg hover:bg-gray-100">Cancel</button>
-          </div>
-        )}
-
-        {isLoading ? (
-          <div className="flex justify-center py-8">
-            <Loader2 className="w-5 h-5 animate-spin text-blue-500" />
-          </div>
-        ) : tokens.length === 0 ? (
-          <p className="text-sm text-gray-400 py-4">No tokens yet. Create one to get started.</p>
-        ) : (
-          <div className="space-y-3">
-            {tokens.map((token) => (
-              <div key={token.token_name} className="flex items-center justify-between py-2 border-b border-gray-100 last:border-0">
-                <div>
-                  <p className="text-sm font-medium text-gray-800">{token.token_name}</p>
-                  <p className="text-xs text-gray-400 mt-0.5">
-                    Created {new Date(token.created_at).toLocaleDateString()}
-                    {token.last_used && ` · Last used ${new Date(token.last_used).toLocaleDateString()}`}
-                  </p>
-                </div>
-                <button type="button" onClick={() => deleteMutation.mutate(token.token_name)} disabled={deleteMutation.isPending}
-                  className="text-xs text-red-500 hover:text-red-700 font-medium disabled:opacity-50">
-                  {deleteMutation.isPending ? "Revoking..." : "Revoke"}
-                </button>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-
-      <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
-        <p className="text-sm font-semibold text-blue-900 mb-2">Using API Tokens</p>
-        <code className="block text-xs text-blue-800 bg-white p-3 rounded border border-blue-100 mb-3 font-mono">
-          curl -H "Authorization: Bearer YOUR_TOKEN" https://api.grc.local/api/v1/ai/generate-docs
-        </code>
-        <p className="text-xs text-blue-700">Use tokens for: Document generation, AI features, and programmatic access.</p>
-      </div>
-    </div>
-  );
-}
-
 // ── Tab: Appearance ───────────────────────────────────────────────────────────
 
 const ACCENT_OPTIONS: { value: AccentColor; label: string; bg: string; ring: string }[] = [
@@ -1195,17 +1064,17 @@ function AdminTab() {
               className="col-span-1 px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white" />
             <select value={invite.role} onChange={e => setInvite(i => ({ ...i, role: e.target.value as DemoRole }))}
               className="px-3 py-2 border border-gray-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500">
-              <option value="admin">Admin</option>
-              <option value="ciso">CISO</option>
-              <option value="auditor">Auditor</option>
-              <option value="viewer">Viewer</option>
+              <option value="admin">{t("roles.admin")}</option>
+              <option value="ciso">{t("roles.ciso")}</option>
+              <option value="auditor">{t("roles.auditor")}</option>
+              <option value="viewer">{t("roles.viewer")}</option>
             </select>
             <select value={invite.plan} onChange={e => setInvite(i => ({ ...i, plan: e.target.value as DemoPlan }))}
               className="px-3 py-2 border border-gray-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500">
-              <option value="free_trial">Free Trial</option>
-              <option value="starter">Starter</option>
-              <option value="professional">Professional</option>
-              <option value="enterprise">Enterprise</option>
+              <option value="free_trial">{t("plan.free_trial")}</option>
+              <option value="starter">{t("plan.starter")}</option>
+              <option value="professional">{t("plan.professional")}</option>
+              <option value="enterprise">{t("plan.enterprise")}</option>
             </select>
           </div>
           <div className="flex gap-2">
@@ -1244,19 +1113,19 @@ function AdminTab() {
                 <td className="px-4 py-3">
                   <select value={u.role} onChange={e => changeRole(u.id, e.target.value as DemoRole)}
                     className={`px-2 py-1 rounded-full text-xs font-semibold border-0 cursor-pointer ${ROLE_BADGE[u.role]}`}>
-                    <option value="admin">Admin</option>
-                    <option value="ciso">CISO</option>
-                    <option value="auditor">Auditor</option>
-                    <option value="viewer">Viewer</option>
+                    <option value="admin">{t("roles.admin")}</option>
+                    <option value="ciso">{t("roles.ciso")}</option>
+                    <option value="auditor">{t("roles.auditor")}</option>
+                    <option value="viewer">{t("roles.viewer")}</option>
                   </select>
                 </td>
                 <td className="px-4 py-3">
                   <select value={u.plan} onChange={e => changePlan(u.id, e.target.value as DemoPlan)}
                     className="px-2 py-1 bg-gray-100 rounded-lg text-xs font-medium text-gray-600 border-0 cursor-pointer">
-                    <option value="free_trial">Free Trial</option>
-                    <option value="starter">Starter</option>
-                    <option value="professional">Professional</option>
-                    <option value="enterprise">Enterprise</option>
+                    <option value="free_trial">{t("plan.free_trial")}</option>
+                    <option value="starter">{t("plan.starter")}</option>
+                    <option value="professional">{t("plan.professional")}</option>
+                    <option value="enterprise">{t("plan.enterprise")}</option>
                   </select>
                 </td>
                 <td className="px-4 py-3">
@@ -1307,7 +1176,6 @@ function AdminTab() {
 const TAB_MIN_PLAN: Partial<Record<Tab, PlanTier>> = {
   organization:  "starter",
   notifications: "starter",
-  api:           "professional",
 };
 
 const PLAN_ORDER: PlanTier[] = ["free_trial", "starter", "professional", "enterprise"];
@@ -1326,14 +1194,14 @@ export default function SettingsPage() {
   const [searchParams] = useSearchParams();
   const [activeTab, setActiveTab] = useState<Tab>(() => {
     const t = searchParams.get("tab");
-    const valid: Tab[] = ["profile","framework","notifications","security","ai-access","api","appearance","admin"];
+    const valid: Tab[] = ["profile","framework","notifications","security","ai-access","appearance","admin"];
     return valid.includes(t as Tab) ? (t as Tab) : "profile";
   });
 
   // Sync if URL changes
   useEffect(() => {
     const t = searchParams.get("tab");
-    const valid: Tab[] = ["profile","framework","notifications","security","ai-access","api","appearance","admin"];
+    const valid: Tab[] = ["profile","framework","notifications","security","ai-access","appearance","admin"];
     if (t && valid.includes(t as Tab)) setActiveTab(t as Tab);
   }, [searchParams]);
 
@@ -1343,7 +1211,6 @@ export default function SettingsPage() {
     { id: "notifications", icon: Bell,      label: t("settings.notifications")      },
     { id: "security",      icon: Shield,    label: t("settings.security")           },
     { id: "ai-access",     icon: Zap,       label: "AI Access"                      },
-    { id: "api",           icon: Key,       label: t("settings.api_integrations")   },
     { id: "appearance",    icon: Palette,   label: t("settings.appearance")         },
     { id: "admin",         icon: Crown,     label: t("settings.admin_panel"), superAdminOnly: true },
   ];
@@ -1365,7 +1232,6 @@ export default function SettingsPage() {
     if (tab === "notifications") return <NotificationsTab />;
     if (tab === "security")      return <SecurityTab />;
     if (tab === "ai-access")     return <AiAccessTab />;
-    if (tab === "api")           return <ApiTab />;
     return <AppearanceTab />;
   }
 

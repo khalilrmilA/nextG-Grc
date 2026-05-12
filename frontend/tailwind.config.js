@@ -1,6 +1,8 @@
 /** @type {import('tailwindcss').Config} */
 export default {
   darkMode: ["class"],
+  // Enable RTL variant — triggered by dir="rtl" on any ancestor element
+  // Works with Tailwind v3 natively; the rtl: prefix reverses directional utilities
   content: [
     "./index.html",
     "./src/**/*.{ts,tsx,js,jsx}",

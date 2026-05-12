@@ -7,7 +7,7 @@ import {
 import LanguageSwitcher from "../LanguageSwitcher";
 
 export default function AuditorLayout() {
-  const user     = useAuthStore(u => u);
+  const user = useAuthStore(u => u);
   const navigate = useNavigate();
   const initials = (user?.name ?? "A").charAt(0).toUpperCase();
 
@@ -86,7 +86,7 @@ export default function AuditorLayout() {
               <Bell className="w-4 h-4" />
             </button>
             {/* Avatar */}
-            <div className="flex items-center gap-2.5 pl-3 border-l border-gray-100">
+            <div className="flex items-center gap-2.5 pl-3 rtl:pl-0 rtl:pr-3 border-l rtl:border-l-0 rtl:border-r border-gray-100">
               <div className="w-8 h-8 rounded-full bg-gradient-to-br from-purple-500 to-violet-600 flex items-center justify-center text-white shadow-sm">
                 <span className="text-sm font-bold">{initials}</span>
               </div>
