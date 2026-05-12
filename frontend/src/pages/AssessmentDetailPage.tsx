@@ -29,11 +29,12 @@ const STATUS_CONFIG = {
 } as const;
 
 function ControlStatusBadge({ status }: { readonly status: string }) {
+  const { t } = useTranslation();
   const cfg = STATUS_CONFIG[status as keyof typeof STATUS_CONFIG] ?? STATUS_CONFIG.not_started;
   return (
     <span className={`inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full ${cfg.color}`}>
       <cfg.icon className="w-3 h-3" />
-      {cfg.label}
+      {t(`compliance.status_options.${status}`, { defaultValue: cfg.label })}
     </span>
   );
 }
@@ -60,6 +61,7 @@ function UploadTab({
   readonly assessment: AssessmentDetail;
   readonly onAnalyzed: (updated: AssessmentDetail) => void;
 }) {
+  const { t } = useTranslation();
   const [dragOver, setDragOver] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [analyzing, setAnalyzing] = useState(false);
@@ -144,9 +146,9 @@ function UploadTab({
           <Upload className="w-8 h-8 text-gray-400 mx-auto mb-2" />
         )}
         <p className="text-sm font-medium text-gray-700">
-          {uploading ? "Uploading…" : "Drop files here or click to browse"}
+          {uploading ? t("compliance.uploading") : t("compliance.drop_files")}
         </p>
-        <p className="text-xs text-gray-400 mt-1">PDF, DOCX, XLSX, XLS, TXT — max 10 MB each</p>
+        <p className="text-xs text-gray-400 mt-1">{t("compliance.file_types_hint")}</p>
       </div>
 
       {/* Uploaded docs */}
@@ -173,7 +175,7 @@ function UploadTab({
 
       {analyzeResult && (
         <div className="bg-green-50 border border-green-200 rounded-xl p-4 text-sm text-green-700">
-          Analysis complete — compliance score: {analyzeResult.compliance_score}%
+          {t("compliance.analysis_complete_score", { score: analyzeResult.compliance_score })}
         </div>
       )}
 
@@ -187,12 +189,12 @@ function UploadTab({
           {analyzing ? (
             <>
               <Loader2 className="w-4 h-4 animate-spin" />
-              Analyzing {assessment.framework_short_name} controls…
+              {t("compliance.analyzing_controls", { framework: assessment.framework_short_name })}
             </>
           ) : (
             <>
               <Play className="w-4 h-4" />
-              Run AI Analysis
+              {t("compliance.run_ai_analysis")}
             </>
           )}
         </button>
@@ -201,7 +203,7 @@ function UploadTab({
       {analyzing && (
         <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 text-sm text-blue-700">
           <Loader2 className="w-4 h-4 animate-spin inline mr-2" />
-          AI is analyzing your documents against the framework controls. This may take 1–5 minutes depending on the model and number of controls.
+          {t("compliance.ai_analyzing_notice")}
         </div>
       )}
     </div>
@@ -399,9 +401,9 @@ function ResultsTab({
         <div className="fixed bottom-6 right-6 z-50 bg-indigo-600 text-white rounded-xl shadow-lg px-5 py-3 flex items-center gap-3 max-w-sm animate-in slide-in-from-bottom-4">
           <Globe className="w-5 h-5 flex-shrink-0" />
           <div>
-            <p className="text-sm font-semibold">Evidence shared across frameworks</p>
+            <p className="text-sm font-semibold">{t("compliance.evidence_shared_title")}</p>
             <p className="text-xs text-indigo-200 mt-0.5">
-              "{evidenceSharedToast.fileName}" was automatically linked to {evidenceSharedToast.count} equivalent control{evidenceSharedToast.count !== 1 ? "s" : ""} in other frameworks.
+              {t("compliance.evidence_shared_desc", { file: evidenceSharedToast.fileName, count: evidenceSharedToast.count })}
             </p>
           </div>
           <button onClick={() => setEvidenceSharedToast(null)} className="text-indigo-300 hover:text-white ml-1 flex-shrink-0">✕</button>
@@ -423,13 +425,13 @@ function ResultsTab({
           <p className={`text-5xl font-bold ${scoreColor(assessment.compliance_score ?? 0)}`}>
             {assessment.compliance_score ?? 0}%
           </p>
-          <p className="text-sm text-gray-500 mt-1">Compliance score</p>
+          <p className="text-sm text-gray-500 mt-1">{t("compliance.compliance_score_label")}</p>
         </div>
         <div className="flex-1 grid grid-cols-3 gap-4">
           {[
-            { label: "Compliant",  count: counts.implemented, color: "text-green-600" },
-            { label: "Partial",    count: counts.partial,     color: "text-yellow-600" },
-            { label: "Gaps",       count: counts.gap,         color: "text-red-600"   },
+            { label: t("compliance.filter_compliant"), count: counts.implemented, color: "text-green-600" },
+            { label: t("compliance.filter_partial"),   count: counts.partial,     color: "text-yellow-600" },
+            { label: t("compliance.filter_gaps"),      count: counts.gap,         color: "text-red-600"   },
           ].map((s) => (
             <div key={s.label} className="text-center">
               <p className={`text-2xl font-bold ${s.color}`}>{s.count}</p>
@@ -454,7 +456,7 @@ function ResultsTab({
             className="flex items-center gap-1.5 text-xs font-medium border border-gray-200 hover:bg-gray-50 text-gray-600 px-3 py-1.5 rounded-lg transition-colors"
           >
             <Table2 className="w-3.5 h-3.5" />
-            Export CSV
+            {t("compliance.export_csv_btn")}
           </button>
           <button
             onClick={() => exportComplianceReport({
@@ -492,7 +494,7 @@ function ResultsTab({
             className="flex items-center gap-1.5 text-xs font-medium border border-gray-200 hover:bg-gray-50 text-gray-600 px-3 py-1.5 rounded-lg transition-colors"
           >
             <Download className="w-3.5 h-3.5" />
-            Full Report
+            {t("compliance.full_report_btn")}
           </button>
         </div>
       </div>
@@ -509,7 +511,7 @@ function ResultsTab({
                 : "bg-white text-gray-600 border-gray-200 hover:bg-gray-50"
             }`}
           >
-            {f === "all" ? "All" : f === "implemented" ? "Compliant" : f === "partial" ? "Partial" : "Gaps"}
+            {f === "all" ? t("compliance.filter_all") : f === "implemented" ? t("compliance.filter_compliant") : f === "partial" ? t("compliance.filter_partial") : t("compliance.filter_gaps")}
             <span className="ml-1.5 opacity-70">{counts[f]}</span>
           </button>
         ))}
@@ -537,7 +539,7 @@ function ResultsTab({
                       </span>
                       {ca.is_mandatory && (
                         <span className="text-xs font-semibold text-red-700 bg-red-50 border border-red-200 px-1.5 py-0.5 rounded">
-                          Mandatory
+                          {t("compliance.mandatory_badge")}
                         </span>
                       )}
                       {ca.control_category && (
@@ -568,7 +570,7 @@ function ResultsTab({
                       className="flex items-center gap-1 text-xs text-purple-600 hover:text-purple-800 bg-purple-50 hover:bg-purple-100 px-2 py-0.5 rounded-full transition-colors"
                     >
                       <Sparkles className="w-3 h-3" />
-                      Generate policy
+                      {t("compliance.generate_policy_btn")}
                     </button>
                   )}
                   <button
@@ -577,7 +579,7 @@ function ResultsTab({
                     title="Share upload link with stakeholder"
                   >
                     <Link2 className="w-3 h-3" />
-                    Share
+                    {t("compliance.share_btn")}
                   </button>
                 </div>
               </div>
@@ -589,14 +591,14 @@ function ResultsTab({
                   )}
                   {ca.implementation_notes && (
                     <div>
-                      <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-0.5">AI Assessment</p>
+                      <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-0.5">{t("compliance.ai_assessment_label")}</p>
                       <p className="text-xs text-gray-700">{ca.implementation_notes}</p>
                     </div>
                   )}
                   {gap && (
                     <div className="bg-red-50 rounded-lg p-3">
                       <div className="flex items-center gap-2 mb-1">
-                        <p className="text-xs font-semibold text-red-700">Gap identified</p>
+                        <p className="text-xs font-semibold text-red-700">{t("compliance.gap_identified_label")}</p>
                         <span className={`text-xs px-1.5 py-0.5 rounded-full font-medium ${SEVERITY_COLOR[gap.severity] ?? "text-gray-600 bg-gray-100"}`}>
                           {gap.severity}
                         </span>
@@ -609,7 +611,7 @@ function ResultsTab({
                   )}
                   {ca.cross_framework_coverage.length > 0 && (
                     <div>
-                      <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Maps to</p>
+                      <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">{t("compliance.maps_to_label")}</p>
                       <div className="flex flex-wrap gap-1">
                         {ca.cross_framework_coverage.map((m, i) => (
                           <span key={i} className="text-xs bg-indigo-50 text-indigo-700 px-1.5 py-0.5 rounded">
@@ -622,7 +624,7 @@ function ResultsTab({
 
                   {/* Manual override */}
                   <div className="flex items-center gap-2 pt-1">
-                    <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide shrink-0">Override status:</p>
+                    <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide shrink-0">{t("compliance.override_status_label")}:</p>
                     <select
                       value={effectiveStatus(ca)}
                       onChange={(e) => handleStatusOverride(ca.id, effectiveStatus(ca), e.target.value)}
@@ -646,7 +648,7 @@ function ResultsTab({
                   {/* Status change history */}
                   {history[ca.id] && history[ca.id].length > 0 && (
                     <div>
-                      <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Status History</p>
+                      <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">{t("compliance.status_history_label")}</p>
                       <div className="space-y-1">
                         {history[ca.id].map((h, i) => (
                           <div key={i} className="flex items-center gap-2 text-xs text-gray-500">
@@ -669,18 +671,18 @@ function ResultsTab({
                       <div className="col-span-2">
                         <div className="flex items-center gap-1.5 mb-1.5">
                           <div className="w-2 h-2 rounded-full bg-blue-500" />
-                          <label className="text-xs font-semibold text-blue-700 uppercase tracking-wide">Justification</label>
+                          <label className="text-xs font-semibold text-blue-700 uppercase tracking-wide">{t("compliance.justification_label")}</label>
                         </div>
                         <textarea
                           value={justifications[ca.id] ?? ca.notes ?? ""}
                           onChange={(e) => handleJustificationChange(ca.id, e.target.value)}
-                          placeholder="Add notes or justification..."
+                          placeholder={t("compliance.justification_placeholder")}
                           className="w-full px-3 py-2 text-xs border-2 border-blue-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none bg-blue-50 hover:bg-blue-50 transition-all placeholder-blue-400"
                           rows={1}
                         />
                         {savedJustifications[ca.id] && (
                           <p className="text-xs text-blue-600 mt-0.5 flex items-center gap-1 font-medium">
-                            <CheckCircle className="w-3 h-3" /> Saved
+                            <CheckCircle className="w-3 h-3" /> {t("compliance.saved_label")}
                           </p>
                         )}
                       </div>
@@ -689,7 +691,7 @@ function ResultsTab({
                       <div>
                         <div className="flex items-center gap-1.5 mb-1.5">
                           <div className="w-2 h-2 rounded-full bg-purple-500" />
-                          <label className="text-xs font-semibold text-purple-700 uppercase tracking-wide">Files</label>
+                          <label className="text-xs font-semibold text-purple-700 uppercase tracking-wide">{t("compliance.files_label")}</label>
                         </div>
                         <div
                           onDragOver={(e) => { e.preventDefault(); e.currentTarget.classList.add("bg-purple-50", "border-purple-400", "shadow-md"); }}
@@ -759,7 +761,7 @@ function ResultsTab({
                       <div className="bg-gradient-to-r from-green-50 to-emerald-50 border-2 border-green-200 rounded-lg p-2">
                         <div className="flex items-center gap-1.5 mb-1">
                           <div className="w-2 h-2 rounded-full bg-green-600" />
-                          <span className="text-xs font-semibold text-green-700 uppercase tracking-wide">Evidence Files</span>
+                          <span className="text-xs font-semibold text-green-700 uppercase tracking-wide">{t("compliance.evidence_files_label")}</span>
                           <span className="ml-auto text-xs font-bold text-green-600 bg-white px-1.5 py-0.5 rounded-full">{evidenceMap[ca.id].length}</span>
                         </div>
                         <div className="space-y-1">
@@ -768,16 +770,16 @@ function ResultsTab({
                               <FileText className="w-3.5 h-3.5 flex-shrink-0 text-green-600" />
                               <span className="truncate font-medium text-green-700 flex-1">{ev.file_name}</span>
                               {ev.is_shared && (
-                                <span title="Auto-shared from another framework" className="flex items-center gap-0.5 text-indigo-600 bg-indigo-50 rounded px-1 py-0.5 flex-shrink-0">
+                                <span title={t("compliance.evidence_auto_shared_title")} className="flex items-center gap-0.5 text-indigo-600 bg-indigo-50 rounded px-1 py-0.5 flex-shrink-0">
                                   <Globe className="w-2.5 h-2.5" />
-                                  <span className="text-[10px] font-medium">Shared</span>
+                                  <span className="text-[10px] font-medium">{t("compliance.evidence_shared_badge")}</span>
                                 </span>
                               )}
                               {/* Download/view button */}
                               <button
                                 onClick={() => openEvidence(ev)}
                                 className="text-blue-600 hover:text-blue-800 flex-shrink-0"
-                                title="View / Download"
+                                title={t("compliance.evidence_view_download")}
                               >
                                 <ExternalLink className="w-3 h-3" />
                               </button>
@@ -829,6 +831,7 @@ function ResultsTab({
 // ─── Tab: Cross-Framework Coverage ────────────────────────────────────────────
 
 function CrossFrameworkTab({ assessment }: { readonly assessment: AssessmentDetail }) {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const summary = assessment.cross_framework_summary;
   const entries = Object.entries(summary).sort((a, b) => b[1].percent - a[1].percent);
@@ -837,8 +840,8 @@ function CrossFrameworkTab({ assessment }: { readonly assessment: AssessmentDeta
     return (
       <div className="text-center py-16 text-gray-400 text-sm">
         <Globe className="w-10 h-10 mx-auto mb-3 opacity-30" />
-        <p className="font-medium text-gray-500 mb-1">No other framework assessments found</p>
-        <p className="text-xs">Add more frameworks from the Dashboard to see cross-framework coverage here.</p>
+        <p className="font-medium text-gray-500 mb-1">{t("compliance.no_other_frameworks")}</p>
+        <p className="text-xs">{t("compliance.no_other_frameworks_desc")}</p>
       </div>
     );
   }
@@ -849,15 +852,11 @@ function CrossFrameworkTab({ assessment }: { readonly assessment: AssessmentDeta
       <div className="bg-indigo-50 border border-indigo-200 rounded-xl p-4 flex gap-3">
         <Globe className="w-5 h-5 text-indigo-600 flex-shrink-0 mt-0.5" />
         <div>
-          <p className="text-sm font-semibold text-indigo-800">Automatic Evidence Sharing</p>
-          <p className="text-xs text-indigo-600 mt-0.5">
-            When you upload a document to any control in this assessment, it is automatically shared to the equivalent controls in all other active framework assessments below — based on the cross-walk mappings (ISO 27001 ↔ SOC 2, NIST CSF, PCI DSS, etc.). Shared files appear with a <span className="inline-flex items-center gap-0.5 bg-white border border-indigo-200 rounded px-1 py-0.5 text-indigo-700 font-medium"><Globe className="w-2.5 h-2.5" /> Shared</span> badge in the Results tab.
-          </p>
+          <p className="text-sm font-semibold text-indigo-800">{t("compliance.auto_evidence_title")}</p>
+          <p className="text-xs text-indigo-600 mt-0.5">{t("compliance.auto_evidence_desc")}</p>
         </div>
       </div>
-      <p className="text-sm text-gray-500">
-        Compliance status across your other active framework assessments.
-      </p>
+      <p className="text-sm text-gray-500">{t("compliance.cross_fw_subtitle")}</p>
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         {entries.map(([fw, data]) => {
           const scoreClr = data.percent >= 75 ? "text-green-600" : data.percent >= 50 ? "text-yellow-600" : "text-red-600";
@@ -883,19 +882,19 @@ function CrossFrameworkTab({ assessment }: { readonly assessment: AssessmentDeta
               <div className="grid grid-cols-3 gap-2 text-center">
                 <div className="bg-gray-50 rounded-lg py-1.5">
                   <p className="text-sm font-bold text-gray-800">{data.total}</p>
-                  <p className="text-xs text-gray-400">Controls</p>
+                  <p className="text-xs text-gray-400">{t("compliance.controls_count_label")}</p>
                 </div>
                 <div className="bg-green-50 rounded-lg py-1.5">
                   <p className="text-sm font-bold text-green-700">{data.covered}</p>
-                  <p className="text-xs text-green-500">Compliant</p>
+                  <p className="text-xs text-green-500">{t("compliance.filter_compliant")}</p>
                 </div>
                 <div className="bg-red-50 rounded-lg py-1.5">
                   <p className="text-sm font-bold text-red-600">{data.gaps}</p>
-                  <p className="text-xs text-red-400">Gaps</p>
+                  <p className="text-xs text-red-400">{t("compliance.filter_gaps")}</p>
                 </div>
               </div>
               <p className="text-xs text-blue-500 mt-3 group-hover:text-blue-700 text-right">
-                Open assessment →
+                {t("compliance.open_assessment")}
               </p>
             </div>
           );
@@ -910,6 +909,7 @@ function CrossFrameworkTab({ assessment }: { readonly assessment: AssessmentDeta
 type Tab = "upload" | "checklist" | "results" | "gapreport" | "crossfw";
 
 export default function AssessmentDetailPage() {
+  const { t } = useTranslation();
   const { assessmentId } = useParams<{ assessmentId: string }>();
   const navigate = useNavigate();
   const [assessment, setAssessment] = useState<AssessmentDetail | null>(null);
@@ -949,8 +949,8 @@ export default function AssessmentDetailPage() {
   if (!assessment) {
     return (
       <div className="p-8 text-center text-gray-500">
-        Assessment not found.{" "}
-        <button onClick={() => navigate("/compliance")} className="text-blue-600 underline">Back</button>
+        {t("compliance.not_found")}{" "}
+        <button onClick={() => navigate("/compliance")} className="text-blue-600 underline">{t("compliance.back_btn")}</button>
       </div>
     );
   }
@@ -959,11 +959,11 @@ export default function AssessmentDetailPage() {
   const gapCount = gaps.length;
 
   const tabs: { key: Tab; label: string; disabled?: boolean }[] = [
-    { key: "upload",    label: "Upload & Analyze" },
-    { key: "checklist", label: "Document Checklist" },
-    { key: "results",   label: `Results${hasResults ? ` (${assessment.control_assessments.length})` : ""}`, disabled: !hasResults },
-    { key: "gapreport", label: `Gap Report${gapCount > 0 ? ` (${gapCount})` : ""}`, disabled: gapCount === 0 },
-    { key: "crossfw",   label: `Cross-Framework${Object.keys(assessment.cross_framework_summary).length > 0 ? ` (${Object.keys(assessment.cross_framework_summary).length})` : ""}` },
+    { key: "upload",    label: t("compliance.upload_analyze") },
+    { key: "checklist", label: t("compliance.document_checklist") },
+    { key: "results",   label: `${t("compliance.results")}${hasResults ? ` (${assessment.control_assessments.length})` : ""}`, disabled: !hasResults },
+    { key: "gapreport", label: `${t("compliance.gap_report")}${gapCount > 0 ? ` (${gapCount})` : ""}`, disabled: gapCount === 0 },
+    { key: "crossfw",   label: `${t("compliance.cross_framework")}${Object.keys(assessment.cross_framework_summary).length > 0 ? ` (${Object.keys(assessment.cross_framework_summary).length})` : ""}` },
   ];
 
   return (
@@ -975,7 +975,7 @@ export default function AssessmentDetailPage() {
           className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-800 mb-3"
         >
           <ArrowLeft className="w-4 h-4" />
-          Back to assessments
+          {t("compliance.back_to_assessments")}
         </button>
         <div className="flex items-start justify-between">
           <div>
@@ -988,7 +988,7 @@ export default function AssessmentDetailPage() {
               {assessment.uploaded_documents.length > 0 && (
                 <span className="flex items-center gap-1">
                   <FileText className="w-3.5 h-3.5" />
-                  {assessment.uploaded_documents.length} document{assessment.uploaded_documents.length !== 1 ? "s" : ""}
+                  {t(assessment.uploaded_documents.length === 1 ? "compliance.documents_label_one" : "compliance.documents_label_other", { count: assessment.uploaded_documents.length })}
                 </span>
               )}
             </div>
@@ -1000,7 +1000,7 @@ export default function AssessmentDetailPage() {
                 className="flex items-center gap-1.5 text-sm font-medium text-gray-600 border border-gray-200 hover:bg-gray-50 px-3 py-2 rounded-lg transition-colors"
               >
                 <GitBranch className="w-4 h-4" />
-                Traceability Matrix
+                {t("compliance.traceability_matrix")}
               </button>
             )}
             {assessment.compliance_score != null && (
@@ -1008,7 +1008,7 @@ export default function AssessmentDetailPage() {
                 <p className={`text-3xl font-bold ${scoreColor(assessment.compliance_score)}`}>
                   {assessment.compliance_score}%
                 </p>
-                <p className="text-xs text-gray-400">compliance score</p>
+                <p className="text-xs text-gray-400">{t("compliance.compliance_score_label")}</p>
               </div>
             )}
           </div>

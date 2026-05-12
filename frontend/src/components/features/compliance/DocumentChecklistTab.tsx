@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from "react";
+import { useTranslation } from "react-i18next";
 import {
   Upload, CheckCircle, XCircle, FileText, Loader2, RefreshCw, Plus,
   Eye, EyeOff, Trash2, Download,
@@ -25,6 +26,7 @@ function DocFileRow({
   readonly onVisibilityToggled: (updated: ChecklistUploadedDoc) => void;
   readonly onDeleted: (id: string) => void;
 }) {
+  const { t } = useTranslation();
   const [toggling, setToggling] = useState(false);
   const [toggleError, setToggleError] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -34,7 +36,6 @@ function DocFileRow({
     setToggleError(false);
     try {
       const updated = await complianceApi.toggleDocumentVisibility(doc.id);
-      // toggleDocumentVisibility returns ChecklistDocItem — same shape as ChecklistUploadedDoc
       onVisibilityToggled(updated as unknown as ChecklistUploadedDoc);
     } catch {
       setToggleError(true);
@@ -74,12 +75,12 @@ function DocFileRow({
       <FileText className="w-3.5 h-3.5 text-green-600 flex-shrink-0" />
       <span className="text-xs text-green-800 truncate flex-1 max-w-[150px]">{doc.file_name}</span>
       {toggleError && (
-        <span className="text-xs text-red-600 flex-shrink-0">Save failed</span>
+        <span className="text-xs text-red-600 flex-shrink-0">{t("compliance.checklist_save_failed")}</span>
       )}
       <div className="flex items-center gap-1 flex-shrink-0">
         <button
           onClick={handleOpen}
-          title="View file"
+          title={t("compliance.checklist_view_file")}
           className="p-1 rounded hover:bg-green-100 text-green-600 transition-colors"
         >
           <Download className="w-3.5 h-3.5" />
@@ -89,7 +90,7 @@ function DocFileRow({
             <button
               onClick={handleToggle}
               disabled={toggling}
-              title={doc.is_visible_to_auditor ? "Hide from auditor" : "Show to auditor"}
+              title={doc.is_visible_to_auditor ? t("compliance.checklist_hide_auditor") : t("compliance.checklist_show_auditor")}
               className={`p-1 rounded transition-colors ${
                 doc.is_visible_to_auditor
                   ? "text-blue-600 hover:bg-blue-50"
@@ -100,7 +101,7 @@ function DocFileRow({
             </button>
             <button
               onClick={handleDelete}
-              title="Delete file"
+              title={t("compliance.checklist_delete_file")}
               className="p-1 rounded hover:bg-red-50 text-red-400 hover:text-red-600 transition-colors"
             >
               <Trash2 className="w-3.5 h-3.5" />
@@ -129,6 +130,7 @@ function ClauseRow({
   readonly onVisibilityToggled: (key: string, updated: ChecklistUploadedDoc) => void;
   readonly onDeleted: (key: string, docId: string) => void;
 }) {
+  const { t } = useTranslation();
   const [uploading, setUploading] = useState(false);
   const [uploadingCount, setUploadingCount] = useState(0);
   const [error, setError] = useState("");
@@ -143,7 +145,6 @@ function ClauseRow({
       setUploading(true);
       try {
         const result = await complianceApi.uploadDocument(assessmentId, file, item.document_type_key);
-        // Backend now returns is_visible_to_auditor and file_path in UploadedDocumentResponse
         const newDoc: ChecklistUploadedDoc = {
           id: result.id,
           file_name: result.file_name,
@@ -155,7 +156,7 @@ function ClauseRow({
         };
         onUploaded(item.document_type_key, newDoc);
       } catch {
-        setError("One or more uploads failed");
+        setError(t("compliance.checklist_upload_failed"));
       }
     }
     setUploading(false);
@@ -165,8 +166,10 @@ function ClauseRow({
   const docs = item.uploaded_documents ?? [];
 
   const uploadBtnLabel = (() => {
-    if (uploading) return uploadingCount > 1 ? `Uploading ${uploadingCount} files…` : "Uploading…";
-    return docs.length > 0 ? "Add More" : "Upload";
+    if (uploading) return uploadingCount > 1
+      ? t("compliance.checklist_uploading_count", { count: uploadingCount })
+      : t("compliance.checklist_uploading");
+    return docs.length > 0 ? t("compliance.checklist_add_more_btn") : t("compliance.checklist_upload_btn");
   })();
 
   const uploadBtnIcon = uploading
@@ -186,21 +189,27 @@ function ClauseRow({
       </td>
       <td className="px-4 py-3 text-center">
         {item.is_mandatory ? (
-          <span className="text-xs font-medium text-red-600 bg-red-50 px-2 py-0.5 rounded-full">Required</span>
+          <span className="text-xs font-medium text-red-600 bg-red-50 px-2 py-0.5 rounded-full">
+            {t("compliance.checklist_required")}
+          </span>
         ) : (
-          <span className="text-xs font-medium text-gray-400 bg-gray-50 px-2 py-0.5 rounded-full">Optional</span>
+          <span className="text-xs font-medium text-gray-400 bg-gray-50 px-2 py-0.5 rounded-full">
+            {t("compliance.checklist_optional")}
+          </span>
         )}
       </td>
       <td className="px-4 py-3 text-center">
         {item.is_uploaded ? (
           <span className="inline-flex items-center gap-1 text-xs font-medium text-green-700 bg-green-50 px-2 py-0.5 rounded-full">
             <CheckCircle className="w-3 h-3" />
-            {docs.length > 1 ? `${docs.length} files` : "Uploaded"}
+            {docs.length > 1
+              ? t("compliance.checklist_files_count", { count: docs.length })
+              : t("compliance.checklist_uploaded_badge")}
           </span>
         ) : (
           <span className="inline-flex items-center gap-1 text-xs font-medium text-gray-400 bg-gray-50 px-2 py-0.5 rounded-full">
             <XCircle className="w-3 h-3" />
-            Missing
+            {t("compliance.checklist_missing_badge")}
           </span>
         )}
       </td>
@@ -256,6 +265,7 @@ function ClauseRow({
 // ─── Main component ───────────────────────────────────────────────────────────
 
 export default function DocumentChecklistTab({ assessmentId, frameworkShortName }: Props) {
+  const { t } = useTranslation();
   const [checklist, setChecklist] = useState<DocumentChecklistResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -282,7 +292,7 @@ export default function DocumentChecklistTab({ assessmentId, frameworkShortName 
       const data = await complianceApi.getDocumentChecklist(assessmentId);
       setChecklist(data);
     } catch {
-      setError("Failed to load document checklist.");
+      setError(t("compliance.checklist_load_error"));
     } finally {
       setLoading(false);
     }
@@ -344,7 +354,7 @@ export default function DocumentChecklistTab({ assessmentId, frameworkShortName 
     return (
       <div className="flex items-center justify-center py-16">
         <Loader2 className="w-6 h-6 animate-spin text-blue-500 mr-2" />
-        <span className="text-sm text-gray-500">Loading checklist…</span>
+        <span className="text-sm text-gray-500">{t("compliance.checklist_loading")}</span>
       </div>
     );
   }
@@ -352,9 +362,9 @@ export default function DocumentChecklistTab({ assessmentId, frameworkShortName 
   if (error || !checklist) {
     return (
       <div className="py-12 text-center">
-        <p className="text-sm text-red-600 mb-3">{error || "No checklist available."}</p>
+        <p className="text-sm text-red-600 mb-3">{error || t("compliance.checklist_no_checklist")}</p>
         <button onClick={load} className="text-sm text-blue-600 hover:underline inline-flex items-center gap-1">
-          <RefreshCw className="w-3.5 h-3.5" /> Retry
+          <RefreshCw className="w-3.5 h-3.5" /> {t("compliance.checklist_retry")}
         </button>
       </div>
     );
@@ -373,6 +383,12 @@ export default function DocumentChecklistTab({ assessmentId, frameworkShortName 
   const pctColor = pct >= 80 ? "text-green-600" : pct >= 50 ? "text-yellow-600" : "text-red-600";
   const barColor = pct >= 80 ? "bg-green-500" : pct >= 50 ? "bg-yellow-400" : "bg-red-400";
 
+  const filterLabels: Record<"all" | "missing" | "uploaded", string> = {
+    all:      t("compliance.checklist_filter_all"),
+    missing:  t("compliance.checklist_filter_missing"),
+    uploaded: t("compliance.checklist_filter_uploaded"),
+  };
+
   return (
     <div className="space-y-5">
       {/* Progress header */}
@@ -380,15 +396,15 @@ export default function DocumentChecklistTab({ assessmentId, frameworkShortName 
         <div className="flex items-center justify-between mb-3">
           <div>
             <h3 className="text-sm font-semibold text-gray-900">
-              Mandatory Documents — {frameworkShortName}
+              {t("compliance.checklist_mandatory_docs", { framework: frameworkShortName })}
             </h3>
             <p className="text-xs text-gray-500 mt-0.5">
-              {checklist.uploaded} of {checklist.total} documents uploaded
+              {t("compliance.checklist_docs_uploaded", { uploaded: checklist.uploaded, total: checklist.total })}
             </p>
           </div>
           <div className="text-right">
             <p className={`text-2xl font-bold ${pctColor}`}>{pct}%</p>
-            <p className="text-xs text-gray-400">complete</p>
+            <p className="text-xs text-gray-400">{t("compliance.checklist_complete")}</p>
           </div>
         </div>
         <div className="h-2.5 rounded-full bg-gray-100 overflow-hidden">
@@ -399,14 +415,16 @@ export default function DocumentChecklistTab({ assessmentId, frameworkShortName 
         </div>
         {missingMandatory.length > 0 && (
           <div className="mt-3 flex flex-wrap gap-1">
-            <span className="text-xs text-gray-400">Missing required:</span>
+            <span className="text-xs text-gray-400">{t("compliance.checklist_missing_required")}</span>
             {missingMandatory.slice(0, 5).map((d) => (
               <span key={d.document_type_key} className="text-xs text-red-600 bg-red-50 px-1.5 py-0.5 rounded">
                 {d.document_name}
               </span>
             ))}
             {missingMandatory.length > 5 && (
-              <span className="text-xs text-gray-400">+{missingMandatory.length - 5} more</span>
+              <span className="text-xs text-gray-400">
+                {t("compliance.checklist_more", { count: missingMandatory.length - 5 })}
+              </span>
             )}
           </div>
         )}
@@ -414,16 +432,21 @@ export default function DocumentChecklistTab({ assessmentId, frameworkShortName 
 
       {/* Legend */}
       <div className="flex items-center gap-4 px-1 text-xs text-gray-500">
-        <span className="flex items-center gap-1"><Eye className="w-3.5 h-3.5 text-blue-500" /> Visible to auditor</span>
-        <span className="flex items-center gap-1"><EyeOff className="w-3.5 h-3.5 text-gray-400" /> Hidden from auditor</span>
-        <span className="flex items-center gap-1"><Download className="w-3.5 h-3.5 text-green-600" /> View / Download</span>
+        <span className="flex items-center gap-1">
+          <Eye className="w-3.5 h-3.5 text-blue-500" /> {t("compliance.checklist_visible_auditor")}
+        </span>
+        <span className="flex items-center gap-1">
+          <EyeOff className="w-3.5 h-3.5 text-gray-400" /> {t("compliance.checklist_hidden_auditor")}
+        </span>
+        <span className="flex items-center gap-1">
+          <Download className="w-3.5 h-3.5 text-green-600" /> {t("compliance.evidence_view_download")}
+        </span>
       </div>
 
       {/* Filter tabs */}
       <div className="flex gap-2">
         {(["all", "missing", "uploaded"] as const).map((f) => {
           const counts = { all: checklist.total, missing: checklist.total - checklist.uploaded, uploaded: checklist.uploaded };
-          const label = f === "all" ? "All" : f === "missing" ? "Missing" : "Uploaded";
           return (
             <button
               key={f}
@@ -434,7 +457,7 @@ export default function DocumentChecklistTab({ assessmentId, frameworkShortName 
                   : "bg-white text-gray-600 border-gray-200 hover:bg-gray-50"
               }`}
             >
-              {label}
+              {filterLabels[f]}
               <span className="ml-1.5 opacity-70">{counts[f]}</span>
             </button>
           );
@@ -446,18 +469,18 @@ export default function DocumentChecklistTab({ assessmentId, frameworkShortName 
         {filtered.length === 0 ? (
           <div className="py-12 text-center">
             <FileText className="w-8 h-8 text-gray-300 mx-auto mb-2" />
-            <p className="text-sm text-gray-400">No documents in this category.</p>
+            <p className="text-sm text-gray-400">{t("compliance.checklist_no_docs")}</p>
           </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-left">
               <thead>
                 <tr className="bg-gray-50 border-b border-gray-100">
-                  <th className="px-4 py-2.5 text-xs font-semibold text-gray-500 uppercase tracking-wide">Clause</th>
-                  <th className="px-4 py-2.5 text-xs font-semibold text-gray-500 uppercase tracking-wide">Document</th>
-                  <th className="px-4 py-2.5 text-xs font-semibold text-gray-500 uppercase tracking-wide text-center">Type</th>
-                  <th className="px-4 py-2.5 text-xs font-semibold text-gray-500 uppercase tracking-wide text-center">Status</th>
-                  <th className="px-4 py-2.5 text-xs font-semibold text-gray-500 uppercase tracking-wide text-right">Files & Actions</th>
+                  <th className="px-4 py-2.5 text-xs font-semibold text-gray-500 uppercase tracking-wide">{t("compliance.checklist_col_clause")}</th>
+                  <th className="px-4 py-2.5 text-xs font-semibold text-gray-500 uppercase tracking-wide">{t("compliance.checklist_col_document")}</th>
+                  <th className="px-4 py-2.5 text-xs font-semibold text-gray-500 uppercase tracking-wide text-center">{t("compliance.checklist_col_type")}</th>
+                  <th className="px-4 py-2.5 text-xs font-semibold text-gray-500 uppercase tracking-wide text-center">{t("compliance.checklist_col_status")}</th>
+                  <th className="px-4 py-2.5 text-xs font-semibold text-gray-500 uppercase tracking-wide text-right">{t("compliance.checklist_col_files")}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
@@ -478,14 +501,19 @@ export default function DocumentChecklistTab({ assessmentId, frameworkShortName 
         )}
       </div>
 
-      {/* Stakeholder uploads — files received via share link that don't match a specific clause */}
+      {/* Stakeholder uploads */}
       {(checklist.other_uploads?.length ?? 0) > 0 && (
         <div className="bg-white rounded-2xl border border-orange-100 overflow-hidden">
           <div className="px-5 py-3 border-b border-orange-100 bg-orange-50 flex items-center gap-2">
             <FileText className="w-4 h-4 text-orange-500" />
-            <h3 className="text-sm font-semibold text-orange-800">Stakeholder Uploads</h3>
+            <h3 className="text-sm font-semibold text-orange-800">{t("compliance.checklist_stakeholder_uploads")}</h3>
             <span className="text-xs text-orange-500 ml-1">
-              {checklist.other_uploads!.length} file{checklist.other_uploads!.length !== 1 ? "s" : ""} received via share link
+              {t(
+                checklist.other_uploads!.length === 1
+                  ? "compliance.checklist_files_via_link_one"
+                  : "compliance.checklist_files_via_link_other",
+                { count: checklist.other_uploads!.length }
+              )}
             </span>
           </div>
           <div className="divide-y divide-gray-50 px-5 py-3 space-y-1.5">
@@ -500,7 +528,7 @@ export default function DocumentChecklistTab({ assessmentId, frameworkShortName 
                 </div>
                 <button
                   onClick={() => openViewer(doc)}
-                  title="View file"
+                  title={t("compliance.checklist_view_file")}
                   className="p-1 rounded hover:bg-green-100 text-green-600 transition-colors flex-shrink-0"
                 >
                   <Download className="w-3.5 h-3.5" />

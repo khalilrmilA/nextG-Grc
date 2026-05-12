@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { X, Link2, Copy, Check, Trash2, Loader2, Plus, ExternalLink } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { shareLinksApi, type ShareLink } from "@/api/endpoints";
 
 interface Props {
@@ -10,6 +11,7 @@ interface Props {
 }
 
 export default function ShareLinkModal({ caId, controlTitle, controlId, onClose }: Props) {
+  const { t } = useTranslation();
   const [links, setLinks] = useState<ShareLink[]>([]);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
@@ -63,7 +65,7 @@ export default function ShareLinkModal({ caId, controlTitle, controlId, onClose 
               <Link2 className="w-5 h-5 text-orange-600" />
             </div>
             <div>
-              <h2 className="text-sm font-semibold text-gray-900">Stakeholder Upload Links</h2>
+              <h2 className="text-sm font-semibold text-gray-900">{t("share_link.modal_title")}</h2>
               <p className="text-xs text-gray-400 mt-0.5">
                 <span className="font-mono text-gray-500">{controlId}</span> — {controlTitle}
               </p>
@@ -87,9 +89,9 @@ export default function ShareLinkModal({ caId, controlTitle, controlId, onClose 
                   <div className="w-14 h-14 bg-orange-50 rounded-2xl flex items-center justify-center mx-auto mb-3">
                     <Link2 className="w-7 h-7 text-orange-300" />
                   </div>
-                  <p className="text-sm font-medium text-gray-600">No upload links yet</p>
+                  <p className="text-sm font-medium text-gray-600">{t("share_link.no_links")}</p>
                   <p className="text-xs text-gray-400 mt-1 max-w-xs mx-auto">
-                    Create a link to let external stakeholders upload evidence files directly to this control
+                    {t("share_link.no_links_desc")}
                   </p>
                 </div>
               )}
@@ -101,38 +103,41 @@ export default function ShareLinkModal({ caId, controlTitle, controlId, onClose 
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-1">
-                      <span className="text-sm font-semibold text-gray-800">{link.label || "Untitled link"}</span>
+                      <span className="text-sm font-semibold text-gray-800">{link.label || t("share_link.untitled_link")}</span>
                       <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${link.is_active ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"}`}>
-                        {link.is_active ? "Active" : "Revoked"}
+                        {link.is_active ? t("share_link.active") : t("share_link.revoked")}
                       </span>
                     </div>
                     <p className="text-xs text-blue-600 truncate font-mono mb-2">{link.upload_url}</p>
                     <div className="flex items-center gap-3 text-xs text-gray-400">
                       {link.expires_at && (
-                        <span>Expires {new Date(link.expires_at).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })}</span>
+                        <span>{t("share_link.expires")} {new Date(link.expires_at).toLocaleDateString()}</span>
                       )}
-                      <span>{link.use_count} upload{link.use_count !== 1 ? "s" : ""}{link.max_uses != null ? ` / ${link.max_uses} max` : ""}</span>
+                      <span>
+                        {t(link.use_count === 1 ? "share_link.uploads_count" : "share_link.uploads_count_plural", { count: link.use_count })}
+                        {link.max_uses != null && ` / ${link.max_uses} ${t("share_link.max_suffix")}`}
+                      </span>
                     </div>
                   </div>
                   <div className="flex items-center gap-1 flex-shrink-0">
                     <button
                       onClick={() => window.open(link.upload_url, "_blank")}
                       className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-white transition-colors"
-                      title="Open link"
+                      title={t("share_link.open_link")}
                     >
                       <ExternalLink className="w-3.5 h-3.5" />
                     </button>
                     <button
                       onClick={() => copyLink(link)}
                       className="p-1.5 rounded-lg text-gray-400 hover:text-blue-600 hover:bg-white transition-colors"
-                      title="Copy link"
+                      title={t("share_link.copy_link")}
                     >
                       {copiedId === link.id ? <Check className="w-3.5 h-3.5 text-green-500" /> : <Copy className="w-3.5 h-3.5" />}
                     </button>
                     <button
                       onClick={() => handleRevoke(link.id)}
                       className="p-1.5 rounded-lg text-gray-400 hover:text-red-600 hover:bg-white transition-colors"
-                      title="Revoke link"
+                      title={t("share_link.revoke_link")}
                     >
                       <Trash2 className="w-3.5 h-3.5" />
                     </button>
@@ -142,16 +147,16 @@ export default function ShareLinkModal({ caId, controlTitle, controlId, onClose 
 
               {showForm && (
                 <div className="border-2 border-orange-200 rounded-xl p-4 space-y-3 bg-orange-50/40">
-                  <h3 className="text-xs font-semibold text-gray-700 uppercase tracking-wide">New Upload Link</h3>
+                  <h3 className="text-xs font-semibold text-gray-700 uppercase tracking-wide">{t("share_link.new_link_title")}</h3>
                   <input
                     type="text"
-                    placeholder="Label (e.g. IT Team — Q2 evidence submission)"
+                    placeholder={t("share_link.label_placeholder")}
                     value={form.label}
                     onChange={e => setForm(p => ({ ...p, label: e.target.value }))}
                     className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-orange-400 bg-white"
                   />
                   <textarea
-                    placeholder="Instructions for the stakeholder (optional) — explain what files to upload and any naming conventions"
+                    placeholder={t("share_link.instructions_placeholder")}
                     value={form.instructions}
                     onChange={e => setForm(p => ({ ...p, instructions: e.target.value }))}
                     rows={3}
@@ -159,7 +164,7 @@ export default function ShareLinkModal({ caId, controlTitle, controlId, onClose 
                   />
                   <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <label className="text-xs font-medium text-gray-500 block mb-1.5">Expiry date</label>
+                      <label className="text-xs font-medium text-gray-500 block mb-1.5">{t("share_link.expiry_date")}</label>
                       <input
                         type="date"
                         value={form.expires_at}
@@ -168,11 +173,11 @@ export default function ShareLinkModal({ caId, controlTitle, controlId, onClose 
                       />
                     </div>
                     <div>
-                      <label className="text-xs font-medium text-gray-500 block mb-1.5">Max uploads</label>
+                      <label className="text-xs font-medium text-gray-500 block mb-1.5">{t("share_link.max_uploads")}</label>
                       <input
                         type="number"
                         min="1"
-                        placeholder="Unlimited"
+                        placeholder={t("share_link.unlimited")}
                         value={form.max_uses}
                         onChange={e => setForm(p => ({ ...p, max_uses: e.target.value }))}
                         className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-orange-400 bg-white"
@@ -184,7 +189,7 @@ export default function ShareLinkModal({ caId, controlTitle, controlId, onClose 
                       onClick={() => setShowForm(false)}
                       className="flex-1 text-sm text-gray-600 border border-gray-200 px-4 py-2.5 rounded-xl hover:bg-white transition-colors"
                     >
-                      Cancel
+                      {t("share_link.cancel")}
                     </button>
                     <button
                       onClick={handleCreate}
@@ -192,7 +197,7 @@ export default function ShareLinkModal({ caId, controlTitle, controlId, onClose 
                       className="flex-1 flex items-center justify-center gap-2 text-sm font-medium bg-orange-500 hover:bg-orange-600 text-white px-4 py-2.5 rounded-xl disabled:opacity-50 transition-colors"
                     >
                       {creating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Link2 className="w-4 h-4" />}
-                      Generate Link
+                      {t("share_link.generate_link")}
                     </button>
                   </div>
                 </div>
@@ -209,7 +214,7 @@ export default function ShareLinkModal({ caId, controlTitle, controlId, onClose 
               className="w-full flex items-center justify-center gap-2 text-sm font-medium text-orange-600 bg-orange-50 hover:bg-orange-100 border border-orange-200 px-4 py-2.5 rounded-xl transition-colors"
             >
               <Plus className="w-4 h-4" />
-              Create New Upload Link
+              {t("share_link.create_new")}
             </button>
           </div>
         )}

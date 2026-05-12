@@ -1,10 +1,12 @@
 import { useState, useEffect, useRef } from "react";
 import { useParams } from "react-router-dom";
 import { Upload, CheckCircle, AlertCircle, FileText, Loader2 } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { shareLinksApi, type ShareLinkInfo } from "@/api/endpoints";
 
 export default function EvidenceUploadPage() {
   const { token } = useParams<{ token: string }>();
+  const { t } = useTranslation();
   const [info, setInfo]             = useState<ShareLinkInfo | null>(null);
   const [loading, setLoading]       = useState(true);
   const [uploading, setUploading]   = useState(false);
@@ -16,7 +18,7 @@ export default function EvidenceUploadPage() {
     if (!token) return;
     shareLinksApi.getInfo(token)
       .then(setInfo)
-      .catch(() => setError("Upload link not found or has expired."))
+      .catch(() => setError(t("share_link.link_not_found")))
       .finally(() => setLoading(false));
   }, [token]);
 
@@ -29,7 +31,7 @@ export default function EvidenceUploadPage() {
         await shareLinksApi.uploadFile(token, file);
         setUploaded(prev => [...prev, file.name]);
       } catch {
-        setError(`Failed to upload ${file.name}. Please try again.`);
+        setError(t("share_link.failed_upload", { file: file.name }));
       }
     }
     setUploading(false);
@@ -48,7 +50,7 @@ export default function EvidenceUploadPage() {
       <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-8 max-w-md w-full text-center">
           <AlertCircle className="w-12 h-12 text-red-400 mx-auto mb-4" />
-          <h1 className="text-lg font-semibold text-gray-900 mb-2">Link unavailable</h1>
+          <h1 className="text-lg font-semibold text-gray-900 mb-2">{t("share_link.link_unavailable")}</h1>
           <p className="text-sm text-gray-500">{error}</p>
         </div>
       </div>
@@ -60,10 +62,8 @@ export default function EvidenceUploadPage() {
       <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-8 max-w-md w-full text-center">
           <AlertCircle className="w-12 h-12 text-orange-400 mx-auto mb-4" />
-          <h1 className="text-lg font-semibold text-gray-900 mb-2">Link expired or disabled</h1>
-          <p className="text-sm text-gray-500">
-            This upload link is no longer active. Contact the person who shared it to get a new one.
-          </p>
+          <h1 className="text-lg font-semibold text-gray-900 mb-2">{t("share_link.link_expired_title")}</h1>
+          <p className="text-sm text-gray-500">{t("share_link.link_expired_desc")}</p>
         </div>
       </div>
     );
@@ -77,13 +77,13 @@ export default function EvidenceUploadPage() {
           <div className="w-14 h-14 rounded-2xl bg-blue-50 flex items-center justify-center mx-auto mb-4">
             <Upload className="w-7 h-7 text-blue-500" />
           </div>
-          <h1 className="text-xl font-bold text-gray-900">Evidence Upload</h1>
+          <h1 className="text-xl font-bold text-gray-900">{t("share_link.upload_page_title")}</h1>
           {info?.label && (
             <p className="text-sm text-blue-600 font-medium mt-1">{info.label}</p>
           )}
           {info?.control_identifier && (
             <p className="text-xs text-gray-400 mt-0.5">
-              Control: <span className="font-mono">{info.control_identifier}</span>
+              {t("share_link.control_label")}: <span className="font-mono">{info.control_identifier}</span>
               {info.control_title && ` — ${info.control_title}`}
             </p>
           )}
@@ -117,9 +117,9 @@ export default function EvidenceUploadPage() {
             <Upload className="w-8 h-8 text-gray-400 mx-auto mb-2" />
           )}
           <p className="text-sm font-medium text-gray-700">
-            {uploading ? "Uploading…" : "Drop files here or click to browse"}
+            {uploading ? t("share_link.uploading") : t("share_link.drop_files")}
           </p>
-          <p className="text-xs text-gray-400 mt-1">PDF, DOCX, XLSX, XLS, TXT — max 10 MB each</p>
+          <p className="text-xs text-gray-400 mt-1">{t("share_link.file_types")}</p>
         </div>
 
         {/* Error */}
@@ -133,7 +133,7 @@ export default function EvidenceUploadPage() {
         {/* Uploaded files */}
         {uploaded.length > 0 && (
           <div className="space-y-2">
-            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Uploaded</p>
+            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">{t("share_link.uploaded_label")}</p>
             {uploaded.map((name, i) => (
               <div key={i} className="flex items-center gap-2 bg-green-50 border border-green-100 rounded-xl px-4 py-2.5">
                 <CheckCircle className="w-4 h-4 text-green-500 flex-shrink-0" />
@@ -146,12 +146,12 @@ export default function EvidenceUploadPage() {
 
         {info?.max_uses != null && (
           <p className="text-center text-xs text-gray-400">
-            {info.use_count} / {info.max_uses} uploads used
+            {t("share_link.uploads_used", { used: info.use_count, max: info.max_uses })}
           </p>
         )}
         {info?.expires_at && (
           <p className="text-center text-xs text-gray-400">
-            Link expires: {new Date(info.expires_at).toLocaleDateString()}
+            {t("share_link.link_expires")} {new Date(info.expires_at).toLocaleDateString()}
           </p>
         )}
       </div>

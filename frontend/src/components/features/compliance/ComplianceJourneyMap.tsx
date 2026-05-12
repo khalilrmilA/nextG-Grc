@@ -1,8 +1,4 @@
-/**
- * ComplianceJourneyMap — horizontal SVG milestone timeline.
- * Shows the 5 phases from Gap Analysis → Certification.
- * Phase completion is derived from the framework summary data.
- */
+import { useTranslation } from "react-i18next";
 
 interface Milestone {
   label: string;
@@ -30,34 +26,40 @@ export default function ComplianceJourneyMap({
   openActions,
   certReadiness,
 }: Props) {
+  const { t } = useTranslation();
+
   const milestones: Milestone[] = [
     {
-      label: "Gap Analysis",
-      sublabel: `${complianceScore}% score`,
+      label: t("compliance.journey_gap_analysis"),
+      sublabel: t("compliance.journey_score", { pct: complianceScore }),
       done: phaseDone(complianceScore, 1),
       active: !phaseDone(complianceScore, 50),
     },
     {
-      label: "Remediation",
-      sublabel: openActions === 0 ? "All resolved" : `${openActions} open`,
+      label: t("compliance.journey_remediation"),
+      sublabel: openActions === 0
+        ? t("compliance.journey_all_resolved")
+        : t("compliance.journey_open", { count: openActions }),
       done: openActions === 0 && complianceScore >= 50,
       active: complianceScore >= 50 && openActions > 0,
     },
     {
-      label: "Documentation",
-      sublabel: `${docCompleteness}% complete`,
+      label: t("compliance.journey_documentation"),
+      sublabel: t("compliance.journey_pct_complete", { pct: docCompleteness }),
       done: phaseDone(docCompleteness, 90),
       active: openActions === 0 && !phaseDone(docCompleteness, 90),
     },
     {
-      label: "Blocker Resolution",
-      sublabel: openBlockers === 0 ? "Cleared" : `${openBlockers} remaining`,
+      label: t("compliance.journey_blocker_resolution"),
+      sublabel: openBlockers === 0
+        ? t("compliance.journey_cleared")
+        : t("compliance.journey_remaining", { count: openBlockers }),
       done: openBlockers === 0 && phaseDone(docCompleteness, 90),
       active: phaseDone(docCompleteness, 90) && openBlockers > 0,
     },
     {
-      label: "Certification Ready",
-      sublabel: `${certReadiness}% readiness`,
+      label: t("compliance.journey_cert_ready"),
+      sublabel: t("compliance.journey_readiness", { pct: certReadiness }),
       done: phaseDone(certReadiness, 80),
       active: openBlockers === 0 && !phaseDone(certReadiness, 80),
     },
@@ -71,7 +73,7 @@ export default function ComplianceJourneyMap({
 
   return (
     <div className="bg-white rounded-2xl border border-gray-100 p-5">
-      <h3 className="text-sm font-semibold text-gray-900 mb-4">Compliance Journey</h3>
+      <h3 className="text-sm font-semibold text-gray-900 mb-4">{t("compliance.journey_title")}</h3>
       <div className="w-full overflow-x-auto">
         <svg
           viewBox={`0 0 ${W} ${H}`}
@@ -103,13 +105,10 @@ export default function ComplianceJourneyMap({
 
             return (
               <g key={`milestone-${i}`}>
-                {/* Outer ring for active */}
                 {m.active && (
                   <circle cx={cx} cy={midY} r={19} fill="none" stroke="#93c5fd" strokeWidth={3} />
                 )}
-                {/* Circle */}
                 <circle cx={cx} cy={midY} r={14} fill={fill} />
-                {/* Check or number */}
                 {m.done ? (
                   <text x={cx} y={midY + 5} textAnchor="middle" fontSize={14} fill="white" fontWeight="bold">
                     ✓
@@ -119,11 +118,9 @@ export default function ComplianceJourneyMap({
                     {i + 1}
                   </text>
                 )}
-                {/* Label */}
                 <text x={cx} y={midY + 30} textAnchor="middle" fontSize={10} fill={textColor} fontWeight="600">
                   {m.label}
                 </text>
-                {/* Sublabel */}
                 <text x={cx} y={midY + 42} textAnchor="middle" fontSize={9} fill="#9ca3af">
                   {m.sublabel}
                 </text>
@@ -136,9 +133,9 @@ export default function ComplianceJourneyMap({
       {/* Legend */}
       <div className="flex items-center gap-4 mt-2 justify-center">
         {[
-          { color: "bg-green-500", label: "Complete" },
-          { color: "bg-blue-500",  label: "In progress" },
-          { color: "bg-gray-200",  label: "Pending" },
+          { color: "bg-green-500", label: t("compliance.journey_legend_complete") },
+          { color: "bg-blue-500",  label: t("compliance.journey_legend_in_progress") },
+          { color: "bg-gray-200",  label: t("compliance.journey_legend_pending") },
         ].map(({ color, label }) => (
           <div key={label} className="flex items-center gap-1.5">
             <span className={`w-3 h-3 rounded-full ${color}`} />

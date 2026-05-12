@@ -1,7 +1,4 @@
-/**
- * ReadinessScoreWidget — SVG arc gauge showing certification readiness (0–100).
- * Score = compliance × 0.5 + doc_completeness × 0.3 + blocker_resolution × 0.2
- */
+import { useTranslation } from "react-i18next";
 
 interface Props {
   readonly score: number;           // 0–100
@@ -18,34 +15,44 @@ function scoreColor(s: number): string {
   return "#ef4444";
 }
 
-function scoreLabel(s: number): string {
-  if (s >= 80) return "Ready";
-  if (s >= 60) return "Near Ready";
-  if (s >= 40) return "In Progress";
-  return "Early Stage";
-}
-
 export default function ReadinessScoreWidget({
   score,
-  label = "Certification Readiness",
+  label,
   compliancePct,
   docPct,
   blockerPct,
 }: Props) {
+  const { t } = useTranslation();
+
+  const title = label ?? t("compliance.readiness_title");
+
+  function scoreLabel(s: number): string {
+    if (s >= 80) return t("compliance.readiness_status_ready");
+    if (s >= 60) return t("compliance.readiness_status_near_ready");
+    if (s >= 40) return t("compliance.readiness_status_in_progress");
+    return t("compliance.readiness_status_early_stage");
+  }
+
   const CX = 100;
   const CY = 90;
   const R = 70;
   const color = scoreColor(score);
 
   const breakdown = [
-    { label: "Compliance score",    pct: compliancePct, weight: "50%", color: "#3b82f6" },
-    { label: "Documentation",       pct: docPct,        weight: "30%", color: "#8b5cf6" },
-    { label: "Blockers resolved",   pct: blockerPct,    weight: "20%", color: "#22c55e" },
+    { label: t("compliance.readiness_compliance_score"), pct: compliancePct, weight: "50%", color: "#3b82f6" },
+    { label: t("compliance.readiness_documentation"),    pct: docPct,        weight: "30%", color: "#8b5cf6" },
+    { label: t("compliance.readiness_blockers_resolved"),pct: blockerPct,    weight: "20%", color: "#22c55e" },
+  ];
+
+  const milestones = [
+    { threshold: 40, label: t("compliance.readiness_audit_ready"), reached: score >= 40 },
+    { threshold: 60, label: t("compliance.readiness_pre_cert"),    reached: score >= 60 },
+    { threshold: 80, label: t("compliance.readiness_cert_ready"),  reached: score >= 80 },
   ];
 
   return (
     <div className="bg-white rounded-2xl border border-gray-100 p-5">
-      <h3 className="text-sm font-semibold text-gray-900 mb-4">{label}</h3>
+      <h3 className="text-sm font-semibold text-gray-900 mb-4">{title}</h3>
 
       <div className="flex items-center gap-6">
         {/* Arc gauge */}
@@ -109,11 +116,7 @@ export default function ReadinessScoreWidget({
 
       {/* Milestones */}
       <div className="mt-4 grid grid-cols-3 gap-2 text-center">
-        {[
-          { threshold: 40, label: "Audit Ready",  reached: score >= 40 },
-          { threshold: 60, label: "Pre-Cert",     reached: score >= 60 },
-          { threshold: 80, label: "Cert Ready",   reached: score >= 80 },
-        ].map(({ threshold, label: ml, reached }) => (
+        {milestones.map(({ threshold, label: ml, reached }) => (
           <div
             key={threshold}
             className={`rounded-lg px-2 py-1.5 border text-xs font-medium ${

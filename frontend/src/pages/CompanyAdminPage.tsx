@@ -2,11 +2,12 @@ import { useState, useEffect, useCallback } from "react";
 import { Navigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { useAuthStore } from "../store/auth";
-import { usersApi } from "../api/endpoints";
+import { usersApi, activityLogApi } from "../api/endpoints";
 import {
   UserPlus, Trash2, KeyRound, Users, Search, X,
   CheckCircle, Loader2, AlertCircle, Eye, EyeOff,
   Shield, ShieldCheck, ToggleLeft, ToggleRight, Pencil,
+  Activity, Clock, Filter, Plus, Download, Upload, LogIn, ScrollText,
 } from "lucide-react";
 
 // ── Role definitions ──────────────────────────────────────────────────────────
@@ -273,6 +274,250 @@ function UserFormModal({
   );
 }
 
+// ── Activity Log helpers ───────────────────────────────────────────────────────
+
+const ACTION_CONFIG: Record<string, { bg: string; text: string; dot: string; icon: React.ComponentType<{ className?: string }> }> = {
+  create: { bg: "bg-emerald-50", text: "text-emerald-700", dot: "bg-emerald-500", icon: Plus    },
+  update: { bg: "bg-blue-50",    text: "text-blue-700",    dot: "bg-blue-500",    icon: Pencil  },
+  delete: { bg: "bg-red-50",     text: "text-red-700",     dot: "bg-red-500",     icon: Trash2  },
+  login:  { bg: "bg-purple-50",  text: "text-purple-700",  dot: "bg-purple-500",  icon: LogIn   },
+  export: { bg: "bg-gray-50",    text: "text-gray-600",    dot: "bg-gray-400",    icon: Download },
+  import: { bg: "bg-teal-50",    text: "text-teal-700",    dot: "bg-teal-500",    icon: Upload  },
+};
+
+const MODULE_CONFIG: Record<string, { label_key: string; icon: string }> = {
+  risk:          { label_key: "risks.title",            icon: "⚠️" },
+  vendor:        { label_key: "vendors.title",          icon: "🏢" },
+  audit:         { label_key: "audits.title",           icon: "📋" },
+  policy:        { label_key: "policies.title",         icon: "📄" },
+  compliance:    { label_key: "compliance.title",       icon: "✅" },
+  asset:         { label_key: "assets.title",           icon: "💻" },
+  incident:      { label_key: "incidents.title",        icon: "🚨" },
+  auth:          { label_key: "settings.title",         icon: "🔐" },
+  framework:     { label_key: "frameworks.title",       icon: "📚" },
+  vulnerability: { label_key: "vulnerabilities.title",  icon: "🔓" },
+  threat:        { label_key: "threats.title",          icon: "🛡️" },
+  user:          { label_key: "company_admin.title",    icon: "👤" },
+  security:      { label_key: "security_exceptions.title", icon: "🔒" },
+  regulatory:    { label_key: "regulatory.title",       icon: "📰" },
+  webhook:       { label_key: "webhooks.title",         icon: "🔗" },
+};
+
+const ENTITY_FILTER_LIST = ["risk","vendor","audit","policy","compliance","asset","incident","vulnerability","threat"];
+const ACTION_FILTER_LIST  = ["create","update","delete","login","export","import"];
+
+function fmtTimeAgo(dateStr: string, justNow: string): string {
+  const diff = Math.max(0, Date.now() - new Date(dateStr).getTime());
+  const s = Math.floor(diff / 1000);
+  if (s < 60)   return justNow;
+  const m = Math.floor(s / 60);
+  if (m < 60)   return `${m}m`;
+  const h = Math.floor(m / 60);
+  if (h < 24)   return `${h}h`;
+  const d = Math.floor(h / 24);
+  if (d < 30)   return `${d}d`;
+  return new Date(dateStr).toLocaleDateString();
+}
+
+function avatarColor(email: string): string {
+  const colors = [
+    "bg-blue-500","bg-indigo-500","bg-purple-500","bg-pink-500",
+    "bg-teal-500","bg-emerald-500","bg-amber-500","bg-orange-500",
+  ];
+  let h = 0;
+  for (let i = 0; i < email.length; i++) h = (h * 31 + email.charCodeAt(i)) % colors.length;
+  return colors[h];
+}
+
+function ActivityLogPanel({ users, initialUserId }: { users: TenantUser[]; initialUserId?: string }) {
+  const { t } = useTranslation();
+  const [items, setItems]             = useState<any[]>([]);
+  const [loading, setLoading]         = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [hasMore, setHasMore]         = useState(true);
+  const [offset, setOffset]           = useState(0);
+  const [userFilter, setUserFilter]   = useState(initialUserId ?? "");
+  const [entityFilter, setEntityFilter] = useState("");
+  const [actionFilter, setActionFilter] = useState("");
+  const LIMIT = 25;
+
+  async function load(reset = true) {
+    const newOffset = reset ? 0 : offset;
+    reset ? setLoading(true) : setLoadingMore(true);
+    try {
+      const params: any = { limit: LIMIT, offset: newOffset };
+      if (userFilter)   params.user_id     = userFilter;
+      if (entityFilter) params.entity_type = entityFilter;
+      if (actionFilter) params.action      = actionFilter;
+      const data = await activityLogApi.list(params);
+      const entries = Array.isArray(data) ? data : (data as any).items || [];
+      setItems(prev => reset ? entries : [...prev, ...entries]);
+      setHasMore(entries.length === LIMIT);
+      setOffset(newOffset + entries.length);
+    } catch {
+      if (reset) setItems([]);
+    } finally {
+      setLoading(false);
+      setLoadingMore(false);
+    }
+  }
+
+  useEffect(() => { load(true); }, [userFilter, entityFilter, actionFilter]);
+
+  const hasFilters = userFilter || entityFilter || actionFilter;
+
+  return (
+    <div className="space-y-4">
+
+      {/* Filter bar */}
+      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm px-5 py-4">
+        <div className="flex items-center gap-3 flex-wrap">
+          <Filter className="w-4 h-4 text-gray-400 flex-shrink-0" />
+
+          {/* Member filter */}
+          <select
+            value={userFilter}
+            onChange={e => setUserFilter(e.target.value)}
+            className="border border-gray-200 rounded-xl text-sm px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 max-w-[200px]"
+          >
+            <option value="">{t("activity_log.all_members")}</option>
+            {users.map(u => (
+              <option key={u.id} value={u.id}>{u.first_name} {u.last_name}</option>
+            ))}
+          </select>
+
+          {/* Module filter */}
+          <select
+            value={entityFilter}
+            onChange={e => setEntityFilter(e.target.value)}
+            className="border border-gray-200 rounded-xl text-sm px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+          >
+            <option value="">{t("activity_log.all_modules")}</option>
+            {ENTITY_FILTER_LIST.map(et => (
+              <option key={et} value={et}>
+                {MODULE_CONFIG[et]?.icon} {t(`activity_log.entities.${et}`, { defaultValue: et })}
+              </option>
+            ))}
+          </select>
+
+          {/* Action filter */}
+          <select
+            value={actionFilter}
+            onChange={e => setActionFilter(e.target.value)}
+            className="border border-gray-200 rounded-xl text-sm px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+          >
+            <option value="">{t("activity_log.all_actions")}</option>
+            {ACTION_FILTER_LIST.map(a => (
+              <option key={a} value={a}>
+                {t(`activity_log.actions.${a}`, { defaultValue: a })}
+              </option>
+            ))}
+          </select>
+
+          {hasFilters && (
+            <button
+              onClick={() => { setUserFilter(""); setEntityFilter(""); setActionFilter(""); }}
+              className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-red-500 transition-colors border border-gray-200 hover:border-red-200 rounded-lg px-3 py-2"
+            >
+              <X className="w-3 h-3" /> {t("activity_log.clear_filters")}
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Log cards */}
+      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+        {loading ? (
+          <div className="flex flex-col items-center justify-center py-20 gap-3">
+            <Loader2 className="w-8 h-8 animate-spin text-blue-400" />
+            <p className="text-sm text-gray-400">{t("company_admin.loading_activity")}</p>
+          </div>
+        ) : items.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-20 text-center px-6">
+            <div className="w-16 h-16 bg-gray-50 rounded-2xl flex items-center justify-center mb-4">
+              <Activity className="w-8 h-8 text-gray-300" />
+            </div>
+            <p className="text-sm font-medium text-gray-500">{t("activity_log.no_activity")}</p>
+          </div>
+        ) : (
+          <>
+            <div className="divide-y divide-gray-50">
+              {items.map((entry: any, idx: number) => {
+                const cfg   = ACTION_CONFIG[entry.action] ?? ACTION_CONFIG.update;
+                const Icon  = cfg.icon;
+                const email = entry.user_email || "system@platform";
+                const initials = email.slice(0, 2).toUpperCase();
+                const mod   = MODULE_CONFIG[entry.entity_type];
+
+                const actionLabel  = t(`activity_log.actions.${entry.action}`,  { defaultValue: entry.action });
+                const entityLabel  = t(`activity_log.entities.${entry.entity_type}`, { defaultValue: entry.entity_type });
+                const timeLabel    = entry.created_at ? fmtTimeAgo(entry.created_at, t("activity_log.time_just_now")) : "–";
+
+                return (
+                  <div key={entry.id || idx} className="flex items-start gap-4 px-5 py-4 hover:bg-gray-50/60 transition-colors">
+
+                    {/* Avatar */}
+                    <div className={`flex-shrink-0 w-10 h-10 rounded-full ${avatarColor(email)} flex items-center justify-center`}>
+                      <span className="text-white text-xs font-bold">{initials}</span>
+                    </div>
+
+                    {/* Content */}
+                    <div className="flex-1 min-w-0">
+                      {/* Top row: email + time */}
+                      <div className="flex items-center justify-between gap-2 mb-1">
+                        <p className="text-sm font-semibold text-gray-800 truncate">{email}</p>
+                        <span className="flex-shrink-0 flex items-center gap-1 text-xs text-gray-400">
+                          <Clock className="w-3 h-3" />{timeLabel}
+                        </span>
+                      </div>
+
+                      {/* Description row */}
+                      <p className="text-sm text-gray-600">
+                        <span className={`inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-xs font-semibold mr-1.5 ${cfg.bg} ${cfg.text}`}>
+                          <Icon className="w-3 h-3" />
+                          {actionLabel}
+                        </span>
+                        {entityLabel}
+                        {entry.entity_name && (
+                          <span className="font-semibold text-gray-800"> — {entry.entity_name}</span>
+                        )}
+                      </p>
+
+                      {/* Module tag */}
+                      {mod && (
+                        <p className="text-xs text-gray-400 mt-1.5 flex items-center gap-1">
+                          <span>{mod.icon}</span>
+                          <span>{t(mod.label_key as never, { defaultValue: entry.entity_type })}</span>
+                        </p>
+                      )}
+                    </div>
+
+                    {/* Action dot indicator */}
+                    <div className={`flex-shrink-0 w-2 h-2 rounded-full mt-2 ${cfg.dot}`} />
+                  </div>
+                );
+              })}
+            </div>
+
+            {hasMore && (
+              <div className="px-5 py-4 border-t border-gray-50 text-center">
+                <button
+                  onClick={() => load(false)}
+                  disabled={loadingMore}
+                  className="inline-flex items-center gap-2 text-sm text-blue-600 hover:text-blue-700 font-medium disabled:opacity-50"
+                >
+                  {loadingMore ? <Loader2 className="w-4 h-4 animate-spin" /> : <Activity className="w-4 h-4" />}
+                  {t("activity_log.load_more")}
+                </button>
+              </div>
+            )}
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ── Main Page ─────────────────────────────────────────────────────────────────
 
 export default function CompanyAdminPage() {
@@ -281,6 +526,9 @@ export default function CompanyAdminPage() {
 
   // Only tenant_admin can access this page
   if (!user || user.role !== "tenant_admin") return <Navigate to="/dashboard" replace />;
+
+  const [activeTab, setActiveTab] = useState<"team" | "logs">("team");
+  const [logUserId, setLogUserId] = useState<string | undefined>(undefined);
 
   const [users,   setUsers]   = useState<TenantUser[]>([]);
   const [loading, setLoading] = useState(true);
@@ -353,6 +601,11 @@ export default function CompanyAdminPage() {
     await loadUsers();
   }
 
+  function viewUserLogs(userId: string) {
+    setLogUserId(userId);
+    setActiveTab("logs");
+  }
+
   return (
     <div className="p-8 max-w-6xl mx-auto space-y-6">
 
@@ -367,14 +620,40 @@ export default function CompanyAdminPage() {
           </h1>
           <p className="text-sm text-gray-500 mt-1">{t("company_admin.subtitle")}</p>
         </div>
+        {activeTab === "team" && (
+          <button
+            type="button"
+            onClick={() => setCreateModal(true)}
+            className="flex items-center gap-2 px-4 py-2.5 bg-blue-600 text-white rounded-xl text-sm font-semibold hover:bg-blue-700 transition-colors shadow-sm"
+          >
+            <UserPlus className="w-4 h-4" /> {t("company_admin.invite_member")}
+          </button>
+        )}
+      </div>
+
+      {/* Tabs */}
+      <div className="flex gap-1 bg-gray-100 rounded-xl p-1 w-fit">
         <button
-          type="button"
-          onClick={() => setCreateModal(true)}
-          className="flex items-center gap-2 px-4 py-2.5 bg-blue-600 text-white rounded-xl text-sm font-semibold hover:bg-blue-700 transition-colors shadow-sm"
+          onClick={() => setActiveTab("team")}
+          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+            activeTab === "team" ? "bg-white shadow-sm text-gray-900" : "text-gray-500 hover:text-gray-700"
+          }`}
         >
-          <UserPlus className="w-4 h-4" /> {t("company_admin.invite_member")}
+          <Users className="w-4 h-4" /> {t("company_admin.tab_team")}
+        </button>
+        <button
+          onClick={() => { setLogUserId(undefined); setActiveTab("logs"); }}
+          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+            activeTab === "logs" ? "bg-white shadow-sm text-gray-900" : "text-gray-500 hover:text-gray-700"
+          }`}
+        >
+          <ScrollText className="w-4 h-4" /> {t("company_admin.tab_logs")}
         </button>
       </div>
+
+      {activeTab === "logs" && <ActivityLogPanel users={users} initialUserId={logUserId} />}
+
+      {activeTab === "team" && <>
 
       {/* Stats */}
       <div className="grid grid-cols-3 gap-4">
@@ -471,8 +750,16 @@ export default function CompanyAdminPage() {
                   <div className="flex items-center gap-1 flex-shrink-0">
                     <button
                       type="button"
+                      onClick={() => viewUserLogs(u.id)}
+                      title={t("company_admin.view_logs_title")}
+                      className="p-2 rounded-lg text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 transition-colors"
+                    >
+                      <ScrollText className="w-4 h-4" />
+                    </button>
+                    <button
+                      type="button"
                       onClick={() => setEditTarget(u)}
-                      title="Edit roles"
+                      title={t("company_admin.edit_roles_title")}
                       className="p-2 rounded-lg text-gray-400 hover:text-blue-600 hover:bg-blue-50 transition-colors"
                     >
                       <Pencil className="w-4 h-4" />
@@ -480,7 +767,7 @@ export default function CompanyAdminPage() {
                     <button
                       type="button"
                       onClick={() => handleResetPassword(u)}
-                      title="Reset password"
+                      title={t("company_admin.reset_password_title")}
                       className="p-2 rounded-lg text-gray-400 hover:text-amber-600 hover:bg-amber-50 transition-colors"
                     >
                       <KeyRound className="w-4 h-4" />
@@ -488,7 +775,7 @@ export default function CompanyAdminPage() {
                     <button
                       type="button"
                       onClick={() => handleToggleActive(u)}
-                      title={u.is_active ? "Deactivate" : "Activate"}
+                      title={u.is_active ? t("company_admin.deactivate") : t("company_admin.activate")}
                       className="p-2 rounded-lg text-gray-400 hover:text-green-600 hover:bg-green-50 transition-colors"
                     >
                       {u.is_active
@@ -498,7 +785,7 @@ export default function CompanyAdminPage() {
                     <button
                       type="button"
                       onClick={() => setDeleteId(u.id)}
-                      title="Delete"
+                      title={t("company_admin.delete_confirm")}
                       className="p-2 rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50 transition-colors"
                     >
                       <Trash2 className="w-4 h-4" />
@@ -532,6 +819,8 @@ export default function CompanyAdminPage() {
           })}
         </div>
       </div>
+
+      </>}
 
       {/* Modals */}
       {createModal && (
