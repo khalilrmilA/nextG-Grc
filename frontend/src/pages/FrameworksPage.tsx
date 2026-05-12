@@ -570,10 +570,10 @@ export default function FrameworksPage() {
             className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors" title={t("common.refresh")}>
             <RefreshCw className="w-4 h-4" />
           </button>
-          <button type="button" onClick={() => navigate("/frameworks/builder")}
+          <button type="button" onClick={() => navigate("/framework/builder")}
             className="flex items-center gap-2 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors">
             <Plus className="w-4 h-4" />
-            Build Custom Framework
+            {t("frameworks.build_custom_framework")}
           </button>
         </div>
       </div>

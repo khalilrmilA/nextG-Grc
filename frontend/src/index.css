@@ -360,8 +360,10 @@ aside:hover ::-webkit-scrollbar-thumb:hover {
   flex-direction: row-reverse;
 }
 
-/* ── Sidebar itself stays LTR-ordered internally but appears on right ── */
+/* ── Sidebar: pin to right edge in RTL (overrides Tailwind left-0) ── */
 [dir="rtl"] aside {
+  left: auto !important;
+  right: 0 !important;
   border-left-width: 1px;
   border-right-width: 0;
 }
@@ -445,5 +447,24 @@ aside:hover ::-webkit-scrollbar-thumb:hover {
   transform: scaleX(-1);
 }
 [dir="rtl"] .lucide-external-link {
+  transform: scaleX(-1);
+}
+
+/* ── Search input icons: move from left-3/left-4 to right ── */
+[dir="rtl"] .absolute.left-3 {
+  left: auto;
+  right: 0.75rem;
+}
+[dir="rtl"] .absolute.left-4 {
+  left: auto;
+  right: 1rem;
+}
+
+/* ── Search input padding: flip icon-offset padding ── */
+[dir="rtl"] .pl-10 { padding-left: 0; padding-right: 2.5rem; }
+[dir="rtl"] .pl-12 { padding-left: 0; padding-right: 3rem; }
+
+/* ── Chevron-left also flips in RTL ── */
+[dir="rtl"] .lucide-chevron-left {
   transform: scaleX(-1);
 }

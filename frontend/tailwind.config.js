@@ -45,5 +45,9 @@ export default {
       },
     },
   },
+  safelist: [
+    "translate-x-full",
+    "flex-row-reverse",
+  ],
   plugins: [],
 };

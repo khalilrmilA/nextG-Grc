@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from "react";
+import { useTranslation } from "react-i18next";
 import {
   Bot, X, Send, Loader2, Sparkles, ChevronDown,
   Shield, AlertTriangle, CheckSquare, FileText, RotateCcw,
@@ -86,6 +87,7 @@ async function streamChat(
   onToken: (token: string) => void,
   onDone: () => void,
   signal: AbortSignal,
+  language = "en",
 ) {
   // Use a combined signal with a 90s timeout to allow model cold-start
   const timeoutId = setTimeout(() => {
@@ -101,7 +103,7 @@ async function streamChat(
       "Content-Type": "application/json",
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
     },
-    body: JSON.stringify({ messages, stream: true }),
+    body: JSON.stringify({ messages, stream: true, language }),
     signal,
   });
   clearTimeout(timeoutId);
@@ -126,6 +128,7 @@ async function streamChat(
 }
 
 export default function AIAssistant() {
+  const { i18n } = useTranslation();
   const [open, setOpen]       = useState(false);
   const [input, setInput]     = useState("");
   const [messages, setMessages] = useState<Message[]>([
@@ -192,6 +195,7 @@ export default function AIAssistant() {
         },
         () => setLoading(false),
         abortRef.current.signal,
+        i18n.language,
       );
     } catch (err: any) {
       if (err?.name === "AbortError") return;

@@ -156,10 +156,17 @@ class ChatMessage(BaseModel):
     content: str
 
 
+_LANGUAGE_INSTRUCTIONS: dict[str, str] = {
+    "ar": "Always respond entirely in Arabic (العربية). Do not use any English words except technical acronyms (ISO, NIST, SOC, GDPR, etc.).",
+    "fr": "Always respond entirely in French (Français). Do not use any English words except technical acronyms.",
+}
+
+
 class ChatRequest(BaseModel):
     messages: list[ChatMessage]
     model: str = DEFAULT_MODEL
     stream: bool = True
+    language: str = "en"
 
 
 class PolicyGenerateRequest(BaseModel):
@@ -295,8 +302,10 @@ async def chat(
     )
     ai_quota.check_quota_or_raise(current_user.id, estimated)
     messages = [{"role": m.role, "content": m.content} for m in request.messages]
+    lang_instr = _LANGUAGE_INSTRUCTIONS.get(request.language, "")
+    system_prompt = SYSTEM_PROMPT + (f"\n- {lang_instr}" if lang_instr else "")
     return StreamingResponse(
-        _quota_only_sse_generator(messages, request.model, SYSTEM_PROMPT, current_user.id),
+        _quota_only_sse_generator(messages, request.model, system_prompt, current_user.id),
         media_type=_SSE_MEDIA_TYPE,
         headers=_SSE_HEADERS,
     )

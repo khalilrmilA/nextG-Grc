@@ -406,9 +406,8 @@ function NotificationBell() {
 }
 
 // Sidebar style helpers
-function sidebarClasses(style: string, rtl = false) {
-  const border = rtl ? "border-l" : "border-r";
-  if (style === "light")   return `bg-white ${border} border-gray-200`;
+function sidebarClasses(style: string) {
+  if (style === "light")   return "bg-white border-r border-gray-200";
   if (style === "branded") return "bg-gradient-to-b from-blue-700 to-indigo-800";
   return "bg-slate-900"; // dark (default)
 }
@@ -449,7 +448,7 @@ export default function Layout() {
   const isRTL = i18n.language === "ar";
   const qc = useQueryClient();
   const segment  = location.pathname.split("/")[1] || "dashboard";
-  const pageLabel = t(`nav.${segment}` as never, PAGE_LABELS[segment] ?? segment);
+  const pageLabel = t(`nav.${segment.replace(/-/g, "_")}` as never, PAGE_LABELS[segment] ?? segment);
   const [appearance] = useAppearance();
   const sc = sidebarTextClasses(appearance.sidebarStyle);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
@@ -540,7 +539,10 @@ export default function Layout() {
   const planSub = resolvePlanSub();
 
   return (
-    <div className={`flex h-screen bg-gray-50 ${isRTL ? "flex-row-reverse" : ""}`}>
+    <div
+      className="flex h-screen bg-gray-50"
+      style={{ flexDirection: isRTL ? "row-reverse" : "row" }}
+    >
       {/* ── Mobile sidebar backdrop ── */}
       {mobileSidebarOpen && (
         <div
@@ -550,12 +552,15 @@ export default function Layout() {
       )}
 
       {/* ── Sidebar ── */}
-      <aside className={`
-        fixed inset-y-0 ${isRTL ? "right-0" : "left-0"} z-50 w-64 flex flex-col shadow-2xl flex-shrink-0 transition-all duration-300
-        md:relative md:translate-x-0 md:z-auto
-        ${mobileSidebarOpen ? "translate-x-0" : isRTL ? "translate-x-full" : "-translate-x-full"}
-        ${sidebarClasses(appearance.sidebarStyle, isRTL)}
-      `}>
+      <aside
+        style={isRTL ? { right: 0, left: "auto" } : { left: 0, right: "auto" }}
+        className={`
+          fixed inset-y-0 z-50 w-64 flex flex-col shadow-2xl flex-shrink-0 transition-all duration-300
+          md:relative md:translate-x-0 md:z-auto
+          ${mobileSidebarOpen ? "translate-x-0" : isRTL ? "translate-x-full" : "-translate-x-full"}
+          ${sidebarClasses(appearance.sidebarStyle)}
+        `}
+      >
         {/* Logo + mobile close */}
         <div className={`flex items-center justify-between px-4 py-4 border-b ${sc.divider}`}>
           <img src="/logowhite.png" alt="GRCEye — Governance, Risk & Compliance Platform" className="h-20 w-auto object-contain" />
@@ -668,7 +673,7 @@ export default function Layout() {
                       {({ isActive }) => (
                         <>
                           <Icon className={`w-4 h-4 flex-shrink-0 ${isActive ? sc.navIconActive : sc.navIcon}`} />
-                          <span className="flex-1">{t(`nav.${module}` as never, label)}</span>
+                          <span className="flex-1">{t(`nav.${module.replace(/-/g, "_")}` as never, label)}</span>
                         </>
                       )}
                     </NavLink>

@@ -168,8 +168,8 @@ export default function ReportsPage() {
               <div className={`w-12 h-12 ${colors.bg} rounded-xl flex items-center justify-center mb-4`}>
                 <Icon className={`w-6 h-6 ${colors.icon}`} />
               </div>
-              <h3 className="text-lg font-semibold text-gray-900 mb-1">{report.name}</h3>
-              <p className="text-sm text-gray-500 mb-4 min-h-[40px]">{report.description}</p>
+              <h3 className="text-lg font-semibold text-gray-900 mb-1">{String(t(`reports.${report.id}_name` as never, report.name))}</h3>
+              <p className="text-sm text-gray-500 mb-4 min-h-[40px]">{String(t(`reports.${report.id}_desc` as never, report.description))}</p>
 
               <div className="flex gap-2">
                 <button

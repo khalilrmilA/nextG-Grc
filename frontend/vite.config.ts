@@ -14,6 +14,7 @@ export default defineConfig({
     port: 4000,
     strictPort: true,
     allowedHosts: true,
+    hmr: { overlay: false },
     proxy: {
       "/api": {
         target: "http://localhost:8000",
