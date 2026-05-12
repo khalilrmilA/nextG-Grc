@@ -7,6 +7,7 @@
  */
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import {
   BookOpen, Sparkles, Plus, Check, ChevronRight, ChevronDown, Trash2,
   Search, Loader2, Save, ArrowLeft, AlertCircle, Lightbulb, Library, Wand2, Copy,
@@ -51,6 +52,7 @@ type Step = typeof STEPS[number];
 
 export default function FrameworkBuilderPage() {
   const navigate = useNavigate();
+  const { t } = useTranslation();
   const [step, setStep] = useState<Step>("info");
 
   // Form state
@@ -146,7 +148,7 @@ export default function FrameworkBuilderPage() {
       setAiRationale(result.rationale || "");
     } catch (err) {
       console.error("AI suggestions failed:", err);
-      setError("AI suggestions failed. Make sure Ollama is running.");
+      setError(t("frameworks.builder.err_ai_failed"));
     } finally {
       setLoadingAi(false);
     }
@@ -269,11 +271,11 @@ export default function FrameworkBuilderPage() {
 
   async function handleSave() {
     if (!name.trim() || !shortName.trim()) {
-      setError("Name and short name are required");
+      setError(t("frameworks.builder.err_name_required"));
       return;
     }
     if (selected.length === 0) {
-      setError("Select at least one control");
+      setError(t("frameworks.builder.err_no_controls"));
       return;
     }
 
@@ -339,14 +341,14 @@ export default function FrameworkBuilderPage() {
             onClick={() => navigate("/framework")}
             className="text-sm text-gray-500 hover:text-gray-700 flex items-center gap-1 mb-2"
           >
-            <ArrowLeft className="w-4 h-4" /> Back to Frameworks
+            <ArrowLeft className="w-4 h-4" /> {t("frameworks.builder.back")}
           </button>
-          <h1 className="text-2xl font-bold text-gray-900">Custom Framework Builder</h1>
-          <p className="text-gray-500 text-sm mt-1">Mix and match controls from existing frameworks + AI suggestions</p>
+          <h1 className="text-2xl font-bold text-gray-900">{t("frameworks.builder.title")}</h1>
+          <p className="text-gray-500 text-sm mt-1">{t("frameworks.builder.subtitle")}</p>
         </div>
         <div className="flex items-center gap-2 bg-blue-50 border border-blue-100 rounded-xl px-3 py-2">
           <Library className="w-4 h-4 text-blue-600" />
-          <span className="text-sm font-semibold text-blue-900">{selected.length} controls selected</span>
+          <span className="text-sm font-semibold text-blue-900">{selected.length} {t("frameworks.builder.controls_selected")}</span>
         </div>
       </div>
 
@@ -357,10 +359,10 @@ export default function FrameworkBuilderPage() {
             const isActive = step === s;
             const isPast = STEPS.indexOf(step) > idx;
             const labels: Record<Step, string> = {
-              info: "1. Framework Info",
-              browse: "2. Browse Controls",
-              ai: "3. AI Suggestions",
-              review: "4. Review & Save",
+              info:   `1. ${t("frameworks.builder.step_info")}`,
+              browse: `2. ${t("frameworks.builder.step_browse")}`,
+              ai:     `3. ${t("frameworks.builder.step_ai")}`,
+              review: `4. ${t("frameworks.builder.step_review")}`,
             };
             return (
               <div key={s} className="flex items-center flex-1">
@@ -400,11 +402,11 @@ export default function FrameworkBuilderPage() {
       {/* STEP 1: INFO */}
       {step === "info" && (
         <div className="bg-white rounded-2xl border border-gray-100 p-6 space-y-4">
-          <h2 className="text-lg font-semibold text-gray-900 mb-2">Framework Information</h2>
+          <h2 className="text-lg font-semibold text-gray-900 mb-2">{t("frameworks.builder.framework_info")}</h2>
 
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Framework Name *</label>
+              <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">{t("frameworks.builder.framework_name")} *</label>
               <input
                 type="text"
                 value={name}
@@ -414,7 +416,7 @@ export default function FrameworkBuilderPage() {
               />
             </div>
             <div>
-              <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Short Name *</label>
+              <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">{t("frameworks.builder.short_name")} *</label>
               <input
                 type="text"
                 value={shortName}
@@ -428,7 +430,7 @@ export default function FrameworkBuilderPage() {
 
           <div className="grid grid-cols-3 gap-4">
             <div>
-              <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Version</label>
+              <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">{t("frameworks.builder.version")}</label>
               <input
                 type="text"
                 value={version}
@@ -437,7 +439,7 @@ export default function FrameworkBuilderPage() {
               />
             </div>
             <div>
-              <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Industry</label>
+              <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">{t("frameworks.builder.industry")}</label>
               <select
                 value={industry}
                 onChange={e => setIndustry(e.target.value)}
@@ -455,7 +457,7 @@ export default function FrameworkBuilderPage() {
               </select>
             </div>
             <div>
-              <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Region</label>
+              <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">{t("frameworks.builder.region")}</label>
               <select
                 value={region}
                 onChange={e => setRegion(e.target.value)}
@@ -474,12 +476,12 @@ export default function FrameworkBuilderPage() {
           </div>
 
           <div>
-            <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Description / Use Case</label>
+            <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">{t("frameworks.builder.description_label")}</label>
             <textarea
               rows={3}
               value={description}
               onChange={e => setDescription(e.target.value)}
-              placeholder="Describe what this framework will be used for. AI will use this context for suggestions."
+              placeholder={t("frameworks.builder.description_placeholder")}
               className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
             />
           </div>
@@ -490,14 +492,14 @@ export default function FrameworkBuilderPage() {
       {step === "browse" && (
         <div className="bg-white rounded-2xl border border-gray-100 p-6 space-y-4">
           <div className="flex items-center justify-between">
-            <h2 className="text-lg font-semibold text-gray-900">Browse Controls from Existing Frameworks</h2>
+            <h2 className="text-lg font-semibold text-gray-900">{t("frameworks.builder.browse_title")}</h2>
             <div className="relative">
               <Search className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
               <input
                 type="text"
                 value={search}
                 onChange={e => setSearch(e.target.value)}
-                placeholder="Search controls..."
+                placeholder={t("frameworks.builder.search_controls")}
                 className="pl-9 pr-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
             </div>
@@ -528,7 +530,7 @@ export default function FrameworkBuilderPage() {
                               ? "bg-blue-100 border-blue-600"
                               : "border-gray-300 hover:border-blue-400"
                           }`}
-                          title={fwState === "all" ? "Deselect all" : "Select all controls in this framework"}
+                          title={fwState === "all" ? t("frameworks.builder.deselect_all") : t("frameworks.builder.select_all")}
                         >
                           {fwState === "all" && <Check className="w-3.5 h-3.5 text-white" />}
                           {fwState === "some" && <div className="w-2 h-0.5 bg-blue-600 rounded"></div>}
@@ -542,7 +544,7 @@ export default function FrameworkBuilderPage() {
                           <div>
                             <p className="text-sm font-semibold text-gray-900">{fw.framework_name}</p>
                             <p className="text-xs text-gray-500">
-                              {fw.controls.length} controls · <span className={selectedFromFw > 0 ? "text-blue-600 font-semibold" : ""}>{selectedFromFw} selected</span>
+                              {fw.controls.length} {t("frameworks.builder.controls_count")} · <span className={selectedFromFw > 0 ? "text-blue-600 font-semibold" : ""}>{selectedFromFw} {t("frameworks.builder.selected_count")}</span>
                             </p>
                           </div>
                         </button>
@@ -558,7 +560,7 @@ export default function FrameworkBuilderPage() {
                     {isExpanded && (
                       <div className="border-t border-gray-100 p-3 space-y-1.5 max-h-96 overflow-y-auto">
                         {fw.controls.length === 0 ? (
-                          <p className="text-xs text-gray-500 text-center py-4">No controls found</p>
+                          <p className="text-xs text-gray-500 text-center py-4">{t("frameworks.builder.no_controls")}</p>
                         ) : (
                           fw.controls.map(ctrl => {
                             const isSel = isControlSelected(ctrl.id);
@@ -607,7 +609,7 @@ export default function FrameworkBuilderPage() {
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
               <Sparkles className="w-5 h-5 text-purple-600" />
-              AI Control Suggestions
+              {t("frameworks.builder.ai_title")}
             </h2>
             <button
               onClick={loadAISuggestions}
@@ -617,12 +619,12 @@ export default function FrameworkBuilderPage() {
               {loadingAi ? (
                 <>
                   <Loader2 className="w-4 h-4 animate-spin" />
-                  AI Thinking...
+                  {t("frameworks.builder.ai_thinking")}
                 </>
               ) : (
                 <>
                   <Wand2 className="w-4 h-4" />
-                  {aiSuggestions.length > 0 ? "Refresh Suggestions" : "Get AI Suggestions"}
+                  {aiSuggestions.length > 0 ? t("frameworks.builder.refresh_suggestions") : t("frameworks.builder.get_suggestions")}
                 </>
               )}
             </button>
@@ -631,16 +633,16 @@ export default function FrameworkBuilderPage() {
           {aiSuggestions.length === 0 && !loadingAi && (
             <div className="bg-blue-50 border border-blue-100 rounded-xl p-6 text-center">
               <Lightbulb className="w-10 h-10 text-blue-600 mx-auto mb-3" />
-              <p className="text-sm font-semibold text-blue-900">Get AI-powered control suggestions</p>
+              <p className="text-sm font-semibold text-blue-900">{t("frameworks.builder.ai_empty_title")}</p>
               <p className="text-xs text-blue-700 mt-1">
-                Based on your industry ({industry}), region ({region}), and use case
+                {t("frameworks.builder.ai_empty_sub", { industry, region })}
               </p>
             </div>
           )}
 
           {aiRationale && (
             <div className="bg-purple-50 border border-purple-100 rounded-xl p-3">
-              <p className="text-xs text-purple-900"><strong>AI Rationale:</strong> {aiRationale}</p>
+              <p className="text-xs text-purple-900"><strong>{t("frameworks.builder.ai_rationale")}</strong> {aiRationale}</p>
             </div>
           )}
 
@@ -711,14 +713,14 @@ export default function FrameworkBuilderPage() {
           {/* Custom Control Form */}
           <div className="border-t border-gray-100 pt-4">
             <div className="flex items-center justify-between mb-3">
-              <p className="text-sm font-semibold text-gray-700">Add Your Own Control</p>
+              <p className="text-sm font-semibold text-gray-700">{t("frameworks.builder.add_own")}</p>
               <button
                 type="button"
                 onClick={() => { setShowCustomForm(v => !v); setCustomTab("new"); }}
                 className="flex items-center gap-1.5 text-xs font-medium text-blue-600 hover:text-blue-800 bg-blue-50 hover:bg-blue-100 px-3 py-1.5 rounded-lg transition-colors"
               >
                 <Plus className="w-3.5 h-3.5" />
-                {showCustomForm ? "Cancel" : "Add Custom Control"}
+                {showCustomForm ? t("frameworks.builder.cancel") : t("frameworks.builder.add_custom")}
               </button>
             </div>
 
@@ -733,7 +735,7 @@ export default function FrameworkBuilderPage() {
                       customTab === "new" ? "bg-blue-600 text-white" : "text-gray-600 hover:bg-gray-200"
                     }`}
                   >
-                    <Plus className="w-3 h-3" /> Create from scratch
+                    <Plus className="w-3 h-3" /> {t("frameworks.builder.create_scratch")}
                   </button>
                   <button
                     type="button"
@@ -742,7 +744,7 @@ export default function FrameworkBuilderPage() {
                       customTab === "import" ? "bg-blue-600 text-white" : "text-gray-600 hover:bg-gray-200"
                     }`}
                   >
-                    <Copy className="w-3 h-3" /> Import from framework
+                    <Copy className="w-3 h-3" /> {t("frameworks.builder.import_from")}
                   </button>
                 </div>
 
@@ -754,7 +756,7 @@ export default function FrameworkBuilderPage() {
                       onChange={e => setImportFwId(e.target.value)}
                       className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
                     >
-                      <option value="">— Select a framework —</option>
+                      <option value="">{t("frameworks.builder.select_framework")}</option>
                       {importFwList.map(f => (
                         <option key={f.id} value={f.id}>{f.name} ({f.short_name})</option>
                       ))}
@@ -777,14 +779,14 @@ export default function FrameworkBuilderPage() {
                       <div className="border border-gray-200 rounded-lg bg-white overflow-y-auto max-h-40">
                         {importFwLoading ? (
                           <div className="flex items-center justify-center py-5 text-xs text-gray-400">
-                            <Loader2 className="w-4 h-4 animate-spin mr-2" /> Loading…
+                            <Loader2 className="w-4 h-4 animate-spin mr-2" /> {t("docgen.loading_controls")}
                           </div>
                         ) : importFwControls.filter(c =>
                             !importSearch ||
                             c.control_id.toLowerCase().includes(importSearch.toLowerCase()) ||
                             c.title.toLowerCase().includes(importSearch.toLowerCase())
                           ).length === 0 ? (
-                          <div className="py-5 text-center text-xs text-gray-400">No controls found</div>
+                          <div className="py-5 text-center text-xs text-gray-400">{t("frameworks.builder.no_controls")}</div>
                         ) : (
                           importFwControls
                             .filter(c =>
@@ -822,7 +824,7 @@ export default function FrameworkBuilderPage() {
                     )}
 
                     {importSelected && (
-                      <p className="text-xs text-blue-600 font-medium">✓ Selected — edit the fields below before adding</p>
+                      <p className="text-xs text-blue-600 font-medium">{t("frameworks.builder.selected_hint")}</p>
                     )}
                   </div>
                 )}
@@ -830,7 +832,7 @@ export default function FrameworkBuilderPage() {
                 {/* Form fields */}
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">Control ID <span className="text-gray-400">(auto if blank)</span></label>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">{t("frameworks.builder.control_id")} <span className="text-gray-400">({t("frameworks.builder.control_id_hint")})</span></label>
                     <input
                       type="text"
                       value={customCtrl.control_id}
@@ -840,7 +842,7 @@ export default function FrameworkBuilderPage() {
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">Category</label>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">{t("frameworks.builder.category")}</label>
                     <input
                       type="text"
                       value={customCtrl.category}
@@ -851,7 +853,7 @@ export default function FrameworkBuilderPage() {
                   </div>
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">Title *</label>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">{t("frameworks.builder.ctrl_title")} *</label>
                   <input
                     type="text"
                     value={customCtrl.title}
@@ -861,7 +863,7 @@ export default function FrameworkBuilderPage() {
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">Description</label>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">{t("frameworks.builder.ctrl_description")}</label>
                   <textarea
                     rows={2}
                     value={customCtrl.description}
@@ -877,7 +879,7 @@ export default function FrameworkBuilderPage() {
                   className="flex items-center gap-1.5 text-sm font-medium bg-blue-600 hover:bg-blue-700 disabled:opacity-40 text-white px-4 py-2 rounded-lg transition-colors"
                 >
                   <Plus className="w-4 h-4" />
-                  Add to Framework
+                  {t("frameworks.builder.add_to_framework")}
                 </button>
               </div>
             )}
@@ -888,40 +890,40 @@ export default function FrameworkBuilderPage() {
       {/* STEP 4: REVIEW & SAVE */}
       {step === "review" && (
         <div className="bg-white rounded-2xl border border-gray-100 p-6 space-y-4">
-          <h2 className="text-lg font-semibold text-gray-900">Review Your Custom Framework</h2>
+          <h2 className="text-lg font-semibold text-gray-900">{t("frameworks.builder.review_title")}</h2>
 
           <div className="grid grid-cols-2 gap-4 bg-gray-50 rounded-xl p-4">
             <div>
-              <p className="text-xs text-gray-500 uppercase">Name</p>
-              <p className="text-sm font-semibold text-gray-900">{name || "(unnamed)"}</p>
+              <p className="text-xs text-gray-500 uppercase">{t("frameworks.builder.lbl_name")}</p>
+              <p className="text-sm font-semibold text-gray-900">{name || t("frameworks.builder.unnamed")}</p>
             </div>
             <div>
-              <p className="text-xs text-gray-500 uppercase">Short Name</p>
+              <p className="text-xs text-gray-500 uppercase">{t("frameworks.builder.lbl_short_name")}</p>
               <p className="text-sm font-semibold text-gray-900">{shortName || "-"}</p>
             </div>
             <div>
-              <p className="text-xs text-gray-500 uppercase">Version</p>
+              <p className="text-xs text-gray-500 uppercase">{t("frameworks.builder.lbl_version")}</p>
               <p className="text-sm font-semibold text-gray-900">{version}</p>
             </div>
             <div>
-              <p className="text-xs text-gray-500 uppercase">Total Controls</p>
+              <p className="text-xs text-gray-500 uppercase">{t("frameworks.builder.lbl_total_controls")}</p>
               <p className="text-sm font-semibold text-blue-600">{selected.length}</p>
             </div>
             <div>
-              <p className="text-xs text-gray-500 uppercase">Industry</p>
+              <p className="text-xs text-gray-500 uppercase">{t("frameworks.builder.lbl_industry")}</p>
               <p className="text-sm font-semibold text-gray-900">{industry}</p>
             </div>
             <div>
-              <p className="text-xs text-gray-500 uppercase">Region</p>
+              <p className="text-xs text-gray-500 uppercase">{t("frameworks.builder.lbl_region")}</p>
               <p className="text-sm font-semibold text-gray-900">{region}</p>
             </div>
           </div>
 
           <div>
-            <h3 className="text-sm font-semibold text-gray-900 mb-2">Selected Controls ({selected.length})</h3>
+            <h3 className="text-sm font-semibold text-gray-900 mb-2">{t("frameworks.builder.selected_controls")} ({selected.length})</h3>
             <div className="space-y-1.5 max-h-96 overflow-y-auto">
               {selected.length === 0 ? (
-                <p className="text-sm text-gray-500 text-center py-8">No controls selected. Go back to add some.</p>
+                <p className="text-sm text-gray-500 text-center py-8">{t("frameworks.builder.no_controls_selected")}</p>
               ) : (
                 selected.map((c, i) => (
                   <div key={i} className="flex items-start justify-between gap-2 p-2.5 bg-gray-50 rounded-lg border border-gray-100">
@@ -964,7 +966,7 @@ export default function FrameworkBuilderPage() {
           disabled={step === "info"}
           className="px-4 py-2 rounded-lg border border-gray-200 text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
         >
-          ← Previous
+          {t("frameworks.builder.previous")}
         </button>
 
         {step !== "review" ? (
@@ -972,7 +974,7 @@ export default function FrameworkBuilderPage() {
             onClick={nextStep}
             className="flex items-center gap-2 px-5 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium transition-colors"
           >
-            Next →
+            {t("frameworks.builder.next")}
           </button>
         ) : (
           <button
@@ -983,12 +985,12 @@ export default function FrameworkBuilderPage() {
             {saving ? (
               <>
                 <Loader2 className="w-4 h-4 animate-spin" />
-                Saving...
+                {t("frameworks.builder.saving")}
               </>
             ) : (
               <>
                 <Save className="w-4 h-4" />
-                Save Framework
+                {t("frameworks.builder.save_framework")}
               </>
             )}
           </button>

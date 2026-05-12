@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
+import { useTranslation } from "react-i18next";
 import {
   supportApi,
   type SupportTicketListItem,
@@ -30,17 +31,19 @@ const PRIORITY_STYLES: Record<TicketPriority, string> = {
 };
 
 function StatusBadge({ status }: { status: TicketStatus }) {
+  const { t } = useTranslation();
   return (
     <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold capitalize ${STATUS_STYLES[status]}`}>
-      {status.replace("_", " ")}
+      {String(t(`support.statuses.${status}` as never, status.replace("_", " ")))}
     </span>
   );
 }
 
 function PriorityBadge({ priority }: { priority: TicketPriority }) {
+  const { t } = useTranslation();
   return (
     <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold capitalize ${PRIORITY_STYLES[priority]}`}>
-      {priority}
+      {String(t(`support.priorities.${priority}` as never, priority))}
     </span>
   );
 }
@@ -91,6 +94,7 @@ function getToken() {
 // ── Create Ticket Modal ───────────────────────────────────────────────────────
 
 function CreateTicketModal({ onClose, onCreate }: { onClose: () => void; onCreate: (t: SupportTicketDetail) => void }) {
+  const { t } = useTranslation();
   const [title, setTitle]       = useState("");
   const [description, setDesc]  = useState("");
   const [priority, setPriority] = useState<TicketPriority>("medium");
@@ -99,13 +103,13 @@ function CreateTicketModal({ onClose, onCreate }: { onClose: () => void; onCreat
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
-    if (!title.trim() || !description.trim()) { setError("Title and description are required."); return; }
+    if (!title.trim() || !description.trim()) { setError(t("support.err_required")); return; }
     setSaving(true);
     try {
       const ticket = await supportApi.create({ title: title.trim(), description: description.trim(), priority });
       onCreate(ticket);
     } catch {
-      setError("Failed to create ticket. Please try again.");
+      setError(t("support.err_create"));
     } finally {
       setSaving(false);
     }
@@ -115,47 +119,47 @@ function CreateTicketModal({ onClose, onCreate }: { onClose: () => void; onCreat
     <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg">
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
-          <h2 className="text-lg font-bold text-gray-900">New Support Ticket</h2>
+          <h2 className="text-lg font-bold text-gray-900">{t("support.new_ticket_title")}</h2>
           <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-gray-100"><X className="w-4 h-4" /></button>
         </div>
         <form onSubmit={submit} className="p-6 space-y-4">
           {error && <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{error}</p>}
           <div>
-            <label className="block text-sm font-semibold text-gray-700 mb-1">Title</label>
+            <label className="block text-sm font-semibold text-gray-700 mb-1">{t("support.col_title")}</label>
             <input
               value={title} onChange={e => setTitle(e.target.value)}
-              placeholder="Brief description of your issue"
+              placeholder={t("support.placeholder_title")}
               className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
           </div>
           <div>
-            <label className="block text-sm font-semibold text-gray-700 mb-1">Description</label>
+            <label className="block text-sm font-semibold text-gray-700 mb-1">{t("support.col_description")}</label>
             <textarea
               value={description} onChange={e => setDesc(e.target.value)}
               rows={5}
-              placeholder="Describe your issue in detail — what you expected, what happened, and any steps to reproduce."
+              placeholder={t("support.placeholder_desc")}
               className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
             />
           </div>
           <div>
-            <label className="block text-sm font-semibold text-gray-700 mb-1">Priority</label>
+            <label className="block text-sm font-semibold text-gray-700 mb-1">{t("support.col_priority")}</label>
             <select
               value={priority} onChange={e => setPriority(e.target.value as TicketPriority)}
               className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
-              <option value="low">Low</option>
-              <option value="medium">Medium</option>
-              <option value="high">High</option>
-              <option value="urgent">Urgent</option>
+              <option value="low">{t("support.priorities.low")}</option>
+              <option value="medium">{t("support.priorities.medium")}</option>
+              <option value="high">{t("support.priorities.high")}</option>
+              <option value="urgent">{t("support.priorities.urgent")}</option>
             </select>
           </div>
           <div className="flex gap-3 pt-2">
             <button type="button" onClick={onClose} className="flex-1 px-4 py-2.5 border border-gray-200 text-gray-700 font-semibold rounded-xl hover:bg-gray-50 text-sm">
-              Cancel
+              {t("support.cancel")}
             </button>
             <button type="submit" disabled={saving} className="flex-1 px-4 py-2.5 bg-blue-600 text-white font-semibold rounded-xl hover:bg-blue-700 text-sm disabled:opacity-60 flex items-center justify-center gap-2">
               {saving && <Loader2 className="w-4 h-4 animate-spin" />}
-              Submit Ticket
+              {t("support.submit_ticket")}
             </button>
           </div>
         </form>
@@ -175,6 +179,7 @@ function ChatPanel({
   chatSession: ChatSessionData;
   onChatUpdate: (s: ChatSessionData) => void;
 }) {
+  const { t } = useTranslation();
   const [msgs, setMsgs] = useState<{ id: string; content: string; is_support: boolean; sender_name: string; created_at: string }[]>([]);
   const [input, setInput] = useState("");
   const [wsReady, setWsReady] = useState(false);
@@ -227,10 +232,10 @@ function ChatPanel({
     <div className="flex flex-col h-80 border border-blue-200 rounded-2xl overflow-hidden mt-4">
       <div className="flex items-center gap-2 px-4 py-2.5 bg-blue-600 text-white">
         <Video className="w-4 h-4" />
-        <span className="text-sm font-semibold flex-1">Live Chat with Support</span>
+        <span className="text-sm font-semibold flex-1">{t("support.live_chat")}</span>
         {wsReady
-          ? <span className="flex items-center gap-1 text-xs text-blue-200"><span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />Connected</span>
-          : <span className="text-xs text-blue-300">Connecting…</span>}
+          ? <span className="flex items-center gap-1 text-xs text-blue-200"><span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />{t("support.connected")}</span>
+          : <span className="text-xs text-blue-300">{t("support.connecting")}</span>}
         <button onClick={endChat} className="ml-2 p-1 rounded-lg hover:bg-blue-700 transition-colors" title="End chat">
           <PhoneOff className="w-4 h-4" />
         </button>
@@ -238,7 +243,7 @@ function ChatPanel({
 
       <div className="flex-1 overflow-y-auto p-3 space-y-2 bg-gray-50">
         {msgs.length === 0 && (
-          <p className="text-center text-xs text-gray-400 mt-8">Chat started — say hello!</p>
+          <p className="text-center text-xs text-gray-400 mt-8">{t("support.chat_started")}</p>
         )}
         {msgs.map((m) => (
           <div key={m.id} className={`flex ${m.is_support ? "justify-start" : "justify-end"}`}>
@@ -255,7 +260,7 @@ function ChatPanel({
         <input
           value={input} onChange={e => setInput(e.target.value)}
           onKeyDown={e => e.key === "Enter" && !e.shiftKey && sendMessage()}
-          placeholder="Type a message…"
+          placeholder={t("support.type_message")}
           className="flex-1 border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
           disabled={!wsReady}
         />
@@ -282,6 +287,7 @@ function TicketDetail({
   onBack: () => void;
   onUpdated: (t: SupportTicketDetail) => void;
 }) {
+  const { t } = useTranslation();
   const [ticket, setTicket]   = useState(initial);
   const [newMsg, setNewMsg]   = useState("");
   const [sending, setSending] = useState(false);
@@ -373,7 +379,7 @@ function TicketDetail({
       </div>
 
       <div className="bg-gray-50 rounded-2xl px-5 py-4 mb-5">
-        <p className="text-sm font-semibold text-gray-500 mb-1">Description</p>
+        <p className="text-sm font-semibold text-gray-500 mb-1">{t("support.col_description")}</p>
         <p className="text-sm text-gray-700 whitespace-pre-wrap">{ticket.description}</p>
       </div>
 
@@ -381,11 +387,11 @@ function TicketDetail({
         <div className="flex items-center gap-3 bg-blue-50 border border-blue-200 rounded-2xl px-5 py-3.5 mb-4">
           <Video className="w-5 h-5 text-blue-600 flex-shrink-0" />
           <div className="flex-1">
-            <p className="text-sm font-semibold text-blue-800">Support wants to chat with you live</p>
-            <p className="text-xs text-blue-600">Accept to open a real-time chat window with the support team.</p>
+            <p className="text-sm font-semibold text-blue-800">{t("support.chat_wants")}</p>
+            <p className="text-xs text-blue-600">{t("support.chat_accept_desc")}</p>
           </div>
           <button onClick={acceptChat} className="px-4 py-1.5 bg-blue-600 text-white text-sm font-semibold rounded-xl hover:bg-blue-700 transition-colors">
-            Accept
+            {t("support.accept")}
           </button>
         </div>
       )}
@@ -396,13 +402,13 @@ function TicketDetail({
 
       <div className="flex-1 overflow-y-auto space-y-3 pr-1 mb-4">
         {ticket.messages.length === 0 && (
-          <p className="text-center text-sm text-gray-400 py-8">No messages yet. Start by writing below.</p>
+          <p className="text-center text-sm text-gray-400 py-8">{t("support.no_messages")}</p>
         )}
         {ticket.messages.map((msg) => (
           <div key={msg.id} className={`flex ${msg.is_support ? "justify-start" : "justify-end"}`}>
             <div className={`max-w-[80%] rounded-2xl px-4 py-3 ${msg.is_support ? "bg-white border border-gray-200" : "bg-blue-600 text-white"}`}>
               <div className={`text-xs font-semibold mb-1 ${msg.is_support ? "text-blue-600" : "text-blue-200"}`}>
-                {msg.is_support ? `Support — ${msg.sender.first_name} ${msg.sender.last_name}` : "You"} · {fmtDate(msg.created_at)}
+                {msg.is_support ? `Support — ${msg.sender.first_name} ${msg.sender.last_name}` : t("support.you")} · {fmtDate(msg.created_at)}
               </div>
               <p className="text-sm whitespace-pre-wrap">{msg.content}</p>
             </div>
@@ -415,7 +421,7 @@ function TicketDetail({
         <form onSubmit={sendMessage} className="flex gap-2">
           <input
             value={newMsg} onChange={e => setNewMsg(e.target.value)}
-            placeholder="Write a reply…"
+            placeholder={t("support.write_reply")}
             className="flex-1 border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
           />
           <button
@@ -424,7 +430,7 @@ function TicketDetail({
             className="px-4 py-2.5 bg-blue-600 text-white rounded-xl hover:bg-blue-700 disabled:opacity-50 flex items-center gap-2 text-sm font-semibold"
           >
             {sending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
-            Send
+            {t("support.send")}
           </button>
         </form>
       )}
@@ -435,6 +441,7 @@ function TicketDetail({
 // ── Main Page ─────────────────────────────────────────────────────────────────
 
 export default function SupportPage() {
+  const { t } = useTranslation();
   const [tickets, setTickets]         = useState<SupportTicketListItem[]>([]);
   const [selected, setSelected]       = useState<SupportTicketDetail | null>(null);
   const [loading, setLoading]         = useState(true);
@@ -530,14 +537,14 @@ export default function SupportPage() {
           </div>
           <div>
             <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
-              Support
+              {t("support.title")}
               {totalUnread > 0 && (
                 <span className="flex items-center gap-1 px-2 py-0.5 bg-red-100 text-red-600 rounded-full text-xs font-bold">
-                  <Bell className="w-3 h-3" />{totalUnread} new
+                  <Bell className="w-3 h-3" />{totalUnread} {t("support.new_reply")}
                 </span>
               )}
             </h1>
-            <p className="text-sm text-gray-500">Submit and track your support requests</p>
+            <p className="text-sm text-gray-500">{t("support.subtitle")}</p>
           </div>
         </div>
         <button
@@ -545,7 +552,7 @@ export default function SupportPage() {
           className="flex items-center gap-2 px-4 py-2.5 bg-blue-600 text-white font-semibold rounded-xl hover:bg-blue-700 text-sm shadow-sm"
         >
           <Plus className="w-4 h-4" />
-          New Ticket
+          {t("support.new_ticket")}
         </button>
       </div>
 
@@ -562,7 +569,7 @@ export default function SupportPage() {
                 onClick={() => setStatusFilter(s)}
                 className={`px-3 py-1 rounded-full text-xs font-semibold capitalize transition-colors ${statusFilter === s ? "bg-blue-600 text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200"}`}
               >
-                {s.replace("_", " ")}
+                {String(t(`support.statuses.${s}` as never, s.replace("_", " ")))}
               </button>
             ))}
           </div>
@@ -572,8 +579,8 @@ export default function SupportPage() {
           ) : tickets.length === 0 ? (
             <div className="text-center py-16 text-gray-400">
               <Headphones className="w-10 h-10 mx-auto mb-3 opacity-30" />
-              <p className="font-semibold">No tickets yet</p>
-              <p className="text-sm mt-1">Click New Ticket to get help</p>
+              <p className="font-semibold">{t("support.no_tickets")}</p>
+              <p className="text-sm mt-1">{t("support.no_tickets_hint")}</p>
             </div>
           ) : (
             <div className="space-y-2">
@@ -599,7 +606,7 @@ export default function SupportPage() {
                       <PriorityBadge priority={ticket.priority} />
                       {hasUnread && (
                         <span className="flex items-center gap-1 text-xs text-blue-600 font-semibold">
-                          <Bell className="w-3 h-3" />New reply
+                          <Bell className="w-3 h-3" />{t("support.new_reply")}
                         </span>
                       )}
                       {ticket.has_chat && (
@@ -632,7 +639,7 @@ export default function SupportPage() {
           ) : (
             <div className="hidden lg:flex bg-gray-50 border border-gray-200 rounded-2xl h-[70vh] items-center justify-center text-gray-400 flex-col gap-3">
               <MessageSquare className="w-10 h-10 opacity-30" />
-              <p className="font-semibold">Select a ticket to view</p>
+              <p className="font-semibold">{t("support.select_ticket")}</p>
             </div>
           )}
         </div>

@@ -562,7 +562,7 @@ export default function FrameworksPage() {
         <div>
           <h1 className="text-2xl font-bold text-gray-900">{t("frameworks.title")}</h1>
           <p className="text-gray-500 text-sm mt-1">
-            {frameworks.filter(f => f.is_builtin).length} {t("frameworks.builtin").toLowerCase()} · {frameworks.filter(f => !f.is_builtin).length} {t("frameworks.tenant").toLowerCase()} · {totalControls.toLocaleString()} total controls
+            {frameworks.filter(f => f.is_builtin).length} {t("frameworks.builtin").toLowerCase()} · {frameworks.filter(f => !f.is_builtin).length} {t("frameworks.tenant").toLowerCase()} · {totalControls.toLocaleString()} {t("frameworks.total_controls_sub")}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -581,10 +581,10 @@ export default function FrameworksPage() {
       {/* Stats row */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         {[
-          { label: t("frameworks.builtin"),  value: frameworks.filter(f => f.is_builtin).length,  sub: "ready to use",        color: "text-blue-600"  },
-          { label: t("frameworks.tenant"),   value: frameworks.filter(f => !f.is_builtin).length, sub: "in your workspace",   color: "text-purple-600"},
-          { label: "Total Controls",          value: totalControls.toLocaleString(),               sub: "across all frameworks",color: "text-green-600"},
-          { label: "Categories",              value: CATEGORIES.length - 1,                        sub: "security domains",    color: "text-orange-600"},
+          { label: t("frameworks.builtin"),             value: frameworks.filter(f => f.is_builtin).length,  sub: t("frameworks.ready_to_use"),        color: "text-blue-600"  },
+          { label: t("frameworks.tenant"),            value: frameworks.filter(f => !f.is_builtin).length, sub: t("frameworks.in_your_workspace"),   color: "text-purple-600"},
+          { label: t("frameworks.total_controls_label"), value: totalControls.toLocaleString(),            sub: t("frameworks.across_all_frameworks"), color: "text-green-600"},
+          { label: t("frameworks.categories_label"),  value: CATEGORIES.length - 1,                        sub: t("frameworks.security_domains"),    color: "text-orange-600"},
         ].map(s => (
           <div key={s.label} className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
             <p className={`text-2xl font-bold ${s.color}`}>{s.value}</p>
