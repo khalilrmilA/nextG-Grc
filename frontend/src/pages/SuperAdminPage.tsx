@@ -18,9 +18,11 @@ import {
   ToggleLeft, ToggleRight, Trash2, Upload,
   Plus, AlertCircle, Loader2, X, CheckCircle, ThumbsUp, ThumbsDown, Pencil,
   Headphones, MessageSquare, Video, Send, PhoneOff, ChevronRight, RefreshCw, Bell,
+  Activity, Clock, Filter, Download, Upload as UploadIcon, LogIn,
 } from "lucide-react";
 import {
   supportApi,
+  activityLogApi,
   type SupportTicketListItem,
   type SupportTicketDetail,
   type ChatSessionData,
@@ -320,9 +322,9 @@ function UsersTab() {
 
                   {/* Role */}
                   <td className="px-5 py-3.5">
-                    {u.role === "super_admin" || u.role === "admin" ? (
+                    {u.role === "super_admin" ? (
                       <span className="inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-1 bg-yellow-50 text-yellow-700 border border-yellow-200 rounded-lg">
-                        👑 {u.role === "super_admin" ? "Super Admin" : "Owner"}
+                        👑 Super Admin
                       </span>
                     ) : (
                       <select
@@ -331,8 +333,15 @@ function UsersTab() {
                         onChange={e => changeRole(u, e.target.value)}
                         className="text-xs border border-gray-200 rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
                       >
-                        <option value="user">User (Full Access)</option>
-                        <option value="auditor">Auditor (Limited)</option>
+                        <option value="tenant_admin">Tenant Admin</option>
+                        <option value="ciso">CISO</option>
+                        <option value="risk_manager">Risk Manager</option>
+                        <option value="compliance_manager">Compliance Manager</option>
+                        <option value="policy_manager">Policy Manager</option>
+                        <option value="vendor_manager">Vendor Manager</option>
+                        <option value="control_owner">Control Owner</option>
+                        <option value="auditor">Auditor</option>
+                        <option value="viewer">Viewer</option>
                       </select>
                     )}
                   </td>
@@ -1454,9 +1463,170 @@ function SupportTab({
   );
 }
 
+// ── Activity Log Tab ──────────────────────────────────────────────────────────
+
+const LOG_ACTION_STYLE: Record<string, { color: string; bg: string; icon: React.ComponentType<{ className?: string }> }> = {
+  create: { color: "text-green-600", bg: "bg-green-50 border-green-200",   icon: Plus    },
+  update: { color: "text-blue-600",  bg: "bg-blue-50 border-blue-200",     icon: Pencil  },
+  delete: { color: "text-red-600",   bg: "bg-red-50 border-red-200",       icon: Trash2  },
+  login:  { color: "text-purple-600",bg: "bg-purple-50 border-purple-200", icon: LogIn   },
+  export: { color: "text-gray-600",  bg: "bg-gray-50 border-gray-200",     icon: Download },
+  import: { color: "text-teal-600",  bg: "bg-teal-50 border-teal-200",     icon: UploadIcon },
+};
+
+const LOG_ENTITY_TYPES = ["risk","vendor","audit","policy","compliance","asset","incident"];
+const LOG_ACTION_TYPES  = ["create","update","delete","login","export","import"];
+
+function timeAgoStr(dateStr: string): string {
+  const diff = Math.max(0, Date.now() - new Date(dateStr).getTime());
+  const s = Math.floor(diff / 1000);
+  if (s < 60)  return "just now";
+  const m = Math.floor(s / 60);
+  if (m < 60)  return `${m}m ago`;
+  const h = Math.floor(m / 60);
+  if (h < 24)  return `${h}h ago`;
+  const d = Math.floor(h / 24);
+  if (d < 30)  return `${d}d ago`;
+  return new Date(dateStr).toLocaleDateString();
+}
+
+function ActivityLogTab() {
+  const [items, setItems] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(true);
+  const [offset, setOffset] = useState(0);
+  const [entityFilter, setEntityFilter] = useState("");
+  const [actionFilter, setActionFilter] = useState("");
+  const LIMIT = 25;
+
+  async function load(reset = true) {
+    const newOffset = reset ? 0 : offset;
+    reset ? setLoading(true) : setLoadingMore(true);
+    try {
+      const params: any = { limit: LIMIT, offset: newOffset };
+      if (entityFilter) params.entity_type = entityFilter;
+      if (actionFilter) params.action = actionFilter;
+      const data = await activityLogApi.list(params);
+      const entries = Array.isArray(data) ? data : (data as any).items || [];
+      setItems(prev => reset ? entries : [...prev, ...entries]);
+      setHasMore(entries.length === LIMIT);
+      setOffset(newOffset + entries.length);
+    } catch {
+      if (reset) setItems([]);
+    } finally {
+      setLoading(false);
+      setLoadingMore(false);
+    }
+  }
+
+  useEffect(() => { load(true); }, [entityFilter, actionFilter]);
+
+  return (
+    <div className="space-y-6">
+      {/* Filters */}
+      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
+        <div className="flex items-center gap-3 flex-wrap">
+          <Filter className="w-4 h-4 text-gray-400" />
+          <select
+            value={entityFilter}
+            onChange={e => setEntityFilter(e.target.value)}
+            className="border border-gray-200 rounded-xl text-sm px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+          >
+            <option value="">All Entities</option>
+            {LOG_ENTITY_TYPES.map(et => (
+              <option key={et} value={et}>{et.charAt(0).toUpperCase() + et.slice(1)}</option>
+            ))}
+          </select>
+          <select
+            value={actionFilter}
+            onChange={e => setActionFilter(e.target.value)}
+            className="border border-gray-200 rounded-xl text-sm px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+          >
+            <option value="">All Actions</option>
+            {LOG_ACTION_TYPES.map(a => (
+              <option key={a} value={a}>{a.charAt(0).toUpperCase() + a.slice(1)}</option>
+            ))}
+          </select>
+        </div>
+      </div>
+
+      {/* Timeline */}
+      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
+        {loading ? (
+          <div className="flex items-center justify-center py-16">
+            <Loader2 className="w-6 h-6 animate-spin text-blue-500" />
+          </div>
+        ) : items.length === 0 ? (
+          <div className="text-center py-16 text-gray-400">
+            <Activity className="w-10 h-10 mx-auto mb-3 opacity-50" />
+            <p className="text-sm">No activity entries found</p>
+          </div>
+        ) : (
+          <div className="relative">
+            <div className="absolute left-5 top-0 bottom-0 w-px bg-gray-200" />
+            <div className="space-y-0">
+              {items.map((entry: any, idx: number) => {
+                const style = LOG_ACTION_STYLE[entry.action] || LOG_ACTION_STYLE.update;
+                const Icon = style.icon;
+                return (
+                  <div key={entry.id || idx} className="relative flex gap-4 pb-6">
+                    <div className={`relative z-10 flex-shrink-0 w-10 h-10 rounded-xl flex items-center justify-center border ${style.bg}`}>
+                      <Icon className={`w-4 h-4 ${style.color}`} />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-start justify-between gap-2">
+                        <p className="text-sm text-gray-900">
+                          <span className="font-medium">{entry.user_email || "System"}</span>{" "}
+                          <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-semibold border ${style.bg} ${style.color}`}>
+                            {entry.action}
+                          </span>{" "}
+                          {entry.entity_type && (
+                            <span className="text-gray-500">
+                              {entry.entity_type}
+                              {entry.entity_name && <> &mdash; <span className="font-medium text-gray-700">{entry.entity_name}</span></>}
+                            </span>
+                          )}
+                        </p>
+                        <span className="flex items-center gap-1 text-xs text-gray-400 whitespace-nowrap">
+                          <Clock className="w-3 h-3" />
+                          {entry.timestamp || entry.created_at ? timeAgoStr(entry.timestamp || entry.created_at) : "-"}
+                        </span>
+                      </div>
+                      {entry.details && (
+                        <div className="mt-2 p-3 bg-gray-50 rounded-xl border border-gray-100 overflow-x-auto">
+                          <pre className="text-xs text-gray-600 whitespace-pre-wrap">
+                            {typeof entry.details === "string" ? entry.details : JSON.stringify(entry.details, null, 2)}
+                          </pre>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            {hasMore && (
+              <div className="text-center pt-2">
+                <button
+                  onClick={() => load(false)}
+                  disabled={loadingMore}
+                  className="inline-flex items-center gap-2 text-sm text-blue-600 hover:text-blue-700 font-medium disabled:opacity-50"
+                >
+                  {loadingMore && <Loader2 className="w-4 h-4 animate-spin" />}
+                  Load more
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ── Main Page ─────────────────────────────────────────────────────────────────
 
-type TabId = "users" | "access" | "frameworks" | "subscriptions" | "ai-access" | "support" | "settings";
+type TabId = "users" | "access" | "frameworks" | "subscriptions" | "ai-access" | "support" | "logs" | "settings";
 
 const TABS: { id: TabId; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
   { id: "users",         label: "Users",           icon: Users      },
@@ -1465,6 +1635,7 @@ const TABS: { id: TabId; label: string; icon: React.ComponentType<{ className?: 
   { id: "subscriptions", label: "Subscriptions",   icon: CreditCard },
   { id: "ai-access",     label: "AI Requests",     icon: Sparkles   },
   { id: "support",       label: "Support Tickets", icon: Headphones },
+  { id: "logs",          label: "Activity Logs",   icon: Activity   },
   { id: "settings",      label: "Settings",        icon: Settings   },
 ];
 
@@ -1526,9 +1697,9 @@ export default function SuperAdminPage() {
   const supportUnreadCount = supportUnread.size;
 
   return (
-    <div className="min-h-screen bg-gray-50 flex">
+    <div className="min-h-screen bg-gray-50 flex" dir="ltr">
       {/* Sidebar */}
-      <aside className="w-56 flex flex-col bg-slate-900 shadow-2xl flex-shrink-0 fixed h-full">
+      <aside className="w-56 flex flex-col bg-slate-900 shadow-2xl flex-shrink-0 fixed h-full" style={{ left: 0, right: "auto" }}>
         <div className="flex flex-col items-center px-4 py-5 border-b border-slate-700/60">
           <img src="/logo-vertical.png" alt="GRCEye — Governance, Risk & Compliance Platform" className="h-24 w-auto object-contain bg-white/95 rounded-xl p-2" />
         </div>
@@ -1608,6 +1779,7 @@ export default function SuperAdminPage() {
               {activeTab === "subscriptions" && "Manage tenant plans, statuses, and trial expiry dates"}
               {activeTab === "ai-access"    && "Review and approve AI feature access requests"}
               {activeTab === "support"      && "View and respond to user support tickets"}
+              {activeTab === "logs"         && "Full audit trail of all user actions across all tenants"}
               {activeTab === "settings"     && "Platform configuration and credentials"}
             </p>
           </div>
@@ -1624,6 +1796,7 @@ export default function SuperAdminPage() {
           {activeTab === "subscriptions" && <SubscriptionsTab />}
           {activeTab === "ai-access"     && <AiAccessTab />}
           {activeTab === "support"       && <SupportTab unread={supportUnread} onMarkRead={(id) => setSupportUnread(prev => { const n = new Set(prev); n.delete(id); return n; })} onTicketUpdate={() => {}} />}
+          {activeTab === "logs"          && <ActivityLogTab />}
           {activeTab === "settings"   && <SettingsTab />}
         </main>
       </div>

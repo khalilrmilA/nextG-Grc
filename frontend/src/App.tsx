@@ -37,7 +37,6 @@ import AppliedControlsPage from "./pages/AppliedControlsPage";
 import SecurityExceptionsPage from "./pages/SecurityExceptionsPage";
 import TrustCenterConfigPage from "./pages/TrustCenterConfigPage";
 import RegulatoryUpdatesPage from "./pages/RegulatoryUpdatesPage";
-import ActivityLogPage from "./pages/ActivityLogPage";
 import WebhooksPage from "./pages/WebhooksPage";
 import RiskQuantificationPage from "./pages/RiskQuantificationPage";
 import ContractCollaborationPage from "./pages/ContractCollaborationPage";
@@ -115,7 +114,6 @@ const ROUTE_ROLES: Record<string, string[]> = {
   "/threats":             [...CISO_AND_ADMIN, "risk_manager", "compliance_manager", "control_owner", "viewer"],
   "/regulatory":          [...CISO_AND_ADMIN, "compliance_manager", "policy_manager", "viewer"],
   "/trust-center":        [...CISO_AND_ADMIN, "compliance_manager", "viewer"],
-  "/activity-log":        [...CISO_AND_ADMIN, "viewer"],
   "/webhooks":            [...ADMIN_ROLES],
 };
 
@@ -201,7 +199,7 @@ export default function App() {
         <Route path="security-exceptions" element={<RoleRoute path="/security-exceptions"><SecurityExceptionsPage /></RoleRoute>} />
         <Route path="trust-center" element={<RoleRoute path="/trust-center"><TrustCenterConfigPage /></RoleRoute>} />
         <Route path="regulatory" element={<RoleRoute path="/regulatory"><RegulatoryUpdatesPage /></RoleRoute>} />
-        <Route path="activity-log" element={<RoleRoute path="/activity-log"><ActivityLogPage /></RoleRoute>} />
+        <Route path="activity-log" element={<Navigate to="/super-admin" replace />} />
         <Route path="webhooks" element={<RoleRoute path="/webhooks"><WebhooksPage /></RoleRoute>} />
         <Route path="support" element={<SupportPage />} />
         <Route path="company-admin" element={<CompanyAdminPage />} />

@@ -433,7 +433,7 @@ export default function RisksPage() {
               <p className="text-2xl font-bold text-gray-900">{counts[sev]}</p>
               <div className="flex items-center gap-1.5 mt-1">
                 <span className={`w-2 h-2 rounded-full ${SEV_DOT[sev]}`} />
-                <p className="text-sm capitalize text-gray-500">{sev}</p>
+                <p className="text-sm text-gray-500">{t(`compliance.severities.${sev}`)}</p>
               </div>
             </button>
           );
