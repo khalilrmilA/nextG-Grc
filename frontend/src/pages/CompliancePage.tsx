@@ -162,12 +162,12 @@ export default function CompliancePage() {
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
   useEffect(() => {
-    Promise.all([
+    Promise.allSettled([
       complianceApi.listAssessments(),
       frameworksApi.list(),
-    ]).then(([aResp, fwList]) => {
-      setAssessments(aResp.items);
-      setFrameworks(fwList.filter((fw) => fw.control_count > 0));
+    ]).then(([aResult, fwResult]) => {
+      if (aResult.status === "fulfilled") setAssessments(aResult.value.items);
+      if (fwResult.status === "fulfilled") setFrameworks(fwResult.value.filter((fw) => fw.control_count > 0));
     }).finally(() => setLoading(false));
   }, []);
 

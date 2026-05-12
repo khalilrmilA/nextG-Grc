@@ -76,7 +76,10 @@ async def get_current_user(
 def require_roles(*roles: UserRole):
     """Dependency factory that requires the user to have one of the specified roles."""
     async def _require_roles(current_user: User = Depends(get_current_user)) -> User:
-        if current_user.role not in roles and current_user.role != UserRole.SUPER_ADMIN:
+        # super_admin and tenant_admin always have full access
+        if current_user.role in (UserRole.SUPER_ADMIN, UserRole.TENANT_ADMIN):
+            return current_user
+        if current_user.role not in roles:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail=f"Insufficient permissions. Required roles: {[r.value for r in roles]}",
