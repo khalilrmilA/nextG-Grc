@@ -11,6 +11,7 @@ import {
   Activity,
   Clock,
 } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { activityLogApi } from "@/api/endpoints";
 
 const ACTION_STYLE: Record<string, { color: string; bg: string; icon: typeof Plus }> = {
@@ -33,22 +34,27 @@ const ENTITY_TYPES = [
 ];
 const ACTION_TYPES = ["create", "update", "delete", "login", "export", "import"];
 
-function timeAgo(dateStr: string): string {
-  const now = Date.now();
-  const then = new Date(dateStr).getTime();
-  const diff = Math.max(0, now - then);
-  const seconds = Math.floor(diff / 1000);
-  if (seconds < 60) return "just now";
-  const minutes = Math.floor(seconds / 60);
-  if (minutes < 60) return `${minutes}m ago`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}h ago`;
-  const days = Math.floor(hours / 24);
-  if (days < 30) return `${days}d ago`;
-  return new Date(dateStr).toLocaleDateString();
+function useTimeAgo() {
+  const { t } = useTranslation();
+  return function timeAgo(dateStr: string): string {
+    const now = Date.now();
+    const then = new Date(dateStr).getTime();
+    const diff = Math.max(0, now - then);
+    const seconds = Math.floor(diff / 1000);
+    if (seconds < 60) return t("activity_log.time_just_now");
+    const minutes = Math.floor(seconds / 60);
+    if (minutes < 60) return `${minutes}m ago`;
+    const hours = Math.floor(minutes / 60);
+    if (hours < 24) return `${hours}h ago`;
+    const days = Math.floor(hours / 24);
+    if (days < 30) return `${days}d ago`;
+    return new Date(dateStr).toLocaleDateString();
+  };
 }
 
 export default function ActivityLogPage() {
+  const { t } = useTranslation();
+  const timeAgo = useTimeAgo();
   const [items, setItems] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -95,10 +101,8 @@ export default function ActivityLogPage() {
     <div className="p-8 max-w-7xl space-y-6">
       {/* Header */}
       <div>
-        <h1 className="text-2xl font-bold text-gray-900">Activity Log</h1>
-        <p className="text-sm text-gray-500 mt-1">
-          Audit trail of all user actions across the platform
-        </p>
+        <h1 className="text-2xl font-bold text-gray-900">{t("activity_log.title")}</h1>
+        <p className="text-sm text-gray-500 mt-1">{t("activity_log.subtitle")}</p>
       </div>
 
       {/* Filters */}
@@ -110,10 +114,10 @@ export default function ActivityLogPage() {
             onChange={(e) => setEntityFilter(e.target.value)}
             className="border border-gray-200 rounded-xl text-sm px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
-            <option value="">All Entities</option>
-            {ENTITY_TYPES.map((t) => (
-              <option key={t} value={t}>
-                {t.charAt(0).toUpperCase() + t.slice(1)}
+            <option value="">{t("activity_log.all_entities")}</option>
+            {ENTITY_TYPES.map((et) => (
+              <option key={et} value={et}>
+                {et.charAt(0).toUpperCase() + et.slice(1)}
               </option>
             ))}
           </select>
@@ -122,7 +126,7 @@ export default function ActivityLogPage() {
             onChange={(e) => setActionFilter(e.target.value)}
             className="border border-gray-200 rounded-xl text-sm px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
-            <option value="">All Actions</option>
+            <option value="">{t("activity_log.all_actions")}</option>
             {ACTION_TYPES.map((a) => (
               <option key={a} value={a}>
                 {a.charAt(0).toUpperCase() + a.slice(1)}
@@ -141,7 +145,7 @@ export default function ActivityLogPage() {
         ) : items.length === 0 ? (
           <div className="text-center py-16 text-gray-400">
             <Activity className="w-10 h-10 mx-auto mb-3 opacity-50" />
-            <p className="text-sm">No activity log entries found</p>
+            <p className="text-sm">{t("activity_log.no_entries")}</p>
           </div>
         ) : (
           <div className="relative">
@@ -221,7 +225,7 @@ export default function ActivityLogPage() {
                   className="inline-flex items-center gap-2 text-sm text-blue-600 hover:text-blue-700 font-medium disabled:opacity-50"
                 >
                   {loadingMore && <Loader2 className="w-4 h-4 animate-spin" />}
-                  Load more
+                  {t("activity_log.load_more")}
                 </button>
               </div>
             )}

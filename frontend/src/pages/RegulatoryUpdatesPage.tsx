@@ -17,6 +17,7 @@ import {
   ThumbsDown,
   Clock,
 } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { regulatoryApi } from "@/api/endpoints";
 
 const IMPACT_BADGE: Record<string, string> = {
@@ -43,6 +44,7 @@ function formatLabel(s: string) {
 }
 
 export default function RegulatoryUpdatesPage() {
+  const { t } = useTranslation();
   const [items, setItems] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
@@ -123,7 +125,7 @@ export default function RegulatoryUpdatesPage() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!form.title.trim()) {
-      setError("Title is required");
+      setError(t("regulatory.error_title_required"));
       return;
     }
     setSubmitting(true);
@@ -149,7 +151,7 @@ export default function RegulatoryUpdatesPage() {
       setLoading(true);
       load();
     } catch (err: any) {
-      setError(err?.response?.data?.detail || "Failed to create regulatory update");
+      setError(err?.response?.data?.detail || t("regulatory.error_create_failed"));
     } finally {
       setSubmitting(false);
     }
@@ -168,10 +170,8 @@ export default function RegulatoryUpdatesPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Regulatory Updates</h1>
-          <p className="text-sm text-gray-500 mt-1">
-            Track regulatory changes and their impact on your organization
-          </p>
+          <h1 className="text-2xl font-bold text-gray-900">{t("regulatory.title")}</h1>
+          <p className="text-sm text-gray-500 mt-1">{t("regulatory.subtitle")}</p>
         </div>
         <div className="flex items-center gap-2">
           <button
@@ -184,19 +184,18 @@ export default function RegulatoryUpdatesPage() {
             ) : (
               <Sparkles className="w-4 h-4" />
             )}
-            {fetching ? "Fetching..." : "Fetch Latest (AI)"}
+            {fetching ? t("regulatory.fetching") : t("regulatory.fetch_latest")}
           </button>
           <button
             onClick={() => setShowModal(true)}
             className="inline-flex items-center gap-2 bg-blue-600 text-white px-4 py-2.5 rounded-xl text-sm font-medium hover:bg-blue-700 transition-colors"
           >
-            <Plus className="w-4 h-4" /> Add Update
+            <Plus className="w-4 h-4" /> {t("regulatory.add_update")}
           </button>
         </div>
       </div>
 
       {fetchResult && (() => {
-        const updateWord = fetchResult.created === 1 ? "update" : "updates";
         return (
         <div
           className={`flex items-start gap-3 px-4 py-3 rounded-xl text-sm border ${
@@ -209,8 +208,8 @@ export default function RegulatoryUpdatesPage() {
           <div className="flex-1">
             <span className="font-medium">
               {fetchResult.created > 0
-                ? `${fetchResult.created} ${updateWord} ready for review`
-                : "No new proposals"}
+                ? t("regulatory.result_created", { count: fetchResult.created })
+                : t("regulatory.result_no_new")}
             </span>
             <span className="ml-2 text-xs opacity-75">{fetchResult.message}</span>
           </div>
@@ -227,10 +226,10 @@ export default function RegulatoryUpdatesPage() {
           <div className="flex items-center gap-2 px-6 py-4 border-b border-amber-100 bg-amber-50/60">
             <Clock className="w-4 h-4 text-amber-600" />
             <h2 className="font-semibold text-amber-900 text-sm">
-              AI Proposals — Pending Your Review ({pending.length})
+              {t("regulatory.pending_title", { count: pending.length })}
             </h2>
             <span className="ml-auto text-xs text-amber-600">
-              Review each item and approve or reject
+              {t("regulatory.pending_help")}
             </span>
           </div>
           <div className="divide-y divide-gray-50">
@@ -258,7 +257,7 @@ export default function RegulatoryUpdatesPage() {
                   {item.url && (
                     <a href={item.url} target="_blank" rel="noreferrer"
                       className="inline-flex items-center gap-1 text-xs text-blue-500 hover:underline mt-1">
-                      <ExternalLink className="w-3 h-3" /> View source
+                      <ExternalLink className="w-3 h-3" /> {t("regulatory.btn_view_source")}
                     </a>
                   )}
                 </div>
@@ -269,7 +268,7 @@ export default function RegulatoryUpdatesPage() {
                     className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-green-600 text-white text-xs font-medium rounded-lg hover:bg-green-700 disabled:opacity-50 transition-colors"
                   >
                     {approving === item.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <ThumbsUp className="w-3 h-3" />}
-                    Approve
+                    {t("regulatory.btn_approve")}
                   </button>
                   <button
                     onClick={() => handleReject(item.id)}
@@ -277,7 +276,7 @@ export default function RegulatoryUpdatesPage() {
                     className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border border-red-200 text-red-600 text-xs font-medium rounded-lg hover:bg-red-50 disabled:opacity-50 transition-colors"
                   >
                     {approving === item.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <ThumbsDown className="w-3 h-3" />}
-                    Reject
+                    {t("regulatory.btn_reject")}
                   </button>
                 </div>
               </div>
@@ -312,7 +311,7 @@ export default function RegulatoryUpdatesPage() {
           <input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search updates..."
+            placeholder={t("regulatory.search_placeholder")}
             className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
           />
         </div>
@@ -323,7 +322,7 @@ export default function RegulatoryUpdatesPage() {
             onChange={(e) => setStatusFilter(e.target.value)}
             className="border border-gray-200 rounded-xl text-sm px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
-            <option value="">All Statuses</option>
+            <option value="">{t("regulatory.all_statuses")}</option>
             {STATUS_OPTIONS.map((s) => (
               <option key={s} value={s}>
                 {formatLabel(s)}
@@ -342,20 +341,20 @@ export default function RegulatoryUpdatesPage() {
         ) : filtered.length === 0 ? (
           <div className="text-center py-16 text-gray-400">
             <Scale className="w-10 h-10 mx-auto mb-3 opacity-50" />
-            <p className="text-sm">No regulatory updates found</p>
+            <p className="text-sm">{t("regulatory.no_updates")}</p>
           </div>
         ) : (
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-gray-100 bg-gray-50/50">
                 <th className="text-left px-6 py-3 font-medium text-gray-500 w-8" />
-                <th className="text-left px-6 py-3 font-medium text-gray-500">Title</th>
-                <th className="text-left px-6 py-3 font-medium text-gray-500">Source</th>
-                <th className="text-left px-6 py-3 font-medium text-gray-500">Regulation</th>
-                <th className="text-left px-6 py-3 font-medium text-gray-500">Impact</th>
-                <th className="text-left px-6 py-3 font-medium text-gray-500">Status</th>
-                <th className="text-left px-6 py-3 font-medium text-gray-500">Effective</th>
-                <th className="text-left px-6 py-3 font-medium text-gray-500">Deadline</th>
+                <th className="text-left px-6 py-3 font-medium text-gray-500">{t("regulatory.col_title")}</th>
+                <th className="text-left px-6 py-3 font-medium text-gray-500">{t("regulatory.col_source")}</th>
+                <th className="text-left px-6 py-3 font-medium text-gray-500">{t("regulatory.col_regulation")}</th>
+                <th className="text-left px-6 py-3 font-medium text-gray-500">{t("regulatory.col_impact")}</th>
+                <th className="text-left px-6 py-3 font-medium text-gray-500">{t("regulatory.col_status")}</th>
+                <th className="text-left px-6 py-3 font-medium text-gray-500">{t("regulatory.col_effective")}</th>
+                <th className="text-left px-6 py-3 font-medium text-gray-500">{t("regulatory.col_deadline")}</th>
               </tr>
             </thead>
             <tbody>
@@ -409,7 +408,7 @@ export default function RegulatoryUpdatesPage() {
                         <div className="space-y-3">
                           {item.description && (
                             <div>
-                              <p className="text-xs font-medium text-gray-500 mb-1">Description</p>
+                              <p className="text-xs font-medium text-gray-500 mb-1">{t("regulatory.detail_description")}</p>
                               <p className="text-sm text-gray-700 whitespace-pre-wrap">
                                 {item.description}
                               </p>
@@ -423,25 +422,25 @@ export default function RegulatoryUpdatesPage() {
                                 rel="noreferrer"
                                 className="inline-flex items-center gap-1 text-sm text-blue-600 hover:underline"
                               >
-                                <ExternalLink className="w-3 h-3" /> View Source
+                                <ExternalLink className="w-3 h-3" /> {t("regulatory.view_source")}
                               </a>
                             )}
                             {item.effective_date && (
                               <span className="inline-flex items-center gap-1 text-xs text-gray-500">
-                                <Calendar className="w-3 h-3" /> Effective:{" "}
+                                <Calendar className="w-3 h-3" /> {t("regulatory.detail_effective")}{" "}
                                 {new Date(item.effective_date).toLocaleDateString()}
                               </span>
                             )}
                             {item.deadline && (
                               <span className="inline-flex items-center gap-1 text-xs text-gray-500">
-                                <AlertCircle className="w-3 h-3" /> Deadline:{" "}
+                                <AlertCircle className="w-3 h-3" /> {t("regulatory.detail_deadline")}{" "}
                                 {new Date(item.deadline).toLocaleDateString()}
                               </span>
                             )}
                           </div>
                           {item.notes && (
                             <div>
-                              <p className="text-xs font-medium text-gray-500 mb-1">Notes</p>
+                              <p className="text-xs font-medium text-gray-500 mb-1">{t("regulatory.detail_notes")}</p>
                               <p className="text-sm text-gray-700 whitespace-pre-wrap">
                                 {item.notes}
                               </p>
@@ -467,7 +466,7 @@ export default function RegulatoryUpdatesPage() {
           />
           <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-lg mx-4 p-6 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-6">
-              <h2 className="text-lg font-semibold text-gray-900">Add Regulatory Update</h2>
+              <h2 className="text-lg font-semibold text-gray-900">{t("regulatory.modal_title")}</h2>
               <button
                 onClick={() => setShowModal(false)}
                 className="text-gray-400 hover:text-gray-600"
@@ -480,7 +479,7 @@ export default function RegulatoryUpdatesPage() {
             )}
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Title *</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">{t("regulatory.form_title_label")} *</label>
                 <input
                   value={form.title}
                   onChange={(e) => setForm({ ...form, title: e.target.value })}
@@ -488,7 +487,7 @@ export default function RegulatoryUpdatesPage() {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">{t("common.description")}</label>
                 <textarea
                   value={form.description}
                   onChange={(e) => setForm({ ...form, description: e.target.value })}
@@ -498,28 +497,28 @@ export default function RegulatoryUpdatesPage() {
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Source</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">{t("regulatory.form_source_label")}</label>
                   <input
                     value={form.source}
                     onChange={(e) => setForm({ ...form, source: e.target.value })}
-                    placeholder="e.g. EU Commission"
+                    placeholder={t("regulatory.form_source_placeholder")}
                     className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                   />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Regulation Name
+                    {t("regulatory.regulation_name")}
                   </label>
                   <input
                     value={form.regulation_name}
                     onChange={(e) => setForm({ ...form, regulation_name: e.target.value })}
-                    placeholder="e.g. GDPR, NIS2"
+                    placeholder={t("regulatory.form_regulation_placeholder")}
                     className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                   />
                 </div>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Impact</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">{t("regulatory.form_impact_label")}</label>
                 <select
                   value={form.impact}
                   onChange={(e) => setForm({ ...form, impact: e.target.value })}
@@ -535,7 +534,7 @@ export default function RegulatoryUpdatesPage() {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Effective Date
+                    {t("regulatory.form_effective_date_label")}
                   </label>
                   <input
                     type="date"
@@ -545,7 +544,7 @@ export default function RegulatoryUpdatesPage() {
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Deadline</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">{t("regulatory.form_deadline_label")}</label>
                   <input
                     type="date"
                     value={form.deadline}
@@ -555,12 +554,12 @@ export default function RegulatoryUpdatesPage() {
                 </div>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">URL</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">{t("regulatory.form_url_label")}</label>
                 <input
                   type="url"
                   value={form.url}
                   onChange={(e) => setForm({ ...form, url: e.target.value })}
-                  placeholder="https://..."
+                  placeholder={t("regulatory.form_url_placeholder")}
                   className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
@@ -570,14 +569,14 @@ export default function RegulatoryUpdatesPage() {
                   onClick={() => setShowModal(false)}
                   className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800"
                 >
-                  Cancel
+                  {t("regulatory.btn_cancel")}
                 </button>
                 <button
                   type="submit"
                   disabled={submitting}
                   className="inline-flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-xl text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
                 >
-                  {submitting && <Loader2 className="w-4 h-4 animate-spin" />} Add Update
+                  {submitting && <Loader2 className="w-4 h-4 animate-spin" />} {t("regulatory.btn_add_update")}
                 </button>
               </div>
             </form>

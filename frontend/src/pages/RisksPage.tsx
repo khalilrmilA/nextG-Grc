@@ -20,19 +20,28 @@ const SEV_DOT: Record<string, string> = {
 const SEV_ICON: Record<string, string> = {
   critical: "text-red-500", high: "text-orange-500", medium: "text-yellow-500", low: "text-green-500",
 };
-const STATUS_OPTIONS = [
-  { value: "identified",            label: "Identified" },
-  { value: "assessed",              label: "Assessed" },
-  { value: "treatment_planned",     label: "Treatment Planned" },
-  { value: "treatment_in_progress", label: "Treatment In Progress" },
-  { value: "treated",               label: "Treated" },
-  { value: "accepted",              label: "Accepted" },
-  { value: "closed",                label: "Closed" },
+const STATUS_KEYS = [
+  { value: "identified",            key: "risks.statuses.identified" },
+  { value: "assessed",              key: "risks.statuses.assessed" },
+  { value: "treatment_planned",     key: "risks.statuses.treatment_planned" },
+  { value: "treatment_in_progress", key: "risks.statuses.treatment_in_progress" },
+  { value: "treated",               key: "risks.statuses.treated" },
+  { value: "accepted",              key: "risks.statuses.accepted" },
+  { value: "closed",                key: "risks.statuses.closed" },
 ];
-const CATEGORY_OPTIONS = [
-  "Technical", "Access Control", "Identity & Access", "Business Continuity",
-  "Vendor Risk", "People", "Incident Management", "Application",
-  "Data Protection", "Governance", "Physical", "Legal & Compliance",
+const CATEGORY_KEYS = [
+  { value: "Technical",         key: "risks.categories.technical" },
+  { value: "Access Control",    key: "risks.categories.access_control" },
+  { value: "Identity & Access", key: "risks.categories.identity_access" },
+  { value: "Business Continuity", key: "risks.categories.business_continuity" },
+  { value: "Vendor Risk",       key: "risks.categories.vendor_risk" },
+  { value: "People",            key: "risks.categories.people" },
+  { value: "Incident Management", key: "risks.categories.incident_management" },
+  { value: "Application",       key: "risks.categories.application" },
+  { value: "Data Protection",   key: "risks.categories.data_protection" },
+  { value: "Governance",        key: "risks.categories.governance" },
+  { value: "Physical",          key: "risks.categories.physical" },
+  { value: "Legal & Compliance", key: "risks.categories.legal_compliance" },
 ];
 
 function heatmapColor(l: number, i: number): string {
@@ -68,7 +77,7 @@ function RiskHeatmap({ risks, onCellClick }: { readonly risks: Risk[]; readonly 
           <p className="text-xs text-gray-400 mt-0.5">{t("risks.click_cell_filter")}</p>
         </div>
         <div className="flex items-center gap-3 text-xs text-gray-400">
-          {[["bg-green-100","Low"],["bg-yellow-300","Medium"],["bg-orange-400","High"],["bg-red-500","Critical"]].map(([cls, lbl]) => (
+          {([["bg-green-100", t("compliance.severities.low")], ["bg-yellow-300", t("compliance.severities.medium")], ["bg-orange-400", t("compliance.severities.high")], ["bg-red-500", t("compliance.severities.critical")]] as [string,string][]).map(([cls, lbl]) => (
             <span key={lbl} className="flex items-center gap-1">
               <span className={`w-3 h-3 rounded ${cls} inline-block`} />{lbl}
             </span>
@@ -199,14 +208,14 @@ function AddRiskModal({ onClose, onSaved }: { readonly onClose: () => void; read
               <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">{t("risks.category")}</label>
               <select className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
                 value={form.risk_category} onChange={e => setForm(f => ({ ...f, risk_category: e.target.value }))}>
-                {CATEGORY_OPTIONS.map(c => <option key={c} value={c}>{c}</option>)}
+                {CATEGORY_KEYS.map(c => <option key={c.value} value={c.value}>{t(c.key as never)}</option>)}
               </select>
             </div>
             <div>
               <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">{t("common.status")}</label>
               <select className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
                 value={form.status} onChange={e => setForm(f => ({ ...f, status: e.target.value }))}>
-                {STATUS_OPTIONS.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
+                {STATUS_KEYS.map(s => <option key={s.value} value={s.value}>{t(s.key as never)}</option>)}
               </select>
             </div>
           </div>
@@ -451,7 +460,7 @@ export default function RisksPage() {
                 {(["all", "critical", "high", "medium", "low"] as const).map(s => (
                   <button key={s} onClick={() => setSeverityFilter(s)}
                     className={`px-3 py-1.5 rounded-lg text-xs font-medium capitalize transition-colors border ${severityFilterCls(s, severityFilter === s)}`}>
-                    {s === "all" ? "All" : s}
+                    {s === "all" ? t("common.all") : t(`compliance.severities.${s}`)}
                   </button>
                 ))}
               </div>

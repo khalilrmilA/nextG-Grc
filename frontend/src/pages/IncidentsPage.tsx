@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { Plus, Search, X, Loader2, Filter, AlertTriangle, ShieldAlert, Clock, Flame } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { incidentsApi } from "@/api/endpoints";
 
 const SEV_BADGE: Record<string, string> = {
@@ -27,6 +28,7 @@ const SEVERITY_OPTIONS = ["critical", "high", "medium", "low"];
 const STATUS_OPTIONS = ["open", "investigating", "contained", "resolved", "closed"];
 
 export default function IncidentsPage() {
+  const { t } = useTranslation();
   const [items, setItems] = useState<any[]>([]);
   const [stats, setStats] = useState<any>({ total: 0, open: 0, investigating: 0, critical: 0 });
   const [loading, setLoading] = useState(true);
@@ -73,7 +75,7 @@ export default function IncidentsPage() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!form.title.trim()) { setError("Title is required"); return; }
+    if (!form.title.trim()) { setError(t("incidents.error_title_required")); return; }
     setSubmitting(true);
     setError("");
     try {
@@ -84,7 +86,7 @@ export default function IncidentsPage() {
       load();
       loadStats();
     } catch (err: any) {
-      setError(err?.response?.data?.detail || "Failed to create incident");
+      setError(err?.response?.data?.detail || t("incidents.error_create_failed"));
     } finally {
       setSubmitting(false);
     }
@@ -99,24 +101,24 @@ export default function IncidentsPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Incidents</h1>
-          <p className="text-sm text-gray-500 mt-1">Track and manage security incidents</p>
+          <h1 className="text-2xl font-bold text-gray-900">{t("incidents.title")}</h1>
+          <p className="text-sm text-gray-500 mt-1">{t("incidents.subtitle")}</p>
         </div>
         <button
           onClick={() => setShowModal(true)}
           className="inline-flex items-center gap-2 bg-blue-600 text-white px-4 py-2.5 rounded-xl text-sm font-medium hover:bg-blue-700 transition-colors"
         >
-          <Plus className="w-4 h-4" /> Report Incident
+          <Plus className="w-4 h-4" /> {t("incidents.new_incident")}
         </button>
       </div>
 
       {/* Stats */}
       <div className="grid grid-cols-4 gap-4">
         {[
-          { label: "Total Incidents", value: stats.total, icon: AlertTriangle, color: "text-blue-600 bg-blue-50" },
-          { label: "Open", value: stats.open, icon: ShieldAlert, color: "text-red-600 bg-red-50" },
-          { label: "Investigating", value: stats.investigating, icon: Clock, color: "text-yellow-600 bg-yellow-50" },
-          { label: "Critical", value: stats.critical, icon: Flame, color: "text-red-600 bg-red-50" },
+          { label: t("incidents.stat_total"), value: stats.total, icon: AlertTriangle, color: "text-blue-600 bg-blue-50" },
+          { label: t("incidents.stat_open"), value: stats.open, icon: ShieldAlert, color: "text-red-600 bg-red-50" },
+          { label: t("incidents.stat_investigating"), value: stats.investigating, icon: Clock, color: "text-yellow-600 bg-yellow-50" },
+          { label: t("incidents.stat_critical"), value: stats.critical, icon: Flame, color: "text-red-600 bg-red-50" },
         ].map((s) => (
           <div key={s.label} className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
             <div className="flex items-center gap-3">
@@ -139,18 +141,18 @@ export default function IncidentsPage() {
           <input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search incidents..."
+            placeholder={t("incidents.search_placeholder")}
             className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
           />
         </div>
         <div className="flex items-center gap-2">
           <Filter className="w-4 h-4 text-gray-400" />
           <select value={sevFilter} onChange={(e) => setSevFilter(e.target.value)} className="border border-gray-200 rounded-xl text-sm px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500">
-            <option value="">All Severities</option>
-            {SEVERITY_OPTIONS.map((s) => <option key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</option>)}
+            <option value="">{t("incidents.all_severities")}</option>
+            {SEVERITY_OPTIONS.map((s) => <option key={s} value={s}>{t(`compliance.severities.${s}` as never)}</option>)}
           </select>
           <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="border border-gray-200 rounded-xl text-sm px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500">
-            <option value="">All Statuses</option>
+            <option value="">{t("incidents.all_statuses")}</option>
             {STATUS_OPTIONS.map((s) => <option key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</option>)}
           </select>
         </div>
@@ -163,17 +165,17 @@ export default function IncidentsPage() {
             <Loader2 className="w-6 h-6 animate-spin text-blue-500" />
           </div>
         ) : filtered.length === 0 ? (
-          <div className="text-center py-16 text-gray-400">No incidents found</div>
+          <div className="text-center py-16 text-gray-400">{t("incidents.no_incidents")}</div>
         ) : (
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-gray-100 bg-gray-50/50">
-                <th className="text-left px-6 py-3 font-medium text-gray-500">Title</th>
-                <th className="text-left px-6 py-3 font-medium text-gray-500">Category</th>
-                <th className="text-left px-6 py-3 font-medium text-gray-500">Severity</th>
-                <th className="text-left px-6 py-3 font-medium text-gray-500">Status</th>
-                <th className="text-left px-6 py-3 font-medium text-gray-500">Detected</th>
-                <th className="text-left px-6 py-3 font-medium text-gray-500">Assigned To</th>
+                <th className="text-left px-6 py-3 font-medium text-gray-500">{t("incidents.col_title")}</th>
+                <th className="text-left px-6 py-3 font-medium text-gray-500">{t("incidents.col_category")}</th>
+                <th className="text-left px-6 py-3 font-medium text-gray-500">{t("incidents.col_severity")}</th>
+                <th className="text-left px-6 py-3 font-medium text-gray-500">{t("incidents.col_status")}</th>
+                <th className="text-left px-6 py-3 font-medium text-gray-500">{t("incidents.col_detected")}</th>
+                <th className="text-left px-6 py-3 font-medium text-gray-500">{t("incidents.col_assigned")}</th>
               </tr>
             </thead>
             <tbody>
@@ -206,41 +208,41 @@ export default function IncidentsPage() {
           <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setShowModal(false)} />
           <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-lg mx-4 p-6">
             <div className="flex items-center justify-between mb-6">
-              <h2 className="text-lg font-semibold text-gray-900">Report Incident</h2>
+              <h2 className="text-lg font-semibold text-gray-900">{t("incidents.new_incident")}</h2>
               <button onClick={() => setShowModal(false)} className="text-gray-400 hover:text-gray-600"><X className="w-5 h-5" /></button>
             </div>
             {error && <div className="mb-4 p-3 bg-red-50 text-red-700 rounded-xl text-sm">{error}</div>}
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Title *</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">{t("incidents.form_title")} *</label>
                 <input value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">{t("incidents.form_description")}</label>
                 <textarea value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} rows={3} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Category</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">{t("incidents.form_category")}</label>
                   <select value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
                     {CATEGORY_OPTIONS.map((c) => <option key={c} value={c}>{c.replace(/_/g, " ")}</option>)}
                   </select>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Severity</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">{t("incidents.form_severity")}</label>
                   <select value={form.severity} onChange={(e) => setForm({ ...form, severity: e.target.value })} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-                    {SEVERITY_OPTIONS.map((s) => <option key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</option>)}
+                    {SEVERITY_OPTIONS.map((s) => <option key={s} value={s}>{t(`compliance.severities.${s}` as never)}</option>)}
                   </select>
                 </div>
               </div>
               <div className="flex items-center gap-2">
                 <input type="checkbox" id="breach" checked={form.breach_notification_required} onChange={(e) => setForm({ ...form, breach_notification_required: e.target.checked })} className="rounded border-gray-300" />
-                <label htmlFor="breach" className="text-sm text-gray-700">Breach notification required</label>
+                <label htmlFor="breach" className="text-sm text-gray-700">{t("incidents.breach_notification")}</label>
               </div>
               <div className="flex justify-end gap-3 pt-2">
-                <button type="button" onClick={() => setShowModal(false)} className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800">Cancel</button>
+                <button type="button" onClick={() => setShowModal(false)} className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800">{t("common.cancel")}</button>
                 <button type="submit" disabled={submitting} className="inline-flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-xl text-sm font-medium hover:bg-blue-700 disabled:opacity-50">
-                  {submitting && <Loader2 className="w-4 h-4 animate-spin" />} Report Incident
+                  {submitting && <Loader2 className="w-4 h-4 animate-spin" />} {t("incidents.new_incident")}
                 </button>
               </div>
             </form>

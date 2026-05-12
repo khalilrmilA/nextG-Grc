@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { Plus, Search, X, Loader2, Filter } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { appliedControlsApi } from "@/api/endpoints";
 
 const STATUS_BADGE: Record<string, string> = {
@@ -23,6 +24,7 @@ const EFFORT_OPTIONS = ["very_low", "low", "medium", "high", "very_high"];
 const CSF_FUNCTIONS = ["govern", "identify", "protect", "detect", "respond", "recover"];
 
 export default function AppliedControlsPage() {
+  const { t } = useTranslation();
   const [items, setItems] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
@@ -63,7 +65,7 @@ export default function AppliedControlsPage() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!form.name.trim()) { setError("Name is required"); return; }
+    if (!form.name.trim()) { setError(t("applied_controls.error_name_required")); return; }
     setSubmitting(true);
     setError("");
     try {
@@ -75,7 +77,7 @@ export default function AppliedControlsPage() {
       setLoading(true);
       load();
     } catch (err: any) {
-      setError(err?.response?.data?.detail || "Failed to create control");
+      setError(err?.response?.data?.detail || t("applied_controls.error_create_failed"));
     } finally {
       setSubmitting(false);
     }
@@ -90,14 +92,14 @@ export default function AppliedControlsPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Applied Controls</h1>
-          <p className="text-sm text-gray-500 mt-1">Track implementation of security controls</p>
+          <h1 className="text-2xl font-bold text-gray-900">{t("applied_controls.title")}</h1>
+          <p className="text-sm text-gray-500 mt-1">{t("applied_controls.subtitle")}</p>
         </div>
         <button
           onClick={() => setShowModal(true)}
           className="inline-flex items-center gap-2 bg-blue-600 text-white px-4 py-2.5 rounded-xl text-sm font-medium hover:bg-blue-700 transition-colors"
         >
-          <Plus className="w-4 h-4" /> Add Control
+          <Plus className="w-4 h-4" /> {t("applied_controls.new_control")}
         </button>
       </div>
 
@@ -108,14 +110,14 @@ export default function AppliedControlsPage() {
           <input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search controls..."
+            placeholder={t("applied_controls.search_placeholder")}
             className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
           />
         </div>
         <div className="flex items-center gap-2">
           <Filter className="w-4 h-4 text-gray-400" />
           <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="border border-gray-200 rounded-xl text-sm px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500">
-            <option value="">All Statuses</option>
+            <option value="">{t("applied_controls.all_statuses")}</option>
             {STATUS_OPTIONS.map((s) => <option key={s} value={s}>{s.replace(/_/g, " ")}</option>)}
           </select>
         </div>
@@ -128,19 +130,19 @@ export default function AppliedControlsPage() {
             <Loader2 className="w-6 h-6 animate-spin text-blue-500" />
           </div>
         ) : filtered.length === 0 ? (
-          <div className="text-center py-16 text-gray-400">No applied controls found</div>
+          <div className="text-center py-16 text-gray-400">{t("applied_controls.no_controls")}</div>
         ) : (
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-gray-100 bg-gray-50/50">
-                <th className="text-left px-6 py-3 font-medium text-gray-500">Ref ID</th>
-                <th className="text-left px-6 py-3 font-medium text-gray-500">Name</th>
-                <th className="text-left px-6 py-3 font-medium text-gray-500">Category</th>
-                <th className="text-left px-6 py-3 font-medium text-gray-500">Status</th>
-                <th className="text-left px-6 py-3 font-medium text-gray-500">Progress</th>
-                <th className="text-left px-6 py-3 font-medium text-gray-500">Effort</th>
-                <th className="text-right px-6 py-3 font-medium text-gray-500">Cost</th>
-                <th className="text-left px-6 py-3 font-medium text-gray-500">ETA</th>
+                <th className="text-left px-6 py-3 font-medium text-gray-500">{t("applied_controls.col_ref")}</th>
+                <th className="text-left px-6 py-3 font-medium text-gray-500">{t("applied_controls.col_name")}</th>
+                <th className="text-left px-6 py-3 font-medium text-gray-500">{t("applied_controls.col_category")}</th>
+                <th className="text-left px-6 py-3 font-medium text-gray-500">{t("applied_controls.col_status")}</th>
+                <th className="text-left px-6 py-3 font-medium text-gray-500">{t("applied_controls.col_progress")}</th>
+                <th className="text-left px-6 py-3 font-medium text-gray-500">{t("applied_controls.col_effort")}</th>
+                <th className="text-right px-6 py-3 font-medium text-gray-500">{t("applied_controls.col_cost")}</th>
+                <th className="text-left px-6 py-3 font-medium text-gray-500">{t("applied_controls.col_eta")}</th>
               </tr>
             </thead>
             <tbody>
@@ -190,32 +192,32 @@ export default function AppliedControlsPage() {
           <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setShowModal(false)} />
           <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-lg mx-4 p-6 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-6">
-              <h2 className="text-lg font-semibold text-gray-900">Add Applied Control</h2>
+              <h2 className="text-lg font-semibold text-gray-900">{t("applied_controls.modal_title")}</h2>
               <button onClick={() => setShowModal(false)} className="text-gray-400 hover:text-gray-600"><X className="w-5 h-5" /></button>
             </div>
             {error && <div className="mb-4 p-3 bg-red-50 text-red-700 rounded-xl text-sm">{error}</div>}
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Reference ID</label>
-                  <input value={form.ref_id} onChange={(e) => setForm({ ...form, ref_id: e.target.value })} placeholder="AC-001" className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                  <label className="block text-sm font-medium text-gray-700 mb-1">{t("applied_controls.ref_id")}</label>
+                  <input value={form.ref_id} onChange={(e) => setForm({ ...form, ref_id: e.target.value })} placeholder={t("applied_controls.ref_id_placeholder")} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Name *</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">{t("applied_controls.name_label")} *</label>
                   <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
                 </div>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">{t("common.description")}</label>
                 <textarea value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} rows={3} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Category</label>
-                  <input value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} placeholder="e.g. Access Control" className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                  <label className="block text-sm font-medium text-gray-700 mb-1">{t("applied_controls.col_category")}</label>
+                  <input value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} placeholder={t("applied_controls.category_placeholder")} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">CSF Function</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">{t("applied_controls.col_csf")}</label>
                   <select value={form.csf_function} onChange={(e) => setForm({ ...form, csf_function: e.target.value })} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
                     {CSF_FUNCTIONS.map((f) => <option key={f} value={f}>{f.charAt(0).toUpperCase() + f.slice(1)}</option>)}
                   </select>
@@ -223,36 +225,36 @@ export default function AppliedControlsPage() {
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">{t("applied_controls.col_status")}</label>
                   <select value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
                     {STATUS_OPTIONS.map((s) => <option key={s} value={s}>{s.replace(/_/g, " ")}</option>)}
                   </select>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Effort</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">{t("applied_controls.form_effort")}</label>
                   <select value={form.effort} onChange={(e) => setForm({ ...form, effort: e.target.value })} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-                    {EFFORT_OPTIONS.map((e) => <option key={e} value={e}>{e.replace(/_/g, " ")}</option>)}
+                    {EFFORT_OPTIONS.map((ef) => <option key={ef} value={ef}>{ef.replace(/_/g, " ")}</option>)}
                   </select>
                 </div>
               </div>
               <div className="grid grid-cols-3 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Cost ($)</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">{t("applied_controls.form_cost")}</label>
                   <input type="number" min={0} value={form.cost} onChange={(e) => setForm({ ...form, cost: parseFloat(e.target.value) || 0 })} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Recurring ($)</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">{t("applied_controls.form_recurring_cost")}</label>
                   <input type="number" min={0} value={form.recurring_cost} onChange={(e) => setForm({ ...form, recurring_cost: parseFloat(e.target.value) || 0 })} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">ETA</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">{t("applied_controls.form_eta")}</label>
                   <input type="date" value={form.eta} onChange={(e) => setForm({ ...form, eta: e.target.value })} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
                 </div>
               </div>
               <div className="flex justify-end gap-3 pt-2">
-                <button type="button" onClick={() => setShowModal(false)} className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800">Cancel</button>
+                <button type="button" onClick={() => setShowModal(false)} className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800">{t("common.cancel")}</button>
                 <button type="submit" disabled={submitting} className="inline-flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-xl text-sm font-medium hover:bg-blue-700 disabled:opacity-50">
-                  {submitting && <Loader2 className="w-4 h-4 animate-spin" />} Add Control
+                  {submitting && <Loader2 className="w-4 h-4 animate-spin" />} {t("applied_controls.new_control")}
                 </button>
               </div>
             </form>

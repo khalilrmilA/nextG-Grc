@@ -4,6 +4,7 @@ import {
   Sparkles, Download, ThumbsUp, ThumbsDown, Clock, CheckCircle2, RefreshCw,
   AlertTriangle, ExternalLink, CheckCheck, ChevronRight,
 } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { threatsApi } from "@/api/endpoints";
 
 const CATEGORY_OPTIONS = [
@@ -37,6 +38,7 @@ function fmt(s: string) {
 // ── Detail modal ──────────────────────────────────────────────────────────────
 
 function ThreatDetailModal({ threat, onClose }: { threat: any; onClose: () => void }) {
+  const { t } = useTranslation();
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
@@ -60,7 +62,7 @@ function ThreatDetailModal({ threat, onClose }: { threat: any; onClose: () => vo
               )}
               {threat.is_builtin && (
                 <span className="inline-flex rounded-full px-2 py-0.5 text-xs font-semibold bg-blue-100 text-blue-700 border border-blue-200">
-                  Built-in
+                  {t("threats.builtin")}
                 </span>
               )}
             </div>
@@ -77,7 +79,7 @@ function ThreatDetailModal({ threat, onClose }: { threat: any; onClose: () => vo
           {/* Description */}
           {threat.description && (
             <div>
-              <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Description</h3>
+              <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">{t("common.description")}</h3>
               <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-line">{threat.description}</p>
             </div>
           )}
@@ -85,7 +87,7 @@ function ThreatDetailModal({ threat, onClose }: { threat: any; onClose: () => vo
           {/* Threat actors */}
           {threat.typical_threat_actors?.length > 0 && (
             <div>
-              <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Threat Actors</h3>
+              <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">{t("threats.threat_actors")}</h3>
               <div className="flex flex-wrap gap-1.5">
                 {threat.typical_threat_actors.map((a: string, i: number) => (
                   <span key={i} className="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs bg-red-50 text-red-700 border border-red-200">
@@ -99,7 +101,7 @@ function ThreatDetailModal({ threat, onClose }: { threat: any; onClose: () => vo
           {/* Attack vectors / tags */}
           {threat.typical_attack_vectors?.length > 0 && (
             <div>
-              <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Attack Vectors / Tags</h3>
+              <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">{t("threats.attack_vectors")}</h3>
               <div className="flex flex-wrap gap-1.5">
                 {threat.typical_attack_vectors.map((v: string, i: number) => (
                   <span key={i} className="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs bg-orange-50 text-orange-700 border border-orange-200">
@@ -113,7 +115,7 @@ function ThreatDetailModal({ threat, onClose }: { threat: any; onClose: () => vo
           {/* MITRE IDs */}
           {threat.mitre_ids?.length > 0 && (
             <div>
-              <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">MITRE ATT&CK IDs</h3>
+              <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">{t("threats.mitre_ids")}</h3>
               <div className="flex flex-wrap gap-1.5">
                 {threat.mitre_ids.map((id: string, i: number) => (
                   <span key={i} className="inline-flex rounded-full px-2.5 py-0.5 text-xs font-mono bg-purple-50 text-purple-700 border border-purple-200">
@@ -127,7 +129,7 @@ function ThreatDetailModal({ threat, onClose }: { threat: any; onClose: () => vo
           {/* Affected assets */}
           {threat.affected_assets?.length > 0 && (
             <div>
-              <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Affected Assets</h3>
+              <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">{t("threats.affected_assets")}</h3>
               <div className="flex flex-wrap gap-1.5">
                 {threat.affected_assets.map((a: string, i: number) => (
                   <span key={i} className="inline-flex rounded-full px-2.5 py-0.5 text-xs bg-gray-100 text-gray-600 border border-gray-200">
@@ -141,7 +143,7 @@ function ThreatDetailModal({ threat, onClose }: { threat: any; onClose: () => vo
           {/* Source + link */}
           {(threat.source || threat.url) && (
             <div>
-              <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Source</h3>
+              <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">{t("threats.col_source")}</h3>
               <div className="flex items-center gap-3">
                 {threat.source && (
                   <span className="text-sm text-gray-600 font-medium">{threat.source}</span>
@@ -153,7 +155,7 @@ function ThreatDetailModal({ threat, onClose }: { threat: any; onClose: () => vo
                     rel="noopener noreferrer"
                     className="inline-flex items-center gap-1.5 text-xs text-blue-600 hover:text-blue-800 hover:underline"
                   >
-                    <ExternalLink className="w-3 h-3" /> View Advisory
+                    <ExternalLink className="w-3 h-3" /> {t("threats.view_advisory")}
                   </a>
                 )}
               </div>
@@ -167,7 +169,7 @@ function ThreatDetailModal({ threat, onClose }: { threat: any; onClose: () => vo
             onClick={onClose}
             className="px-4 py-2 text-sm font-medium text-gray-600 hover:text-gray-800 bg-gray-100 hover:bg-gray-200 rounded-xl transition-colors"
           >
-            Close
+            {t("threats.btn_close")}
           </button>
         </div>
       </div>
@@ -178,6 +180,7 @@ function ThreatDetailModal({ threat, onClose }: { threat: any; onClose: () => vo
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export default function ThreatLibraryPage() {
+  const { t } = useTranslation();
   const [items, setItems]           = useState<any[]>([]);
   const [pending, setPending]       = useState<any[]>([]);
   const [loading, setLoading]       = useState(true);
@@ -222,7 +225,7 @@ export default function ThreatLibraryPage() {
 
   /* ── MITRE one-time import ── */
   async function handleImportMitre() {
-    if (!confirm("This will import all 700+ MITRE ATT&CK techniques into your library. Continue?")) return;
+    if (!confirm(t("threats.confirm_import"))) return;
     setImporting(true);
     setNotice(null);
     try {
@@ -231,7 +234,7 @@ export default function ThreatLibraryPage() {
       setLoading(true);
       load();
     } catch {
-      setNotice({ msg: "MITRE import failed — check backend logs.", ok: false });
+      setNotice({ msg: t("threats.error_import_failed"), ok: false });
     } finally {
       setImporting(false);
     }
@@ -246,7 +249,7 @@ export default function ThreatLibraryPage() {
       setNotice({ msg: r.message, ok: r.created > 0 });
       if (r.created > 0) load();
     } catch {
-      setNotice({ msg: "Feed fetch failed — check backend logs.", ok: false });
+      setNotice({ msg: t("threats.error_fetch_failed"), ok: false });
     } finally {
       setFetching(false);
     }
@@ -265,11 +268,11 @@ export default function ThreatLibraryPage() {
     setApprovingAll(true);
     setNotice(null);
     try {
-      await Promise.all(pending.map((t) => threatsApi.approve(t.id)));
+      await Promise.all(pending.map((th) => threatsApi.approve(th.id)));
       setNotice({ msg: `Approved ${pending.length} threat${pending.length > 1 ? "s" : ""} — added to library.`, ok: true });
       load();
     } catch {
-      setNotice({ msg: "Some approvals failed — check backend logs.", ok: false });
+      setNotice({ msg: t("threats.error_approve_failed"), ok: false });
     } finally {
       setApprovingAll(false);
     }
@@ -285,7 +288,7 @@ export default function ThreatLibraryPage() {
   /* ── Manual create ── */
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!form.name.trim()) { setError("Name is required"); return; }
+    if (!form.name.trim()) { setError(t("threats.error_name_required")); return; }
     setSubmitting(true);
     setError("");
     try {
@@ -310,7 +313,7 @@ export default function ThreatLibraryPage() {
   }
 
   async function handleDelete(id: string) {
-    if (!confirm("Delete this threat?")) return;
+    if (!confirm(t("threats.confirm_delete"))) return;
     try { await threatsApi.delete(id); load(); } catch {}
   }
 
@@ -332,40 +335,40 @@ export default function ThreatLibraryPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Threat Library</h1>
+          <h1 className="text-2xl font-bold text-gray-900">{t("threats.title")}</h1>
           <p className="text-sm text-gray-500 mt-1">
-            Browse threats · {items.length} in library
+            {t("threats.subtitle")} · {items.length} in library
             {pending.length > 0 && <span className="ml-2 text-amber-600 font-medium">· {pending.length} pending review</span>}
           </p>
           <p className="text-xs text-gray-400 mt-0.5 flex items-center gap-1">
             <Sparkles className="w-3 h-3 text-purple-400" />
-            Auto-fetches from CISA KEV · SANS ISC · opensourcemalware.com every 24h
+            {t("threats.info_text")}
           </p>
         </div>
         <div className="flex items-center gap-2">
           <button
             onClick={handleImportMitre}
             disabled={importing}
-            title="One-time import of all 700+ MITRE ATT&CK techniques"
+            title={t("threats.import_mitre_title")}
             className="inline-flex items-center gap-2 bg-orange-500 text-white px-4 py-2.5 rounded-xl text-sm font-medium hover:bg-orange-600 disabled:opacity-60 transition-colors"
           >
             {importing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
-            {importing ? "Importing..." : "Import MITRE ATT&CK"}
+            {importing ? t("threats.importing") : t("threats.import_mitre")}
           </button>
           <button
             onClick={handleFetchNews}
             disabled={fetching}
-            title="Auto-fetches every 24h · Click to run now (CISA KEV, SANS ISC, opensourcemalware.com)"
+            title={t("threats.fetch_now_title")}
             className="inline-flex items-center gap-2 bg-purple-600 text-white px-4 py-2.5 rounded-xl text-sm font-medium hover:bg-purple-700 disabled:opacity-60 transition-colors"
           >
             {fetching ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
-            {fetching ? "Fetching..." : "Fetch Now"}
+            {fetching ? t("threats.fetching") : t("threats.fetch_now")}
           </button>
           <button
             onClick={() => setShowModal(true)}
             className="inline-flex items-center gap-2 bg-blue-600 text-white px-4 py-2.5 rounded-xl text-sm font-medium hover:bg-blue-700 transition-colors"
           >
-            <Plus className="w-4 h-4" /> Add Threat
+            <Plus className="w-4 h-4" /> {t("threats.new_threat")}
           </button>
         </div>
       </div>
@@ -385,17 +388,17 @@ export default function ThreatLibraryPage() {
           <div className="flex items-center gap-2 px-6 py-4 border-b border-amber-100 bg-amber-50/60">
             <Clock className="w-4 h-4 text-amber-600" />
             <h2 className="font-semibold text-amber-900 text-sm">
-              Pending Review — {pending.length} new threat{pending.length > 1 ? "s" : ""} from feeds
+              {t("threats.pending_review", { count: pending.length })}
             </h2>
             <span className="ml-auto flex items-center gap-2">
-              <span className="text-xs text-amber-600 hidden sm:inline">Approve to add · Reject to discard</span>
+              <span className="text-xs text-amber-600 hidden sm:inline">{t("threats.pending_help")}</span>
               <button
                 onClick={handleApproveAll}
                 disabled={approvingAll}
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-green-600 text-white text-xs font-semibold rounded-lg hover:bg-green-700 disabled:opacity-50 transition-colors"
               >
                 {approvingAll ? <Loader2 className="w-3 h-3 animate-spin" /> : <CheckCheck className="w-3 h-3" />}
-                {approvingAll ? "Approving..." : "Approve All"}
+                {approvingAll ? t("threats.approving") : t("threats.approve_all")}
               </button>
             </span>
           </div>
@@ -442,7 +445,7 @@ export default function ThreatLibraryPage() {
                     className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-green-600 text-white text-xs font-medium rounded-lg hover:bg-green-700 disabled:opacity-50 transition-colors"
                   >
                     {actioning === t.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <ThumbsUp className="w-3 h-3" />}
-                    Approve
+                    {t("threats.btn_approve")}
                   </button>
                   <button
                     onClick={() => handleReject(t.id)}
@@ -450,7 +453,7 @@ export default function ThreatLibraryPage() {
                     className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border border-red-200 text-red-600 text-xs font-medium rounded-lg hover:bg-red-50 disabled:opacity-50 transition-colors"
                   >
                     {actioning === t.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <ThumbsDown className="w-3 h-3" />}
-                    Reject
+                    {t("threats.btn_reject")}
                   </button>
                 </div>
               </div>
@@ -466,7 +469,7 @@ export default function ThreatLibraryPage() {
           <input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search threats..."
+            placeholder={t("threats.search_placeholder")}
             className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
           />
         </div>
@@ -477,7 +480,7 @@ export default function ThreatLibraryPage() {
             onChange={(e) => setCatFilter(e.target.value)}
             className="border border-gray-200 rounded-xl text-sm px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
-            <option value="">All Categories</option>
+            <option value="">{t("threats.all_categories")}</option>
             {CATEGORY_OPTIONS.map((c) => <option key={c} value={c}>{fmt(c)}</option>)}
           </select>
         </div>
@@ -491,8 +494,8 @@ export default function ThreatLibraryPage() {
       ) : Object.keys(grouped).length === 0 ? (
         <div className="text-center py-16 text-gray-400">
           <Shield className="w-10 h-10 mx-auto mb-3 opacity-30" />
-          <p className="text-sm font-medium">No threats in library yet</p>
-          <p className="text-xs mt-1">Click <strong>Import MITRE ATT&CK</strong> to seed 700+ techniques, or <strong>Fetch Now</strong> for live feeds</p>
+          <p className="text-sm font-medium">{t("threats.no_threats")}</p>
+          <p className="text-xs mt-1">{t("threats.empty_help")}</p>
         </div>
       ) : (
         Object.entries(grouped).map(([category, threats]) => (
@@ -531,7 +534,7 @@ export default function ThreatLibraryPage() {
                   </div>
 
                   <h3 className="font-semibold text-gray-900 mb-1 line-clamp-2 leading-snug">{threat.name}</h3>
-                  <p className="text-sm text-gray-500 mb-3 line-clamp-2">{threat.description || "No description"}</p>
+                  <p className="text-sm text-gray-500 mb-3 line-clamp-2">{threat.description || t("threats.no_description")}</p>
 
                   {/* Actors + vectors/tags combined */}
                   {((threat.typical_threat_actors?.length > 0) || (threat.typical_attack_vectors?.length > 0)) && (
@@ -579,43 +582,43 @@ export default function ThreatLibraryPage() {
           <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setShowModal(false)} />
           <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-lg mx-4 p-6">
             <div className="flex items-center justify-between mb-6">
-              <h2 className="text-lg font-semibold text-gray-900">Add Threat</h2>
+              <h2 className="text-lg font-semibold text-gray-900">{t("threats.new_threat")}</h2>
               <button onClick={() => setShowModal(false)} className="text-gray-400 hover:text-gray-600"><X className="w-5 h-5" /></button>
             </div>
             {error && <div className="mb-4 p-3 bg-red-50 text-red-700 rounded-xl text-sm">{error}</div>}
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Reference ID</label>
-                  <input value={form.ref_id} onChange={(e) => setForm({ ...form, ref_id: e.target.value })} placeholder="T-001" className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                  <label className="block text-sm font-medium text-gray-700 mb-1">{t("threats.ref_id")}</label>
+                  <input value={form.ref_id} onChange={(e) => setForm({ ...form, ref_id: e.target.value })} placeholder={t("threats.ref_id_placeholder")} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Name *</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">{t("common.name")} *</label>
                   <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
                 </div>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">{t("common.description")}</label>
                 <textarea value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} rows={3} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Category</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">{t("common.category")}</label>
                 <select value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
                   {CATEGORY_OPTIONS.map((c) => <option key={c} value={c}>{fmt(c)}</option>)}
                 </select>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Typical Threat Actors (comma-separated)</label>
-                <input value={form.typical_threat_actors} onChange={(e) => setForm({ ...form, typical_threat_actors: e.target.value })} placeholder="APT28, Lazarus Group" className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                <label className="block text-sm font-medium text-gray-700 mb-1">{t("threats.threat_actors")}</label>
+                <input value={form.typical_threat_actors} onChange={(e) => setForm({ ...form, typical_threat_actors: e.target.value })} placeholder={t("threats.threat_actors_placeholder")} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">MITRE ATT&CK IDs (comma-separated)</label>
-                <input value={form.mitre_ids} onChange={(e) => setForm({ ...form, mitre_ids: e.target.value })} placeholder="T1566, T1078" className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                <label className="block text-sm font-medium text-gray-700 mb-1">{t("threats.mitre_ids")}</label>
+                <input value={form.mitre_ids} onChange={(e) => setForm({ ...form, mitre_ids: e.target.value })} placeholder={t("threats.mitre_ids_placeholder")} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
               </div>
               <div className="flex justify-end gap-3 pt-2">
-                <button type="button" onClick={() => setShowModal(false)} className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800">Cancel</button>
+                <button type="button" onClick={() => setShowModal(false)} className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800">{t("threats.btn_cancel")}</button>
                 <button type="submit" disabled={submitting} className="inline-flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-xl text-sm font-medium hover:bg-blue-700 disabled:opacity-50">
-                  {submitting && <Loader2 className="w-4 h-4 animate-spin" />} Add Threat
+                  {submitting && <Loader2 className="w-4 h-4 animate-spin" />} {t("threats.new_threat")}
                 </button>
               </div>
             </form>

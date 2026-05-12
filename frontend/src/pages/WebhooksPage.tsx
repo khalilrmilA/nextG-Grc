@@ -10,6 +10,7 @@ import {
   XCircle,
   Globe,
 } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { webhooksApi } from "@/api/endpoints";
 
 const MODULE_GROUPS: Record<string, string[]> = {
@@ -23,6 +24,7 @@ const MODULE_GROUPS: Record<string, string[]> = {
 };
 
 export default function WebhooksPage() {
+  const { t } = useTranslation();
   const [webhooks, setWebhooks] = useState<any[]>([]);
   const [availableEvents, setAvailableEvents] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
@@ -64,11 +66,11 @@ export default function WebhooksPage() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!form.url.trim()) {
-      setError("URL is required");
+      setError(t("webhooks.error_url_required"));
       return;
     }
     if (form.events.length === 0) {
-      setError("Select at least one event");
+      setError(t("webhooks.error_select_events"));
       return;
     }
     setSubmitting(true);
@@ -84,14 +86,14 @@ export default function WebhooksPage() {
       setLoading(true);
       load();
     } catch (err: any) {
-      setError(err?.response?.data?.detail || "Failed to create webhook");
+      setError(err?.response?.data?.detail || t("webhooks.error_create_failed"));
     } finally {
       setSubmitting(false);
     }
   }
 
   async function handleDelete(id: string) {
-    if (!confirm("Delete this webhook?")) return;
+    if (!confirm(t("webhooks.confirm_delete"))) return;
     try {
       await webhooksApi.delete(id);
       setWebhooks((prev) => prev.filter((w) => w.id !== id));
@@ -154,16 +156,14 @@ export default function WebhooksPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Webhooks</h1>
-          <p className="text-sm text-gray-500 mt-1">
-            Manage webhook integrations to receive real-time event notifications
-          </p>
+          <h1 className="text-2xl font-bold text-gray-900">{t("webhooks.title")}</h1>
+          <p className="text-sm text-gray-500 mt-1">{t("webhooks.subtitle")}</p>
         </div>
         <button
           onClick={() => setShowModal(true)}
           className="inline-flex items-center gap-2 bg-blue-600 text-white px-4 py-2.5 rounded-xl text-sm font-medium hover:bg-blue-700 transition-colors"
         >
-          <Plus className="w-4 h-4" /> Add Webhook
+          <Plus className="w-4 h-4" /> {t("webhooks.new_webhook")}
         </button>
       </div>
 
@@ -175,10 +175,8 @@ export default function WebhooksPage() {
       ) : webhooks.length === 0 ? (
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-16 text-center">
           <Webhook className="w-10 h-10 mx-auto mb-3 text-gray-300" />
-          <p className="text-sm text-gray-400">No webhooks configured</p>
-          <p className="text-xs text-gray-400 mt-1">
-            Add a webhook to receive event notifications
-          </p>
+          <p className="text-sm text-gray-400">{t("webhooks.no_webhooks")}</p>
+          <p className="text-xs text-gray-400 mt-1">{t("webhooks.add_desc")}</p>
         </div>
       ) : (
         <div className="grid gap-4">
@@ -201,7 +199,7 @@ export default function WebhooksPage() {
                             : "bg-gray-50 text-gray-500 border-gray-200"
                         }`}
                       >
-                        {hook.is_active !== false ? "Active" : "Inactive"}
+                        {hook.is_active !== false ? t("webhooks.badge_active") : t("webhooks.badge_inactive")}
                       </span>
                     </div>
                     {hook.description && (
@@ -244,13 +242,13 @@ export default function WebhooksPage() {
                       ) : (
                         <Zap className="w-3.5 h-3.5" />
                       )}
-                      Test
+                      {t("webhooks.btn_test")}
                     </button>
                     <button
                       onClick={() => handleDelete(hook.id)}
                       className="inline-flex items-center gap-1 text-sm text-red-600 hover:text-red-700 font-medium px-3 py-1.5 rounded-lg hover:bg-red-50 transition-colors"
                     >
-                      <Trash2 className="w-3.5 h-3.5" /> Delete
+                      <Trash2 className="w-3.5 h-3.5" /> {t("webhooks.btn_delete")}
                     </button>
                   </div>
                 </div>
@@ -269,7 +267,7 @@ export default function WebhooksPage() {
           />
           <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-lg mx-4 p-6 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-6">
-              <h2 className="text-lg font-semibold text-gray-900">Add Webhook</h2>
+              <h2 className="text-lg font-semibold text-gray-900">{t("webhooks.modal_title")}</h2>
               <button
                 onClick={() => setShowModal(false)}
                 className="text-gray-400 hover:text-gray-600"
@@ -283,28 +281,28 @@ export default function WebhooksPage() {
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Webhook URL *
+                  {t("webhooks.form_url_label")} *
                 </label>
                 <input
                   type="url"
                   value={form.url}
                   onChange={(e) => setForm({ ...form, url: e.target.value })}
-                  placeholder="https://example.com/webhook"
+                  placeholder={t("webhooks.form_url_placeholder")}
                   className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">{t("webhooks.form_description_label")}</label>
                 <input
                   value={form.description}
                   onChange={(e) => setForm({ ...form, description: e.target.value })}
-                  placeholder="e.g. Slack integration for incidents"
+                  placeholder={t("webhooks.form_description_placeholder")}
                   className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-3">
-                  Events *
+                  {t("webhooks.form_events_label")} *
                 </label>
                 <div className="space-y-4">
                   {Object.entries(groupedEvents).map(([module, events]) => (
@@ -346,14 +344,14 @@ export default function WebhooksPage() {
                   onClick={() => setShowModal(false)}
                   className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800"
                 >
-                  Cancel
+                  {t("webhooks.btn_cancel")}
                 </button>
                 <button
                   type="submit"
                   disabled={submitting}
                   className="inline-flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-xl text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
                 >
-                  {submitting && <Loader2 className="w-4 h-4 animate-spin" />} Create Webhook
+                  {submitting && <Loader2 className="w-4 h-4 animate-spin" />} {t("webhooks.btn_create")}
                 </button>
               </div>
             </form>

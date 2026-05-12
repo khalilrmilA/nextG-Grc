@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { Plus, Search, X, Loader2, Filter, Bug, ShieldCheck, Wrench, BarChart3 } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { vulnerabilitiesApi } from "@/api/endpoints";
 
 const SEV_BADGE: Record<string, string> = {
@@ -23,6 +24,7 @@ const STATUS_OPTIONS = ["open", "in_remediation", "mitigated", "accepted", "clos
 const SOURCE_OPTIONS = ["pen_test", "scan", "manual", "bug_bounty"];
 
 export default function VulnerabilitiesPage() {
+  const { t } = useTranslation();
   const [items, setItems] = useState<any[]>([]);
   const [stats, setStats] = useState<any>({ total: 0, open: 0, in_remediation: 0, avg_cvss: 0 });
   const [loading, setLoading] = useState(true);
@@ -71,8 +73,8 @@ export default function VulnerabilitiesPage() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!form.title.trim()) { setError("Title is required"); return; }
-    if (!form.ref_id.trim()) { setError("Reference ID is required"); return; }
+    if (!form.title.trim()) { setError(t("vulnerabilities.error_title_required")); return; }
+    if (!form.ref_id.trim()) { setError(t("vulnerabilities.error_ref_required")); return; }
     setSubmitting(true);
     setError("");
     try {
@@ -83,7 +85,7 @@ export default function VulnerabilitiesPage() {
       load();
       loadStats();
     } catch (err: any) {
-      setError(err?.response?.data?.detail || "Failed to create vulnerability");
+      setError(err?.response?.data?.detail || t("vulnerabilities.error_create_failed"));
     } finally {
       setSubmitting(false);
     }
@@ -98,24 +100,24 @@ export default function VulnerabilitiesPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Vulnerabilities</h1>
-          <p className="text-sm text-gray-500 mt-1">Track and remediate security vulnerabilities</p>
+          <h1 className="text-2xl font-bold text-gray-900">{t("vulnerabilities.title")}</h1>
+          <p className="text-sm text-gray-500 mt-1">{t("vulnerabilities.subtitle")}</p>
         </div>
         <button
           onClick={() => setShowModal(true)}
           className="inline-flex items-center gap-2 bg-blue-600 text-white px-4 py-2.5 rounded-xl text-sm font-medium hover:bg-blue-700 transition-colors"
         >
-          <Plus className="w-4 h-4" /> Add Vulnerability
+          <Plus className="w-4 h-4" /> {t("vulnerabilities.new_vulnerability")}
         </button>
       </div>
 
       {/* Stats */}
       <div className="grid grid-cols-4 gap-4">
         {[
-          { label: "Total Vulnerabilities", value: stats.total, icon: Bug, color: "text-blue-600 bg-blue-50" },
-          { label: "Open", value: stats.open, icon: ShieldCheck, color: "text-red-600 bg-red-50" },
-          { label: "In Remediation", value: stats.in_remediation, icon: Wrench, color: "text-yellow-600 bg-yellow-50" },
-          { label: "Avg CVSS", value: typeof stats.avg_cvss === "number" ? stats.avg_cvss.toFixed(1) : "0.0", icon: BarChart3, color: "text-purple-600 bg-purple-50" },
+          { label: t("vulnerabilities.stat_total"), value: stats.total, icon: Bug, color: "text-blue-600 bg-blue-50" },
+          { label: t("vulnerabilities.stat_open"), value: stats.open, icon: ShieldCheck, color: "text-red-600 bg-red-50" },
+          { label: t("vulnerabilities.stat_in_remediation"), value: stats.in_remediation, icon: Wrench, color: "text-yellow-600 bg-yellow-50" },
+          { label: t("vulnerabilities.stat_avg_cvss"), value: typeof stats.avg_cvss === "number" ? stats.avg_cvss.toFixed(1) : "0.0", icon: BarChart3, color: "text-purple-600 bg-purple-50" },
         ].map((s) => (
           <div key={s.label} className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
             <div className="flex items-center gap-3">
@@ -138,18 +140,18 @@ export default function VulnerabilitiesPage() {
           <input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search by title or CVE..."
+            placeholder={t("vulnerabilities.search_placeholder")}
             className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
           />
         </div>
         <div className="flex items-center gap-2">
           <Filter className="w-4 h-4 text-gray-400" />
           <select value={sevFilter} onChange={(e) => setSevFilter(e.target.value)} className="border border-gray-200 rounded-xl text-sm px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500">
-            <option value="">All Severities</option>
-            {SEVERITY_OPTIONS.map((s) => <option key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</option>)}
+            <option value="">{t("vulnerabilities.all_severities")}</option>
+            {SEVERITY_OPTIONS.map((s) => <option key={s} value={s}>{t(`compliance.severities.${s}` as never)}</option>)}
           </select>
           <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="border border-gray-200 rounded-xl text-sm px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500">
-            <option value="">All Statuses</option>
+            <option value="">{t("vulnerabilities.all_statuses")}</option>
             {STATUS_OPTIONS.map((s) => <option key={s} value={s}>{s.replace(/_/g, " ")}</option>)}
           </select>
         </div>
@@ -162,17 +164,17 @@ export default function VulnerabilitiesPage() {
             <Loader2 className="w-6 h-6 animate-spin text-blue-500" />
           </div>
         ) : filtered.length === 0 ? (
-          <div className="text-center py-16 text-gray-400">No vulnerabilities found</div>
+          <div className="text-center py-16 text-gray-400">{t("vulnerabilities.no_vulnerabilities")}</div>
         ) : (
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-gray-100 bg-gray-50/50">
-                <th className="text-left px-6 py-3 font-medium text-gray-500">Ref ID</th>
-                <th className="text-left px-6 py-3 font-medium text-gray-500">Title</th>
-                <th className="text-left px-6 py-3 font-medium text-gray-500">Severity</th>
-                <th className="text-left px-6 py-3 font-medium text-gray-500">CVSS</th>
-                <th className="text-left px-6 py-3 font-medium text-gray-500">Status</th>
-                <th className="text-left px-6 py-3 font-medium text-gray-500">Remediation Due</th>
+                <th className="text-left px-6 py-3 font-medium text-gray-500">{t("vulnerabilities.col_ref")}</th>
+                <th className="text-left px-6 py-3 font-medium text-gray-500">{t("vulnerabilities.col_title")}</th>
+                <th className="text-left px-6 py-3 font-medium text-gray-500">{t("vulnerabilities.col_severity")}</th>
+                <th className="text-left px-6 py-3 font-medium text-gray-500">{t("vulnerabilities.col_cvss")}</th>
+                <th className="text-left px-6 py-3 font-medium text-gray-500">{t("vulnerabilities.col_status")}</th>
+                <th className="text-left px-6 py-3 font-medium text-gray-500">{t("vulnerabilities.col_remediation_due")}</th>
               </tr>
             </thead>
             <tbody>
@@ -205,51 +207,51 @@ export default function VulnerabilitiesPage() {
           <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setShowModal(false)} />
           <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-lg mx-4 p-6">
             <div className="flex items-center justify-between mb-6">
-              <h2 className="text-lg font-semibold text-gray-900">Add Vulnerability</h2>
+              <h2 className="text-lg font-semibold text-gray-900">{t("vulnerabilities.new_vulnerability")}</h2>
               <button onClick={() => setShowModal(false)} className="text-gray-400 hover:text-gray-600"><X className="w-5 h-5" /></button>
             </div>
             {error && <div className="mb-4 p-3 bg-red-50 text-red-700 rounded-xl text-sm">{error}</div>}
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Reference ID *</label>
-                  <input value={form.ref_id} onChange={(e) => setForm({ ...form, ref_id: e.target.value })} placeholder="CVE-2024-1234" className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                  <label className="block text-sm font-medium text-gray-700 mb-1">{t("vulnerabilities.ref_id_label")} *</label>
+                  <input value={form.ref_id} onChange={(e) => setForm({ ...form, ref_id: e.target.value })} placeholder={t("vulnerabilities.ref_id_placeholder")} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Title *</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">{t("common.name")} *</label>
                   <input value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
                 </div>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">{t("common.description")}</label>
                 <textarea value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} rows={3} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
               </div>
               <div className="grid grid-cols-3 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Severity</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">{t("common.severity")}</label>
                   <select value={form.severity} onChange={(e) => setForm({ ...form, severity: e.target.value })} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-                    {SEVERITY_OPTIONS.map((s) => <option key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</option>)}
+                    {SEVERITY_OPTIONS.map((s) => <option key={s} value={s}>{t(`compliance.severities.${s}` as never)}</option>)}
                   </select>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">CVSS Score</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">{t("vulnerabilities.cvss_score")}</label>
                   <input type="number" min={0} max={10} step={0.1} value={form.cvss_score} onChange={(e) => setForm({ ...form, cvss_score: parseFloat(e.target.value) || 0 })} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Source</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">{t("vulnerabilities.col_source")}</label>
                   <select value={form.source} onChange={(e) => setForm({ ...form, source: e.target.value })} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
                     {SOURCE_OPTIONS.map((s) => <option key={s} value={s}>{s.replace(/_/g, " ")}</option>)}
                   </select>
                 </div>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Affected Systems</label>
-                <input value={form.affected_systems} onChange={(e) => setForm({ ...form, affected_systems: e.target.value })} placeholder="e.g. web-server-01, db-cluster" className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                <label className="block text-sm font-medium text-gray-700 mb-1">{t("vulnerabilities.affected_systems")}</label>
+                <input value={form.affected_systems} onChange={(e) => setForm({ ...form, affected_systems: e.target.value })} placeholder={t("vulnerabilities.affected_systems_placeholder")} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
               </div>
               <div className="flex justify-end gap-3 pt-2">
-                <button type="button" onClick={() => setShowModal(false)} className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800">Cancel</button>
+                <button type="button" onClick={() => setShowModal(false)} className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800">{t("common.cancel")}</button>
                 <button type="submit" disabled={submitting} className="inline-flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-xl text-sm font-medium hover:bg-blue-700 disabled:opacity-50">
-                  {submitting && <Loader2 className="w-4 h-4 animate-spin" />} Add Vulnerability
+                  {submitting && <Loader2 className="w-4 h-4 animate-spin" />} {t("vulnerabilities.new_vulnerability")}
                 </button>
               </div>
             </form>

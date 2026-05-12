@@ -406,8 +406,9 @@ function NotificationBell() {
 }
 
 // Sidebar style helpers
-function sidebarClasses(style: string) {
-  if (style === "light")   return "bg-white border-r border-gray-200";
+function sidebarClasses(style: string, rtl = false) {
+  const border = rtl ? "border-l" : "border-r";
+  if (style === "light")   return `bg-white ${border} border-gray-200`;
   if (style === "branded") return "bg-gradient-to-b from-blue-700 to-indigo-800";
   return "bg-slate-900"; // dark (default)
 }
@@ -444,7 +445,8 @@ export default function Layout() {
   const user = useAuthStore((u) => u);
   const navigate = useNavigate();
   const location = useLocation();
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const isRTL = i18n.language === "ar";
   const qc = useQueryClient();
   const segment  = location.pathname.split("/")[1] || "dashboard";
   const pageLabel = t(`nav.${segment}` as never, PAGE_LABELS[segment] ?? segment);
@@ -528,17 +530,17 @@ export default function Layout() {
   const { Icon: RoleIcon, color: roleColor } = roleIcon(user?.role ?? "viewer");
   const initials = (user?.name ?? "U").charAt(0).toUpperCase();
   // Role label: super_admin → "Admin", everyone else → their company name
-  const planLabel = isSuperAdmin ? "Admin" : (user?.org ?? PLAN_FEATURES[plan].label);
+  const planLabel = isSuperAdmin ? t("roles.admin") : (user?.org ?? PLAN_FEATURES[plan].label);
   function resolvePlanSub() {
-    if (isSuperAdmin) return "Platform Owner";
-    if (isAdmin) return "Account Owner";
+    if (isSuperAdmin) return t("nav.platform_owner");
+    if (isAdmin) return t("nav.account_owner");
     if (plan === "free_trial") return `${user?.daysRemaining ?? 14} days remaining`;
     return PLAN_FEATURES[plan].label;
   }
   const planSub = resolvePlanSub();
 
   return (
-    <div className="flex h-screen bg-gray-50">
+    <div className={`flex h-screen bg-gray-50 ${isRTL ? "flex-row-reverse" : ""}`}>
       {/* ── Mobile sidebar backdrop ── */}
       {mobileSidebarOpen && (
         <div
@@ -549,10 +551,10 @@ export default function Layout() {
 
       {/* ── Sidebar ── */}
       <aside className={`
-        fixed inset-y-0 left-0 z-50 w-64 flex flex-col shadow-2xl flex-shrink-0 transition-all duration-300
+        fixed inset-y-0 ${isRTL ? "right-0" : "left-0"} z-50 w-64 flex flex-col shadow-2xl flex-shrink-0 transition-all duration-300
         md:relative md:translate-x-0 md:z-auto
-        ${mobileSidebarOpen ? "translate-x-0" : "-translate-x-full"}
-        ${sidebarClasses(appearance.sidebarStyle)}
+        ${mobileSidebarOpen ? "translate-x-0" : isRTL ? "translate-x-full" : "-translate-x-full"}
+        ${sidebarClasses(appearance.sidebarStyle, isRTL)}
       `}>
         {/* Logo + mobile close */}
         <div className={`flex items-center justify-between px-4 py-4 border-b ${sc.divider}`}>
@@ -691,7 +693,7 @@ export default function Layout() {
               }
             >
               <Users className="w-4 h-4" />
-              Team Management
+              {t("nav.team_management")}
             </NavLink>
           )}
           {[
@@ -779,8 +781,8 @@ export default function Layout() {
         {user?.role === "viewer" && (
           <div className="flex items-center gap-3 px-4 py-2.5 bg-amber-50 border-b border-amber-200 text-amber-800 text-sm flex-shrink-0">
             <Eye className="w-4 h-4 flex-shrink-0 text-amber-600" />
-            <span className="font-medium">Read-only Access</span>
-            <span className="text-amber-700">— You can view all data but cannot create, edit, or delete anything. Contact your administrator to request additional permissions.</span>
+            <span className="font-medium">{t("nav.read_only_access")}</span>
+            <span className="text-amber-700">— {t("nav.read_only_message")}</span>
           </div>
         )}
 
@@ -800,7 +802,7 @@ export default function Layout() {
       {showDemoToast && (
         <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[200] flex items-center gap-3 bg-gray-900 text-white text-sm font-medium px-5 py-3 rounded-2xl shadow-2xl">
           <Eye className="w-4 h-4 text-amber-400 flex-shrink-0" />
-          <span>You have read-only access. Contact your administrator to request additional permissions.</span>
+          <span>{t("nav.read_only_toast")}</span>
           <button type="button" onClick={() => setShowDemoToast(false)} className="ml-1 text-gray-400 hover:text-white">
             <X className="w-4 h-4" />
           </button>
