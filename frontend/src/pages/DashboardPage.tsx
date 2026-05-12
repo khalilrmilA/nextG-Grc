@@ -373,7 +373,7 @@ function GenericDashboard({ d, isDemo }: { d: DashboardSummary; isDemo: boolean 
         <KpiCard title={t("dashboard.open_risks")} value={d.risk.total_open}
           subtitle={`${d.risk.critical} ${t("compliance.severities.critical")} · ${d.risk.high} ${t("compliance.severities.high")}`}
           icon={AlertTriangle} iconBg="bg-red-500" change="-12%" changePositive />
-        <KpiCard title={t("dashboard.compliance_score")} value={`${d.compliance.average_score}%`}
+        <KpiCard title={t("dashboard.compliance_score")} value={`${d.compliance.average_score ?? 0}%`}
           subtitle={`${d.compliance.total_assessments} ${t("compliance.assessments")}`}
           icon={Shield} iconBg="bg-blue-500" change="+4.2%" changePositive />
         <KpiCard title={t("dashboard.open_audit_findings")} value={d.audit.open_findings}
@@ -401,10 +401,10 @@ function GenericDashboard({ d, isDemo }: { d: DashboardSummary; isDemo: boolean 
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
           <div className="flex items-center justify-between mb-4">
             <h3 className="font-semibold text-gray-900">{t("dashboard.policy_attestation")}</h3>
-            <span className="text-2xl font-bold text-blue-600">{d.policy.attestation_rate_percent}%</span>
+            <span className="text-2xl font-bold text-blue-600">{d.policy.attestation_rate_percent ?? 0}%</span>
           </div>
           <div className="h-3 bg-gray-100 rounded-full overflow-hidden mb-3">
-            <div className="h-full bg-blue-500 rounded-full" style={{ width: `${d.policy.attestation_rate_percent}%` }} />
+            <div className="h-full bg-blue-500 rounded-full" style={{ width: `${d.policy.attestation_rate_percent ?? 0}%` }} />
           </div>
           <p className="text-xs text-gray-400">{d.policy.total_attestations} {t("dashboard.total_attestations")}</p>
           <div className="mt-4 pt-4 border-t border-gray-100 flex items-center justify-between text-sm">
@@ -809,12 +809,12 @@ function OverviewDashboard({
           <KpiCard title={t("dashboard.open_risks")} value={d.risk.total_open}
             subtitle={`${d.risk.critical} ${t("compliance.severities.critical")} · ${d.risk.high} ${t("compliance.severities.high")}`}
             icon={AlertTriangle} iconBg="bg-red-500" />
-          <KpiCard title={t("dashboard.avg_compliance")} value={`${d.compliance.average_score}%`}
+          <KpiCard title={t("dashboard.avg_compliance")} value={`${d.compliance.average_score ?? 0}%`}
             subtitle={`${d.compliance.total_assessments} ${t("compliance.assessments")}`}
             icon={Shield} iconBg="bg-blue-500" />
           <KpiCard title={t("dashboard.open_audit_findings")} value={d.audit.open_findings}
             icon={ClipboardList} iconBg="bg-orange-500" />
-          <KpiCard title={t("dashboard.policy_attestation")} value={`${d.policy.attestation_rate_percent}%`}
+          <KpiCard title={t("dashboard.policy_attestation")} value={`${d.policy.attestation_rate_percent ?? 0}%`}
             subtitle={`${d.policy.total_attestations} ${t("dashboard.attestations")}`}
             icon={BookOpen} iconBg="bg-indigo-500" />
         </div>
