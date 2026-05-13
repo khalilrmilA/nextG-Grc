@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="en" xmlns="http://www.w3.org/1999/xhtml">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+  <title>New Contact Form Submission — GRCEye</title>
+</head>
+<body style="margin:0;padding:0;background-color:#f0f4f8;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+
+  <!-- Outer wrapper -->
+  <table width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#f0f4f8;padding:32px 16px;">
+    <tr>
+      <td align="center">
+
+        <!-- Card -->
+        <table width="600" cellpadding="0" cellspacing="0" border="0" style="max-width:600px;width:100%;background:#ffffff;border-radius:16px;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,0.10);">
+
+          <!-- ── HEADER ── -->
+          <tr>
+            <td style="background:linear-gradient(135deg,#0f2d5e 0%,#1a56db 100%);padding:28px 36px;">
+              <table width="100%" cellpadding="0" cellspacing="0" border="0">
+                <tr>
+                  <td>
+                    <!-- Logo -->
+                    <img src="https://grceye.com/logo-horizontal.png"
+                         alt="GRCEye"
+                         width="160"
+                         style="display:block;height:auto;max-height:44px;object-fit:contain;" />
+                    <p style="margin:8px 0 0;color:rgba(255,255,255,0.65);font-size:13px;letter-spacing:0.2px;">
+                      Governance, Risk &amp; Compliance Platform
+                    </p>
+                  </td>
+                  <td align="right" valign="middle">
+                    <table cellpadding="0" cellspacing="0" border="0">
+                      <tr>
+                        <td style="background:rgba(255,255,255,0.15);border-radius:12px;width:48px;height:48px;text-align:center;vertical-align:middle;">
+                          <svg width="26" height="26" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M12 2L3 7v5c0 5.25 3.75 10.15 9 11.35C17.25 22.15 21 17.25 21 12V7l-9-5z" stroke="#ffffff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                          </svg>
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- ── BADGE STRIP ── -->
+          <tr>
+            <td style="background:#eef4ff;padding:12px 36px;border-bottom:1px solid #dbeafe;">
+              <table cellpadding="0" cellspacing="0" border="0">
+                <tr>
+                  <td style="background:#2563eb;border-radius:99px;padding:4px 14px;">
+                    <span style="color:#ffffff;font-size:11px;font-weight:700;letter-spacing:0.8px;text-transform:uppercase;">
+                      &#128236; &nbsp;New Contact Form Submission
+                    </span>
+                  </td>
+                  <td style="padding-left:12px;">
+                    <span style="color:#64748b;font-size:12px;">{{ submitted_at }}</span>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- ── BODY ── -->
+          <tr>
+            <td style="padding:32px 36px 0;">
+              <h1 style="margin:0 0 6px;font-size:24px;font-weight:800;color:#0f172a;letter-spacing:-0.5px;">
+                Someone reached out
+              </h1>
+              <p style="margin:0 0 24px;font-size:14px;color:#64748b;line-height:1.5;">
+                A visitor submitted the contact form on
+                <a href="https://grceye.com/contact" style="color:#2563eb;text-decoration:none;font-weight:600;">grceye.com/contact</a>.
+                Details below.
+              </p>
+            </td>
+          </tr>
+
+          <!-- ── SENDER INFO TABLE ── -->
+          <tr>
+            <td style="padding:0 36px;">
+              <table width="100%" cellpadding="0" cellspacing="0" border="0"
+                     style="border:1.5px solid #e2e8f0;border-radius:12px;overflow:hidden;font-size:14px;">
+
+                <!-- Name -->
+                <tr>
+                  <td width="120" style="background:#f8fafc;padding:13px 16px;color:#64748b;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;border-bottom:1px solid #e2e8f0;white-space:nowrap;">
+                    Name
+                  </td>
+                  <td style="background:#ffffff;padding:13px 16px;color:#0f172a;font-weight:600;border-bottom:1px solid #e2e8f0;">
+                    {{ sender_name }}
+                  </td>
+                </tr>
+
+                <!-- Email -->
+                <tr>
+                  <td style="background:#f8fafc;padding:13px 16px;color:#64748b;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;border-bottom:1px solid #e2e8f0;">
+                    Email
+                  </td>
+                  <td style="background:#ffffff;padding:13px 16px;border-bottom:1px solid #e2e8f0;">
+                    <a href="mailto:{{ sender_email }}" style="color:#2563eb;text-decoration:none;font-weight:500;">
+                      {{ sender_email }}
+                    </a>
+                  </td>
+                </tr>
+
+                {% if company %}
+                <!-- Company -->
+                <tr>
+                  <td style="background:#f8fafc;padding:13px 16px;color:#64748b;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;border-bottom:1px solid #e2e8f0;">
+                    Company
+                  </td>
+                  <td style="background:#ffffff;padding:13px 16px;color:#0f172a;border-bottom:1px solid #e2e8f0;">
+                    {{ company }}
+                  </td>
+                </tr>
+                {% endif %}
+
+                <!-- Subject -->
+                <tr>
+                  <td style="background:#f8fafc;padding:13px 16px;color:#64748b;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;">
+                    Subject
+                  </td>
+                  <td style="background:#ffffff;padding:13px 16px;color:#0f172a;font-weight:600;">
+                    {{ contact_subject }}
+                  </td>
+                </tr>
+
+              </table>
+            </td>
+          </tr>
+
+          <!-- ── MESSAGE BOX ── -->
+          <tr>
+            <td style="padding:20px 36px 0;">
+              <table width="100%" cellpadding="0" cellspacing="0" border="0"
+                     style="background:#f8fafc;border:1.5px solid #e2e8f0;border-left:4px solid #2563eb;border-radius:10px;">
+                <tr>
+                  <td style="padding:16px 20px;">
+                    <p style="margin:0 0 8px;font-size:11px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:0.6px;">
+                      Message
+                    </p>
+                    <p style="margin:0;font-size:15px;color:#1e293b;line-height:1.75;white-space:pre-wrap;word-break:break-word;">{{ message }}</p>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- ── REPLY BUTTON ── -->
+          <tr>
+            <td style="padding:24px 36px 0;">
+              <table cellpadding="0" cellspacing="0" border="0">
+                <tr>
+                  <td style="background:#2563eb;border-radius:10px;">
+                    <a href="mailto:{{ sender_email }}?subject=Re: {{ contact_subject }}"
+                       style="display:inline-block;padding:12px 28px;color:#ffffff;font-size:14px;font-weight:700;text-decoration:none;letter-spacing:0.2px;">
+                      &#8617; &nbsp;Reply to {{ sender_name }}
+                    </a>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- ── META INFO ── -->
+          <tr>
+            <td style="padding:20px 36px 32px;">
+              <table width="100%" cellpadding="0" cellspacing="0" border="0"
+                     style="background:#fafafa;border:1px solid #e2e8f0;border-radius:8px;">
+                <tr>
+                  <td style="padding:12px 16px;">
+                    <table width="100%" cellpadding="0" cellspacing="0" border="0">
+                      <tr>
+                        <td style="font-size:12px;color:#64748b;">
+                          <span style="font-weight:700;color:#475569;">&#127760; &nbsp;Submitted from IP:</span>
+                          &nbsp;<span style="font-family:monospace;background:#e2e8f0;padding:2px 7px;border-radius:4px;color:#334155;">{{ ip }}</span>
+                        </td>
+                        <td align="right" style="font-size:12px;color:#94a3b8;">
+                          &#128336; &nbsp;{{ submitted_at }}
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- ── DIVIDER ── -->
+          <tr>
+            <td style="padding:0 36px;">
+              <hr style="border:none;border-top:1px solid #e2e8f0;margin:0;" />
+            </td>
+          </tr>
+
+          <!-- ── FOOTER ── -->
+          <tr>
+            <td style="padding:20px 36px 28px;background:#f8fafc;">
+              <table width="100%" cellpadding="0" cellspacing="0" border="0">
+                <tr>
+                  <td align="center">
+                    <p style="margin:0;font-size:12px;color:#94a3b8;">
+                      <a href="https://grceye.com" style="color:#2563eb;text-decoration:none;">grceye.com</a>
+                      &nbsp;&middot;&nbsp;
+                      <a href="mailto:support@grceye.com" style="color:#2563eb;text-decoration:none;">support@grceye.com</a>
+                    </p>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+        </table>
+        <!-- /Card -->
+
+      </td>
+    </tr>
+  </table>
+
+</body>
+</html>

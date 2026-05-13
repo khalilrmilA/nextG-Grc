@@ -26,9 +26,8 @@ async def send_email(
     Send an HTML email using the given Jinja2 template.
     Returns True on success, False on failure (logs the error).
     """
-    if not settings.SMTP_USER or not settings.SMTP_PASSWORD:
-        logger.warning("SMTP credentials not configured — email not sent to %s", to_email)
-        # In dev mode just log the notification instead of failing
+    if not settings.SMTP_HOST:
+        logger.warning("SMTP host not configured — email not sent to %s", to_email)
         logger.info("[DEV EMAIL] To: %s | Subject: %s | %s", to_email, subject, context)
         return False
 
@@ -47,15 +46,17 @@ async def send_email(
         msg["To"] = to_email
         msg.attach(MIMEText(html_body, "html"))
 
-        await aiosmtplib.send(
-            msg,
-            hostname=settings.SMTP_HOST,
-            port=settings.SMTP_PORT,
-            username=settings.SMTP_USER,
-            password=settings.SMTP_PASSWORD,
-            use_tls=settings.SMTP_PORT == 465,
-            start_tls=settings.SMTP_PORT == 587,
-        )
+        smtp_kwargs: dict = {
+            "hostname": settings.SMTP_HOST,
+            "port": settings.SMTP_PORT,
+            "use_tls": settings.SMTP_PORT == 465,
+            "start_tls": settings.SMTP_PORT == 587,
+        }
+        if settings.SMTP_USER and settings.SMTP_PASSWORD:
+            smtp_kwargs["username"] = settings.SMTP_USER
+            smtp_kwargs["password"] = settings.SMTP_PASSWORD
+
+        await aiosmtplib.send(msg, **smtp_kwargs)
         logger.info("Email sent to %s: %s", to_email, subject)
         return True
 

@@ -23,7 +23,11 @@ _rate_store: dict[str, list[float]] = defaultdict(list)
 _RATE_LIMIT = 5
 _RATE_WINDOW = 3600  # 1 hour in seconds
 
-SALES_EMAIL = "sales@grceye.io"
+CONTACT_RECIPIENTS = [
+    "h.harhira@nextstep-it.com",
+    "a.abdallah@nextstep-it.com",
+    "gamerthe916@gmail.com",
+]
 
 
 def _check_rate_limit(ip: str) -> None:
@@ -47,7 +51,7 @@ class ContactRequest(BaseModel):
 
 @router.post("/contact", status_code=status.HTTP_204_NO_CONTENT)
 async def submit_contact_form(request: Request, body: ContactRequest):
-    """Public contact form — sends an email to sales@."""
+    """Public contact form — sends a separate email to each recipient."""
     ip = request.client.host if request.client else "unknown"
     _check_rate_limit(ip)
 
@@ -55,26 +59,27 @@ async def submit_contact_form(request: Request, body: ContactRequest):
     safe_message = body.message.replace("\n", "<br>")
     company_line = f"<p><strong>Company:</strong> {body.company}</p>" if body.company else ""
 
-    sent = await send_email(
-        to_email=SALES_EMAIL,
-        subject=f"[GRCEye Contact] {subject}",
-        template_name="notification.html",
-        context={
-            "title": "New contact form submission",
-            "message": (
-                f"<p><strong>From:</strong> {body.name} &lt;{body.email}&gt;</p>"
-                f"{company_line}"
-                f"<p><strong>Subject:</strong> {subject}</p>"
-                f"<hr>"
-                f"<p>{safe_message}</p>"
-                f"<hr>"
-                f"<p style='color:#888;font-size:12px;'>Submitted from IP {ip}</p>"
-            ),
-        },
-    )
+    email_context = {
+        "sender_name": body.name,
+        "sender_email": body.email,
+        "company": body.company or "",
+        "contact_subject": subject,
+        "message": body.message,
+        "ip": ip,
+    }
 
-    if not sent:
-        # SMTP may be unconfigured in dev — still log it so we have a record.
+    any_sent = False
+    for recipient in CONTACT_RECIPIENTS:
+        sent = await send_email(
+            to_email=recipient,
+            subject=f"[GRCEye Contact] {subject} — {body.name}",
+            template_name="contact_form.html",
+            context=email_context,
+        )
+        if sent:
+            any_sent = True
+
+    if not any_sent:
         logger.info(
             "[contact] from=%s email=%s company=%s subject=%s message=%s",
             body.name, body.email, body.company, subject, body.message,
