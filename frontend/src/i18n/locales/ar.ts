@@ -843,6 +843,10 @@ export default {
     send_attestation: "إرسال",
     no_versions: "لا توجد إصدارات بعد.",
     attest_select_help: "اضغط Ctrl / ⌘ لاختيار عدة مستخدمين",
+    ai_write_btn: "كتابة بالذكاء الاصطناعي",
+    ai_generating: "الذكاء الاصطناعي يكتب…",
+    ai_stop: "إيقاف",
+    ai_content_hint: "سيقوم الذكاء الاصطناعي بصياغة السياسة كاملةً — يمكنك تعديلها بعد ذلك.",
   },
 
   // 3rd Party Risk Management

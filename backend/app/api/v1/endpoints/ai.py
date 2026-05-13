@@ -341,6 +341,48 @@ async def generate_policy(
     )
 
 
+class PolicyContentRequest(BaseModel):
+    title: str
+    category: str | None = None
+    description: str | None = None
+    language: str | None = None  # "ar" | "fr" | None (English)
+    model: str = DEFAULT_MODEL
+
+
+@router.post("/generate-policy-content")
+async def generate_policy_content(
+    request: PolicyContentRequest,
+    access: Annotated[tuple, Depends(_require_ai_access)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    """Stream a full policy document from just a title, category, and description."""
+    _, quota = access
+    lang_note = _LANGUAGE_INSTRUCTIONS.get(request.language or "", "")
+    user_prompt = (
+        f"Write a complete, professional, audit-ready policy document for:\n\n"
+        f"Policy Title: {request.title}\n"
+        f"Category: {request.category or 'General'}\n"
+        f"Purpose / Description: {request.description or 'Not provided.'}\n\n"
+        "The document must include:\n"
+        "1. Title & version header\n"
+        "2. Purpose & scope\n"
+        "3. Definitions (key terms)\n"
+        "4. Policy statements (use 'must' / 'shall' — be direct)\n"
+        "5. Roles & responsibilities\n"
+        "6. Procedures / implementation steps\n"
+        "7. Compliance & enforcement\n"
+        "8. Review cycle\n\n"
+        "Format in clear Markdown. Start directly with the document title as # heading."
+        + (f"\n\n{lang_note}" if lang_note else "")
+    )
+    messages = [{"role": "user", "content": user_prompt}]
+    return StreamingResponse(
+        _tracked_sse_generator(messages, request.model, POLICY_SYSTEM_PROMPT, db, quota),
+        media_type=_SSE_MEDIA_TYPE,
+        headers=_SSE_HEADERS,
+    )
+
+
 @router.get("/models")
 async def list_models(current_user: Annotated[User, Depends(get_current_user)]):
     """Return available Ollama models by querying the local Ollama instance."""

@@ -843,6 +843,10 @@ export default {
     send_attestation: "Send",
     no_versions: "No versions yet.",
     attest_select_help: "Hold Ctrl / ⌘ to select multiple users",
+    ai_write_btn: "Write with AI",
+    ai_generating: "AI is writing…",
+    ai_stop: "Stop",
+    ai_content_hint: "AI will draft the full policy — you can edit it afterwards.",
   },
 
   // 3rd Party Risk Management

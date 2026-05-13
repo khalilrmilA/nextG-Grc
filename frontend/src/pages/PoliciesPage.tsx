@@ -1,13 +1,14 @@
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { Link } from "react-router-dom";
 import {
   FileText, Plus, CheckCircle, Clock, AlertCircle, Calendar, Link2, X,
   ChevronRight, Wand2, Trash2, Search, Download, Send, History,
-  Edit3, AlertTriangle, Users,
+  Edit3, AlertTriangle, Users, Sparkles, StopCircle,
 } from "lucide-react";
-import { policiesApi, usersApi, type PolicyVersion, type PolicyAttestation } from "../api/endpoints";
+import { policiesApi, usersApi, aiApi, type PolicyVersion, type PolicyAttestation } from "../api/endpoints";
 import type { Policy } from "../types";
+import i18n from "../i18n";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -161,6 +162,10 @@ function PolicyDetailModal({ policy, onClose, onStatusChange, onDelete, users }:
   // pdf
   const [exportingPdf, setExportingPdf] = useState(false);
 
+  // ai generation
+  const [aiGenerating, setAiGenerating] = useState(false);
+  const abortRef = useRef<AbortController | null>(null);
+
   const currentVersion = versions.find(v => v.is_current) ?? versions[0] ?? null;
 
   const loadVersions = useCallback(async () => {
@@ -220,6 +225,26 @@ function PolicyDetailModal({ policy, onClose, onStatusChange, onDelete, users }:
       a.href = url; a.download = `${policy.title.replace(/\s+/g, "_")}.pdf`; a.click();
       URL.revokeObjectURL(url);
     } catch { /* ignore */ } finally { setExportingPdf(false); }
+  }
+
+  function handleAiGenerate() {
+    const ctrl = new AbortController();
+    abortRef.current = ctrl;
+    setAiGenerating(true);
+    setNewContent("");
+    setVerError("");
+    const lang = i18n.language?.startsWith("ar") ? "ar" : i18n.language?.startsWith("fr") ? "fr" : undefined;
+    aiApi.streamPolicyContent(
+      { title: policy.title, category: policy.category ?? undefined, description: policy.description ?? undefined, language: lang },
+      (token) => setNewContent(prev => prev + token),
+      () => setAiGenerating(false),
+      ctrl.signal,
+    ).catch(() => setAiGenerating(false));
+  }
+
+  function handleAiStop() {
+    abortRef.current?.abort();
+    setAiGenerating(false);
   }
 
   const STATUS_MAP: Record<string, { label: string; icon: typeof CheckCircle; color: string }> = {
@@ -410,13 +435,36 @@ function PolicyDetailModal({ policy, onClose, onStatusChange, onDelete, users }:
                 <div className="text-center py-10 text-gray-400 text-sm">{t("common.loading")}</div>
               ) : (
                 <>
-                  {currentVersion ? (
-                    <div className="flex items-center gap-2 text-xs text-gray-500 mb-1">
+                  {/* AI banner */}
+                  <div className="flex items-center justify-between gap-3 bg-gradient-to-r from-violet-50 to-indigo-50 border border-violet-200 rounded-xl px-4 py-3">
+                    <div className="flex items-center gap-2">
+                      <Sparkles className="w-4 h-4 text-violet-500 flex-shrink-0" />
+                      <p className="text-xs text-violet-700">{t("policies.ai_content_hint")}</p>
+                    </div>
+                    {aiGenerating ? (
+                      <button onClick={handleAiStop}
+                        className="flex items-center gap-1.5 flex-shrink-0 bg-red-500 hover:bg-red-600 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors">
+                        <StopCircle className="w-3.5 h-3.5" />{t("policies.ai_stop")}
+                      </button>
+                    ) : (
+                      <button onClick={handleAiGenerate}
+                        className="flex items-center gap-1.5 flex-shrink-0 bg-violet-600 hover:bg-violet-700 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors">
+                        <Sparkles className="w-3.5 h-3.5" />{t("policies.ai_write_btn")}
+                      </button>
+                    )}
+                  </div>
+
+                  {currentVersion && !aiGenerating && !newContent && (
+                    <div className="flex items-center gap-2 text-xs text-gray-500">
                       <span className="font-mono bg-blue-50 text-blue-600 px-2 py-0.5 rounded">{t("policies.current_version")}: v{currentVersion.version_number}</span>
                       {currentVersion.change_summary && <span className="text-gray-400">— {currentVersion.change_summary}</span>}
                     </div>
-                  ) : (
-                    <p className="text-sm text-gray-400">{t("policies.no_content")}</p>
+                  )}
+
+                  {aiGenerating && (
+                    <div className="flex items-center gap-2 text-xs text-violet-600 font-medium animate-pulse">
+                      <Sparkles className="w-3.5 h-3.5" />{t("policies.ai_generating")}
+                    </div>
                   )}
 
                   <div>
@@ -425,10 +473,15 @@ function PolicyDetailModal({ policy, onClose, onStatusChange, onDelete, users }:
                     </label>
                     <textarea
                       rows={14}
-                      className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-500 resize-y"
-                      placeholder={t("policies.version_content_placeholder")}
+                      className={`w-full border rounded-lg px-3 py-2.5 text-sm font-mono focus:outline-none focus:ring-2 resize-y transition-colors ${
+                        aiGenerating
+                          ? "border-violet-300 bg-violet-50/40 focus:ring-violet-400"
+                          : "border-gray-200 focus:ring-blue-500"
+                      }`}
+                      placeholder={aiGenerating ? t("policies.ai_generating") : t("policies.version_content_placeholder")}
                       value={newContent}
-                      onChange={e => setNewContent(e.target.value)}
+                      onChange={e => !aiGenerating && setNewContent(e.target.value)}
+                      readOnly={aiGenerating}
                     />
                   </div>
                   <div>
@@ -445,7 +498,7 @@ function PolicyDetailModal({ policy, onClose, onStatusChange, onDelete, users }:
                   {verError && <p className="text-sm text-red-600">{verError}</p>}
                   <button
                     onClick={handleSaveVersion}
-                    disabled={savingVer || !newContent.trim()}
+                    disabled={savingVer || !newContent.trim() || aiGenerating}
                     className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-sm font-medium px-4 py-2.5 rounded-lg transition-colors">
                     <Edit3 className="w-4 h-4" />
                     {savingVer ? t("common.saving") : t("policies.add_version")}
@@ -636,9 +689,9 @@ export default function PoliciesPage() {
 
   const load = useCallback(async () => {
     try {
-      const [pols, usr] = await Promise.all([policiesApi.list(), usersApi.list()]);
-      setPolicies(pols);
-      setUsers(usr);
+      const [polsResult, usrResult] = await Promise.allSettled([policiesApi.list(), usersApi.list()]);
+      if (polsResult.status === "fulfilled") setPolicies(polsResult.value);
+      if (usrResult.status === "fulfilled") setUsers(usrResult.value);
     } catch { /* ignore */ } finally { setLoading(false); }
   }, []);
 

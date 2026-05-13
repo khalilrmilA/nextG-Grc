@@ -373,6 +373,13 @@ async function _streamAi(
 }
 
 export const aiApi = {
+  streamPolicyContent: (
+    request: { title: string; category?: string; description?: string; language?: string },
+    onToken: (token: string) => void,
+    onDone: () => void,
+    signal: AbortSignal
+  ) => _streamAi("/ai/generate-policy-content", request, onToken, onDone, signal),
+
   streamPolicyGeneration: (
     request: PolicyGenerateRequest,
     onToken: (token: string) => void,
