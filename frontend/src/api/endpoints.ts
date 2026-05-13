@@ -438,6 +438,30 @@ export const auditsApi = {
 
 // ─── Policies ────────────────────────────────
 
+export interface PolicyVersion {
+  id: string;
+  policy_id: string;
+  version_number: number;
+  content: string;
+  change_summary?: string;
+  is_current: boolean;
+  authored_by_id?: string;
+  approved_by_id?: string;
+  approved_at?: string;
+  created_at: string;
+}
+
+export interface PolicyAttestation {
+  id: string;
+  policy_id: string;
+  policy_version_id: string;
+  user_id: string;
+  status: "pending" | "acknowledged";
+  due_date?: string;
+  acknowledged_at?: string;
+  created_at: string;
+}
+
 export const policiesApi = {
   list: (params?: { page?: number; page_size?: number; limit?: number }) =>
     apiClient.get<Policy[]>("/policies", { params }).then((r) => r.data),
@@ -450,10 +474,22 @@ export const policiesApi = {
   update: (id: string, data: Partial<Policy>) =>
     apiClient.patch<Policy>(`/policies/${id}`, data).then((r) => r.data),
 
-  getVersions: (id: string) =>
-    apiClient.get<Array<{ id: string; version_number: number; content: string; is_current: boolean }>>(`/policies/${id}/versions`).then((r) => r.data),
-
   delete: (id: string) => apiClient.delete(`/policies/${id}`),
+
+  getVersions: (id: string) =>
+    apiClient.get<PolicyVersion[]>(`/policies/${id}/versions`).then((r) => r.data),
+
+  createVersion: (id: string, data: { content: string; change_summary?: string }) =>
+    apiClient.post<PolicyVersion>(`/policies/${id}/versions`, data).then((r) => r.data),
+
+  listAttestations: (id: string) =>
+    apiClient.get<PolicyAttestation[]>(`/policies/${id}/attestations`).then((r) => r.data),
+
+  createAttestations: (id: string, data: { user_ids: string[]; due_date?: string }) =>
+    apiClient.post<PolicyAttestation[]>(`/policies/${id}/attestations`, data).then((r) => r.data),
+
+  exportPdf: (id: string) =>
+    apiClient.get(`/policies/${id}/export-pdf`, { responseType: "blob" }).then((r) => r.data as Blob),
 };
 
 // ─── Vendors ─────────────────────────────────

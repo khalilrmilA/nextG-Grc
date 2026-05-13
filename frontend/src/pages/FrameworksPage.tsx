@@ -518,11 +518,11 @@ export default function FrameworksPage() {
 
   function handleCustomized(cloned: Framework) {
     setFrameworks(prev => [cloned, ...prev]);
-    navigate(`/frameworks/${cloned.id}/edit`);
+    navigate(`/framework/${cloned.id}/edit`);
   }
 
   function handleEdit(fw: Framework) {
-    navigate(`/frameworks/${fw.id}/edit`);
+    navigate(`/framework/${fw.id}/edit`);
   }
 
   function handleUseInDocGen(fw: Framework, selected: FrameworkControl[]) {

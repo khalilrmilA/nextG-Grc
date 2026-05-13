@@ -1,6 +1,8 @@
 """Policy Management — full policy lifecycle with versioning and attestations."""
+import io
 from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -204,3 +206,75 @@ async def acknowledge_attestation(pid: str, aid: str, db: AsyncSession = Depends
     att.status = AttestationStatus.ACKNOWLEDGED; att.acknowledged_at = datetime.utcnow().isoformat()
     await db.commit(); await db.refresh(att)
     return AttestationOut.model_validate(att)
+
+
+# ── PDF Export ───────────────────────────────────────────────────────────
+
+@router.get("/{pid}/export-pdf")
+async def export_policy_pdf(pid: str, db: AsyncSession = Depends(get_db), _: User = Depends(get_current_user), tenant_id: str = Depends(get_tenant_id)):
+    from reportlab.lib import colors
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.lib.units import cm
+    from reportlab.lib.enums import TA_LEFT
+    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, HRFlowable
+
+    p = await _policy(db, pid, tenant_id)
+    cv = (await db.execute(select(PolicyVersion).where(PolicyVersion.policy_id == pid, PolicyVersion.is_current == True))).scalar_one_or_none()  # noqa: E712
+
+    buf = io.BytesIO()
+    doc = SimpleDocTemplate(buf, pagesize=A4, rightMargin=2*cm, leftMargin=2*cm, topMargin=2*cm, bottomMargin=2*cm)
+    styles = getSampleStyleSheet()
+
+    h1 = ParagraphStyle("H1", parent=styles["Heading1"], fontSize=22, spaceAfter=8, textColor=colors.HexColor("#0f172a"))
+    h2 = ParagraphStyle("H2", parent=styles["Heading2"], fontSize=14, spaceBefore=14, spaceAfter=6, textColor=colors.HexColor("#1e3a5f"))
+    body = ParagraphStyle("Body", parent=styles["Normal"], fontSize=11, leading=16, textColor=colors.HexColor("#334155"))
+    label_style = ParagraphStyle("Label", parent=styles["Normal"], fontSize=9, textColor=colors.HexColor("#64748b"))
+
+    story = []
+    story.append(Paragraph(p.title, h1))
+    if p.policy_number:
+        story.append(Paragraph(f"Policy No. {p.policy_number}", label_style))
+    story.append(Spacer(1, 0.3*cm))
+    story.append(HRFlowable(width="100%", thickness=1, color=colors.HexColor("#e2e8f0")))
+    story.append(Spacer(1, 0.4*cm))
+
+    meta = [
+        ["Category", p.category or "—"],
+        ["Status", p.status.replace("_", " ").title()],
+        ["Review Cycle", f"{p.review_frequency_months} months"],
+        ["Next Review", p.next_review_date or "—"],
+        ["Version", f"v{cv.version_number}" if cv else "—"],
+    ]
+    tbl = Table(meta, colWidths=[4*cm, 13*cm])
+    tbl.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (0, -1), colors.HexColor("#f8fafc")),
+        ("TEXTCOLOR", (0, 0), (0, -1), colors.HexColor("#64748b")),
+        ("FONTSIZE", (0, 0), (-1, -1), 10),
+        ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#e2e8f0")),
+        ("PADDING", (0, 0), (-1, -1), 7),
+        ("FONTNAME", (0, 0), (0, -1), "Helvetica-Bold"),
+    ]))
+    story.append(tbl)
+
+    if p.description:
+        story.append(Paragraph("Description", h2))
+        story.append(Paragraph(p.description, body))
+
+    if cv:
+        story.append(Paragraph(f"Policy Content — v{cv.version_number}", h2))
+        if cv.change_summary:
+            story.append(Paragraph(f"Change summary: {cv.change_summary}", label_style))
+        story.append(Spacer(1, 0.3*cm))
+        for line in cv.content.split("\n"):
+            if line.strip():
+                story.append(Paragraph(line.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;"), body))
+            else:
+                story.append(Spacer(1, 0.25*cm))
+
+    doc.build(story)
+    buf.seek(0)
+    safe_name = "".join(c if c.isalnum() or c in (" ", "_", "-") else "_" for c in p.title)
+    ver = cv.version_number if cv else 1
+    return StreamingResponse(buf, media_type="application/pdf",
+                             headers={"Content-Disposition": f'attachment; filename="{safe_name}_v{ver}.pdf"'})
