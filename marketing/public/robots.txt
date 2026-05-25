@@ -4,7 +4,7 @@
 User-agent: *
 Allow: /
 Allow: /how-it-works
-Allow: /features
+Allow: /features-landing
 Allow: /solutions
 Allow: /frameworks
 Allow: /blog
