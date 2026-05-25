@@ -41,8 +41,8 @@ const ORG_SIZES = [
 
 function passwordStrength(pw: string): { score: number; label: string; color: string } {
   let score = 0;
-  if (pw.length >= 8) score++;
   if (pw.length >= 12) score++;
+  if (pw.length >= 16) score++;
   if (/[A-Z]/.test(pw)) score++;
   if (/[0-9]/.test(pw)) score++;
   if (/[^A-Za-z0-9]/.test(pw)) score++;
@@ -61,6 +61,9 @@ export default function RegisterPage() {
   const [frameworks, setFrameworks] = useState<Framework[]>([]);
   const [fwLoading, setFwLoading] = useState(false);
 
+  // Track which fields the user has interacted with (to show inline errors only after touching)
+  const [touched, setTouched] = useState<Record<string, boolean>>({});
+
   // Step 1 fields
   const [form, setForm] = useState({
     first_name: "", last_name: "", email: "", password: "",
@@ -72,7 +75,8 @@ export default function RegisterPage() {
   const [primaryFwId, setPrimaryFwId] = useState("");
   const [secondaryFwIds, setSecondaryFwIds] = useState<string[]>([]);
 
-  const set = (k: string) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
+  const set = (k: string) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+    setTouched((t) => ({ ...t, [k]: true }));
     setForm((f) => ({
       ...f,
       [k]: e.target.value,
@@ -80,6 +84,18 @@ export default function RegisterPage() {
         ? { organization_slug: e.target.value.toLowerCase().replace(/[^a-z0-9]/g, "-").replace(/-+/g, "-").replace(/^-|-$/g, "") }
         : {}),
     }));
+  };
+
+  // Per-field inline validation — only shown after the field is touched
+  const fieldErrors = {
+    first_name: touched.first_name && !form.first_name ? "First name is required." : "",
+    last_name: touched.last_name && !form.last_name ? "Last name is required." : "",
+    email: touched.email && !form.email ? "Work email is required."
+         : touched.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email) ? "Enter a valid email address." : "",
+    password: touched.password && form.password.length === 0 ? "Password is required."
+            : touched.password && form.password.length < 12 ? `Password is too short — ${form.password.length}/12 characters minimum.` : "",
+    organization_name: touched.organization_name && !form.organization_name ? "Organization name is required." : "",
+  };
 
   // Load frameworks (public endpoint) when entering step 2
   useEffect(() => {
@@ -92,7 +108,7 @@ export default function RegisterPage() {
   }, [step]);
 
   const pw = passwordStrength(form.password);
-  const step1Valid = form.first_name && form.last_name && form.email && form.password.length >= 8 && form.organization_name;
+  const step1Valid = form.first_name && form.last_name && form.email && form.password.length >= 12 && form.organization_name;
   const step2Valid = !!primaryFwId;
 
   function toggleSecondary(id: string) {
@@ -166,9 +182,25 @@ export default function RegisterPage() {
 
       navigate("/dashboard");
     } catch (err: any) {
-      const detail: string = err?.response?.data?.detail ?? "";
+      // Log the full error to the browser console for debugging
+      console.error("[Register] error", {
+        status: err?.response?.status,
+        data: err?.response?.data,
+        message: err?.message,
+      });
+      const raw = err?.response?.data?.detail;
+      // Pydantic 422 returns detail as an array of {loc, msg, type} objects
+      const detail: string = Array.isArray(raw)
+        ? raw.map((e: any) => `[${(e.loc ?? []).slice(1).join(".")}] ${e.msg}`).join(" · ")
+        : (typeof raw === "string" ? raw : "");
       if (detail.toLowerCase().includes("email")) {
         setError("An account with this email already exists. Please sign in.");
+      } else if (detail.toLowerCase().includes("password") || detail.toLowerCase().includes("min_length")) {
+        setError("Password must be at least 12 characters long.");
+      } else if (err?.response?.status === 429) {
+        setError("Too many attempts. Please wait a few minutes and try again.");
+      } else if (err?.response?.status >= 500) {
+        setError(`Server error (${err.response.status}). Please try again later.`);
       } else if (detail) {
         setError(detail);
       } else {
@@ -225,25 +257,25 @@ export default function RegisterPage() {
               </div>
 
               <div className="grid grid-cols-2 gap-4">
-                <Field label={t("public.register.first_name")}>
+                <Field label={t("public.register.first_name")} error={fieldErrors.first_name}>
                   <input type="text" value={form.first_name} onChange={set("first_name")} required autoFocus
-                    className={INPUT} placeholder={t("public.register.first_name_placeholder")} />
+                    className={inputCls(!!fieldErrors.first_name)} placeholder={t("public.register.first_name_placeholder")} />
                 </Field>
-                <Field label={t("public.register.last_name")}>
+                <Field label={t("public.register.last_name")} error={fieldErrors.last_name}>
                   <input type="text" value={form.last_name} onChange={set("last_name")} required
-                    className={INPUT} placeholder={t("public.register.last_name_placeholder")} />
+                    className={inputCls(!!fieldErrors.last_name)} placeholder={t("public.register.last_name_placeholder")} />
                 </Field>
               </div>
 
-              <Field label={t("public.register.work_email")}>
+              <Field label={t("public.register.work_email")} error={fieldErrors.email}>
                 <input type="email" value={form.email} onChange={set("email")} required
-                  className={INPUT} placeholder={t("public.register.work_email_placeholder")} />
+                  className={inputCls(!!fieldErrors.email)} placeholder={t("public.register.work_email_placeholder")} />
               </Field>
 
-              <Field label={t("public.register.password")}>
+              <Field label={t("public.register.password")} error={fieldErrors.password}>
                 <div className="relative">
                   <input type={showPw ? "text" : "password"} value={form.password} onChange={set("password")}
-                    required minLength={8} className={INPUT + " pr-10"} placeholder={t("public.register.password_placeholder")} />
+                    required minLength={12} className={inputCls(!!fieldErrors.password) + " pr-10"} placeholder={t("public.register.password_placeholder")} />
                   <button type="button" onClick={() => setShowPw(!showPw)}
                     className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
                     {showPw ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
@@ -261,9 +293,9 @@ export default function RegisterPage() {
                 )}
               </Field>
 
-              <Field label={t("public.register.org_name")}>
+              <Field label={t("public.register.org_name")} error={fieldErrors.organization_name}>
                 <input type="text" value={form.organization_name} onChange={set("organization_name")} required
-                  className={INPUT} placeholder={t("public.register.org_name_placeholder")} />
+                  className={inputCls(!!fieldErrors.organization_name)} placeholder={t("public.register.org_name_placeholder")} />
                 {form.organization_slug && (
                   <p className="text-xs text-gray-400 mt-1">
                     URL: <span className="font-mono text-blue-600">grcplatform.com/{form.organization_slug}</span>
@@ -460,11 +492,19 @@ export default function RegisterPage() {
 const INPUT = "w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500";
 const SELECT = INPUT;
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
+/** Returns input class with red border when there is an error. */
+function inputCls(hasError: boolean) {
+  return hasError
+    ? "w-full px-3 py-2.5 border border-red-400 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-red-400 focus:border-red-400"
+    : INPUT;
+}
+
+function Field({ label, error, children }: { label: string; error?: string; children: React.ReactNode }) {
   return (
     <div>
       <label className="block text-sm font-medium text-gray-700 mb-1.5">{label}</label>
       {children}
+      {error && <p className="mt-1 text-xs text-red-600">{error}</p>}
     </div>
   );
 }
