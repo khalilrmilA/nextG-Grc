@@ -133,6 +133,56 @@ export interface RiskHeatmapData {
   by_severity: Record<RiskSeverity, number>;
 }
 
+// ─── Risk Cartography ────────────────────────
+
+export interface CartographyRiskLevel {
+  name: string;
+  color: string;
+  min_score: number;
+  max_score: number;
+}
+
+export interface CartographyScope {
+  type: "all" | "control" | "category" | "tag";
+  value?: string;
+}
+
+export interface CartographyDefinition {
+  grid_rows: number;
+  grid_cols: number;
+  likelihood_labels: string[];
+  impact_labels: string[];
+  risk_levels: CartographyRiskLevel[];
+  scope?: CartographyScope;
+}
+
+export interface RiskCartography {
+  id: string;
+  name: string;
+  description?: string;
+  is_default: boolean;
+  definition: CartographyDefinition;
+  risk_count?: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CartographyRisk {
+  id: string;
+  title: string;
+  severity: string | null;
+  native_likelihood: number | null;
+  native_impact: number | null;
+  effective_likelihood: number;
+  effective_impact: number;
+  is_overridden: boolean;
+}
+
+export interface RiskCartographyDetail extends RiskCartography {
+  risk_positions: Record<string, { likelihood: number; impact: number }>;
+  risks: CartographyRisk[];
+}
+
 // ─── Compliance ──────────────────────────────
 
 export type ControlStatus =
@@ -327,6 +377,21 @@ export interface GapDetail {
   is_certification_blocker?: boolean;
   remediation_priority?: number;
   action_item_id?: string | null;
+}
+
+export interface DocumentLogEntry {
+  id: string;
+  file_name: string;
+  file_size_bytes: number | null;
+  content_type: string | null;
+  document_type_key: string | null;
+  clause_refs: string[];
+  ai_analysis_summary: string | null;
+  is_visible_to_auditor: boolean;
+  uploaded_by_id: string | null;
+  uploaded_by_name: string | null;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface ChecklistUploadedDoc {

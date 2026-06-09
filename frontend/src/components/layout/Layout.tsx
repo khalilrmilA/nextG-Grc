@@ -17,7 +17,7 @@ import {
   ChevronRight, Bell, Settings, HelpCircle, Lock,
   Crown, X, Trash2, Wand2, Menu,
   AlertCircle, Info, ShieldAlert, ClipboardCheck, RefreshCw,
-  Eye, Users, Headphones,
+  Eye, Users, Headphones, Map, ListTodo,
 } from "lucide-react";
 
 // roles: null = visible to all authenticated non-auditor users
@@ -27,8 +27,9 @@ const NAV_GROUPS = [
     label: "Core",
     items: [
       { to: "/dashboard",  icon: LayoutDashboard, label: "Dashboard",     module: "dashboard",  roles: null },
-      { to: "/risks",      icon: AlertTriangle,   label: "Risk Register", module: "risks",      roles: ["tenant_admin","ciso","risk_manager","compliance_manager","control_owner","viewer"] },
+      { to: "/risk-cartography", icon: Map,           label: "Risk Cartography", module: "risk-cartography", roles: ["tenant_admin","ciso","risk_manager","compliance_manager","control_owner","viewer"] },
       { to: "/compliance", icon: CheckSquare,     label: "Compliance",    module: "compliance", roles: ["tenant_admin","ciso","risk_manager","compliance_manager","policy_manager","control_owner","viewer"] },
+      { to: "/action-plan", icon: ListTodo,       label: "Action Plan",   module: "action-plan", roles: ["tenant_admin","ciso","risk_manager","compliance_manager","control_owner","viewer"] },
       { to: "/framework",  icon: BookOpen,        label: "Frameworks",    module: "frameworks", roles: ["tenant_admin","ciso","compliance_manager","policy_manager","viewer"] },
     ],
   },
@@ -52,6 +53,8 @@ const AUDITOR_NAV = [
 const PAGE_LABELS: Record<string, string> = {
   dashboard:  "Dashboard",
   risks:      "Risk Register",
+  "risk-cartography": "Risk Cartography",
+  "action-plan": "Action Plan",
   "risk-scenarios": "Risk Scenarios",
   "risk-quantification": "Risk Quantification",
   compliance: "Compliance",

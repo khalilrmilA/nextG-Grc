@@ -31,7 +31,33 @@ import type {
   AiAccessRequest,
   AiUsageQuota,
   AiTokenUsage,
+  RiskCartography,
+  RiskCartographyDetail,
+  CartographyDefinition,
+  DocumentLogEntry,
 } from "@/types";
+
+export interface ActionPlanItem {
+  id: string;
+  title: string;
+  description?: string | null;
+  priority: "critical" | "high" | "medium" | "low";
+  status: "open" | "in_progress" | "completed" | "cancelled";
+  due_date?: string | null;
+  notes?: string | null;
+  ai_generated: boolean;
+  assessment_id?: string | null;
+  assessment_name?: string | null;
+  framework_name?: string | null;
+  framework_short_name?: string | null;
+  gap_id?: string | null;
+  control_identifier?: string | null;
+  control_title?: string | null;
+  gap_severity?: string | null;
+  is_certification_blocker: boolean;
+  owner_id?: string | null;
+  owner_name?: string | null;
+}
 
 const API_BASE = import.meta.env.VITE_API_URL ?? "http://localhost:8000/api/v1";
 
@@ -178,6 +204,35 @@ export const risksApi = {
   getHeatmap: () => apiClient.get<RiskHeatmapData>("/risks/heatmap/data").then((r) => r.data),
 };
 
+// ─── Risk Cartography ────────────────────────
+
+export const riskCartographyApi = {
+  list: () =>
+    apiClient.get<RiskCartography[]>("/risk-cartographies").then((r) => r.data),
+
+  create: (data: { name: string; description?: string; is_default?: boolean; definition?: CartographyDefinition }) =>
+    apiClient.post<RiskCartographyDetail>("/risk-cartographies", data).then((r) => r.data),
+
+  get: (id: string) =>
+    apiClient.get<RiskCartographyDetail>(`/risk-cartographies/${id}`).then((r) => r.data),
+
+  update: (id: string, data: { name?: string; description?: string; is_default?: boolean; definition?: CartographyDefinition }) =>
+    apiClient.put<RiskCartographyDetail>(`/risk-cartographies/${id}`, data).then((r) => r.data),
+
+  delete: (id: string) => apiClient.delete(`/risk-cartographies/${id}`),
+
+  updatePositions: (
+    id: string,
+    positions: Record<string, { likelihood: number; impact: number } | null>,
+  ) =>
+    apiClient
+      .put<RiskCartographyDetail>(`/risk-cartographies/${id}/risk-positions`, positions)
+      .then((r) => r.data),
+
+  exportPdf: (id: string) =>
+    apiClient.get(`/risk-cartographies/${id}/pdf`, { responseType: "blob" }),
+};
+
 // ─── Compliance ──────────────────────────────
 
 export interface EvidenceItem {
@@ -314,8 +369,19 @@ export const complianceApi = {
   deleteDocument: (docId: string) =>
     apiClient.delete(`/compliance/documents/${docId}`),
 
+  getDocumentLog: (assessmentId: string) =>
+    apiClient.get<DocumentLogEntry[]>(`/compliance/assessments/${assessmentId}/document-log`).then(r => r.data),
+
   deleteAssessment: (assessmentId: string) =>
     apiClient.delete(`/compliance/assessments/${assessmentId}`),
+
+  listActionPlan: (assessmentId?: string) =>
+    apiClient.get<ActionPlanItem[]>("/compliance/action-plan", {
+      params: assessmentId ? { assessment_id: assessmentId } : undefined,
+    }).then(r => r.data),
+
+  updateActionPlanItem: (id: string, data: Partial<{ status: string; due_date: string | null; owner_id: string | null; notes: string; priority: string }>) =>
+    apiClient.patch<ActionPlanItem>(`/compliance/action-plan/${id}`, data).then(r => r.data),
 };
 
 // ─── Custom Framework Builder ─────────────────

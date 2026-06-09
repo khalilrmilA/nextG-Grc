@@ -8,6 +8,8 @@ import RegisterPage from "./pages/RegisterPage";
 import ServiceDownPage from "./pages/ServiceDownPage";
 import DashboardPage from "./pages/DashboardPage";
 import RisksPage from "./pages/RisksPage";
+import RiskCartographyPage from "./pages/RiskCartographyPage";
+import ActionPlanPage from "./pages/ActionPlanPage";
 import CompliancePage from "./pages/CompliancePage";
 import AssessmentDetailPage from "./pages/AssessmentDetailPage";
 import RemediationPlannerPage from "./pages/RemediationPlannerPage";
@@ -99,6 +101,8 @@ const CISO_AND_ADMIN = [...ADMIN_ROLES, "ciso"];
 // viewer = full read-only access to all modules — write ops blocked at HTTP client level
 const ROUTE_ROLES: Record<string, string[]> = {
   "/risks":               [...CISO_AND_ADMIN, "risk_manager", "compliance_manager", "control_owner", "viewer"],
+  "/risk-cartography":    [...CISO_AND_ADMIN, "risk_manager", "compliance_manager", "control_owner", "viewer"],
+  "/action-plan":         [...CISO_AND_ADMIN, "risk_manager", "compliance_manager", "control_owner", "viewer"],
   "/risk-scenarios":      [...CISO_AND_ADMIN, "risk_manager", "compliance_manager", "control_owner", "viewer"],
   "/risk-quantification": [...CISO_AND_ADMIN, "risk_manager", "viewer"],
   "/compliance":          [...CISO_AND_ADMIN, "risk_manager", "compliance_manager", "policy_manager", "control_owner", "viewer"],
@@ -175,6 +179,8 @@ export default function App() {
       >
         <Route path="dashboard" element={<DashboardPage />} />
         <Route path="risks" element={<RoleRoute path="/risks"><PrivateRoute requiredModule="risks"><RisksPage /></PrivateRoute></RoleRoute>} />
+        <Route path="risk-cartography" element={<RoleRoute path="/risk-cartography"><PrivateRoute requiredModule="risks"><RiskCartographyPage /></PrivateRoute></RoleRoute>} />
+        <Route path="action-plan" element={<RoleRoute path="/action-plan"><PrivateRoute requiredModule="compliance"><ActionPlanPage /></PrivateRoute></RoleRoute>} />
         <Route path="compliance" element={<RoleRoute path="/compliance"><PrivateRoute requiredModule="compliance"><CompliancePage /></PrivateRoute></RoleRoute>} />
         <Route path="compliance/:assessmentId" element={<RoleRoute path="/compliance"><PrivateRoute requiredModule="compliance"><AssessmentDetailPage /></PrivateRoute></RoleRoute>} />
         <Route path="compliance/assessments/:assessmentId/remediation-plan" element={<RoleRoute path="/compliance"><PrivateRoute requiredModule="compliance"><RemediationPlannerPage /></PrivateRoute></RoleRoute>} />

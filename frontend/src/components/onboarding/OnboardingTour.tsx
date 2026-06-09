@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import {
   X, ChevronRight, ChevronLeft, SkipForward,
   LayoutDashboard, AlertTriangle, CheckSquare, BookOpen,
@@ -26,117 +27,31 @@ export function resetTour(userId?: string) {
 }
 
 // ── Tour step definitions ─────────────────────────────────────────────────────
-interface TourStep {
+interface TourStepMeta {
   id: string;
-  target: string;          // CSS selector for the element to highlight
-  title: string;
-  body: string;
+  target: string;
   icon: React.ElementType;
   iconColor: string;
   placement: "right" | "left" | "bottom" | "top" | "center";
-  route?: string;          // navigate before showing this step
+  route?: string;
 }
 
-const TOUR_STEPS: TourStep[] = [
-  {
-    id: "welcome",
-    target: "",
-    title: "Welcome to GRCEye!",
-    body: "This quick tour walks you through the key sections of the platform. It will only appear for your first 3 visits. You can skip at any time.",
-    icon: Shield,
-    iconColor: "from-blue-500 to-indigo-600",
-    placement: "center",
-  },
-  {
-    id: "dashboard",
-    target: 'a[href="/dashboard"]',
-    title: "Dashboard",
-    body: "Your command center. See overall compliance scores, open risks, recent activity, and quick-action shortcuts at a glance.",
-    icon: LayoutDashboard,
-    iconColor: "from-blue-500 to-blue-600",
-    placement: "right",
-    route: "/dashboard",
-  },
-  {
-    id: "risks",
-    target: 'a[href="/risks"]',
-    title: "Risk Register",
-    body: "Log, assess, and track all your organizational risks. Rate by likelihood and impact, assign owners, and monitor treatment plans.",
-    icon: AlertTriangle,
-    iconColor: "from-orange-500 to-red-500",
-    placement: "right",
-    route: "/risks",
-  },
-  {
-    id: "compliance",
-    target: 'a[href="/compliance"]',
-    title: "Compliance",
-    body: "Create compliance assessments against any framework (ISO 27001, SOC 2, GDPR…). Upload evidence, run AI gap analysis, and track closure of findings.",
-    icon: CheckSquare,
-    iconColor: "from-green-500 to-emerald-600",
-    placement: "right",
-    route: "/compliance",
-  },
-  {
-    id: "frameworks",
-    target: 'a[href="/framework"]',
-    title: "Frameworks Library",
-    body: "Browse 73+ built-in frameworks from ISO, NIST, GDPR, PCI DSS, regional laws and more — or build your own custom framework.",
-    icon: BookOpen,
-    iconColor: "from-purple-500 to-violet-600",
-    placement: "right",
-    route: "/framework",
-  },
-  {
-    id: "audits",
-    target: 'a[href="/audits"]',
-    title: "Audits",
-    body: "Plan and manage internal and external audits. Create auditor accounts, assign assessments, and generate formal audit reports.",
-    icon: ClipboardList,
-    iconColor: "from-sky-500 to-cyan-600",
-    placement: "right",
-    route: "/audits",
-  },
-  {
-    id: "policies",
-    target: 'a[href="/policies"]',
-    title: "Policies",
-    body: "Maintain your policy library with versioning and attestation. Use AI to draft new policies directly from control gaps.",
-    icon: FileText,
-    iconColor: "from-amber-500 to-yellow-600",
-    placement: "right",
-    route: "/policies",
-  },
-  {
-    id: "vendors",
-    target: 'a[href="/vendors"]',
-    title: "3rd Parties (TPRM)",
-    body: "Manage 3rd party risk. Send questionnaires, track responses, and score each 3rd party's security posture automatically.",
-    icon: Building2,
-    iconColor: "from-pink-500 to-rose-600",
-    placement: "right",
-    route: "/vendors",
-  },
-  {
-    id: "ai",
-    target: ".ai-assistant-button",
-    title: "AI Assistant",
-    body: "Click the chat bubble (bottom-right) at any time to ask your built-in AI for help — gap analysis, policy drafts, risk advice, and more.",
-    icon: Sparkles,
-    iconColor: "from-violet-500 to-purple-600",
-    placement: "top",
-    route: "/dashboard",
-  },
-  {
-    id: "done",
-    target: "",
-    title: "You're all set!",
-    body: "Start by creating your first compliance assessment — go to Compliance and click 'New Assessment'. Need help later? Visit the Help & Support page anytime.",
-    icon: Shield,
-    iconColor: "from-green-500 to-emerald-600",
-    placement: "center",
-    route: "/dashboard",
-  },
+interface TourStep extends TourStepMeta {
+  title: string;
+  body: string;
+}
+
+const TOUR_STEP_META: TourStepMeta[] = [
+  { id: "welcome",    target: "",                        icon: Shield,        iconColor: "from-blue-500 to-indigo-600",   placement: "center" },
+  { id: "dashboard",  target: 'a[href="/dashboard"]',    icon: LayoutDashboard, iconColor: "from-blue-500 to-blue-600",  placement: "right",  route: "/dashboard" },
+  { id: "risks",      target: 'a[href="/risks"]',        icon: AlertTriangle, iconColor: "from-orange-500 to-red-500",   placement: "right",  route: "/risks" },
+  { id: "compliance", target: 'a[href="/compliance"]',   icon: CheckSquare,   iconColor: "from-green-500 to-emerald-600", placement: "right", route: "/compliance" },
+  { id: "frameworks", target: 'a[href="/framework"]',    icon: BookOpen,      iconColor: "from-purple-500 to-violet-600", placement: "right", route: "/framework" },
+  { id: "audits",     target: 'a[href="/audits"]',       icon: ClipboardList, iconColor: "from-sky-500 to-cyan-600",     placement: "right",  route: "/audits" },
+  { id: "policies",   target: 'a[href="/policies"]',     icon: FileText,      iconColor: "from-amber-500 to-yellow-600", placement: "right",  route: "/policies" },
+  { id: "vendors",    target: 'a[href="/vendors"]',      icon: Building2,     iconColor: "from-pink-500 to-rose-600",    placement: "right",  route: "/vendors" },
+  { id: "ai",         target: ".ai-assistant-button",    icon: Sparkles,      iconColor: "from-violet-500 to-purple-600", placement: "top",   route: "/dashboard" },
+  { id: "done",       target: "",                        icon: Shield,        iconColor: "from-green-500 to-emerald-600", placement: "center", route: "/dashboard" },
 ];
 
 // ── Spotlight dimensions ──────────────────────────────────────────────────────
@@ -191,9 +106,16 @@ function tooltipStyle(rect: Rect, placement: TourStep["placement"], vw: number, 
 // ── Main component ────────────────────────────────────────────────────────────
 export default function OnboardingTour() {
   const navigate = useNavigate();
+  const { t } = useTranslation();
   const userId = useAuthStore((u) => u?.email);
   const [visible, setVisible] = useState(false);
   const [stepIdx, setStepIdx] = useState(0);
+
+  const TOUR_STEPS: TourStep[] = TOUR_STEP_META.map((m) => ({
+    ...m,
+    title: t(`tour.${m.id}_title`),
+    body:  t(`tour.${m.id}_body`),
+  }));
   const [rect, setRect] = useState<Rect>(NONE);
   const [animIn, setAnimIn] = useState(false);
   const rafRef = useRef<number | null>(null);
@@ -362,7 +284,7 @@ export default function OnboardingTour() {
                 </button>
               </div>
               <p className="text-xs text-gray-500 mt-0.5">
-                Step {stepIdx + 1} of {TOUR_STEPS.length}
+                {t("tour.step_of", { current: stepIdx + 1, total: TOUR_STEPS.length })}
               </p>
             </div>
           </div>
@@ -402,7 +324,7 @@ export default function OnboardingTour() {
                   className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
                 >
                   <ChevronLeft className="w-3.5 h-3.5" />
-                  Back
+                  {t("tour.back")}
                 </button>
               )}
               {!isLast && (
@@ -412,7 +334,7 @@ export default function OnboardingTour() {
                   className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-gray-400 hover:text-gray-600 hover:bg-gray-50 rounded-lg transition-colors"
                 >
                   <SkipForward className="w-3.5 h-3.5" />
-                  Skip
+                  {t("tour.skip")}
                 </button>
               )}
               <button
@@ -420,7 +342,7 @@ export default function OnboardingTour() {
                 onClick={next}
                 className="flex items-center gap-1.5 px-4 py-1.5 text-xs font-semibold bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-lg hover:from-blue-700 hover:to-indigo-700 transition-all shadow-sm shadow-blue-500/20"
               >
-                {isLast ? "Get Started!" : "Next"}
+                {isLast ? t("tour.get_started") : t("tour.next")}
                 {!isLast && <ChevronRight className="w-3.5 h-3.5" />}
               </button>
             </div>

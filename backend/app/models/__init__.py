@@ -27,6 +27,7 @@ from app.models.risk_scenario import RiskScenario
 from app.models.applied_control import AppliedControl
 from app.models.security_exception import SecurityException, RiskAcceptance
 from app.models.risk_matrix import RiskMatrix
+from app.models.risk_cartography import RiskCartography
 from app.models.subscription import Subscription, SubscriptionTier
 from app.models.notification import (
     Notification, NotificationPreference, NotificationType,
@@ -51,7 +52,7 @@ __all__ = [
     "Incident", "IncidentTimelineEntry",
     "RegulatoryUpdate",
     "Threat", "Vulnerability", "RiskScenario",
-    "AppliedControl", "SecurityException", "RiskAcceptance", "RiskMatrix",
+    "AppliedControl", "SecurityException", "RiskAcceptance", "RiskMatrix", "RiskCartography",
     "Subscription", "SubscriptionTier",
     "Notification", "NotificationPreference", "NotificationType",
     "NotificationChannel", "NotificationStatus",

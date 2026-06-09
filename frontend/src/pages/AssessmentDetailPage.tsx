@@ -6,7 +6,7 @@ import {
   CheckCircle, XCircle, AlertTriangle, MinusCircle,
   ChevronDown, ChevronUp, Sparkles, Globe, GitBranch,
   Download, Table2, Eye, EyeOff, Trash2, ExternalLink,
-  Link2,
+  Link2, CheckSquare,
 } from "lucide-react";
 import { complianceApi, type EvidenceItem } from "@/api/endpoints";
 import type { AssessmentDetail, GapDetail, ControlAssessmentDetail, LinkedChecklistDocument } from "@/types";
@@ -15,7 +15,7 @@ import DocumentChecklistTab from "@/components/features/compliance/DocumentCheck
 import GapReportTab from "@/components/features/compliance/GapReportTab";
 import DocumentViewerModal, { type ViewableDoc } from "@/components/features/compliance/DocumentViewerModal";
 import ShareLinkModal from "@/components/features/compliance/ShareLinkModal";
-import { exportComplianceCSV, exportComplianceReport } from "@/utils/exportUtils";
+import { exportComplianceCSV, exportComplianceReport, exportDdA } from "@/utils/exportUtils";
 
 // ─── Status helpers ────────────────────────────────────────────────────────────
 
@@ -496,6 +496,31 @@ function ResultsTab({
             <Download className="w-3.5 h-3.5" />
             {t("compliance.full_report_btn")}
           </button>
+          <button
+            onClick={() => exportDdA({
+              assessmentName: assessment.name,
+              frameworkName: assessment.framework_name ?? "",
+              frameworkShortName: assessment.framework_short_name ?? "",
+              complianceScore: assessment.compliance_score ?? null,
+              generatedAt: new Date().toLocaleDateString("fr-FR", { day: "2-digit", month: "long", year: "numeric" }),
+              org: "",
+              controls: cas.map((c) => ({
+                control_identifier: c.control_identifier,
+                control_title: c.control_title,
+                control_category: c.control_category,
+                control_description: c.control_description,
+                status: c.status,
+                notes: c.notes,
+                implementation_notes: c.implementation_notes,
+                not_applicable_justification: c.not_applicable_justification,
+                is_mandatory: c.is_mandatory,
+              })),
+            })}
+            className="flex items-center gap-1.5 text-xs font-medium border border-indigo-300 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 px-3 py-1.5 rounded-lg transition-colors font-semibold"
+          >
+            <FileText className="w-3.5 h-3.5" />
+            {t("compliance.dda_btn", "DdA / SoA")}
+          </button>
         </div>
       </div>
 
@@ -904,9 +929,166 @@ function CrossFrameworkTab({ assessment }: { readonly assessment: AssessmentDeta
   );
 }
 
+// ─── Per-Assessment Action Plan ────────────────────────────────────────────────
+
+const PRIORITY_STYLE: Record<string, { color: string; bg: string; dot: string }> = {
+  critical: { color: "text-red-700",    bg: "bg-red-100",    dot: "bg-red-500"    },
+  high:     { color: "text-orange-700", bg: "bg-orange-100", dot: "bg-orange-500" },
+  medium:   { color: "text-yellow-700", bg: "bg-yellow-100", dot: "bg-yellow-500" },
+  low:      { color: "text-green-700",  bg: "bg-green-100",  dot: "bg-green-500"  },
+};
+const STATUS_STYLE_AP: Record<string, { label: string; color: string; bg: string; border: string }> = {
+  open:        { label: "To Do",       color: "text-gray-500",  bg: "bg-gray-100",  border: "border-gray-200"  },
+  in_progress: { label: "In Progress", color: "text-blue-600",  bg: "bg-blue-50",   border: "border-blue-200"  },
+  completed:   { label: "Done",        color: "text-green-600", bg: "bg-green-50",  border: "border-green-200" },
+  cancelled:   { label: "Cancelled",   color: "text-gray-400",  bg: "bg-gray-50",   border: "border-gray-200"  },
+};
+const AP_COLS = ["open", "in_progress", "completed", "cancelled"] as const;
+
+function AssessmentActionPlan({ assessmentId, assessmentName }: { assessmentId: string; assessmentName: string }) {
+  const { t } = useTranslation();
+  const navigate = useNavigate();
+  const [items, setItems] = useState<import("@/api/endpoints").ActionPlanItem[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    complianceApi.listActionPlan(assessmentId)
+      .then(setItems)
+      .finally(() => setLoading(false));
+  }, [assessmentId]);
+
+  async function changeStatus(id: string, newStatus: string) {
+    const prev = items.find(i => i.id === id);
+    if (!prev) return;
+    setItems(all => all.map(i => i.id === id
+      ? { ...i, status: newStatus as import("@/api/endpoints").ActionPlanItem["status"] }
+      : i));
+    try {
+      await complianceApi.updateActionPlanItem(id, { status: newStatus });
+    } catch {
+      setItems(all => all.map(i => i.id === id ? { ...i, status: prev.status } : i));
+    }
+  }
+
+  if (loading) return <div className="flex justify-center py-16"><Loader2 className="w-5 h-5 animate-spin text-indigo-400" /></div>;
+
+  const total    = items.length;
+  const done     = items.filter(i => i.status === "completed").length;
+  const progress = total > 0 ? Math.round((done / total) * 100) : 0;
+
+  return (
+    <div className="space-y-5">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-base font-bold text-gray-800 flex items-center gap-2">
+            <CheckSquare className="w-4 h-4 text-indigo-600" />
+            {t("action_plan.page_title", "Action Plan")} — {assessmentName}
+          </h2>
+          <p className="text-xs text-gray-400 mt-0.5">{t("action_plan.page_subtitle", "Gaps converted to trackable tasks")}</p>
+        </div>
+        <button
+          type="button"
+          onClick={() => navigate("/action-plan")}
+          className="flex items-center gap-1.5 text-xs text-indigo-600 hover:text-indigo-800 border border-indigo-200 rounded-lg px-3 py-1.5 hover:bg-indigo-50 transition-colors"
+        >
+          <ExternalLink className="w-3.5 h-3.5" />
+          {t("action_plan.view_global", "View global plan")}
+        </button>
+      </div>
+
+      {/* Progress */}
+      {total > 0 && (
+        <div className="bg-white border border-gray-100 rounded-xl px-4 py-3 flex items-center gap-4 shadow-sm">
+          <div className="flex-1">
+            <div className="h-2.5 bg-gray-100 rounded-full overflow-hidden">
+              <div className="h-full rounded-full bg-gradient-to-r from-indigo-500 to-green-400 transition-all duration-500" style={{ width: `${progress}%` }} />
+            </div>
+          </div>
+          <span className="text-sm font-bold text-indigo-600 flex-shrink-0">{progress}%</span>
+          <span className="text-xs text-gray-400">{done}/{total} {t("action_plan.done_label", "done")}</span>
+        </div>
+      )}
+
+      {total === 0 ? (
+        <div className="flex flex-col items-center gap-3 py-16 text-center">
+          <CheckCircle className="w-10 h-10 text-green-300" />
+          <p className="text-sm text-gray-500">{t("action_plan.empty_title", "No action items yet")}</p>
+          <p className="text-xs text-gray-400">{t("action_plan.empty_hint", "Run AI analysis first to generate gaps and action items.")}</p>
+        </div>
+      ) : (
+        /* Compact Kanban */
+        <div className="grid grid-cols-2 xl:grid-cols-4 gap-3">
+          {AP_COLS.map(colKey => {
+            const colItems = items.filter(i => i.status === colKey);
+            const cfg = STATUS_STYLE_AP[colKey];
+            return (
+              <div key={colKey} className="flex flex-col gap-2">
+                <div className={`flex items-center gap-2 px-3 py-2 rounded-xl ${cfg.bg} border ${cfg.border}`}>
+                  <span className={`text-xs font-bold ${cfg.color}`}>{cfg.label}</span>
+                  <span className="ml-auto text-xs font-semibold text-gray-500 bg-white/70 px-1.5 py-0.5 rounded-full">{colItems.length}</span>
+                </div>
+                <div className="flex flex-col gap-1.5 min-h-[60px]">
+                  {colItems.length === 0 ? (
+                    <div className="text-xs text-gray-300 text-center py-4 border-2 border-dashed border-gray-100 rounded-xl">—</div>
+                  ) : colItems.map(item => {
+                    const pStyle = PRIORITY_STYLE[item.priority] ?? PRIORITY_STYLE.medium;
+                    return (
+                      <div key={item.id} className={`bg-white rounded-xl border border-gray-100 shadow-sm p-3 flex flex-col gap-2 ${item.status === "completed" ? "opacity-60" : ""}`}>
+                        {/* Priority + blocker */}
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] font-bold ${pStyle.bg} ${pStyle.color}`}>
+                            <span className={`w-1.5 h-1.5 rounded-full ${pStyle.dot}`} />
+                            {item.priority}
+                          </span>
+                          {item.is_certification_blocker && (
+                            <span className="text-[9px] font-bold px-1 py-0.5 rounded bg-red-100 text-red-700">BLOCKER</span>
+                          )}
+                          {item.control_identifier && (
+                            <span className="text-[9px] font-mono font-semibold px-1 py-0.5 bg-gray-100 text-gray-600 rounded">{item.control_identifier}</span>
+                          )}
+                        </div>
+                        {/* Title */}
+                        <p className={`text-xs font-semibold text-gray-800 leading-snug line-clamp-2 ${item.status === "completed" ? "line-through text-gray-400" : ""}`}>
+                          {item.title}
+                        </p>
+                        {/* Action buttons */}
+                        <div className="flex gap-1 flex-wrap">
+                          {item.status !== "completed" && item.status !== "cancelled" && (
+                            <button type="button" onClick={() => changeStatus(item.id, "completed")}
+                              className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-semibold bg-green-50 text-green-600 border border-green-200 hover:bg-green-100 transition-colors">
+                              ✓ Done
+                            </button>
+                          )}
+                          {item.status === "open" && (
+                            <button type="button" onClick={() => changeStatus(item.id, "in_progress")}
+                              className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-semibold bg-blue-50 text-blue-600 border border-blue-200 hover:bg-blue-100 transition-colors">
+                              ▶ Start
+                            </button>
+                          )}
+                          {item.status === "completed" && (
+                            <button type="button" onClick={() => changeStatus(item.id, "open")}
+                              className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-semibold bg-gray-50 text-gray-500 border border-gray-200 hover:bg-gray-100 transition-colors">
+                              ↩ Reopen
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Main Page ─────────────────────────────────────────────────────────────────
 
-type Tab = "upload" | "checklist" | "results" | "gapreport" | "crossfw";
+type Tab = "upload" | "checklist" | "results" | "gapreport" | "crossfw" | "actionplan";
 
 export default function AssessmentDetailPage() {
   const { t } = useTranslation();
@@ -958,12 +1140,13 @@ export default function AssessmentDetailPage() {
   const hasResults = assessment.control_assessments.length > 0;
   const gapCount = gaps.length;
 
-  const tabs: { key: Tab; label: string; disabled?: boolean }[] = [
-    { key: "upload",    label: t("compliance.upload_analyze") },
-    { key: "checklist", label: t("compliance.document_checklist") },
-    { key: "results",   label: `${t("compliance.results")}${hasResults ? ` (${assessment.control_assessments.length})` : ""}`, disabled: !hasResults },
-    { key: "gapreport", label: `${t("compliance.gap_report")}${gapCount > 0 ? ` (${gapCount})` : ""}`, disabled: gapCount === 0 },
-    { key: "crossfw",   label: `${t("compliance.cross_framework")}${Object.keys(assessment.cross_framework_summary).length > 0 ? ` (${Object.keys(assessment.cross_framework_summary).length})` : ""}` },
+  const tabs: { key: Tab; label: string; disabled?: boolean; icon?: React.ReactNode }[] = [
+    { key: "upload",     label: t("compliance.upload_analyze") },
+    { key: "checklist",  label: t("compliance.document_checklist") },
+    { key: "results",    label: `${t("compliance.results")}${hasResults ? ` (${assessment.control_assessments.length})` : ""}`, disabled: !hasResults },
+    { key: "gapreport",  label: `${t("compliance.gap_report")}${gapCount > 0 ? ` (${gapCount})` : ""}`, disabled: gapCount === 0 },
+    { key: "crossfw",    label: `${t("compliance.cross_framework")}${Object.keys(assessment.cross_framework_summary).length > 0 ? ` (${Object.keys(assessment.cross_framework_summary).length})` : ""}` },
+    { key: "actionplan", label: t("action_plan.page_title", "Action Plan"), icon: <CheckSquare className="w-3.5 h-3.5" /> },
   ];
 
   return (
@@ -1031,7 +1214,9 @@ export default function AssessmentDetailPage() {
                   : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
               }`}
             >
-              {tab.label}
+              <span className="flex items-center gap-1.5">
+                {tab.icon}{tab.label}
+              </span>
             </button>
           ))}
         </div>
@@ -1069,6 +1254,9 @@ export default function AssessmentDetailPage() {
       )}
       {activeTab === "crossfw" && (
         <CrossFrameworkTab assessment={assessment} />
+      )}
+      {activeTab === "actionplan" && assessmentId && (
+        <AssessmentActionPlan assessmentId={assessmentId} assessmentName={assessment.name} />
       )}
     </div>
   );

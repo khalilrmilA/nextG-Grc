@@ -2,10 +2,11 @@ import { useState, useRef, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import {
   Upload, CheckCircle, XCircle, FileText, Loader2, RefreshCw, Plus,
-  Eye, EyeOff, Trash2, Download,
+  Eye, EyeOff, Trash2, Download, History, ChevronDown, ChevronUp,
+  User, Calendar, HardDrive, Tag,
 } from "lucide-react";
 import { complianceApi } from "@/api/endpoints";
-import type { DocumentChecklistResponse, MandatoryDocumentStatus, ChecklistUploadedDoc } from "@/types";
+import type { DocumentChecklistResponse, MandatoryDocumentStatus, ChecklistUploadedDoc, DocumentLogEntry } from "@/types";
 import DocumentViewerModal, { type ViewableDoc } from "@/components/features/compliance/DocumentViewerModal";
 
 interface Props {
@@ -271,6 +272,9 @@ export default function DocumentChecklistTab({ assessmentId, frameworkShortName 
   const [error, setError] = useState("");
   const [filter, setFilter] = useState<"all" | "missing" | "uploaded">("all");
   const [viewingDoc, setViewingDoc] = useState<ViewableDoc | null>(null);
+  const [logOpen, setLogOpen] = useState(false);
+  const [logEntries, setLogEntries] = useState<DocumentLogEntry[]>([]);
+  const [logLoading, setLogLoading] = useState(false);
 
   function openViewer(doc: ChecklistUploadedDoc) {
     const fetchUrl = doc.kind === "evidence"
@@ -300,6 +304,20 @@ export default function DocumentChecklistTab({ assessmentId, frameworkShortName 
 
   useEffect(() => { load(); }, [assessmentId]);
 
+  async function loadLog() {
+    setLogLoading(true);
+    try {
+      setLogEntries(await complianceApi.getDocumentLog(assessmentId));
+    } catch { /* silent */ } finally {
+      setLogLoading(false);
+    }
+  }
+
+  function toggleLog() {
+    if (!logOpen && logEntries.length === 0) loadLog();
+    setLogOpen(v => !v);
+  }
+
   function handleUploaded(key: string, newDoc: ChecklistUploadedDoc) {
     setChecklist((prev) => {
       if (!prev) return prev;
@@ -317,6 +335,8 @@ export default function DocumentChecklistTab({ assessmentId, frameworkShortName 
         }),
       };
     });
+    // Refresh log so the new file appears immediately if log is open
+    loadLog();
   }
 
   function handleVisibilityToggled(key: string, updated: ChecklistUploadedDoc) {
@@ -538,6 +558,138 @@ export default function DocumentChecklistTab({ assessmentId, frameworkShortName 
           </div>
         </div>
       )}
+
+      {/* ── Document Upload History ─────────────────────────────────────── */}
+      <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden shadow-sm">
+        <button
+          type="button"
+          onClick={toggleLog}
+          className="w-full flex items-center gap-3 px-5 py-4 hover:bg-gray-50 transition-colors"
+        >
+          <History className="w-4 h-4 text-indigo-500 flex-shrink-0" />
+          <span className="text-sm font-semibold text-gray-800 flex-1 text-left">
+            {t("compliance.doc_history_title", "Upload History")}
+          </span>
+          {logEntries.length > 0 && (
+            <span className="text-xs bg-indigo-100 text-indigo-700 font-semibold px-2 py-0.5 rounded-full">
+              {logEntries.length}
+            </span>
+          )}
+          {logLoading
+            ? <Loader2 className="w-4 h-4 animate-spin text-gray-400" />
+            : logOpen
+              ? <ChevronUp className="w-4 h-4 text-gray-400" />
+              : <ChevronDown className="w-4 h-4 text-gray-400" />
+          }
+        </button>
+
+        {logOpen && (
+          <div className="border-t border-gray-100">
+            {logLoading ? (
+              <div className="flex justify-center py-8">
+                <Loader2 className="w-5 h-5 animate-spin text-indigo-400" />
+              </div>
+            ) : logEntries.length === 0 ? (
+              <div className="text-sm text-gray-400 text-center py-8">
+                {t("compliance.doc_history_empty", "No documents uploaded yet.")}
+              </div>
+            ) : (
+              <div className="divide-y divide-gray-50">
+                {logEntries.map((entry, idx) => {
+                  const isLatest = idx === 0;
+                  const sizeKb = entry.file_size_bytes ? (entry.file_size_bytes / 1024).toFixed(1) : null;
+                  const uploadDate = new Date(entry.created_at);
+                  const isPdf  = entry.content_type?.includes("pdf") || entry.file_name.endsWith(".pdf");
+                  const isText = entry.content_type?.includes("text") || entry.file_name.endsWith(".txt");
+                  const fileIcon = isPdf ? "📄" : isText ? "📝" : "📎";
+
+                  return (
+                    <div key={entry.id} className={`flex items-start gap-4 px-5 py-4 ${isLatest ? "bg-indigo-50/30" : ""}`}>
+                      {/* Timeline dot */}
+                      <div className="flex flex-col items-center mt-1 flex-shrink-0">
+                        <div className={`w-2.5 h-2.5 rounded-full border-2 ${isLatest ? "border-indigo-500 bg-indigo-500" : "border-gray-300 bg-white"}`} />
+                        {idx < logEntries.length - 1 && (
+                          <div className="w-px flex-1 bg-gray-200 mt-1" style={{ minHeight: 24 }} />
+                        )}
+                      </div>
+
+                      {/* Content */}
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-start justify-between gap-2 flex-wrap">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <span className="text-base">{fileIcon}</span>
+                            <span className="text-sm font-semibold text-gray-800 truncate max-w-[260px]" title={entry.file_name}>
+                              {entry.file_name}
+                            </span>
+                            {isLatest && (
+                              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-indigo-100 text-indigo-700 flex-shrink-0">
+                                {t("compliance.doc_history_latest", "LATEST")}
+                              </span>
+                            )}
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => setViewingDoc({
+                              id: entry.id,
+                              fetchUrl: complianceApi.downloadDocumentUrl(entry.id),
+                              fileName: entry.file_name,
+                              contentType: entry.content_type ?? undefined,
+                              fileSizeBytes: entry.file_size_bytes ?? undefined,
+                            })}
+                            className="flex items-center gap-1 text-xs text-indigo-600 hover:text-indigo-800 border border-indigo-200 rounded px-2 py-0.5 hover:bg-indigo-50 transition-colors flex-shrink-0"
+                          >
+                            <Download className="w-3 h-3" />
+                            {t("compliance.doc_history_preview", "Preview")}
+                          </button>
+                        </div>
+
+                        {/* Meta row */}
+                        <div className="flex flex-wrap items-center gap-3 mt-1.5 text-[11px] text-gray-500">
+                          <span className="flex items-center gap-1">
+                            <Calendar className="w-3 h-3" />
+                            {uploadDate.toLocaleDateString()} {uploadDate.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                          </span>
+                          {entry.uploaded_by_name && (
+                            <span className="flex items-center gap-1">
+                              <User className="w-3 h-3" />
+                              {entry.uploaded_by_name}
+                            </span>
+                          )}
+                          {sizeKb && (
+                            <span className="flex items-center gap-1">
+                              <HardDrive className="w-3 h-3" />
+                              {sizeKb} KB
+                            </span>
+                          )}
+                          {entry.clause_refs?.length > 0 && (
+                            <span className="flex items-center gap-1">
+                              <Tag className="w-3 h-3" />
+                              {entry.clause_refs.join(", ")}
+                            </span>
+                          )}
+                          {!entry.is_visible_to_auditor && (
+                            <span className="flex items-center gap-1 text-orange-500">
+                              <EyeOff className="w-3 h-3" />
+                              {t("compliance.doc_history_hidden", "Hidden from auditor")}
+                            </span>
+                          )}
+                        </div>
+
+                        {/* AI summary if available */}
+                        {entry.ai_analysis_summary && (
+                          <p className="mt-2 text-xs text-gray-500 bg-gray-50 rounded-lg px-3 py-2 border border-gray-100 line-clamp-2">
+                            {entry.ai_analysis_summary}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
 
       {viewingDoc && (
         <DocumentViewerModal doc={viewingDoc} onClose={() => setViewingDoc(null)} />

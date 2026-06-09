@@ -11,8 +11,9 @@ import {
   Shield, TrendingUp, TrendingDown, ChevronRight, Plus,
   Sparkles, Upload, CheckCircle2, XCircle,
   AlertCircle, LayoutDashboard, BookOpen, X, Loader2,
+  CheckSquare, Circle, Clock,
 } from "lucide-react";
-import { dashboardApi, frameworksApi, authApi, complianceApi } from "../api/endpoints";
+import { dashboardApi, frameworksApi, authApi, complianceApi, type ActionPlanItem } from "../api/endpoints";
 import { useAuthStore, authSession } from "../store/auth";
 import type { DashboardSummary, Framework } from "../types";
 import ComplianceJourneyMap from "../components/features/compliance/ComplianceJourneyMap";
@@ -222,6 +223,106 @@ function TopGapsCard({ gaps, assessmentId }: { gaps: any[]; assessmentId: string
   );
 }
 
+// ── Per-assessment to-do widget ───────────────────────────────────────────────
+
+function AssessmentToDoWidget({
+  assessmentId,
+  assessmentName,
+  frameworkShortName,
+  items,
+}: {
+  assessmentId: string;
+  assessmentName: string;
+  frameworkShortName: string;
+  items: ActionPlanItem[];
+}) {
+  const { t } = useTranslation();
+  const todo       = items.filter(i => i.status === "open").length;
+  const inProgress = items.filter(i => i.status === "in_progress").length;
+  const done       = items.filter(i => i.status === "completed").length;
+  const total      = items.length;
+  const pct        = total > 0 ? Math.round((done / total) * 100) : 0;
+
+  const topItems = items
+    .filter(i => i.status !== "completed")
+    .sort((a, b) => {
+      const order = { critical: 0, high: 1, medium: 2, low: 3 };
+      return (order[a.priority] ?? 99) - (order[b.priority] ?? 99);
+    })
+    .slice(0, 3);
+
+  const priorityDot: Record<string, string> = {
+    critical: "bg-red-500",
+    high: "bg-orange-400",
+    medium: "bg-yellow-400",
+    low: "bg-green-400",
+  };
+
+  return (
+    <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 flex flex-col gap-3">
+      {/* Header */}
+      <div className="flex items-start justify-between">
+        <div>
+          <span className="text-xs font-bold px-2 py-0.5 rounded-md bg-blue-50 text-blue-700 font-mono">{frameworkShortName}</span>
+          <p className="text-sm font-semibold text-gray-800 mt-1 leading-snug">{assessmentName}</p>
+        </div>
+        <Link
+          to={`/compliance/${assessmentId}`}
+          className="text-xs text-blue-600 hover:text-blue-700 flex items-center gap-0.5 font-medium flex-shrink-0"
+        >
+          {t("common.view")} <ChevronRight className="w-3 h-3" />
+        </Link>
+      </div>
+
+      {/* Status counts */}
+      <div className="flex items-center gap-3 text-xs">
+        <span className="flex items-center gap-1 text-gray-500">
+          <Circle className="w-3 h-3 text-gray-400" />
+          <span className="font-semibold text-gray-700">{todo}</span> {t("action_plan.status_todo")}
+        </span>
+        <span className="flex items-center gap-1 text-gray-500">
+          <Clock className="w-3 h-3 text-blue-400" />
+          <span className="font-semibold text-gray-700">{inProgress}</span> {t("action_plan.status_in_progress")}
+        </span>
+        <span className="flex items-center gap-1 text-gray-500">
+          <CheckSquare className="w-3 h-3 text-green-500" />
+          <span className="font-semibold text-gray-700">{done}</span> {t("action_plan.status_done")}
+        </span>
+      </div>
+
+      {/* Progress bar */}
+      <div>
+        <div className="flex justify-between text-xs text-gray-400 mb-1">
+          <span>{t("action_plan.overall_progress")}</span>
+          <span className={`font-semibold ${pct >= 75 ? "text-green-600" : pct >= 40 ? "text-yellow-600" : "text-red-500"}`}>{pct}%</span>
+        </div>
+        <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+          <div
+            className={`h-full rounded-full transition-all ${pct >= 75 ? "bg-green-500" : pct >= 40 ? "bg-yellow-400" : "bg-red-400"}`}
+            style={{ width: `${pct}%` }}
+          />
+        </div>
+      </div>
+
+      {/* Top pending items */}
+      {topItems.length > 0 && (
+        <div className="space-y-1.5 border-t border-gray-50 pt-2">
+          {topItems.map(item => (
+            <div key={item.id} className="flex items-start gap-2 text-xs text-gray-600">
+              <span className={`w-2 h-2 rounded-full mt-0.5 flex-shrink-0 ${priorityDot[item.priority] ?? "bg-gray-300"}`} />
+              <span className="truncate">{item.control_identifier ? `${item.control_identifier} – ` : ""}{item.title}</span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {total === 0 && (
+        <p className="text-xs text-gray-400 text-center py-2">{t("action_plan.no_items")}</p>
+      )}
+    </div>
+  );
+}
+
 // ── Framework Dashboard (primary) ─────────────────────────────────────────────
 
 function FrameworkDashboard({ data }: { data: any }) {
@@ -245,7 +346,7 @@ function FrameworkDashboard({ data }: { data: any }) {
         <div className="flex items-center gap-2">
           <button
             onClick={() => navigate(`/compliance/${data.assessment_id}`)}
-            className="flex items-center gap-2 text-sm font-medium text-gray-600 border border-gray-200 hover:bg-gray-50 px-3 py-2 rounded-lg"
+            className="flex items-center gap-2 text-sm font-medium text-indigo-600 border border-indigo-300 bg-indigo-50 hover:bg-indigo-100 hover:border-indigo-400 px-4 py-2 rounded-lg transition-colors shadow-sm"
           >
             <LayoutDashboard className="w-4 h-4" /> {t("compliance.assessments")}
           </button>
@@ -726,6 +827,30 @@ function OverviewDashboard({
   const currentFrameworkIds = authUser?.selected_framework_ids || [];
   const primaryFrameworkId = authUser?.primary_framework_id || null;
 
+  const { data: allActionItems = [] } = useQuery({
+    queryKey: ["dashboard", "action-plan-all"],
+    queryFn: () => complianceApi.listActionPlan(),
+    enabled: frameworks.length > 0,
+  });
+
+  // Group action items by assessment_id
+  const itemsByAssessment = allActionItems.reduce<Record<string, ActionPlanItem[]>>((acc, item) => {
+    const key = item.assessment_id ?? "__none__";
+    (acc[key] ??= []).push(item);
+    return acc;
+  }, {});
+
+  // Only show assessments that have items and match frameworks in the overview
+  const assessmentsWithItems = frameworks
+    .filter((fw: any) => fw.has_assessment && fw.assessment_id)
+    .map((fw: any) => ({
+      assessmentId: fw.assessment_id,
+      assessmentName: fw.assessment_name ?? `${fw.framework_short_name} Assessment`,
+      frameworkShortName: fw.framework_short_name,
+      items: itemsByAssessment[fw.assessment_id] ?? [],
+    }))
+    .filter(a => a.items.length > 0);
+
   return (
     <div className="space-y-8">
       {/* Header */}
@@ -789,6 +914,34 @@ function OverviewDashboard({
           </button>
         </div>
       </div>
+
+      {/* Per-assessment action plan to-do lists */}
+      {assessmentsWithItems.length > 0 && (
+        <div>
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide">
+              {t("action_plan.page_title")}
+            </h2>
+            <Link
+              to="/action-plan"
+              className="text-xs text-blue-600 hover:text-blue-700 flex items-center gap-1 font-medium"
+            >
+              {t("action_plan.view_global")} <ChevronRight className="w-3 h-3" />
+            </Link>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {assessmentsWithItems.map(a => (
+              <AssessmentToDoWidget
+                key={a.assessmentId}
+                assessmentId={a.assessmentId}
+                assessmentName={a.assessmentName}
+                frameworkShortName={a.frameworkShortName}
+                items={a.items}
+              />
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Framework management modal */}
       <FrameworkManagementModal

@@ -1,0 +1,639 @@
+NEXTSTEP IT — ENTERPRISE CYBERSECURITY POLICY
+Information Security Management Framework
+Version 2.0 | Effective Date: January 1, 2026 | Classification: Internal
+
+Approved by: Chief Information Security Officer (CISO)
+Review Cycle: Annual | Next Review: January 1, 2027
+
+════════════════════════════════════════════════════════════════════════
+SECTION 1 — ORGANIZATIONAL CONTEXT AND GOVERNANCE (GV)
+════════════════════════════════════════════════════════════════════════
+
+1.1 Organizational Mission and Cybersecurity Context
+
+NextStep IT provides managed IT services, cloud infrastructure, and consulting
+solutions to enterprise clients. Cybersecurity is a strategic business priority.
+The organization operates in alignment with the NIST Cybersecurity Framework 2.0
+(NIST CSF 2.0) as its primary security governance framework.
+
+All cybersecurity activities are conducted in support of the organization's
+mission to deliver reliable, secure, and compliant technology services. The
+cybersecurity program considers regulatory obligations (GDPR, ISO 27001),
+contractual requirements with clients, and the threat landscape relevant to
+managed service providers.
+
+Stakeholder expectations, legal obligations, and business objectives are
+formally reviewed annually and documented in the Cybersecurity Strategy
+document maintained by the CISO office.
+
+1.2 Cybersecurity Risk Management Strategy
+
+The organization adopts a risk-based approach to cybersecurity. Risk tolerance
+and risk appetite are formally defined by the Board of Directors and CISO,
+documented in the Enterprise Risk Appetite Statement, and reviewed annually.
+
+Risk management objectives:
+- Protect confidentiality, integrity, and availability of all information assets
+- Minimize likelihood and impact of cybersecurity incidents
+- Comply with all applicable legal and regulatory requirements
+- Maintain client trust and operational continuity
+
+Risk management decisions are prioritized based on asset criticality, threat
+likelihood, potential business impact, and cost-effectiveness of controls.
+All residual risks exceeding defined tolerance thresholds require formal
+acceptance by senior management.
+
+The organization participates in cybersecurity information sharing communities
+and threat intelligence networks to improve situational awareness.
+
+1.3 Roles, Responsibilities, and Accountability
+
+Board of Directors: Approves cybersecurity strategy and risk appetite; receives
+quarterly cybersecurity reports.
+
+Chief Executive Officer (CEO): Accountable for organizational cybersecurity
+posture; ensures adequate resources are allocated.
+
+Chief Information Security Officer (CISO): Owns the cybersecurity program;
+responsible for policy development, risk management, incident response, and
+compliance.
+
+Chief Technology Officer (CTO): Responsible for secure architecture and
+engineering practices; ensures security-by-design in all systems.
+
+IT Security Team: Implements technical controls; monitors systems; responds
+to security events; conducts vulnerability assessments.
+
+Department Managers: Accountable for cybersecurity compliance within their
+departments; ensure staff complete mandatory security training.
+
+All Employees: Responsible for following security policies; reporting suspicious
+activity; protecting company and client data.
+
+Third-Party Suppliers: Required to meet cybersecurity standards defined in
+supplier agreements; subject to periodic security assessments.
+
+A RACI matrix defining cybersecurity responsibilities is maintained and
+reviewed annually by Human Resources and the CISO.
+
+1.4 Cybersecurity Policies and Procedures
+
+This document constitutes the master cybersecurity policy. Supporting policies
+include:
+
+- Acceptable Use Policy
+- Access Control Policy
+- Data Classification and Handling Policy
+- Incident Response Policy and Procedures
+- Business Continuity and Disaster Recovery Policy
+- Vulnerability Management Policy
+- Third-Party Risk Management Policy
+- Secure Development Lifecycle Policy
+- Password and Authentication Policy
+- Physical Security Policy
+- Data Retention and Destruction Policy
+- Remote Work and Mobile Device Policy
+
+All policies are:
+- Approved by the CISO and relevant executives
+- Communicated to all relevant personnel upon hire and annually
+- Reviewed and updated at minimum annually or after significant incidents
+- Version-controlled and accessible via the internal policy portal
+- Aligned with NIST CSF 2.0 and ISO/IEC 27001:2022
+
+Non-compliance with policies is subject to disciplinary action, up to and
+including termination of employment or contract.
+
+1.5 Cybersecurity Supply Chain Risk Management
+
+All third-party vendors, suppliers, and service providers with access to
+organizational systems or data are subject to:
+
+- Pre-engagement security assessment (questionnaire + risk scoring)
+- Contractual cybersecurity requirements (data protection, breach notification,
+  right to audit, minimum security standards)
+- Ongoing monitoring throughout the relationship
+- Annual reassessment for high-risk and critical suppliers
+- Formal offboarding procedures including access revocation and data return
+
+Supplier cybersecurity requirements are included in all contracts and
+procurement processes. Critical suppliers are reviewed quarterly.
+
+════════════════════════════════════════════════════════════════════════
+SECTION 2 — IDENTIFY (ID)
+════════════════════════════════════════════════════════════════════════
+
+2.1 Asset Management
+
+The organization maintains a comprehensive inventory of all information assets
+including:
+
+Hardware Assets: Servers, workstations, laptops, network devices, mobile
+devices, storage media, printers, and IoT devices.
+
+Software Assets: Licensed applications, open-source software, operating
+systems, cloud services (SaaS, PaaS, IaaS), and internal applications.
+
+Data Assets: Classified by sensitivity (Public, Internal, Confidential,
+Restricted) with defined handling, storage, and disposal requirements.
+
+Network Assets: Network segments, IP address ranges, VPNs, firewalls,
+wireless access points, and external-facing services.
+
+The asset inventory is maintained in the Configuration Management Database
+(CMDB) and updated:
+- Automatically via network discovery tools (weekly scans)
+- Manually upon procurement or decommissioning of assets
+- During quarterly reconciliation reviews
+
+Each asset record includes: owner, classification, location, lifecycle status,
+and associated security controls. Assets are assigned to accountable owners
+who are responsible for ensuring appropriate protection.
+
+Software Bill of Materials (SBOM) is maintained for all internally developed
+and third-party applications.
+
+2.2 Risk Assessment
+
+Cybersecurity risk assessments are conducted:
+- Annually for the full organization
+- Before major system changes, new projects, or technology adoptions
+- After significant security incidents
+- When the threat landscape changes materially
+
+Risk assessment methodology:
+1. Asset identification and valuation
+2. Threat identification (using threat intelligence and MITRE ATT&CK framework)
+3. Vulnerability identification (via scanning and assessment tools)
+4. Likelihood and impact analysis
+5. Risk scoring and prioritization
+6. Control selection and treatment planning
+7. Residual risk evaluation
+8. Risk acceptance or escalation
+
+Risk register is maintained by the CISO and reviewed monthly by the security
+team and quarterly by senior management.
+
+Threat intelligence from government agencies (CISA, ENISA), industry ISACs,
+and commercial feeds is continuously monitored and incorporated into risk
+assessments.
+
+2.3 Improvement and Lessons Learned
+
+The organization continuously improves its cybersecurity posture through:
+
+- Post-incident reviews and root cause analysis after all significant incidents
+- Annual cybersecurity maturity assessments against NIST CSF 2.0
+- Internal and external security audits and penetration tests
+- Tracking of key risk indicators (KRIs) and key performance indicators (KPIs)
+- Benchmarking against industry peers and best practices
+- Integration of lessons learned from industry incidents and threat intelligence
+
+Improvement actions are tracked in the risk register with assigned owners and
+target completion dates. Progress is reported monthly to the CISO and quarterly
+to the Board.
+
+════════════════════════════════════════════════════════════════════════
+SECTION 3 — PROTECT (PR)
+════════════════════════════════════════════════════════════════════════
+
+3.1 Identity Management, Authentication, and Access Control
+
+Access to all systems and data is granted on a least-privilege, need-to-know
+basis and is formally approved by the data/system owner.
+
+User Identity and Access Management:
+- All users are assigned unique, non-shared accounts
+- Account creation requires formal approval from the hiring manager and IT
+- Privileged accounts (admin, root, service accounts) are strictly controlled,
+  inventoried separately, and require additional justification
+- Accounts are disabled within 24 hours of employee termination
+- Quarterly access reviews are conducted; unused accounts are disabled after
+  90 days of inactivity
+- Temporary access is time-limited and documented
+
+Authentication Requirements:
+- Multi-Factor Authentication (MFA) is mandatory for all remote access, cloud
+  services, administrative interfaces, and email
+- Passwords must meet minimum complexity requirements:
+  Minimum 12 characters, mix of upper/lower case, numbers, and symbols
+- Passwords are never shared or reused across systems
+- Password managers are provided and recommended for all staff
+- Privileged accounts use hardware security keys where technically feasible
+- Single Sign-On (SSO) is implemented across all major corporate applications
+- Service accounts use certificate-based authentication where possible
+
+Session Management:
+- Inactive sessions time out after 15 minutes for privileged systems and
+  30 minutes for standard systems
+- Remote desktop and VPN sessions log off after 4 hours of inactivity
+- Concurrent sessions are limited based on role requirements
+
+Physical and Logical Separation:
+- Production, staging, and development environments are strictly separated
+- Administrative networks are isolated from user networks
+- Guest network access is restricted from corporate resources
+
+3.2 Awareness and Training
+
+All personnel receive cybersecurity training appropriate to their role:
+
+General Security Awareness (All Staff):
+- Mandatory training completed within 30 days of hire
+- Annual refresher training (minimum 2 hours)
+- Topics: phishing recognition, password hygiene, data handling, incident
+  reporting, social engineering, remote work security, mobile device security
+- Training completion is tracked; non-completion escalated to managers
+
+Specialized Training (IT and Security Staff):
+- Role-specific training aligned to job responsibilities
+- Annual certifications maintained (CISSP, CISM, CEH, CompTIA Security+)
+- Participation in tabletop exercises and incident response drills
+
+Developer Secure Coding Training:
+- Mandatory for all software developers
+- Covers OWASP Top 10, secure coding practices, dependency management
+- Completed before access to production code repositories
+
+Phishing Simulations:
+- Monthly simulated phishing campaigns for all staff
+- Immediate training intervention for users who fail simulations
+- Trends reported quarterly to management
+
+Social Engineering Awareness:
+- Training covers vishing, pretexting, and impersonation attacks
+- Clear verification procedures for sensitive requests (financial transactions,
+  access changes) via out-of-band channels
+
+3.3 Data Security
+
+Data Classification:
+- Public: No restrictions on distribution
+- Internal: For internal use only, not for external sharing without authorization
+- Confidential: Restricted to authorized personnel; encryption required
+- Restricted: Highest sensitivity; strict access controls, audit logging,
+  MFA required for access
+
+Data Protection Controls:
+- Encryption at rest: AES-256 for all Confidential and Restricted data
+- Encryption in transit: TLS 1.2 minimum (TLS 1.3 preferred) for all data
+  transmissions; unencrypted protocols (HTTP, FTP, Telnet) prohibited
+- Database encryption enabled for all production databases containing
+  personal or sensitive data
+- Full disk encryption on all laptops and mobile devices (BitLocker/FileVault)
+- USB and removable media use requires authorization and encryption
+- Personal data processed in compliance with GDPR and applicable privacy laws
+- Data residency requirements documented and enforced for each data category
+
+Data Handling and Disposal:
+- Clear desk policy enforced for paper documents
+- Secure printing used for sensitive documents
+- Paper documents shredded using cross-cut shredders
+- Digital media sanitized using DoD 5220.22-M standard before disposal
+- Data retention periods defined per data category and regulatory requirements
+- Data destruction certificates maintained for Confidential and Restricted data
+
+Data Loss Prevention (DLP):
+- DLP tools monitor and control data egress via email, web, USB, and cloud
+- Rules tuned to detect and prevent unauthorized transmission of sensitive data
+- DLP alerts reviewed daily by the security team
+
+3.4 Platform Security
+
+Endpoint Security:
+- Endpoint Detection and Response (EDR) deployed on all managed endpoints
+- Anti-malware with real-time protection, updated at least daily
+- Host-based firewalls enabled on all workstations and servers
+- Unauthorized software installation prohibited; application whitelisting on
+  high-risk systems
+- Patch management: Critical patches applied within 72 hours; high within 7
+  days; medium within 30 days; low within 90 days
+- Automated patch deployment for operating systems and common applications
+- Legacy operating systems not receiving security updates prohibited in
+  production environments
+
+Network Security:
+- Network segmentation with firewall rules between segments
+- Default-deny firewall policy; all permitted traffic explicitly authorized
+- Intrusion Detection and Prevention Systems (IDS/IPS) on network perimeter
+  and between critical segments
+- DNS filtering to block malicious domains
+- Email security gateway with anti-phishing, anti-spam, and sandboxing
+- Web proxy with SSL inspection for outbound web traffic
+- All remote access via VPN with MFA; split tunneling restricted
+- Wi-Fi networks segmented; guest Wi-Fi isolated from corporate network
+
+Cloud Security:
+- Cloud services approved via formal procurement and security review process
+- Cloud Security Posture Management (CSPM) tools monitor cloud configuration
+- Principle of least privilege applied to all cloud IAM roles
+- Multi-account architecture with separate production, development, and
+  management accounts
+- Cloud resource tagging policy enforced; untagged resources flagged
+- Cloud access logs retained for minimum 12 months
+
+Secure Configuration:
+- Hardening baselines applied to all systems (CIS Benchmarks)
+- Default accounts and passwords changed before deployment
+- Unnecessary services, ports, and protocols disabled
+- Configuration compliance scanned monthly; deviations remediated promptly
+- Infrastructure as Code (IaC) templates reviewed for security before deployment
+- Secrets (API keys, passwords, certificates) never hardcoded; stored in
+  approved secrets management systems
+
+3.5 Infrastructure Resilience
+
+Business Continuity Controls:
+- Recovery Time Objectives (RTO) and Recovery Point Objectives (RPO) defined
+  for all critical systems
+- Redundant infrastructure for all Tier 1 systems (N+1 minimum)
+- Geographically distributed data centers for disaster recovery
+- Data backups performed daily (incremental) and weekly (full)
+- Backups stored offline or in immutable storage to protect against ransomware
+- Backup restoration tested quarterly; results documented
+- Failover tested annually for all critical systems
+
+Anti-Ransomware Controls:
+- Immutable backups in isolated environments not accessible from production
+- Network segmentation to limit lateral movement
+- EDR with ransomware behavioral detection
+- Privileged access management to protect backup systems
+
+Capacity Management:
+- Infrastructure capacity monitored continuously with automated alerting
+- Capacity planning conducted quarterly; growth projections maintained 12 months ahead
+
+════════════════════════════════════════════════════════════════════════
+SECTION 4 — DETECT (DE)
+════════════════════════════════════════════════════════════════════════
+
+4.1 Continuous Monitoring
+
+The organization operates a Security Operations Center (SOC) with 24/7
+monitoring capabilities.
+
+Security Information and Event Management (SIEM):
+- All security-relevant logs ingested into SIEM (centralized logging)
+- Log sources: firewalls, IDS/IPS, endpoints, servers, cloud services,
+  authentication systems, network devices, applications
+- Logs retained for minimum 12 months online; 7 years in archive
+- Log integrity protected; log deletion requires dual authorization
+- Alerts tuned to minimize false positives while maintaining detection fidelity
+
+Monitoring Coverage:
+- Network traffic analysis for anomalous patterns
+- User and Entity Behavior Analytics (UEBA) to detect insider threats
+- Privileged account activity monitoring (all administrative actions logged)
+- Data access monitoring for sensitive data stores
+- Cloud activity logs (CloudTrail, Azure Monitor, GCP Audit Logs)
+- Authentication events: failed logins, privilege escalation, off-hours access
+- Email security events: phishing attempts, malicious attachments
+- Endpoint telemetry: process execution, file changes, network connections
+- Vulnerability scanner results integrated into SIEM
+
+Threat Intelligence Integration:
+- Commercial and open-source threat intelligence feeds integrated into SIEM
+- Indicators of Compromise (IoCs) automatically checked against all log sources
+- Threat intelligence used to tune detection rules and prioritize responses
+- Intelligence shared with trusted partner organizations via ISAC membership
+
+4.2 Adverse Event Analysis
+
+Security events are triaged, correlated, and analyzed by the SOC team:
+
+Alert Handling Process:
+1. Alert generated by detection tools (SIEM, EDR, IDS/IPS)
+2. Level 1 SOC analyst reviews and performs initial triage within 15 minutes
+3. False positives documented and rules updated
+4. True positives escalated per severity classification:
+   - Critical: Immediate escalation to security incident response team
+   - High: Response within 1 hour
+   - Medium: Response within 4 hours
+   - Low: Response within 24 hours
+
+Event Correlation:
+- SIEM correlation rules detect multi-stage attack patterns
+- Alerts from multiple sources correlated to identify incidents
+- Historical analysis used to detect slow-moving threats (APTs)
+- Machine learning anomaly detection supplements rule-based detection
+
+Forensic Capabilities:
+- Endpoint forensic tools available for memory and disk analysis
+- Network packet capture capability on key segments
+- Forensic investigation procedures documented and tested annually
+- Chain of custody procedures maintained for all evidence
+
+════════════════════════════════════════════════════════════════════════
+SECTION 5 — RESPOND (RS)
+════════════════════════════════════════════════════════════════════════
+
+5.1 Incident Management
+
+The organization maintains a formal Incident Response Plan (IRP) tested
+annually via tabletop exercises and periodic live drills.
+
+Incident Classification:
+- P1 Critical: Active breach, ransomware, data exfiltration in progress —
+  immediate response; executive notification within 30 minutes
+- P2 High: Confirmed malware, unauthorized access to sensitive systems —
+  response within 1 hour; management notification within 2 hours
+- P3 Medium: Suspicious activity, policy violations, potential compromise —
+  response within 4 hours
+- P4 Low: Isolated events, minor policy violations — response within 24 hours
+
+Incident Response Team (IRT):
+- Incident Commander (CISO or designated)
+- Technical Lead (senior security engineer)
+- Communications Lead (handles internal and external communications)
+- Legal Counsel (engaged for P1/P2 incidents)
+- HR Representative (for insider threat incidents)
+- External Incident Response Retainer (engaged for major incidents)
+
+5.2 Incident Analysis
+
+All security incidents undergo structured analysis:
+
+Initial Analysis:
+- Confirm incident versus false positive
+- Identify affected systems, data, and users
+- Determine attack vector and initial compromise point
+- Assess potential scope and impact
+
+Deep Analysis:
+- Timeline reconstruction of attacker activity
+- Identification of all compromised systems and accounts
+- Determination of data accessed, exfiltrated, or modified
+- Identification of persistence mechanisms
+
+Evidence Preservation:
+- System images and memory dumps captured before remediation where feasible
+- All investigative findings documented with timestamps
+- Chain of custody maintained for potential legal proceedings
+
+5.3 Incident Mitigation and Containment
+
+Containment Strategies:
+- Network isolation of compromised systems
+- Account lockout and password resets for compromised credentials
+- Firewall rule changes to block attacker IP addresses
+- Revocation of compromised API keys and certificates
+- Application of emergency patches for exploited vulnerabilities
+
+Eradication:
+- Removal of malware, backdoors, and unauthorized tools
+- Reimaging of compromised systems where required
+- Removal of attacker persistence mechanisms (scheduled tasks, registry entries)
+- Verification that eradication is complete before recovery
+
+Recovery:
+- Systems restored from clean backups
+- Security controls verified before returning systems to production
+- Enhanced monitoring applied post-recovery
+- Lessons learned documented and improvement actions initiated
+
+5.4 Communication and Reporting
+
+Internal Communications:
+- Executive team notified per incident severity classification
+- All-staff communications for incidents affecting employee data or operations
+- Regular status updates during active incidents (every 2 hours for P1/P2)
+
+External Communications:
+- Regulatory notifications: Data breaches reported to supervisory authorities
+  within 72 hours (GDPR Article 33) where required
+- Affected individuals notified without undue delay for high-risk breaches
+- Client notifications per contractual obligations
+- Law enforcement contacted for criminal activity
+- Coordinated public disclosure for significant incidents
+
+Communication principles:
+- All external communications approved by Legal and CISO before release
+- No technical details disclosed that could assist attackers
+- Factual, accurate, and timely information provided to stakeholders
+
+════════════════════════════════════════════════════════════════════════
+SECTION 6 — RECOVER (RC)
+════════════════════════════════════════════════════════════════════════
+
+6.1 Recovery Planning and Execution
+
+Business Continuity and Disaster Recovery Plans (BCP/DRP) are:
+- Documented for all critical business processes and IT systems
+- Reviewed and updated annually or after significant changes
+- Tested via tabletop exercises (twice annually) and full failover tests (annually)
+- Aligned with business RTO and RPO requirements
+
+Recovery Priorities (per Business Impact Analysis):
+Tier 1 (RTO < 4 hours, RPO < 1 hour):
+  - Customer-facing services and platforms
+  - Authentication and identity systems
+  - Security monitoring and SOC tools
+Tier 2 (RTO < 8 hours, RPO < 4 hours):
+  - Internal collaboration tools (email, video conferencing)
+  - Financial systems
+  - Client management platforms
+Tier 3 (RTO < 24 hours, RPO < 8 hours):
+  - Reporting and analytics systems
+  - Development environments
+  - Internal tools and utilities
+
+Recovery Procedures:
+- Step-by-step recovery runbooks maintained for all Tier 1 systems
+- Runbooks stored offline and in geographically separate locations
+- Recovery team roles and contact information maintained and tested
+- Vendor support contacts and service level agreements documented
+
+6.2 Communication During Recovery
+
+During recovery from significant incidents:
+- Recovery status communicated to executive team every 2 hours
+- Client communication managed by account managers with CISO oversight
+- Regular updates posted to internal status page
+- External status page updated for client-facing service disruptions
+- Media inquiries handled exclusively by Communications and Legal
+
+Post-recovery communications:
+- Post-incident report issued within 5 business days
+- Root cause and remediation actions communicated to stakeholders
+- Regulatory reports submitted within required timeframes
+- Client reports provided per contractual requirements
+
+6.3 Post-Incident Improvement
+
+After every P1 and P2 incident, and significant P3 incidents:
+- Formal post-incident review (PIR) conducted within 10 business days
+- Root cause analysis completed using structured methodology (5 Whys, Ishikawa)
+- Improvement actions identified, assigned, and tracked to completion
+- Lessons learned distributed to relevant teams
+- Policy and procedure updates implemented within 30 days
+- Detection and response capabilities enhanced based on gaps identified
+
+Annual cybersecurity improvement program:
+- Maturity assessment against NIST CSF 2.0 (target: Tier 3 or higher)
+- Penetration testing by external third party
+- Red team exercises to test detection and response capabilities
+- Security architecture review
+- Training and awareness program refresh
+
+════════════════════════════════════════════════════════════════════════
+SECTION 7 — COMPLIANCE AND AUDIT
+════════════════════════════════════════════════════════════════════════
+
+7.1 Compliance Monitoring
+
+The organization monitors compliance with this policy and supporting
+standards through:
+- Automated compliance scanning (daily for critical controls)
+- Monthly internal security reviews
+- Quarterly management reviews of key security metrics
+- Annual external audit by accredited third-party auditors
+
+Non-compliance findings are tracked in the risk register with remediation
+plans and target dates.
+
+7.2 Audit Rights
+
+The organization reserves the right to:
+- Monitor all activity on company-owned systems and networks
+- Conduct security assessments of third-party vendors
+- Request evidence of compliance from all staff and contractors
+- Inspect any company-owned device at any time
+
+Users of company systems have no expectation of privacy in their use of
+company resources, consistent with applicable law.
+
+7.3 Policy Exceptions
+
+Exceptions to this policy may be granted only by the CISO and require:
+- Written request with business justification
+- Risk assessment of the exception
+- Compensating controls to reduce risk
+- Time-limited approval with expiration date
+- Annual review and renewal if continued exception is required
+
+All approved exceptions are documented in the exception register maintained
+by the CISO.
+
+════════════════════════════════════════════════════════════════════════
+SECTION 8 — DOCUMENT CONTROL
+════════════════════════════════════════════════════════════════════════
+
+Document Owner:    Chief Information Security Officer
+Classification:    Internal
+Version:           2.0
+Effective Date:    January 1, 2026
+Next Review:       January 1, 2027
+Approved By:       CISO, CEO, Board Risk Committee
+
+Version History:
+v1.0 (2024-01-01) - Initial release
+v1.5 (2025-01-01) - Updated for NIST CSF 2.0; added supply chain section
+v2.0 (2026-01-01) - Full revision; added cloud security; enhanced AI/ML controls;
+                    aligned with ISO 27001:2022 Annex A; expanded recovery section
+
+This policy supersedes all previous versions of the NextStep IT Cybersecurity Policy.
+Questions should be directed to: security@nextstep-it.com
+
+════════════════════════════════════════════════════════════════════════
+END OF DOCUMENT
+════════════════════════════════════════════════════════════════════════

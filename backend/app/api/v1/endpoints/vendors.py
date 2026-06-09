@@ -1,10 +1,11 @@
 """Third-Party Risk Management (TPRM) — Vendor endpoints."""
 import logging
+import re
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from pydantic import BaseModel
-from datetime import datetime
+from datetime import datetime, timezone
 import json
 import os
 from pathlib import Path
@@ -590,6 +591,11 @@ async def upload_vendor_contract(
     # Sanitize the client-supplied filename and verify the resolved path
     # cannot escape upload_dir (path-traversal defense).
     safe_name = sanitize_filename(contract_file.filename, default="contract")
+    # Build display name: contrat_<vendeur>_<date>.<ext>
+    date_str  = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    vendeur   = re.sub(r"[^\w]", "_", vendor.name or "vendeur")[:30].strip("_")
+    ext       = Path(contract_file.filename or "").suffix[:10] or ".bin"
+    display_name = f"contrat_{vendeur}_{date_str}{ext}"
     candidate = upload_dir / f"{vendor_id}_{safe_name}"
     file_path = assert_path_within(upload_dir, candidate)
     max_bytes = settings.MAX_UPLOAD_SIZE_MB * 1024 * 1024
@@ -651,7 +657,7 @@ async def upload_vendor_contract(
     # Create contract record
     contract = VendorContract(
         vendor_id=vendor_id,
-        file_name=safe_name,
+        file_name=display_name,
         file_path=str(file_path),
         file_size=len(content),
         extracted_text=extracted_text,

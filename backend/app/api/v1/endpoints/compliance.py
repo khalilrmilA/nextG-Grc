@@ -3,7 +3,7 @@ import asyncio
 import json
 import re
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 import requests
@@ -177,6 +177,47 @@ def _sanitize_filename(name: str) -> str:
     suffix = Path(name).suffix
     safe = re.sub(r"[^\w\-.]", "_", stem)
     return safe[:80] + suffix[:10]
+
+
+_STATUS_LABEL = {
+    "implemented":           "conforme",
+    "partially_implemented": "partiel",
+    "not_implemented":       "non_conforme",
+    "in_progress":           "en_cours",
+    "not_applicable":        "na",
+    "not_started":           "a_evaluer",
+}
+
+
+def _build_evidence_filename(
+    framework_short: str,
+    control_identifier: str,
+    status: str,
+    original_filename: str,
+) -> str:
+    """Return a display filename following the convention:
+    <norme>_<control>_<statut>_<date>.<ext>
+    e.g. ISO27001_A5_1_conforme_2026-06-09.pdf
+    """
+    date_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    norme    = re.sub(r"[^\w]", "", framework_short or "NORME")[:20]
+    control  = re.sub(r"[^\w]", "_", control_identifier or "XX").strip("_")[:20]
+    statut   = _STATUS_LABEL.get(status, "en_evaluation")
+    ext      = Path(original_filename).suffix[:10] if original_filename else ".bin"
+    return f"{norme}_{control}_{statut}_{date_str}{ext}"
+
+
+def _build_doc_filename(
+    framework_short: str,
+    original_filename: str,
+) -> str:
+    """Assessment-level document (no specific control).
+    <norme>_document_<date>.<ext>
+    """
+    date_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    norme    = re.sub(r"[^\w]", "", framework_short or "NORME")[:20]
+    ext      = Path(original_filename).suffix[:10] if original_filename else ".bin"
+    return f"{norme}_document_{date_str}{ext}"
 
 
 def _extract_text(file_path: str, content_type: str) -> str:
@@ -757,6 +798,13 @@ async def upload_document(
     if not assessment:
         raise HTTPException(status_code=404, detail="Assessment not found")
 
+    # Fetch framework short name for display filename
+    fw_result = await db.execute(
+        select(Framework).where(Framework.id == assessment.framework_id)
+    )
+    fw_obj = fw_result.scalar_one_or_none()
+    fw_short = fw_obj.short_name if fw_obj else ""
+
     content_type = file.content_type or ""
     name_lower = (file.filename or "").lower()
     is_allowed = (
@@ -789,6 +837,10 @@ async def upload_document(
         raise HTTPException(415, "File contents do not match the declared XLS type.")
 
     safe_name = _sanitize_filename(file.filename or "document.txt")
+    display_name = _build_doc_filename(
+        fw_short,
+        file.filename or safe_name,
+    )
     rel_path = f"{tenant_id}/{assessment_id}/{uuid.uuid4().hex}_{safe_name}"
     full_path = Path(settings.UPLOADS_DIR) / rel_path
     full_path.parent.mkdir(parents=True, exist_ok=True)
@@ -799,7 +851,7 @@ async def upload_document(
     doc = UploadedDocument(
         assessment_id=assessment_id,
         tenant_id=tenant_id,
-        file_name=file.filename or safe_name,
+        file_name=display_name,
         file_path=str(rel_path),
         content_type=content_type,
         file_size_bytes=len(file_bytes),
@@ -893,11 +945,29 @@ async def _run_analysis_background(assessment_id: str, tenant_id: str, user_id: 
             old_cas = (await db.execute(
                 select(ControlAssessment).where(ControlAssessment.assessment_id == assessment_id)
             )).scalars().all()
+            old_ca_ids = [ca.id for ca in old_cas]
+            # Delete Evidence rows first — control_assessment_id is NOT NULL so
+            # SQLAlchemy cannot null it out when the parent ControlAssessment is deleted.
+            if old_ca_ids:
+                old_evidence = (await db.execute(
+                    select(Evidence).where(Evidence.control_assessment_id.in_(old_ca_ids))
+                )).scalars().all()
+                for ev in old_evidence:
+                    await db.delete(ev)
+                await db.flush()
             for ca in old_cas:
                 await db.delete(ca)
             old_gaps = (await db.execute(
                 select(ComplianceGap).where(ComplianceGap.assessment_id == assessment_id)
             )).scalars().all()
+            old_gap_ids = [g.id for g in old_gaps]
+            # Remove stale ActionItems linked to these gaps so auto-sync recreates them
+            if old_gap_ids:
+                stale_items = (await db.execute(
+                    select(ActionItem).where(ActionItem.gap_id.in_(old_gap_ids))
+                )).scalars().all()
+                for si in stale_items:
+                    await db.delete(si)
             for gap in old_gaps:
                 await db.delete(gap)
             await db.flush()
@@ -1595,6 +1665,13 @@ async def upload_control_evidence(
 
     ca, assessment = row
 
+    # Fetch framework short name for display filename
+    ev_fw_result = await db.execute(
+        select(Framework).where(Framework.id == assessment.framework_id)
+    )
+    ev_fw_obj = ev_fw_result.scalar_one_or_none()
+    ev_fw_short = ev_fw_obj.short_name if ev_fw_obj else ""
+
     # Accept: PDF, DOCX, TXT only
     content_type = file.content_type or ""
     name_lower = (file.filename or "").lower()
@@ -1628,6 +1705,12 @@ async def upload_control_evidence(
         raise HTTPException(415, "File contents do not match the declared XLS type.")
 
     safe_name = _sanitize_filename(file.filename or "evidence.txt")
+    display_name = _build_evidence_filename(
+        ev_fw_short,
+        ca.control_identifier or "",
+        ca.status.value if ca.status else "not_started",
+        file.filename or safe_name,
+    )
     rel_path = f"{tenant_id}/evidence/{uuid.uuid4().hex}_{safe_name}"
     full_path = Path(settings.UPLOADS_DIR) / rel_path
     full_path.parent.mkdir(parents=True, exist_ok=True)
@@ -1636,9 +1719,9 @@ async def upload_control_evidence(
     evidence = Evidence(
         control_assessment_id=control_assessment_id,
         tenant_id=tenant_id,
-        name=file.filename or safe_name,
+        name=display_name,
         evidence_type=EvidenceType.DOCUMENT,
-        file_name=file.filename or safe_name,
+        file_name=display_name,
         file_path=rel_path,
         file_size_bytes=len(file_bytes),
         content_type=content_type,
@@ -1913,6 +1996,78 @@ async def toggle_document_visibility(
     )
 
 
+class DocumentLogEntry(BaseModel):
+    id: str
+    file_name: str
+    file_size_bytes: int | None = None
+    content_type: str | None = None
+    document_type_key: str | None = None
+    clause_refs: list = []
+    ai_analysis_summary: str | None = None
+    is_visible_to_auditor: bool = True
+    uploaded_by_id: str | None = None
+    uploaded_by_name: str | None = None
+    created_at: datetime
+    updated_at: datetime
+    model_config = {"from_attributes": True}
+
+
+@router.get("/assessments/{assessment_id}/document-log", response_model=list[DocumentLogEntry])
+async def get_document_log(
+    assessment_id: str,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(get_current_user),
+    tenant_id: str = Depends(get_tenant_id),
+):
+    """Return all uploaded documents for an assessment, enriched with uploader info."""
+    # Verify access
+    a = (await db.execute(
+        select(ComplianceAssessment).where(
+            ComplianceAssessment.id == assessment_id,
+            ComplianceAssessment.tenant_id == tenant_id,
+        )
+    )).scalar_one_or_none()
+    if not a:
+        raise HTTPException(status_code=404, detail="Assessment not found")
+
+    docs = (await db.execute(
+        select(UploadedDocument)
+        .where(UploadedDocument.assessment_id == assessment_id)
+        .order_by(UploadedDocument.created_at.desc())
+    )).scalars().all()
+
+    uploader_ids = {d.uploaded_by_id for d in docs if d.uploaded_by_id}
+    from app.models.user import User as UserModel
+    uploaders: dict = {}
+    if uploader_ids:
+        uploaders = {
+            u.id: u for u in (await db.execute(
+                select(UserModel).where(UserModel.id.in_(uploader_ids))
+            )).scalars().all()
+        }
+
+    return [
+        DocumentLogEntry(
+            id=d.id,
+            file_name=d.file_name,
+            file_size_bytes=d.file_size_bytes,
+            content_type=d.content_type,
+            document_type_key=d.document_type_key,
+            clause_refs=d.clause_refs or [],
+            ai_analysis_summary=d.ai_analysis_summary,
+            is_visible_to_auditor=d.is_visible_to_auditor,
+            uploaded_by_id=d.uploaded_by_id,
+            uploaded_by_name=(
+                f"{uploaders[d.uploaded_by_id].first_name} {uploaders[d.uploaded_by_id].last_name}".strip()
+                if d.uploaded_by_id and d.uploaded_by_id in uploaders else None
+            ),
+            created_at=d.created_at,
+            updated_at=d.updated_at,
+        )
+        for d in docs
+    ]
+
+
 @router.delete("/documents/{doc_id}", status_code=204)
 async def delete_uploaded_document(
     doc_id: str,
@@ -2045,6 +2200,244 @@ async def list_share_links(
         )
         for r in rows
     ]
+
+
+# ── Action Plan (global to-do list from all gaps) ─────────────────────────────
+
+class ActionPlanItem(BaseModel):
+    id: str
+    title: str
+    description: str | None
+    priority: str
+    status: str
+    due_date: str | None
+    notes: str | None
+    ai_generated: bool
+    # linked assessment / framework context
+    assessment_id: str | None
+    assessment_name: str | None
+    framework_name: str | None
+    framework_short_name: str | None
+    # linked gap context
+    gap_id: str | None
+    control_identifier: str | None
+    control_title: str | None
+    gap_severity: str | None
+    is_certification_blocker: bool
+    # owner
+    owner_id: str | None
+    owner_name: str | None
+    model_config = {"from_attributes": True}
+
+
+class ActionPlanUpdateBody(BaseModel):
+    status: str | None = None          # open / in_progress / completed / cancelled
+    due_date: str | None = None
+    owner_id: str | None = None
+    notes: str | None = None
+    priority: str | None = None
+
+
+@router.get("/action-plan", response_model=list[ActionPlanItem])
+async def list_action_plan(
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(get_current_user),
+    tenant_id: str = Depends(get_tenant_id),
+    assessment_id: str | None = None,
+):
+    """Return action items for the tenant (or a single assessment if assessment_id given).
+
+    Auto-creates ActionItem rows for any ComplianceGap that doesn't have one yet,
+    so every gap is immediately visible without a manual 'accept' step.
+    """
+    # ── Auto-sync: create ActionItems for gaps that don't have one yet ──────────
+    tenant_assessments = (await db.execute(
+        select(ComplianceAssessment.id).where(ComplianceAssessment.tenant_id == tenant_id)
+    )).scalars().all()
+
+    if tenant_assessments:
+        gap_filter = ComplianceGap.assessment_id.in_(tenant_assessments)
+        all_gaps = (await db.execute(
+            select(ComplianceGap).where(gap_filter)
+        )).scalars().all()
+
+        # Which gap_ids already have an ActionItem?
+        covered_gap_ids: set[str] = set(
+            (await db.execute(
+                select(ActionItem.gap_id).where(
+                    ActionItem.tenant_id == tenant_id,
+                    ActionItem.gap_id.isnot(None),
+                )
+            )).scalars().all()
+        )
+
+        priority_map = {
+            90: ActionItemPriority.CRITICAL, 60: ActionItemPriority.HIGH,
+            50: ActionItemPriority.MEDIUM,   30: ActionItemPriority.LOW,
+        }
+
+        # Bulk-fetch controls for the orphaned gaps in one query
+        orphan_gaps = [g for g in all_gaps if g.id not in covered_gap_ids]
+        if orphan_gaps:
+            orphan_ctrl_ids = {g.control_id for g in orphan_gaps if g.control_id}
+            ctrl_map: dict = {}
+            if orphan_ctrl_ids:
+                ctrl_map = {
+                    c.id: c for c in (await db.execute(
+                        select(FrameworkControl).where(FrameworkControl.id.in_(orphan_ctrl_ids))
+                    )).scalars().all()
+                }
+            for gap in orphan_gaps:
+                ctrl = ctrl_map.get(gap.control_id or "")
+                title = (
+                    f"Remediate: {ctrl.title}" if ctrl
+                    else (gap.gap_description or "")[:120]
+                )
+                db.add(ActionItem(
+                    tenant_id=tenant_id,
+                    assessment_id=gap.assessment_id,
+                    gap_id=gap.id,
+                    title=title,
+                    description=gap.gap_description,
+                    priority=priority_map.get(gap.remediation_priority or 30, ActionItemPriority.MEDIUM),
+                    status=ActionItemStatus.OPEN,
+                    ai_generated=True,
+                ))
+            await db.commit()
+
+    # ── Fetch all items (including newly created ones) ───────────────────────────
+    item_filter = [ActionItem.tenant_id == tenant_id]
+    if assessment_id:
+        item_filter.append(ActionItem.assessment_id == assessment_id)
+    rows = (await db.execute(
+        select(ActionItem)
+        .where(*item_filter)
+        .order_by(ActionItem.status, ActionItem.priority, ActionItem.due_date)
+    )).scalars().all()
+
+    # Pre-fetch assessments, gaps, framework controls and users in bulk
+    assessment_ids = {r.assessment_id for r in rows if r.assessment_id}
+    gap_ids        = {r.gap_id for r in rows if r.gap_id}
+    owner_ids      = {r.owner_id for r in rows if r.owner_id}
+
+    assessments: dict = {}
+    if assessment_ids:
+        res = await db.execute(
+            select(ComplianceAssessment).where(ComplianceAssessment.id.in_(assessment_ids))
+        )
+        assessments = {a.id: a for a in res.scalars().all()}
+
+    gaps: dict = {}
+    if gap_ids:
+        res = await db.execute(
+            select(ComplianceGap).where(ComplianceGap.id.in_(gap_ids))
+        )
+        gaps = {g.id: g for g in res.scalars().all()}
+
+    # Fetch framework controls for those gaps
+    control_ids = {g.control_id for g in gaps.values() if g.control_id}
+    controls: dict = {}
+    if control_ids:
+        res = await db.execute(
+            select(FrameworkControl).where(FrameworkControl.id.in_(control_ids))
+        )
+        controls = {c.id: c for c in res.scalars().all()}
+
+    # Fetch framework names
+    framework_ids = {a.framework_id for a in assessments.values() if a.framework_id}
+    frameworks: dict = {}
+    if framework_ids:
+        res = await db.execute(
+            select(Framework).where(Framework.id.in_(framework_ids))
+        )
+        frameworks = {f.id: f for f in res.scalars().all()}
+
+    # Fetch owners
+    from app.models.user import User as UserModel
+    owners: dict = {}
+    if owner_ids:
+        res = await db.execute(
+            select(UserModel).where(UserModel.id.in_(owner_ids))
+        )
+        owners = {u.id: u for u in res.scalars().all()}
+
+    items = []
+    for r in rows:
+        a   = assessments.get(r.assessment_id or "")
+        g   = gaps.get(r.gap_id or "")
+        fw  = frameworks.get(a.framework_id if a else "")
+        fc  = controls.get(g.control_id if g else "")
+        own = owners.get(r.owner_id or "")
+        items.append(ActionPlanItem(
+            id=r.id,
+            title=r.title,
+            description=r.description,
+            priority=r.priority.value if r.priority else "medium",
+            status=r.status.value if r.status else "open",
+            due_date=r.due_date,
+            notes=r.notes,
+            ai_generated=r.ai_generated,
+            assessment_id=r.assessment_id,
+            assessment_name=a.name if a else None,
+            framework_name=fw.name if fw else None,
+            framework_short_name=fw.short_name if fw else None,
+            gap_id=r.gap_id,
+            control_identifier=fc.control_id if fc else None,
+            control_title=fc.title if fc else None,
+            gap_severity=g.severity if g else None,
+            is_certification_blocker=g.is_certification_blocker if g else False,
+            owner_id=r.owner_id,
+            owner_name=f"{own.first_name} {own.last_name}".strip() if own else None,
+        ))
+    return items
+
+
+@router.patch("/action-plan/{item_id}", response_model=ActionPlanItem)
+async def update_action_plan_item(
+    item_id: str,
+    body: ActionPlanUpdateBody,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    tenant_id: str = Depends(get_tenant_id),
+):
+    """Update status, due date, owner, notes or priority of an action item."""
+    item = (await db.execute(
+        select(ActionItem).where(
+            ActionItem.id == item_id,
+            ActionItem.tenant_id == tenant_id,
+        )
+    )).scalar_one_or_none()
+    if not item:
+        raise HTTPException(404, "Action item not found")
+
+    if body.status is not None:
+        try:
+            item.status = ActionItemStatus(body.status)
+        except ValueError:
+            raise HTTPException(422, f"Invalid status: {body.status}")
+    if body.priority is not None:
+        try:
+            item.priority = ActionItemPriority(body.priority)
+        except ValueError:
+            raise HTTPException(422, f"Invalid priority: {body.priority}")
+    if body.due_date is not None:
+        item.due_date = body.due_date or None
+    if body.notes is not None:
+        item.notes = body.notes
+    if body.owner_id is not None:
+        from app.core.security_utils import assert_user_in_tenant as _assert_user
+        await _assert_user(db, body.owner_id or None, tenant_id, field_name="owner_id")
+        item.owner_id = body.owner_id or None
+
+    await db.commit()
+    await db.refresh(item)
+
+    # Re-use list endpoint logic for single item response
+    items = await list_action_plan(db=db, _=current_user, tenant_id=tenant_id)
+    for i in items:
+        if i.id == item_id:
+            return i
+    raise HTTPException(500, "Failed to return updated item")
 
 
 @router.delete("/share-links/{link_id}", status_code=204)
