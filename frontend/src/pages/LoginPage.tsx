@@ -224,7 +224,15 @@ export default function LoginPage() {
             </p>
           </div>
           <p className="text-center text-xs text-slate-600">
-            {t("public.footer.powered_by")} <span className="font-semibold">SilentWolf</span>
+            {t("public.footer.powered_by")}{" "}
+            <a
+              href="https://silentwolf.io/"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="font-semibold hover:text-slate-300 transition-colors"
+            >
+              SilentWolf
+            </a>
           </p>
         </div>
       </div>

@@ -52,7 +52,17 @@ export default function PublicFooter() {
 
         <div className="border-t border-slate-800 pt-8 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-slate-600">
           <p>© {new Date().getFullYear()} GRCEye, Inc. All rights reserved.</p>
-          <p>Powered by <span className="font-semibold text-slate-500">SilentWolf</span></p>
+          <p>
+            Powered by{" "}
+            <a
+              href="https://silentwolf.io/"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="font-semibold text-slate-500 hover:text-slate-300 transition-colors"
+            >
+              SilentWolf
+            </a>
+          </p>
         </div>
       </div>
     </footer>
