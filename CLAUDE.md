@@ -29,11 +29,26 @@ cd frontend && npm run dev -- --port 4000
 
 ---
 
+## ⚠️ Production reality & gotchas — READ BEFORE WORKING
+
+This working copy **is the live production server for grceye.com** (real client data). Load-bearing facts the rest of this doc doesn't capture (full detail + evidence in the Obsidian memory vault at `~/Desktop/Claude-Memory` / `MEMORY.md`):
+
+- **Serving topology is 3 tiers**: browser → **marketing Next.js (:3000, the public front door)** → proxies to the **Vite dashboard (:4000)** and **FastAPI (:8000)**. The dashboard lives at `grceye.com/app`.
+- **PM2 runs only backend + marketing.** The **frontend is a bare Vite process on :4000, NOT in PM2** → never casually `npm run build` or restart it (no supervisor brings it back). Backend code change = `pm2 restart grceye-backend` (2 workers, no hot-reload).
+- **Prod runs in `development` mode** (`.env.local`: `ENVIRONMENT=development`, `DEBUG=true`) → hardening guards off, no HSTS, and `/api/v1/docs` is publicly exposed. Flipping to `production` crashes startup unless `SECRET_KEY`/`DEBUG` are fixed first.
+- **2 uvicorn workers ⇒ per-worker in-memory state**: JWT revocation, rate limits, license/AI-quota caches, and the threat scheduler are all split-brained (revocation unreliable, limits ~2×, feed double-fires). Put shared state in Redis + guard singletons.
+- **The Ed25519 license SIGNING key lives in `backend/.env.local` here** — grceye.com is the license-minting authority; treat that file as crown-jewel.
+- **Migrations are manual**: alembic is dead (no revisions). New *columns* = a hand-written idempotent `ALTER` script in `backend/scripts/`; new *tables* auto-create via `create_all()`.
+- **Traps**: frontend `plan` is cosmetic (always enterprise); `roles` JSON is ignored by backend authz (only scalar `role` + admin auto-pass); SettingsPage user-mgmt is mock data; uploads cap at **2 MB**; a 5xx/network error hard-redirects the SPA to `/service-down`.
+- **DB is `backend/grc_dev.db`** (git-tracked, real data) — never mutate in place; snapshot read-only first. No scheduled backups exist.
+
+---
+
 ## Architecture
 
 - **Backend**: FastAPI (Python 3.12+) + SQLAlchemy ORM + SQLite (dev) / PostgreSQL (prod)
 - **Frontend**: React 18 + TypeScript + Tailwind CSS + shadcn/ui
-- **AI**: Ollama (local, `http://localhost:11434`, model `deepseek-v3.1:671b-cloud`) — NOT Anthropic API
+- **AI**: Ollama (local, `http://localhost:11434`, model `gpt-oss:120b-cloud`) — NOT Anthropic API
 - **i18n**: react-i18next (en, fr, ar with full RTL support)
 - **Auth**: JWT + role-based access control
 - **Reports**: ReportLab PDF generation
@@ -286,7 +301,7 @@ GOVERNANCE: Regulatory Updates, Trust Center, Risk Quantification, Activity Log,
 
 ### AI Integration
 - **ALWAYS use Ollama** (http://localhost:11434), NEVER Anthropic API
-- Model: `deepseek-v3.1:671b-cloud` (configurable in config.py)
+- Model: `gpt-oss:120b-cloud` (config.py default; NOT overridden by any env file — change it in config.py, not `.env`)
 - AI access gate is **disabled** (AiGate just passes children through)
 - Config: `OLLAMA_BASE_URL`, `OLLAMA_CHAT_MODEL` in `backend/app/core/config.py`
 
