@@ -1814,6 +1814,31 @@ export default {
     analysis_failed: "Échec de l'analyse",
   },
 
+  license: {
+    title: "Activation de licence",
+    subtitle: "Cette installation nécessite une clé de licence valide",
+    status_label: "Statut de la licence",
+    customer: "Client",
+    plan: "Formule",
+    expires: "Expire le",
+    days_remaining: "Jours restants",
+    status_valid: "Valide",
+    status_expired: "Expirée",
+    status_missing: "Aucune licence",
+    status_invalid: "Invalide",
+    status_unconfigured: "Non configurée",
+    unavailable: "Service de licence indisponible sur ce serveur.",
+    key_label: "Clé de licence",
+    key_placeholder: "Collez votre clé de licence ici",
+    activate: "Activer",
+    activating: "Activation…",
+    success: "Licence activée avec succès. Redirection…",
+    contact_admin: "Une clé de licence est requise. Veuillez contacter votre administrateur.",
+    logout: "Se déconnecter",
+    err_generic: "Échec de l'activation. Vérifiez la clé et réessayez.",
+    banner: "La licence expire dans {{days}} jours — contactez votre fournisseur pour la renouveler.",
+  },
+
   public: {
     nav: {
       features: "Fonctionnalités",

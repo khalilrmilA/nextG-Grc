@@ -106,6 +106,15 @@ class ApiClient {
           return Promise.reject(error);
         }
 
+        // 402 = license required/expired (self-hosted licensed builds only) —
+        // send the user to the activation page. Never fires on the SaaS.
+        if (status === 402) {
+          if (window.location.pathname !== "/license") {
+            window.location.href = "/license";
+          }
+          return Promise.reject(error);
+        }
+
         const originalRequest = error.config;
 
         if (status === 401 && !originalRequest._retry) {

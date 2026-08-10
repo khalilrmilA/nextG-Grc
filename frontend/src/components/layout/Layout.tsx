@@ -456,6 +456,7 @@ export default function Layout() {
   const sc = sidebarTextClasses(appearance.sidebarStyle);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [showDemoToast, setShowDemoToast] = useState(false);
+  const [licenseDays, setLicenseDays] = useState<number | null>(null);
 
   // Refresh profile + roles from server on every app load.
   // This ensures role changes made by the admin take effect on the user's
@@ -500,6 +501,20 @@ export default function Layout() {
         authSession.patchUser({ plan: newPlan, daysRemaining });
       }).catch(() => {/* ignore — best effort */});
     });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // License expiry warning (self-hosted licensed builds only) — best effort,
+  // silently ignore any error (older backends have no /license endpoint).
+  useEffect(() => {
+    if (!user) return;
+    import("../../api/license").then(({ licenseApi }) => {
+      licenseApi.getStatus().then((s) => {
+        if (s.enforcement && s.status === "valid" && s.days_remaining !== null && s.days_remaining <= 30) {
+          setLicenseDays(s.days_remaining);
+        }
+      }).catch(() => {/* ignore — license service unavailable */});
+    }).catch(() => {/* ignore */});
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -731,6 +746,14 @@ export default function Layout() {
 
       {/* ── Main content ── */}
       <main className="flex-1 flex flex-col overflow-hidden min-w-0">
+        {/* License expiry warning (licensed self-hosted builds only) */}
+        {licenseDays !== null && (
+          <div className="flex items-center gap-2 px-4 py-2 bg-amber-50 border-b border-amber-200 text-amber-800 text-xs font-medium flex-shrink-0">
+            <AlertCircle className="w-3.5 h-3.5 flex-shrink-0 text-amber-600" />
+            {t("license.banner", { days: licenseDays })}
+          </div>
+        )}
+
         {/* Trial banner */}
         <TrialBanner />
 

@@ -1,0 +1,53 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# DATA-LEAK GUARD for on-prem client image builds (context = repo root).
+#
+# The live SaaS database, uploads, env files and secrets must NEVER enter a
+# build context — an image ships to client hardware. Matching uses Docker's
+# last-match-wins rule, so the `!release/seed/grc_seed.db` exception below
+# must stay AFTER the `**/*.db` exclusion it punches through. `!` exceptions
+# work against file-glob exclusions; do not replace the globs with a parent-
+# directory exclusion (e.g. `release/`) or the re-include will stop working.
+# ─────────────────────────────────────────────────────────────────────────────
+
+# VCS / tooling
+.git
+.gitignore
+.claude
+**/__pycache__
+**/*.pyc
+**/.pytest_cache
+**/.mypy_cache
+
+# Databases — the LIVE grc_dev.db above all. Only the cleaned seed re-enters.
+backend/grc_dev.db
+**/*.db
+**/*.db-wal
+**/*.db-shm
+**/*.sqlite
+**/*.sqlite3
+!release/seed/grc_seed.db
+
+# Customer files and local state
+backend/uploads
+backend/venv
+backend/env
+backend/logs
+test-documents
+*.pdf
+**/*.pdf
+*.xlsx
+**/*.xlsx
+
+# Env / secrets — every variant, everywhere
+**/.env*
+
+# Frontend / marketing — dist may be what production serves; marketing never ships
+node_modules
+**/node_modules
+frontend/dist
+marketing
+
+# Vendor-only docs and previous release outputs (keep seed + pyarmor regfile)
+DEPLOYMENT_PRIVATE.md
+release/*.tar.gz
+release/bundle-*

@@ -1814,6 +1814,31 @@ export default {
     analysis_failed: "Analysis failed",
   },
 
+  license: {
+    title: "License Activation",
+    subtitle: "This installation requires a valid license key",
+    status_label: "License status",
+    customer: "Customer",
+    plan: "Plan",
+    expires: "Expires",
+    days_remaining: "Days remaining",
+    status_valid: "Valid",
+    status_expired: "Expired",
+    status_missing: "No license",
+    status_invalid: "Invalid",
+    status_unconfigured: "Not configured",
+    unavailable: "License service unavailable on this server.",
+    key_label: "License key",
+    key_placeholder: "Paste your license key here",
+    activate: "Activate",
+    activating: "Activating…",
+    success: "License activated successfully. Redirecting…",
+    contact_admin: "A license key is required. Please contact your administrator.",
+    logout: "Sign out",
+    err_generic: "Activation failed. Please check the key and try again.",
+    banner: "License expires in {{days}} days — contact your provider to renew.",
+  },
+
   // Public marketing site (nav, footer, landing, blog, faq, news, contact, login, register)
   public: {
     nav: {

@@ -7,11 +7,13 @@ import {
   superAdminAccessApi,
   superAdminAiAccessApi,
   superAdminSubscriptionsApi,
+  superAdminLicensesApi,
   type SuperAdminUser,
   type SuperAdminFramework,
   type AccessControlEntry,
   type TenantSubscription,
   type CreatedUser,
+  type IssuedLicense,
 } from "../api/superadmin";
 import type { AiAccessRequest } from "../types";
 import {
@@ -20,6 +22,7 @@ import {
   Plus, AlertCircle, Loader2, X, CheckCircle, ThumbsUp, ThumbsDown, Pencil,
   Headphones, MessageSquare, Video, Send, PhoneOff, ChevronRight, RefreshCw, Bell,
   Activity, Clock, Filter, Download, Upload as UploadIcon, LogIn, UserPlus, Copy,
+  KeyRound,
 } from "lucide-react";
 import {
   supportApi,
@@ -1379,6 +1382,239 @@ function SubscriptionsTab() {
   );
 }
 
+// ── Licenses Tab ──────────────────────────────────────────────────────────────
+
+const LICENSE_DURATIONS = [
+  { value: "30",     label: "30 days"  },
+  { value: "90",     label: "90 days"  },
+  { value: "180",    label: "180 days" },
+  { value: "365",    label: "365 days (1 year)"  },
+  { value: "730",    label: "730 days (2 years)" },
+  { value: "custom", label: "Custom…" },
+];
+
+const LICENSE_PLANS = [
+  { value: "enterprise",   label: "Enterprise — all modules & features" },
+  { value: "professional", label: "Professional" },
+  { value: "starter",      label: "Starter" },
+];
+
+function CopyKeyButton({ licenseKey, className }: { licenseKey: string; className?: string }) {
+  const [copied, setCopied] = useState(false);
+  function copy() {
+    navigator.clipboard?.writeText(licenseKey).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  }
+  return (
+    <button type="button" onClick={copy}
+      className={className ?? "p-2 border border-gray-200 rounded-lg text-gray-500 hover:bg-gray-50 transition-colors flex-shrink-0"}
+      title="Copy license key">
+      {copied ? <CheckCircle className="w-4 h-4 text-green-600" /> : <Copy className="w-4 h-4" />}
+    </button>
+  );
+}
+
+function LicensesTab() {
+  const [licenses, setLicenses]   = useState<IssuedLicense[]>([]);
+  const [loading, setLoading]     = useState(true);
+  const [loadError, setLoadError] = useState("");
+
+  // Create form state
+  const [customerName, setCustomerName] = useState("");
+  const [contactEmail, setContactEmail] = useState("");
+  const [duration, setDuration]         = useState("365");
+  const [customDays, setCustomDays]     = useState("365");
+  const [plan, setPlan]                 = useState("enterprise");
+  const [notes, setNotes]               = useState("");
+  const [saving, setSaving]             = useState(false);
+  const [formError, setFormError]       = useState("");
+  const [created, setCreated]           = useState<IssuedLicense | null>(null);
+
+  useEffect(() => {
+    superAdminLicensesApi.list()
+      .then(data => { setLicenses(data); setLoading(false); })
+      .catch(() => { setLoadError("Failed to load issued licenses — the backend may not support licensing yet."); setLoading(false); });
+  }, []);
+
+  async function handleCreate(e: React.FormEvent) {
+    e.preventDefault();
+    const days = duration === "custom" ? parseInt(customDays, 10) : parseInt(duration, 10);
+    if (!Number.isInteger(days) || days < 1 || days > 3650) {
+      setFormError("Duration must be between 1 and 3650 days.");
+      return;
+    }
+    setSaving(true);
+    setFormError("");
+    setCreated(null);
+    try {
+      const lic = await superAdminLicensesApi.create({
+        customer_name: customerName.trim(),
+        contact_email: contactEmail.trim().toLowerCase(),
+        duration_days: days,
+        plan,
+        notes: notes.trim() || null,
+      });
+      setCreated(lic);
+      setLicenses(prev => [lic, ...prev]);
+      setCustomerName("");
+      setContactEmail("");
+      setNotes("");
+    } catch (err: unknown) {
+      const detail = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
+      setFormError(typeof detail === "string" ? detail : "Failed to generate license key. Please try again.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  if (loading) return <div className="flex justify-center py-20"><Loader2 className="w-8 h-8 animate-spin text-indigo-500" /></div>;
+
+  return (
+    <div className="space-y-6">
+      {/* Create form */}
+      <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
+        <h2 className="font-semibold text-gray-900 flex items-center gap-2 mb-4">
+          <KeyRound className="w-4 h-4 text-indigo-600" /> Issue New License
+        </h2>
+        <form onSubmit={handleCreate} className="space-y-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">Customer name *</label>
+              <input value={customerName} onChange={e => setCustomerName(e.target.value)} required placeholder="Acme Corp"
+                className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">Contact email *</label>
+              <input type="email" value={contactEmail} onChange={e => setContactEmail(e.target.value)} required placeholder="it@acme.com"
+                className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+            </div>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">Plan *</label>
+              <select value={plan} onChange={e => setPlan(e.target.value)}
+                className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white">
+                {LICENSE_PLANS.map(p => <option key={p.value} value={p.value}>{p.label}</option>)}
+              </select>
+              <p className="text-xs text-gray-400 mt-1">Enterprise unlocks every module — the default for self-hosted clients.</p>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">Duration *</label>
+              <select value={duration} onChange={e => setDuration(e.target.value)}
+                className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white">
+                {LICENSE_DURATIONS.map(d => <option key={d.value} value={d.value}>{d.label}</option>)}
+              </select>
+            </div>
+            {duration === "custom" && (
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">Custom duration (days, 1–3650) *</label>
+                <input type="number" min={1} max={3650} value={customDays} onChange={e => setCustomDays(e.target.value)} required
+                  className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+              </div>
+            )}
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-700 mb-1">Notes (optional)</label>
+            <input value={notes} onChange={e => setNotes(e.target.value)} placeholder="Internal reference, PO number…"
+              className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+          </div>
+          {formError && (
+            <div className="flex items-center gap-2 px-4 py-3 bg-red-50 border border-red-200 rounded-xl text-red-700 text-sm">
+              <AlertCircle className="w-4 h-4 flex-shrink-0" /> {formError}
+            </div>
+          )}
+          <button type="submit" disabled={saving}
+            className="flex items-center gap-2 px-4 py-2.5 bg-indigo-600 text-white rounded-xl text-sm font-medium hover:bg-indigo-700 transition-colors disabled:opacity-50">
+            {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
+            Generate License Key
+          </button>
+        </form>
+
+        {/* Result panel */}
+        {created && (
+          <div className="mt-5 p-5 bg-green-50 border border-green-200 rounded-xl space-y-3">
+            <div className="flex items-center gap-2 text-green-700 text-sm font-semibold flex-wrap">
+              <CheckCircle className="w-4 h-4 flex-shrink-0" />
+              License issued for {created.customer_name}
+              <span className={`px-2 py-0.5 rounded-full text-xs font-semibold capitalize ${TIER_COLORS[created.plan] ?? "bg-gray-100 text-gray-600"}`}>
+                {created.plan}
+              </span>
+              — expires {new Date(created.expires_at).toLocaleDateString()}
+            </div>
+            <div className="flex items-start gap-2">
+              <code className="flex-1 px-3 py-2.5 bg-white border border-green-200 rounded-xl text-xs font-mono break-all max-h-32 overflow-y-auto">
+                {created.license_key}
+              </code>
+              <CopyKeyButton licenseKey={created.license_key} />
+            </div>
+            <p className="text-xs text-green-700">
+              Send this key to the client ({created.contact_email}). Their administrator activates it on the installation's <span className="font-mono">/license</span> page.
+            </p>
+          </div>
+        )}
+      </div>
+
+      {/* Issued licenses table */}
+      {loadError ? (
+        <div className="flex items-center gap-2 px-4 py-3 bg-amber-50 border border-amber-200 rounded-xl text-amber-700 text-sm">
+          <AlertCircle className="w-4 h-4 flex-shrink-0" /> {loadError}
+        </div>
+      ) : (
+        <div>
+          <div className="overflow-x-auto rounded-xl border border-gray-200 shadow-sm">
+            <table className="w-full text-sm">
+              <thead className="bg-gray-50 border-b border-gray-200">
+                <tr>
+                  {["Customer", "Email", "Plan", "Issued", "Expires", "Status", "Key"].map(h => (
+                    <th key={h} className="px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100 bg-white">
+                {licenses.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} className="px-5 py-10 text-center text-sm text-gray-400">No licenses issued yet.</td>
+                  </tr>
+                ) : licenses.map(l => {
+                  const expired = new Date(l.expires_at) < new Date();
+                  return (
+                    <tr key={l.id} className="hover:bg-gray-50 transition-colors">
+                      <td className="px-5 py-3.5 font-medium text-gray-900">{l.customer_name}</td>
+                      <td className="px-5 py-3.5 text-gray-600">{l.contact_email}</td>
+                      <td className="px-5 py-3.5">
+                        <span className={`px-2.5 py-1 rounded-full text-xs font-semibold capitalize ${TIER_COLORS[l.plan] ?? "bg-gray-100 text-gray-600"}`}>
+                          {l.plan}
+                        </span>
+                      </td>
+                      <td className="px-5 py-3.5 text-gray-600">{new Date(l.issued_at).toLocaleDateString()}</td>
+                      <td className="px-5 py-3.5 text-gray-600">{new Date(l.expires_at).toLocaleDateString()}</td>
+                      <td className="px-5 py-3.5">
+                        <span className={`px-2.5 py-1 rounded-full text-xs font-semibold ${expired ? "bg-red-100 text-red-700" : "bg-green-100 text-green-700"}`}>
+                          {expired ? "expired" : "active"}
+                        </span>
+                      </td>
+                      <td className="px-5 py-3.5">
+                        <div className="flex items-center gap-2">
+                          <code className="text-xs font-mono text-gray-500">{l.license_key.slice(0, 20)}…</code>
+                          <CopyKeyButton licenseKey={l.license_key}
+                            className="p-1.5 border border-gray-200 rounded-lg text-gray-500 hover:bg-gray-50 transition-colors flex-shrink-0" />
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+          <p className="text-xs text-gray-400 mt-3">{licenses.length} license{licenses.length !== 1 ? "s" : ""} issued</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Support Tickets Tab ───────────────────────────────────────────────────────
 
 const STATUS_STYLES: Record<TicketStatus, string> = {
@@ -1862,13 +2098,14 @@ function ActivityLogTab() {
 
 // ── Main Page ─────────────────────────────────────────────────────────────────
 
-type TabId = "users" | "access" | "frameworks" | "subscriptions" | "ai-access" | "support" | "logs" | "settings";
+type TabId = "users" | "access" | "frameworks" | "subscriptions" | "licenses" | "ai-access" | "support" | "logs" | "settings";
 
 const TABS: { id: TabId; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
   { id: "users",         label: "Users",           icon: Users      },
   { id: "access",        label: "Access Control",  icon: Shield     },
   { id: "frameworks",    label: "Frameworks",      icon: BookOpen   },
   { id: "subscriptions", label: "Subscriptions",   icon: CreditCard },
+  { id: "licenses",      label: "Licenses",        icon: KeyRound   },
   { id: "ai-access",     label: "AI Requests",     icon: Sparkles   },
   { id: "support",       label: "Support Tickets", icon: Headphones },
   { id: "logs",          label: "Activity Logs",   icon: Activity   },
@@ -2013,6 +2250,7 @@ export default function SuperAdminPage() {
               {activeTab === "access"     && "Control which modules each tenant can access"}
               {activeTab === "frameworks" && "Upload and manage compliance frameworks"}
               {activeTab === "subscriptions" && "Manage tenant plans, statuses, and trial expiry dates"}
+              {activeTab === "licenses"     && "Generate and track license keys for self-hosted client installations"}
               {activeTab === "ai-access"    && "Review and approve AI feature access requests"}
               {activeTab === "support"      && "View and respond to user support tickets"}
               {activeTab === "logs"         && "Full audit trail of all user actions across all tenants"}
@@ -2030,6 +2268,7 @@ export default function SuperAdminPage() {
           {activeTab === "access"        && <AccessControlTab />}
           {activeTab === "frameworks"    && <FrameworksTab />}
           {activeTab === "subscriptions" && <SubscriptionsTab />}
+          {activeTab === "licenses"      && <LicensesTab />}
           {activeTab === "ai-access"     && <AiAccessTab />}
           {activeTab === "support"       && <SupportTab unread={supportUnread} onMarkRead={(id) => setSupportUnread(prev => { const n = new Set(prev); n.delete(id); return n; })} onTicketUpdate={() => {}} />}
           {activeTab === "logs"          && <ActivityLogTab />}

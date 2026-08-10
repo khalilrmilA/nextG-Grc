@@ -1,0 +1,110 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# GRC Platform — PROTECTED on-prem backend image
+#
+# Build context = REPO ROOT:
+#   docker build -f infrastructure/docker/Dockerfile.backend.onprem \
+#       --build-arg LICENSE_PUBLIC_KEY="<base64 raw ed25519 public key>" \
+#       [--build-arg PYARMOR_REGFILE=release/pyarmor/pyarmor-regfile.zip] \
+#       -t grc-backend:onprem .
+#
+# IMPORTANT — PyArmor licensing:
+#   The free PyArmor trial CANNOT obfuscate large scripts ("Too big code object,
+#   the limitation is 32768 bytes in trial version") and several files under
+#   backend/app (compliance.py, ai.py, vendors.py, ...) exceed that limit.
+#   A one-time PyArmor Basic (or Pro) license is REQUIRED for real client
+#   builds. Pass the purchased registration file via the PYARMOR_REGFILE build
+#   arg after copying it into the build context at release/pyarmor/
+#   (scripts/build_client_release.sh does this automatically).
+#
+# The license public key and LICENSED_BUILD=True are baked into
+# app/core/build_info.py BEFORE obfuscation, so the client cannot disable
+# license enforcement via environment variables.
+#
+# Prerequisite: release/seed/grc_seed.db must exist (built by
+# backend/scripts/make_client_seed_db.py — NEVER ship the live grc_dev.db).
+# ─────────────────────────────────────────────────────────────────────────────
+
+# ── Stage 1: obfuscate ───────────────────────────────────────────────────────
+FROM python:3.12-slim AS obfuscate
+
+ARG LICENSE_PUBLIC_KEY
+# Path (relative to the build context) of a purchased PyArmor registration
+# file. Empty = trial mode (will FAIL on this codebase — see header comment).
+ARG PYARMOR_REGFILE=""
+
+RUN pip install --no-cache-dir pyarmor
+
+WORKDIR /src
+COPY backend/app ./app
+
+# Optional regfile: `.dockerignore` always exists at the context root, so this
+# COPY succeeds even when release/pyarmor/ is absent (the [r] glob matches
+# nothing instead of erroring).
+COPY .dockerignore release/pyarmo[r]/ /tmp/pyarmor-reg/
+RUN if [ -n "$PYARMOR_REGFILE" ]; then \
+        pyarmor reg "/tmp/pyarmor-reg/$(basename "$PYARMOR_REGFILE")"; \
+    fi
+
+# Bake the licensed-build constants BEFORE obfuscation — overwrites the repo
+# defaults (LICENSED_BUILD = False, empty key) so enforcement cannot be
+# disabled by the client at runtime.
+RUN if [ -z "$LICENSE_PUBLIC_KEY" ]; then \
+        echo "ERROR: LICENSE_PUBLIC_KEY build arg is required" >&2; exit 1; \
+    fi \
+    && printf 'LICENSED_BUILD = True\nLICENSE_PUBLIC_KEY = "%s"\n' "$LICENSE_PUBLIC_KEY" > app/core/build_info.py \
+    && python -c "import ast, pathlib; ast.parse(pathlib.Path('app/core/build_info.py').read_text())"
+
+# Obfuscate the whole app package (recursive). Output: /obf/app plus the
+# pyarmor_runtime_* package alongside it.
+RUN pyarmor gen -O /obf -r app
+
+# PyArmor only processes .py files — carry over every other asset (Jinja2
+# email templates, YAML, JSON, ...) preserving relative paths.
+RUN cd app && find . -type f ! -name "*.py" ! -path "*__pycache__*" \
+        -exec cp --parents {} /obf/app/ \;
+
+# ── Stage 2: runtime ─────────────────────────────────────────────────────────
+FROM python:3.12-slim AS runtime
+
+# curl only (healthcheck). All Python deps install from manylinux wheels on
+# 3.12-slim, so no build toolchain is needed.
+RUN apt-get update && apt-get install -y --no-install-recommends curl \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY backend/requirements.txt /tmp/requirements.txt
+RUN pip install --no-cache-dir -r /tmp/requirements.txt && rm /tmp/requirements.txt
+
+WORKDIR /srv
+# /srv holds the obfuscated `app` package AND the pyarmor_runtime_* package —
+# both must be importable by uvicorn and the celery worker.
+ENV PYTHONPATH=/srv
+
+# Obfuscated app + pyarmor runtime package
+COPY --from=obfuscate /obf/ /srv/
+
+# Alembic (migrations for future updates) + framework YAML files. The YAML
+# loader resolves the repo-root frameworks/ dir to /frameworks inside the
+# container (app lives at /srv/app).
+COPY backend/alembic /srv/alembic
+COPY backend/alembic.ini /srv/alembic.ini
+COPY frameworks /frameworks
+
+# Clean seed database (built by backend/scripts/make_client_seed_db.py).
+# The entrypoint copies it to /data/grc.db on first boot only.
+COPY release/seed/grc_seed.db /seed/grc_seed.db
+
+COPY infrastructure/docker/entrypoint.backend.sh /entrypoint.sh
+RUN chmod 0755 /entrypoint.sh
+
+# Non-root user; /data is the persistent volume mountpoint (db + uploads)
+RUN groupadd -r grc && useradd -r -g grc -d /srv grc \
+    && mkdir -p /data \
+    && chown -R grc:grc /srv /seed /data
+
+USER grc
+
+EXPOSE 8000
+
+ENTRYPOINT ["/entrypoint.sh"]
+# Default command — the celery worker service overrides this in compose.
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

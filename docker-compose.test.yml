@@ -1,0 +1,63 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# GRC Platform — QUICK TEST stack (build from source, run in Docker)
+#
+# Purpose: run the whole app in Docker on any machine to SEE it work — no
+# PyArmor, no license keys required. NOT the client deliverable.
+#
+#   1) Copy this repo folder to a machine that has Docker.
+#   2) Make sure release/seed/grc_seed.db exists (clean seed DB — see TEST_DOCKER.md).
+#   3) docker compose -f docker-compose.test.yml up --build
+#   4) Open http://localhost:8080   (login with the seeded admin from step 2)
+#
+# Optional local AI (compliance analysis, doc generator, etc.):
+#   docker compose -f docker-compose.test.yml --profile ai up --build -d
+#   docker compose -f docker-compose.test.yml exec ai ollama pull llama3.1:8b
+#   # then set OLLAMA_CHAT_MODEL below to the model you pulled
+# ─────────────────────────────────────────────────────────────────────────────
+
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: infrastructure/docker/Dockerfile.backend.test
+    image: grc-backend:test
+    environment:
+      ENVIRONMENT: development         # avoids the prod SECRET_KEY guard for a quick test
+      DEBUG: "false"
+      # License enforcement stays OFF (build default) — the app is fully usable.
+      LICENSE_ENFORCEMENT: "false"
+      # AI: point at the optional `ai` service below, or a GPU box on your LAN.
+      OLLAMA_BASE_URL: http://ai:11434
+      OLLAMA_CHAT_MODEL: llama3.1:8b
+    volumes:
+      - grc_test_data:/data           # DB + uploads persist here
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  frontend:
+    build:
+      context: .
+      dockerfile: infrastructure/docker/Dockerfile.frontend.onprem
+    image: grc-frontend:test
+    ports:
+      - "8080:80"                      # browse http://localhost:8080
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+  # Optional local AI — only started with `--profile ai`.
+  ai:
+    image: ollama/ollama
+    profiles: ["ai"]
+    restart: unless-stopped
+    volumes:
+      - ollama_models:/root/.ollama
+
+volumes:
+  grc_test_data:
+  ollama_models:

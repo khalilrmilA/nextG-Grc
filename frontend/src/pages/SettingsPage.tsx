@@ -5,7 +5,7 @@ import {
   Settings, User, Bell, Shield, Globe, Palette,
   Save, Eye, EyeOff, Check, AlertTriangle,
   Lock, Crown, Trash2, Plus, Loader2, Zap,
-  Sun, Moon, Monitor, RotateCcw,
+  Sun, Moon, Monitor, RotateCcw, KeyRound,
 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuthStore, PLAN_FEATURES, type PlanTier } from "../store/auth";
@@ -14,6 +14,7 @@ import type { NotificationPreference, NotificationType, NotificationChannel } fr
 import { useAppearance, appearanceStore, type ThemeMode, type Density, type AccentColor, type FontSize, type SidebarStyle } from "../store/appearance";
 import { useFramework } from "../context/FrameworkContext";
 import AiAccessRequestDialog from "../components/features/ai/AiAccessRequestDialog";
+import LicenseKeyModal from "../components/license/LicenseKeyModal";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -1189,7 +1190,9 @@ export default function SettingsPage() {
   const user    = useAuthStore(u => u);
   const isAdmin = user?.role === "ciso";
   const isSuperAdmin = user?.role === "super_admin";
+  const canManageLicense = user?.role === "tenant_admin" || user?.role === "super_admin";
   const plan    = user?.plan ?? "free_trial";
+  const [licenseOpen, setLicenseOpen] = useState(false);
 
   const [searchParams] = useSearchParams();
   const [activeTab, setActiveTab] = useState<Tab>(() => {
@@ -1282,6 +1285,12 @@ export default function SettingsPage() {
             {!isAdmin && plan !== "enterprise" && (
               <p className="mt-2 text-xs text-gray-400">{PLAN_FEATURES[plan].label}</p>
             )}
+            {canManageLicense && (
+              <button type="button" onClick={() => setLicenseOpen(true)}
+                className="mt-3 flex items-center justify-center gap-1.5 w-full px-3 py-2 rounded-lg text-xs font-medium bg-indigo-600 text-white hover:bg-indigo-700 transition-colors">
+                <KeyRound className="w-3.5 h-3.5" /> Enter license key
+              </button>
+            )}
           </div>
         </aside>
 
@@ -1290,6 +1299,10 @@ export default function SettingsPage() {
           {tabContent(activeTab)}
         </div>
       </div>
+
+      {canManageLicense && (
+        <LicenseKeyModal open={licenseOpen} onClose={() => setLicenseOpen(false)} />
+      )}
     </div>
   );
 }

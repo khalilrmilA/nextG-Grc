@@ -1814,6 +1814,31 @@ export default {
     analysis_failed: "فشل التحليل",
   },
 
+  license: {
+    title: "تفعيل الترخيص",
+    subtitle: "يتطلب هذا التثبيت مفتاح ترخيص صالحاً",
+    status_label: "حالة الترخيص",
+    customer: "العميل",
+    plan: "الخطة",
+    expires: "تاريخ الانتهاء",
+    days_remaining: "الأيام المتبقية",
+    status_valid: "صالح",
+    status_expired: "منتهي الصلاحية",
+    status_missing: "لا يوجد ترخيص",
+    status_invalid: "غير صالح",
+    status_unconfigured: "غير مُهيأ",
+    unavailable: "خدمة الترخيص غير متوفرة على هذا الخادم.",
+    key_label: "مفتاح الترخيص",
+    key_placeholder: "الصق مفتاح الترخيص هنا",
+    activate: "تفعيل",
+    activating: "جارٍ التفعيل…",
+    success: "تم تفعيل الترخيص بنجاح. جارٍ إعادة التوجيه…",
+    contact_admin: "مفتاح الترخيص مطلوب. يرجى التواصل مع مسؤولك.",
+    logout: "تسجيل الخروج",
+    err_generic: "فشل التفعيل. يرجى التحقق من المفتاح والمحاولة مجدداً.",
+    banner: "تنتهي صلاحية الترخيص خلال {{days}} يوماً — تواصل مع مزودك للتجديد.",
+  },
+
   public: {
     nav: {
       features: "الميزات",

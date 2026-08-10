@@ -1,7 +1,7 @@
 """Super admin endpoints — platform-wide user and tenant management."""
 import logging
 from typing import Annotated
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -9,8 +9,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_
 from pydantic import BaseModel, EmailStr, Field, field_serializer
 
+from app.core.config import settings
 from app.core.database import get_db
+from app.core.licensing import LICENSE_PRODUCT, sign_license, normalize_plan
 from app.core.security import hash_password
+from app.models.license import IssuedLicense
 from app.models.user import User, UserRole
 from app.models.tenant import Tenant
 from app.models.subscription import Subscription, SubscriptionTier, SubscriptionStatus
@@ -589,3 +592,93 @@ async def update_subscription(
         status=sub.status.value,
         trial_ends_at=sub.trial_ends_at,
     )
+
+
+# ── License management ────────────────────────────────────────────────────────
+
+class IssueLicenseRequest(BaseModel):
+    customer_name: str = Field(..., min_length=1, max_length=255)
+    contact_email: EmailStr
+    duration_days: int = Field(..., ge=1, le=3650)
+    plan: str = "enterprise"  # starter | professional | enterprise
+    notes: str | None = None
+
+
+class IssuedLicenseResponse(BaseModel):
+    id: str
+    customer_name: str
+    contact_email: str
+    license_key: str
+    plan: str
+    issued_at: str
+    expires_at: str
+    notes: str | None
+
+    model_config = {"from_attributes": True}
+
+
+@router.post("/licenses", response_model=IssuedLicenseResponse, status_code=201)
+async def issue_license(
+    body: IssueLicenseRequest,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: Annotated[User, Depends(_require_super_admin())],
+):
+    """Mint and sign a client license key. Requires LICENSE_PRIVATE_KEY on this server."""
+    if not settings.LICENSE_PRIVATE_KEY:
+        raise HTTPException(status_code=503, detail="License signing key not configured")
+
+    now = datetime.now(timezone.utc)
+    issued_at = now.strftime("%Y-%m-%dT%H:%M:%SZ")
+    expires_at = (now + timedelta(days=body.duration_days)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    plan = normalize_plan(body.plan)
+
+    payload = {
+        "lid": uuid4().hex,
+        "product": LICENSE_PRODUCT,
+        "customer": body.customer_name.strip(),
+        "email": body.contact_email,
+        "plan": plan,
+        "issued_at": issued_at,
+        "expires_at": expires_at,
+    }
+    license_key = sign_license(payload, settings.LICENSE_PRIVATE_KEY)
+
+    lic = IssuedLicense(
+        customer_name=payload["customer"],
+        contact_email=body.contact_email,
+        license_key=license_key,
+        lid=payload["lid"],
+        plan=plan,
+        issued_at=issued_at,
+        expires_at=expires_at,
+        notes=body.notes,
+        created_by=current_user.email,
+    )
+    db.add(lic)
+    await db.flush()
+
+    logger.info("super-admin %s issued %s license %s for %s (%s days)",
+                current_user.email, plan, lic.lid, lic.customer_name, body.duration_days)
+
+    return IssuedLicenseResponse(
+        id=lic.id,
+        customer_name=lic.customer_name,
+        contact_email=lic.contact_email,
+        license_key=lic.license_key,
+        plan=lic.plan,
+        issued_at=lic.issued_at,
+        expires_at=lic.expires_at,
+        notes=lic.notes,
+    )
+
+
+@router.get("/licenses", response_model=list[IssuedLicenseResponse])
+async def list_licenses(
+    db: Annotated[AsyncSession, Depends(get_db)],
+    _: Annotated[User, Depends(_require_super_admin())],
+):
+    """List all issued licenses, newest first."""
+    result = await db.execute(
+        select(IssuedLicense).order_by(IssuedLicense.created_at.desc())
+    )
+    return result.scalars().all()

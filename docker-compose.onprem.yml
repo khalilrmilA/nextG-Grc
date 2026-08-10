@@ -1,0 +1,104 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# GRC Platform — ON-PREM client deployment
+#
+# Images are pre-built by the vendor (scripts/build_client_release.sh) and
+# delivered as a tarball — clients run `docker load`, never `docker build`.
+# NO source code is mounted anywhere; the backend image contains only
+# PyArmor-obfuscated bytecode.
+#
+#   cp .env.onprem.example .env.onprem   # then fill in the values
+#   docker compose -f docker-compose.onprem.yml up -d
+#
+# Only the frontend publishes a port (80). Keep this host on the client LAN
+# behind a firewall — see INSTALL.md. All customer data lives in the grc_data
+# volume (/data = SQLite DB + uploads); back it up by copying that volume.
+#
+# Optional local AI:
+#   docker compose -f docker-compose.onprem.yml --profile ai up -d
+#   docker compose -f docker-compose.onprem.yml exec ai ollama pull <model>
+# ─────────────────────────────────────────────────────────────────────────────
+
+services:
+  backend:
+    image: grc-backend:onprem
+    env_file: .env.onprem
+    environment:
+      # Service-name wiring is fixed by this compose file, not client config.
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/1
+      CELERY_RESULT_BACKEND: redis://redis:6379/2
+    volumes:
+      - grc_data:/data
+    restart: unless-stopped
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  # Celery worker — async tasks (notifications, compliance scoring, ...).
+  # Same protected image as the backend; only the command differs.
+  worker:
+    image: grc-backend:onprem
+    command: ["celery", "-A", "app.workers.celery_app", "worker", "--loglevel=info", "--concurrency=2"]
+    env_file: .env.onprem
+    environment:
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/1
+      CELERY_RESULT_BACKEND: redis://redis:6379/2
+    volumes:
+      - grc_data:/data
+    restart: unless-stopped
+    depends_on:
+      redis:
+        condition: service_healthy
+      backend:
+        condition: service_healthy   # backend seeds /data/grc.db first
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    # Internal only — no published ports.
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  frontend:
+    image: grc-frontend:onprem
+    ports:
+      - "80:80"
+    restart: unless-stopped
+    depends_on:
+      - backend
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://localhost/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+  # ── Optional: local AI (profile "ai") ──────────────────────────────────────
+  # Started only with `--profile ai`. After first start, pull the chat model
+  # configured as OLLAMA_CHAT_MODEL in .env.onprem:
+  #   docker compose -f docker-compose.onprem.yml exec ai ollama pull <model>
+  # Then set OLLAMA_BASE_URL=http://ai:11434 in .env.onprem. For GPU inference
+  # point OLLAMA_BASE_URL at a dedicated GPU box on the client LAN instead.
+  ai:
+    image: ollama/ollama
+    profiles: ["ai"]
+    restart: unless-stopped
+    # Internal only — the backend reaches it via the compose network.
+    volumes:
+      - ollama_models:/root/.ollama
+
+volumes:
+  grc_data:
+  redis_data:
+  ollama_models:

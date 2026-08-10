@@ -113,6 +113,25 @@ export const superAdminSubscriptionsApi = {
     apiClient.patch<TenantSubscription>(`/admin/subscriptions/${tenant_id}`, data).then((r) => r.data),
 };
 
+export interface IssuedLicense {
+  id: string;
+  customer_name: string;
+  contact_email: string;
+  license_key: string;
+  plan: string;
+  issued_at: string;
+  expires_at: string;
+  notes: string | null;
+}
+
+export const superAdminLicensesApi = {
+  list: () =>
+    apiClient.get<IssuedLicense[]>("/admin/licenses").then((r) => r.data),
+
+  create: (data: { customer_name: string; contact_email: string; duration_days: number; plan: string; notes?: string | null }) =>
+    apiClient.post<IssuedLicense>("/admin/licenses", data).then((r) => r.data),
+};
+
 export const superAdminAiAccessApi = {
   listAiRequests: (status?: "pending" | "approved" | "denied") =>
     apiClient

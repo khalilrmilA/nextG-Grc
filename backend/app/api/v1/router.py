@@ -37,6 +37,7 @@ from app.api.v1.endpoints import (
     public_chat,
     public_contact,
     support,
+    license,
 )
 
 api_router = APIRouter()
@@ -77,3 +78,4 @@ api_router.include_router(public_upload.router, prefix="/public", tags=["Public 
 api_router.include_router(public_chat.router, prefix="/public", tags=["Public Support Chat"])
 api_router.include_router(public_contact.router, prefix="/public", tags=["Public Contact Form"])
 api_router.include_router(support.router, prefix="/support/tickets", tags=["Support Tickets"])
+api_router.include_router(license.router, prefix="/license", tags=["License"])

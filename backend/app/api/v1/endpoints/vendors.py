@@ -585,7 +585,7 @@ async def upload_vendor_contract(
         raise HTTPException(status_code=404, detail="Vendor not found")
 
     # Create upload directory if it doesn't exist
-    upload_dir = Path("uploads/contracts")
+    upload_dir = Path(settings.UPLOADS_DIR) / "contracts"
     upload_dir.mkdir(parents=True, exist_ok=True)
 
     # Sanitize the client-supplied filename and verify the resolved path

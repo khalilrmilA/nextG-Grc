@@ -46,6 +46,7 @@ import VendorCollaborationPage from "./pages/VendorCollaborationPage";
 import EvidenceUploadPage from "./pages/EvidenceUploadPage";
 import CompanyAdminPage from "./pages/CompanyAdminPage";
 import SupportPage from "./pages/SupportPage";
+import LicenseActivationPage from "./pages/LicenseActivationPage";
 
 function PrivateRoute({ children, requiredModule }: { readonly children: React.ReactNode; requiredModule?: string }) {
   const user = useAuthStore((u) => u);
@@ -146,6 +147,7 @@ export default function App() {
     <Routes>
       {/* ── Public routes (no authentication required) ── */}
       <Route path="/service-down" element={<ServiceDownPage />} />
+      <Route path="/license" element={<LicenseActivationPage />} />
       <Route path="/upload/:token" element={<EvidenceUploadPage />} />
       <Route path="/vendor-collab/:shareToken" element={<VendorCollaborationPage />} />
       <Route path="/login" element={<PublicOnlyRoute><LoginPage /></PublicOnlyRoute>} />

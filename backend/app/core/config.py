@@ -91,11 +91,17 @@ class Settings(BaseSettings):
     ENABLE_AI_COPILOT: bool = False
     ENABLE_CONTINUOUS_MONITORING: bool = False
 
+    # Licensing
+    LICENSE_PRIVATE_KEY: str = ""   # base64 of the 32-byte Ed25519 private seed — vendor SaaS server ONLY
+    LICENSE_PUBLIC_KEY: str = ""    # base64 of the 32-byte raw public key — client installs
+    LICENSE_ENFORCEMENT: bool = False
+
 
 _INSECURE_SECRETS = {
     "change-me-in-production",
     "dev-local-secret-key-abc123xyz789",
     "dev-secret-key-do-not-use-in-production-abc123",
+    "REPLACE_ME_WITH_64_RANDOM_URLSAFE_CHARS",  # .env.onprem.example placeholder
     "",
 }
 

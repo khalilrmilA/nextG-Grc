@@ -15,6 +15,7 @@ from app.api.v1.router import api_router
 from app.core.seed_mandatory_docs import seed_mandatory_documents
 from app.services.threat_scheduler import start_threat_scheduler
 from app.core.activity_middleware import ActivityLogMiddleware
+from app.core.license_middleware import LicenseEnforcementMiddleware
 from app.core.security_middleware import SecurityHeadersMiddleware
 from app.core.rate_limit import limiter, rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
@@ -79,6 +80,8 @@ def create_application() -> FastAPI:
     application.add_middleware(GZipMiddleware, minimum_size=1000)
     application.add_middleware(ActivityLogMiddleware)
     application.add_middleware(SecurityHeadersMiddleware, is_production=is_production())
+    # License enforcement — always registered; no-op unless enforcement is enabled
+    application.add_middleware(LicenseEnforcementMiddleware)
     application.add_middleware(
         CORSMiddleware,
         allow_origins=settings.ALLOWED_ORIGINS,
