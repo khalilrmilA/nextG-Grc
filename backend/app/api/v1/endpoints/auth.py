@@ -488,7 +488,8 @@ async def forgot_password(request: Request, body: ForgotPasswordRequest, db: Asy
     """Generate a temporary password and send it to the user's email.
     Always returns 204 to avoid email enumeration."""
     import secrets, string
-    result = await db.execute(select(User).where(User.email == body.email))
+    email = body.email.strip().lower()
+    result = await db.execute(select(User).where(User.email == email))
     user = result.scalar_one_or_none()
     if not user or not user.is_active:
         # Silent — don't reveal whether the email exists.
@@ -496,12 +497,17 @@ async def forgot_password(request: Request, body: ForgotPasswordRequest, db: Asy
 
     alphabet = string.ascii_letters + string.digits
     tmp_password = "".join(secrets.choice(alphabet) for _ in range(16))
-    user.hashed_password = hash_password(tmp_password)
-    await db.commit()
+    user_id, user_email = user.id, user.email
 
+    # Release the DB connection before the (slow) SMTP round-trip so the
+    # pool isn't pinned while we wait on the mail relay.
+    await db.rollback()
+
+    # Send the email FIRST — only change the password once delivery succeeded,
+    # otherwise a failed send would lock the user out of their current password.
     from app.services.email_service import send_email
-    await send_email(
-        to_email=user.email,
+    sent = await send_email(
+        to_email=user_email,
         subject="Your temporary password — GRCEye",
         template_name="notification.html",
         context={
@@ -512,6 +518,20 @@ async def forgot_password(request: Request, body: ForgotPasswordRequest, db: Asy
             ),
         },
     )
+    if not sent:
+        logger.error(
+            "forgot-password: email delivery failed for %s — password left unchanged",
+            _hash_email_for_log(user_email),
+        )
+        return None
+
+    result = await db.execute(select(User).where(User.id == user_id))
+    user = result.scalar_one_or_none()
+    if user is None:  # deleted while we were sending — nothing to update
+        return None
+    user.hashed_password = hash_password(tmp_password)
+    await db.commit()
+    logger.info("forgot-password: temporary password emailed to %s", _hash_email_for_log(user_email))
     return None
 
 

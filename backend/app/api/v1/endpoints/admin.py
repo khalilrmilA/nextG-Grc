@@ -7,14 +7,15 @@ from uuid import uuid4
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_
-from pydantic import BaseModel, field_serializer
+from pydantic import BaseModel, EmailStr, Field, field_serializer
 
 from app.core.database import get_db
+from app.core.security import hash_password
 from app.models.user import User, UserRole
 from app.models.tenant import Tenant
 from app.models.subscription import Subscription, SubscriptionTier, SubscriptionStatus
 from app.models.ai_access import AiAccessRequest, AiUsageQuota
-from app.api.v1.dependencies.auth import require_roles
+from app.api.v1.dependencies.auth import get_current_user
 from app.workers.tasks.notifications import (
     notify_ai_access_approved,
     notify_ai_access_request,
@@ -27,8 +28,16 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
+async def _super_admin_only(current_user: User = Depends(get_current_user)) -> User:
+    """Strict super-admin gate. require_roles() cannot be used here: it
+    short-circuits for tenant_admin, which must NOT reach platform-wide /admin."""
+    if current_user.role != UserRole.SUPER_ADMIN:
+        raise HTTPException(status_code=403, detail="Super admin access required")
+    return current_user
+
+
 def _require_super_admin():
-    return require_roles(UserRole.SUPER_ADMIN)
+    return _super_admin_only
 
 
 # ── Response schemas ──────────────────────────────────────────────────────────
@@ -50,6 +59,19 @@ class AdminUserResponse(BaseModel):
 class UpdateUserRequest(BaseModel):
     is_active: bool | None = None
     role: str | None = None
+
+
+class CreateUserAdminRequest(BaseModel):
+    email: EmailStr
+    first_name: str = Field(..., min_length=1, max_length=100)
+    last_name: str = Field(..., min_length=1, max_length=100)
+    role: str
+    tenant_id: str
+    password: str | None = Field(default=None, min_length=8, max_length=200)
+
+
+class CreateUserAdminResponse(AdminUserResponse):
+    temporary_password: str
 
 
 class TenantAccessResponse(BaseModel):
@@ -89,6 +111,69 @@ async def list_all_users(
     ]
 
 
+@router.post("/users", response_model=CreateUserAdminResponse, status_code=201)
+async def create_user(
+    body: CreateUserAdminRequest,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: Annotated[User, Depends(_require_super_admin())],
+):
+    """Create a user in any tenant. Generates a temporary password unless one is supplied.
+    The password is returned once in the response and never again."""
+    import secrets
+    import string
+
+    email = body.email.strip().lower()
+    existing = await db.execute(select(User).where(User.email == email))
+    if existing.scalar_one_or_none():
+        raise HTTPException(status_code=400, detail="Email already registered")
+
+    tenant_result = await db.execute(select(Tenant).where(Tenant.id == body.tenant_id))
+    tenant = tenant_result.scalar_one_or_none()
+    if not tenant:
+        raise HTTPException(status_code=404, detail="Tenant not found")
+
+    try:
+        role = UserRole(body.role)
+    except ValueError:
+        raise HTTPException(status_code=400, detail=f"Invalid role: {body.role}")
+    if role == UserRole.SUPER_ADMIN:
+        # Platform admins must never be mintable over HTTP.
+        raise HTTPException(status_code=403, detail="Cannot create super admin accounts")
+
+    alphabet = string.ascii_letters + string.digits
+    password = body.password or "".join(secrets.choice(alphabet) for _ in range(16))
+
+    user = User(
+        tenant_id=tenant.id,
+        email=email,
+        hashed_password=hash_password(password),
+        first_name=body.first_name.strip(),
+        last_name=body.last_name.strip(),
+        role=role,
+        roles=[role.value],
+        is_verified=True,
+    )
+    db.add(user)
+    await db.flush()
+    await db.refresh(user)  # load server-side defaults (created_at) on the async session
+
+    logger.info("super-admin %s created user %s (role=%s, tenant=%s)",
+                current_user.email, email, role.value, tenant.name)
+
+    return CreateUserAdminResponse(
+        id=user.id,
+        email=user.email,
+        first_name=user.first_name,
+        last_name=user.last_name,
+        role=user.role.value,
+        is_active=user.is_active,
+        tenant_id=user.tenant_id,
+        tenant_name=tenant.name,
+        created_at=user.created_at.isoformat() if user.created_at else "",
+        temporary_password=password,
+    )
+
+
 @router.patch("/users/{user_id}", response_model=AdminUserResponse)
 async def update_user(
     user_id: str,
@@ -106,9 +191,12 @@ async def update_user(
         user.is_active = body.is_active
     if body.role is not None:
         try:
-            user.role = UserRole(body.role)
+            new_role = UserRole(body.role)
         except ValueError:
             raise HTTPException(status_code=400, detail=f"Invalid role: {body.role}")
+        if new_role == UserRole.SUPER_ADMIN:
+            raise HTTPException(status_code=403, detail="Cannot promote users to super admin")
+        user.role = new_role
 
     await db.flush()
 

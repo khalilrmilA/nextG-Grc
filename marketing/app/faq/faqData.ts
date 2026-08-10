@@ -1,4 +1,4 @@
-// Categories + question ids — actual Q&A text lives in the i18n locale files
+// Categories + question ids - actual Q&A text lives in the i18n locale files
 // under the `public.faq_q.*_q` / `*_a` keys, and category headings under
 // `public.faq.cat_*`. Adjust here if you add/remove questions.
 export const FAQ_ITEMS = [

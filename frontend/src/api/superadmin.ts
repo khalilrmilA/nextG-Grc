@@ -38,9 +38,25 @@ export interface TenantSubscription {
   trial_ends_at: string | null;
 }
 
+export interface CreateUserPayload {
+  email: string;
+  first_name: string;
+  last_name: string;
+  role: string;
+  tenant_id: string;
+  password?: string;
+}
+
+export interface CreatedUser extends SuperAdminUser {
+  temporary_password: string;
+}
+
 export const superAdminUsersApi = {
   listAll: () =>
     apiClient.get<SuperAdminUser[]>("/admin/users").then((r) => r.data),
+
+  create: (data: CreateUserPayload) =>
+    apiClient.post<CreatedUser>("/admin/users", data).then((r) => r.data),
 
   setActive: (id: string, is_active: boolean) =>
     apiClient.patch<SuperAdminUser>(`/admin/users/${id}`, { is_active }).then((r) => r.data),

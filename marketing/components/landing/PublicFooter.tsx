@@ -8,7 +8,7 @@ export default function PublicFooter() {
           <div className="md:col-span-2">
             <img src="/logo-horizontal.png" alt="GRCEye" className="h-12 w-auto object-contain bg-white/95 rounded-xl px-3 py-1.5 mb-4" />
             <p className="text-sm text-slate-500 leading-relaxed max-w-sm">
-              Enterprise GRC platform for security teams. Risk management, compliance tracking, audit workflows, and AI-powered document generation — all in one place.
+              Enterprise GRC platform for security teams. Risk management, compliance tracking, audit workflows, and AI-powered document generation, all in one place.
             </p>
             <div className="flex gap-3 mt-5">
               {[

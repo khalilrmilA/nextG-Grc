@@ -2,13 +2,13 @@ import type { Metadata } from "next";
 import ContactView from "./ContactView";
 
 export const metadata: Metadata = {
-  title: "Contact GRCEye — Book a Demo, Sales or Support",
+  title: "Contact GRCEye: Book a Demo, Sales or Support",
   description:
     "Talk to the GRCEye team. Sales, support, partnerships, demos. We typically reply within one business day.",
   keywords: "contact GRCEye, GRC demo, GRC sales contact, GRCEye support",
   alternates: { canonical: "/contact" },
   openGraph: {
-    title: "Contact GRCEye — Book a Demo, Sales or Support | GRCEye",
+    title: "Contact GRCEye: Book a Demo, Sales or Support | GRCEye",
     description:
       "Talk to the GRCEye team. Sales, support, partnerships, demos. We typically reply within one business day.",
     url: "/contact",
@@ -22,7 +22,7 @@ const contactJsonLd = {
   "@type": "ContactPage",
   url: "https://grceye.com/contact",
   name: "Contact GRCEye",
-  description: "Get in touch with the GRCEye team — sales, support, partnerships.",
+  description: "Get in touch with the GRCEye team: sales, support, partnerships.",
 };
 
 export default function ContactPage() {

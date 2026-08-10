@@ -179,7 +179,7 @@ function DashboardMockup() {
           ))}
         </div>
         <div className="flex-1 p-4 bg-gray-50 overflow-hidden">
-          <p className="text-[10px] font-bold text-gray-700 mb-3">Security Overview — Q2 2026</p>
+          <p className="text-[10px] font-bold text-gray-700 mb-3">Security Overview: Q2 2026</p>
           <div className="grid grid-cols-3 gap-2 mb-3">
             {[
               { label: "Compliance Score", value: "76%", color: "text-blue-600", bg: "bg-blue-50 border-blue-100" },
@@ -238,7 +238,7 @@ function RiskHeatmapMockup() {
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-2">
             <AlertTriangle className="w-4 h-4 text-red-500" />
-            <span className="text-sm font-bold text-gray-800">Risk Heatmap — Q2 2026</span>
+            <span className="text-sm font-bold text-gray-800">Risk Heatmap: Q2 2026</span>
           </div>
           <span className="text-[10px] bg-red-50 text-red-600 font-semibold px-2 py-0.5 rounded-full border border-red-100">4 Critical</span>
         </div>
@@ -373,9 +373,9 @@ function AuditMockup() {
 function PolicyMockup() {
   const policies = [
     { name: "Information Security Policy", version: "v3.1", status: "Published", attestation: "94%" },
-    { name: "Access Control Policy", version: "v2.0", status: "Under Review", attestation: "—" },
+    { name: "Access Control Policy", version: "v2.0", status: "Under Review", attestation: "N/A" },
     { name: "Incident Response Plan", version: "v1.5", status: "Published", attestation: "88%" },
-    { name: "BYOD & Remote Work Policy", version: "v1.0", status: "Draft", attestation: "—" },
+    { name: "BYOD & Remote Work Policy", version: "v1.0", status: "Draft", attestation: "N/A" },
   ];
   const statusColor: Record<string,string> = { Published:"bg-green-50 text-green-700 border-green-100", "Under Review":"bg-yellow-50 text-yellow-700 border-yellow-100", Draft:"bg-gray-50 text-gray-600 border-gray-100" };
   return (
@@ -450,7 +450,7 @@ function AIMockup() {
 function VendorChatMockup() {
   const messages = [
     { from: "Vendor (Acme IT)", text: "We've uploaded our SOC 2 report and updated our DPA.", side: "left",  color: "bg-blue-50 border-blue-100 text-blue-900" },
-    { from: "Your Team",        text: "AI review flagged 3 clauses in section 4 — liability cap is below threshold.", side: "right", color: "bg-gradient-to-br from-indigo-600 to-purple-600 text-white border-transparent" },
+    { from: "Your Team",        text: "AI review flagged 3 clauses in section 4: liability cap is below threshold.", side: "right", color: "bg-gradient-to-br from-indigo-600 to-purple-600 text-white border-transparent" },
     { from: "Vendor (Acme IT)", text: "Our legal team will send a redline by EOD.", side: "left",  color: "bg-blue-50 border-blue-100 text-blue-900" },
   ];
   return (
@@ -469,7 +469,7 @@ function VendorChatMockup() {
           <div className="w-7 h-7 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-lg flex items-center justify-center">
             <Building2 className="w-3.5 h-3.5 text-white" />
           </div>
-          <span className="text-xs font-bold text-gray-800">Acme IT Services — Contract Review</span>
+          <span className="text-xs font-bold text-gray-800">Acme IT Services: Contract Review</span>
           <span className="ml-auto text-[9px] bg-yellow-50 text-yellow-700 font-semibold px-2 py-0.5 rounded-full border border-yellow-100">Under Review</span>
         </div>
         {messages.map((m, i) => (

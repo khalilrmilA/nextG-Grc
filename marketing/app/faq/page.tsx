@@ -7,15 +7,15 @@ type FaqQ = Record<string, string>;
 const FAQ_Q = (en as { public: { faq_q: FaqQ } }).public.faq_q;
 
 export const metadata: Metadata = {
-  title: "GRCEye FAQ — Pricing, Security & Compliance Questions",
+  title: "GRCEye FAQ: Pricing, Security & Compliance Questions",
   description:
-    "Answers to common questions about GRCEye — pricing, security, integrations, frameworks, AI features and the auditor portal.",
+    "Answers to common questions about GRCEye: pricing, security, integrations, frameworks, AI features and the auditor portal.",
   keywords: "GRCEye FAQ, GRC platform pricing, GRC security, compliance software questions",
   alternates: { canonical: "/faq" },
   openGraph: {
-    title: "GRCEye FAQ — Pricing, Security, Frameworks & Integrations | GRCEye",
+    title: "GRCEye FAQ: Pricing, Security, Frameworks & Integrations | GRCEye",
     description:
-      "Answers to common questions about GRCEye — pricing, security, integrations, frameworks, AI features and the auditor portal.",
+      "Answers to common questions about GRCEye: pricing, security, integrations, frameworks, AI features and the auditor portal.",
     url: "/faq",
     type: "website",
     images: ["/logo-horizontal.png"],

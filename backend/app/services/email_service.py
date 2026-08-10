@@ -21,6 +21,7 @@ async def send_email(
     subject: str,
     template_name: str = "notification.html",
     context: dict,
+    reply_to: str | None = None,
 ) -> bool:
     """
     Send an HTML email using the given Jinja2 template.
@@ -44,6 +45,8 @@ async def send_email(
         msg["Subject"] = subject
         msg["From"] = settings.EMAIL_FROM
         msg["To"] = to_email
+        if reply_to:
+            msg["Reply-To"] = reply_to
         msg.attach(MIMEText(html_body, "html"))
 
         smtp_kwargs: dict = {
@@ -51,6 +54,9 @@ async def send_email(
             "port": settings.SMTP_PORT,
             "use_tls": settings.SMTP_PORT == 465,
             "start_tls": settings.SMTP_PORT == 587,
+            # Bound the SMTP round-trip so a hung relay can't pin request
+            # resources for aiosmtplib's 60s default.
+            "timeout": 15,
         }
         if settings.SMTP_USER and settings.SMTP_PASSWORD:
             smtp_kwargs["username"] = settings.SMTP_USER
@@ -66,6 +72,14 @@ async def send_email(
 
 
 # ── Typed helpers for each notification type ─────────────────────────────────
+
+async def send_notification_email(*, to_email: str, subject: str, body: str, action_url: str | None = None) -> bool:
+    """Generic notification email — used by the async notification workers."""
+    context: dict = {"title": subject, "message": body}
+    if action_url:
+        context["action_url"] = action_url
+        context["action_label"] = "Open"
+    return await send_email(to_email=to_email, subject=subject, context=context)
 
 async def send_risk_alert(*, to_email: str, risk_title: str, severity: str, org: str, risk_url: str) -> bool:
     badge_colors = {"critical": "red", "high": "orange", "medium": "yellow", "low": "gray"}

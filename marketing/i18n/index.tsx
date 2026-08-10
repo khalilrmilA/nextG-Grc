@@ -87,7 +87,7 @@ export function I18nProvider({ children }: { children: React.ReactNode }) {
 export function useI18n() {
   const v = useContext(Ctx);
   if (!v) {
-    // Outside the provider (e.g. in a server component) — return a sensible fallback
+    // Outside the provider (e.g. in a server component): return a sensible fallback
     // so calls don't crash; UI will just show the EN string.
     return {
       lang: "en" as Language,

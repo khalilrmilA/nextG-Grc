@@ -201,7 +201,7 @@ export default function HowItWorksView() {
               ))}
             </div>
 
-            {/* Visual mock — intentionally kept in English as UI demo */}
+            {/* Visual mock - intentionally kept in English as UI demo */}
             <div className="bg-gradient-to-br from-slate-900 to-indigo-950 rounded-2xl p-5 shadow-xl">
               <div className="flex items-center gap-2 mb-4 pb-3 border-b border-white/10">
                 <div className="w-8 h-8 bg-blue-500 rounded-lg flex items-center justify-center">
@@ -217,12 +217,12 @@ export default function HowItWorksView() {
                 <div className="flex gap-2">
                   <div className="w-6 h-6 rounded-full bg-blue-500 flex items-center justify-center text-white text-xs font-bold flex-shrink-0">Y</div>
                   <div className="bg-white/10 rounded-xl rounded-tl-none px-3 py-2 text-xs text-white/80 max-w-[80%]">
-                    Section 4.2 — data retention clause needs updating to 90 days per our GDPR DPA.
+                    Section 4.2: data retention clause needs updating to 90 days per our GDPR DPA.
                   </div>
                 </div>
                 <div className="flex gap-2 justify-end">
                   <div className="bg-blue-600/80 rounded-xl rounded-tr-none px-3 py-2 text-xs text-white max-w-[80%]">
-                    Updated. Also revised the liability cap in 8.1 — please review.
+                    Updated. Also revised the liability cap in 8.1. Please review.
                   </div>
                   <div className="w-6 h-6 rounded-full bg-violet-500 flex items-center justify-center text-white text-xs font-bold flex-shrink-0">V</div>
                 </div>
@@ -236,7 +236,7 @@ export default function HowItWorksView() {
                 <div className="flex gap-2">
                   <div className="w-6 h-6 rounded-full bg-blue-500 flex items-center justify-center text-white text-xs font-bold flex-shrink-0">Y</div>
                   <div className="bg-white/10 rounded-xl rounded-tl-none px-3 py-2 text-xs text-white/80 max-w-[80%]">
-                    Agreed — updating to €500K. Uploading v4 now.
+                    Agreed. Updating to €500K. Uploading v4 now.
                   </div>
                 </div>
               </div>
@@ -282,7 +282,7 @@ export default function HowItWorksView() {
             ))}
           </div>
 
-          {/* Output mockup — intentionally in English as UI demo */}
+          {/* Output mockup - intentionally in English as UI demo */}
           <div className="bg-white border border-gray-200 rounded-2xl shadow-sm overflow-hidden">
             <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 bg-violet-50/50">
               <div className="flex items-center gap-3">
@@ -401,7 +401,7 @@ export default function HowItWorksView() {
           {/* Gap report mockup */}
           <div className="bg-white border border-gray-200 rounded-2xl shadow-sm overflow-hidden">
             <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
-              <p className="font-semibold text-gray-900">ISO 27001:2022 — Gap Analysis Report</p>
+              <p className="font-semibold text-gray-900">ISO 27001:2022 Gap Analysis Report</p>
               <div className="flex gap-3 text-xs font-semibold">
                 <span className="text-red-600">4 Critical</span>
                 <span className="text-amber-600">12 High</span>
@@ -475,10 +475,10 @@ export default function HowItWorksView() {
           <p className="text-lg text-gray-500 mb-14 max-w-2xl">{t("public.hiw.f06_subtitle")}</p>
 
           <div className="grid lg:grid-cols-2 gap-10 items-start">
-            {/* Q&A examples — kept in English as demo content */}
+            {/* Q&A examples - kept in English as demo content */}
             <div className="space-y-4">
               {[
-                { q: "What's the difference between ISO 27001 and NIS2 for my FinTech?", a: "ISO 27001 is a voluntary certification you pursue to demonstrate ISMS maturity to customers and partners. NIS2 is an EU legal obligation enforced by national authorities — non-compliance carries fines up to €10M or 2% of global turnover. For a FinTech, you likely need both: ISO 27001 to win enterprise deals, NIS2 to operate legally within the EU." },
+                { q: "What's the difference between ISO 27001 and NIS2 for my FinTech?", a: "ISO 27001 is a voluntary certification you pursue to demonstrate ISMS maturity to customers and partners. NIS2 is an EU legal obligation enforced by national authorities. Non-compliance carries fines up to €10M or 2% of global turnover. For a FinTech, you likely need both: ISO 27001 to win enterprise deals, NIS2 to operate legally within the EU." },
                 { q: "How many ISO 27001 controls do we currently have evidence for?", a: "Based on your active assessment, you have evidence uploaded for 67 of 93 Annex A controls (72%). 8 controls are marked Critical-gap with no evidence. Would you like me to list the open critical controls?" },
                 { q: "What does DORA require for third-party ICT risk?", a: "Under DORA Article 28, you must: (1) maintain a register of all ICT third-party providers, (2) classify them by criticality, (3) include mandatory contractual clauses on audit rights and exit strategies, and (4) conduct at minimum annual risk assessments of critical providers. GRCEye's vendor module covers all four requirements." },
               ].map(({ q, a }) => (
@@ -518,7 +518,7 @@ export default function HowItWorksView() {
                   <div className="bg-cyan-500/10 border border-cyan-500/30 rounded-xl p-3 text-xs text-white/80 leading-relaxed">
                     <span className="text-cyan-300 font-semibold">Across your 3 active frameworks:</span><br />
                     ISO 27001: 72% · SOC 2: 84% · GDPR: 61%<br />
-                    Your lowest area is GDPR — 8 critical gaps remain open. The most pressing is Article 30 (Records of Processing Activities). Assign it?
+                    Your lowest area is GDPR: 8 critical gaps remain open. The most pressing is Article 30 (Records of Processing Activities). Assign it?
                   </div>
                 </div>
                 <div className="flex gap-2">

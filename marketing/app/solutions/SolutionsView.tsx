@@ -19,14 +19,14 @@ const INDUSTRIES = [
     border: "border-blue-200",
     label: "SaaS & Technology",
     headline: "Turn SOC 2 and ISO 27001 into a sales asset",
-    ceoValue: "Every enterprise deal that asks for SOC 2 evidence is either closed faster or lost to a competitor who has a Trust Center ready. GRCEye gets you certified — and keeps you there.",
+    ceoValue: "Every enterprise deal that asks for SOC 2 evidence is either closed faster or lost to a competitor who has a Trust Center ready. GRCEye gets you certified, and keeps you there.",
     metrics: [
       { value: "3–5 weeks", label: "faster enterprise deal cycles" },
       { value: "Day 1", label: "full control library live" },
       { value: "30 sec", label: "to generate a board report" },
     ],
     points: [
-      "Pre-built SOC 2 Trust Service Criteria controls — nothing to build",
+      "Pre-built SOC 2 Trust Service Criteria controls: nothing to build",
       "ISO 27001:2022 gap analysis in hours instead of 6–8 weeks",
       "Live Trust Center replaces PDF attachments in sales calls",
       "AI-generated security policies tailored to your product",
@@ -41,8 +41,8 @@ const INDUSTRIES = [
     bg: "bg-rose-50",
     border: "border-rose-200",
     label: "Healthcare & Life Sciences",
-    headline: "HIPAA and GDPR — with a complete audit trail",
-    ceoValue: "A single HIPAA breach costs an average of $10.9M. GRCEye keeps your compliance programme continuous and your evidence always audit-ready — so you're never exposed.",
+    headline: "HIPAA and GDPR, with a complete audit trail",
+    ceoValue: "A single HIPAA breach costs an average of $10.9M. GRCEye keeps your compliance programme continuous and your evidence always audit-ready, so you're never exposed.",
     metrics: [
       { value: "$10.9M", label: "average HIPAA breach cost (avoidable)" },
       { value: "Automated", label: "breach notification workflows" },
@@ -52,7 +52,7 @@ const INDUSTRIES = [
       "HIPAA Security Rule, Privacy Rule, and Breach Notification controls",
       "Breach notification workflow with timeline tracking",
       "DPA templates and data subject request management",
-      "Role-based access — staff see only what they need",
+      "Role-based access: staff see only what they need",
       "Weekly automated compliance reports for leadership",
     ],
     frameworks: ["HIPAA", "GDPR", "ISO 27001:2022", "NIST 800-53"],
@@ -64,15 +64,15 @@ const INDUSTRIES = [
     bg: "bg-emerald-50",
     border: "border-emerald-200",
     label: "Financial Services & FinTech",
-    headline: "DORA, PCI DSS, and NIS2 — in one platform",
-    ceoValue: "Regulatory overlap is costing FinTechs 2–3x more than it should. GRCEye maps controls once and satisfies multiple regulators simultaneously — one team, one tool, multiple audits.",
+    headline: "DORA, PCI DSS, and NIS2 in one platform",
+    ceoValue: "Regulatory overlap is costing FinTechs 2–3x more than it should. GRCEye maps controls once and satisfies multiple regulators simultaneously: one team, one tool, multiple audits.",
     metrics: [
       { value: "60%", label: "reduction in duplicate compliance work" },
       { value: "5 pillars", label: "DORA coverage out of the box" },
-      { value: "Jan 2025", label: "DORA enforced — are you ready?" },
+      { value: "Jan 2025", label: "DORA enforced. Are you ready?" },
     ],
     points: [
-      "DORA digital operational resilience — all 5 pillars",
+      "DORA digital operational resilience: all 5 pillars",
       "PCI DSS 4.0 cardholder data environment controls",
       "NIS2 Directive implementation mapped and tracked",
       "Vendor risk cartography for supply chain exposure",
@@ -88,7 +88,7 @@ const INDUSTRIES = [
     border: "border-violet-200",
     label: "Enterprise",
     headline: "Multi-framework GRC that scales with complexity",
-    ceoValue: "Large organisations waste millions on fragmented GRC tools, external consultants, and manual reporting. GRCEye consolidates everything — 70+ frameworks, 9 roles, unlimited business units — into one cost centre.",
+    ceoValue: "Large organisations waste millions on fragmented GRC tools, external consultants, and manual reporting. GRCEye consolidates everything (70+ frameworks, 9 roles, unlimited business units) into one cost centre.",
     metrics: [
       { value: "40–45%", label: "lower total compliance cost" },
       { value: "70+", label: "frameworks in one platform" },
@@ -97,7 +97,7 @@ const INDUSTRIES = [
     points: [
       "Multi-tenant isolation for subsidiaries and business units",
       "9 built-in roles with module-level access control",
-      "70+ frameworks with cross-walk mappings — no overlap duplication",
+      "70+ frameworks with cross-walk mappings: no overlap duplication",
       "Webhook integrations with existing SIEM and ticketing tools",
       "Full activity log and audit trail for every user action",
     ],
@@ -122,13 +122,13 @@ const CEO_BENEFITS = [
     icon: BarChart3,
     color: "from-violet-500 to-purple-600",
     title: "Board reporting in 30 seconds",
-    body: "Stop waiting two days for a compliance status update. Generate a board-ready PDF — risk exposure, compliance score, open gaps, audit findings — in a single click.",
+    body: "Stop waiting two days for a compliance status update. Generate a board-ready PDF (risk exposure, compliance score, open gaps, audit findings) in a single click.",
   },
   {
     icon: Shield,
     color: "from-rose-500 to-pink-600",
     title: "Regulatory risk is visible, not buried",
-    body: "When a new regulation hits — DORA, NIS2, EU AI Act — GRCEye maps your existing controls to the new framework instantly. Your exposure is quantified before the regulator knocks.",
+    body: "When a new regulation hits (DORA, NIS2, EU AI Act), GRCEye maps your existing controls to the new framework instantly. Your exposure is quantified before the regulator knocks.",
   },
 ];
 
@@ -163,7 +163,7 @@ const STAKEHOLDERS = [
     points: [
       "Evidence collection automated, not manual",
       "AI writes remediation steps so you fix faster",
-      "Cross-framework evidence reuse — upload once",
+      "Cross-framework evidence reuse: upload once",
       "Auditor portal replaces email back-and-forth",
     ],
   },
@@ -210,7 +210,7 @@ const STAKEHOLDERS = [
     highlight: false,
     badge: null,
     points: [
-      "Scoped portal — no email attachments",
+      "Scoped portal: no email attachments",
       "12 months of continuous evidence, not a 6-week pack",
       "Findings logged directly in the platform",
     ],
@@ -244,7 +244,7 @@ export default function SolutionsView() {
               href="/register"
               className="group inline-flex items-center gap-2 bg-gradient-to-br from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-semibold px-6 py-3 rounded-xl transition-all shadow-md hover:shadow-lg hover:shadow-blue-500/25"
             >
-              Start free — no credit card
+              Start free, no credit card
               <ArrowRight className="w-4 h-4 transition-transform group-hover:translate-x-0.5" />
             </Link>
             <Link
@@ -282,10 +282,10 @@ export default function SolutionsView() {
         <div className="max-w-5xl mx-auto">
           <div className="text-center mb-14">
             <h2 className="text-3xl sm:text-4xl font-extrabold text-gray-900 mb-4">
-              The business case — in four lines
+              The business case, in four lines
             </h2>
             <p className="text-lg text-gray-500 max-w-2xl mx-auto">
-              GRC is not an IT cost. It is a revenue driver, a risk buffer, and a board-confidence tool — when it is automated.
+              GRC is not an IT cost. It is a revenue driver, a risk buffer, and a board-confidence tool, when it is automated.
             </p>
           </div>
           <div className="grid sm:grid-cols-2 gap-6">
@@ -322,7 +322,7 @@ export default function SolutionsView() {
                   key={ind.key}
                   className={`flex flex-col ${isEven ? "lg:flex-row" : "lg:flex-row-reverse"} gap-8 items-stretch`}
                 >
-                  {/* Left/right panel — business framing */}
+                  {/* Left/right panel - business framing */}
                   <div className={`flex-1 rounded-2xl ${ind.bg} border ${ind.border} p-8 flex flex-col justify-between`}>
                     <div>
                       <div className="flex items-center gap-3 mb-4">
@@ -344,7 +344,7 @@ export default function SolutionsView() {
                     </div>
                   </div>
 
-                  {/* Right/left panel — what's included */}
+                  {/* Right/left panel - what's included */}
                   <div className="flex-1 bg-white border border-gray-200 rounded-2xl p-8">
                     <h4 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-4">What&apos;s included</h4>
                     <ul className="space-y-3 mb-6">
@@ -378,7 +378,7 @@ export default function SolutionsView() {
         <div className="max-w-5xl mx-auto">
           <div className="text-center mb-14">
             <h2 className="text-3xl sm:text-4xl font-extrabold text-gray-900 mb-4">
-              One platform — every stakeholder gets what they need
+              One platform: every stakeholder gets what they need
             </h2>
             <p className="text-lg text-gray-500">
               GRCEye is built so the CEO has a live dashboard, the CISO has a full programme, and the auditor never needs to send an email.
@@ -430,7 +430,7 @@ export default function SolutionsView() {
               </div>
               <h2 className="text-2xl sm:text-3xl font-extrabold mb-3">AI that never leaves your infrastructure</h2>
               <p className="text-slate-300 leading-relaxed max-w-2xl mx-auto mb-8">
-                Every AI feature in GRCEye — document generation, contract review, gap analysis, vendor prescreening —
+                Every AI feature in GRCEye (document generation, contract review, gap analysis, vendor prescreening)
                 runs on your own servers. No data is sent to OpenAI, Anthropic, or any external provider.
                 This makes GRCEye suitable for the most sensitive regulated environments, including EU-only data processing.
               </p>

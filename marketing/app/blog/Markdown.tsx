@@ -30,7 +30,7 @@ export default function Markdown({ source }: { source: string }) {
       i++; continue;
     }
 
-    // Markdown table — pipe-separated, second row is divider with dashes
+    // Markdown table: pipe-separated, second row is divider with dashes
     if (line.startsWith("|") && i + 1 < lines.length && lines[i + 1].startsWith("|") && /---/.test(lines[i + 1])) {
       const headerCells = splitRow(line);
       const rows: string[][] = [];
@@ -94,7 +94,7 @@ export default function Markdown({ source }: { source: string }) {
       continue;
     }
 
-    // Paragraph — collect consecutive non-empty, non-block lines
+    // Paragraph: collect consecutive non-empty, non-block lines
     const para: string[] = [line];
     i++;
     while (
@@ -125,7 +125,7 @@ function splitRow(line: string): string[] {
 }
 
 function renderInline(text: string): React.ReactNode {
-  // Tokenize bold, code, and links — sequential pass.
+  // Tokenize bold, code, and links: sequential pass.
   const out: React.ReactNode[] = [];
   let remaining = text;
   let key = 0;

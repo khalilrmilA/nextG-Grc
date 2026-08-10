@@ -172,7 +172,7 @@ export default function ArticlePage({ params }: { params: { slug: string } }) {
           <div className="max-w-2xl mx-auto text-center">
             <h2 className="text-2xl sm:text-3xl font-extrabold mb-3">Ready to operationalize this?</h2>
             <p className="text-blue-100 mb-8">
-              GRCEye gives security teams a single platform for risk, compliance, audit, vendor risk, and policy — with AI that runs on your own infrastructure.
+              GRCEye gives security teams a single platform for risk, compliance, audit, vendor risk, and policy, with AI that runs on your own infrastructure.
             </p>
             <div className="flex flex-col sm:flex-row gap-3 justify-center">
               <Link href="/register" className="inline-flex items-center justify-center gap-2 bg-white text-blue-700 font-semibold px-6 py-3 rounded-xl hover:bg-blue-50 transition-colors shadow-md">

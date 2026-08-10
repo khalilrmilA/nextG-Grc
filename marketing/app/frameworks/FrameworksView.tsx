@@ -9,7 +9,7 @@ import {
   Layers, PenLine, GitFork, Plus, Search,
 } from "lucide-react";
 
-/* ─── Static data (proper names / technical IDs — not translated) ─── */
+/* ─── Static data (proper names / technical IDs - not translated) ─── */
 const FEATURED_STATIC = [
   { name: "ISO 27001:2022", controls: 93, badgeColor: "bg-blue-600 text-white" },
   { name: "SOC 2 Type II", controls: 64, badgeColor: "bg-indigo-100 text-indigo-800" },
@@ -70,7 +70,7 @@ const FRAMEWORK_GROUPS_STATIC = [
   },
 ];
 
-/* ─── Cross-walk table rows (technical IDs — not translated) ─── */
+/* ─── Cross-walk table rows (technical IDs - not translated) ─── */
 const CROSSWALK_ROWS = [
   { control: "Access Control Policy", fw1: "A.8.3", fw2: "CC6.1", fw3: "Art. 32", fw4: "PR.AC-1" },
   { control: "Encryption at Rest", fw1: "A.8.24", fw2: "CC6.7", fw3: "Art. 32(1)(a)", fw4: "PR.DS-1" },
@@ -282,7 +282,7 @@ export default function FrameworksView() {
               </div>
             </div>
 
-            {/* Fork UI mockup — kept in English as demo content */}
+            {/* Fork UI mockup - kept in English as demo content */}
             <div className="bg-gradient-to-br from-slate-900 to-indigo-950 rounded-2xl p-5 shadow-xl">
               <div className="flex items-center gap-2 mb-5 pb-3 border-b border-white/10">
                 <Layers className="w-4 h-4 text-violet-400" />
@@ -314,7 +314,7 @@ export default function FrameworksView() {
               <div className="bg-violet-500/15 border border-violet-400/40 rounded-xl p-4 mb-2">
                 <div className="flex items-start justify-between mb-2">
                   <div>
-                    <p className="text-sm font-bold text-white">ISO 27001 — Acme Corp (Custom)</p>
+                    <p className="text-sm font-bold text-white">ISO 27001 - Acme Corp (Custom)</p>
                     <p className="text-xs text-white/50">93 controls + 7 custom · Forked from ISO 27001:2022</p>
                   </div>
                   <span className="text-xs bg-violet-400/30 text-violet-300 font-semibold px-2 py-0.5 rounded-full">Your fork</span>
@@ -341,7 +341,7 @@ export default function FrameworksView() {
         <div className="max-w-5xl mx-auto">
           <div className="grid lg:grid-cols-2 gap-12 items-center">
 
-            {/* Builder UI mockup — kept in English as demo content */}
+            {/* Builder UI mockup - kept in English as demo content */}
             <div className="bg-white border border-gray-200 rounded-2xl shadow-sm overflow-hidden order-2 lg:order-1">
               <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between bg-emerald-50/50">
                 <div className="flex items-center gap-2">
@@ -386,7 +386,7 @@ export default function FrameworksView() {
                     <p className="text-xs font-semibold text-emerald-800">AI suggestion</p>
                   </div>
                   <p className="text-xs text-emerald-700 leading-relaxed">
-                    Based on &quot;AI Governance&quot; category, consider adding: AI Training Data Management, Model Version Control, and Algorithmic Bias Assessment controls — aligned with EU AI Act Article 9–12.
+                    Based on &quot;AI Governance&quot; category, consider adding: AI Training Data Management, Model Version Control, and Algorithmic Bias Assessment controls, aligned with EU AI Act Article 9–12.
                   </p>
                   <button className="mt-2 text-xs font-semibold text-emerald-700 hover:text-emerald-900">Add suggested controls →</button>
                 </div>

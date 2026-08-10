@@ -75,6 +75,8 @@ async def submit_contact_form(request: Request, body: ContactRequest):
             subject=f"[GRCEye Contact] {subject} — {body.name}",
             template_name="contact_form.html",
             context=email_context,
+            # Let sales hit "Reply" and reach the lead directly.
+            reply_to=body.email,
         )
         if sent:
             any_sent = True

@@ -11,6 +11,7 @@ import {
   type SuperAdminFramework,
   type AccessControlEntry,
   type TenantSubscription,
+  type CreatedUser,
 } from "../api/superadmin";
 import type { AiAccessRequest } from "../types";
 import {
@@ -18,7 +19,7 @@ import {
   ToggleLeft, ToggleRight, Trash2, Upload,
   Plus, AlertCircle, Loader2, X, CheckCircle, ThumbsUp, ThumbsDown, Pencil,
   Headphones, MessageSquare, Video, Send, PhoneOff, ChevronRight, RefreshCw, Bell,
-  Activity, Clock, Filter, Download, Upload as UploadIcon, LogIn,
+  Activity, Clock, Filter, Download, Upload as UploadIcon, LogIn, UserPlus, Copy,
 } from "lucide-react";
 import {
   supportApi,
@@ -191,6 +192,183 @@ function EditSubscriptionModal({
   );
 }
 
+const CREATE_ROLE_OPTIONS: { value: string; label: string }[] = [
+  { value: "tenant_admin",       label: "Tenant Admin"       },
+  { value: "ciso",               label: "CISO"               },
+  { value: "risk_manager",       label: "Risk Manager"       },
+  { value: "compliance_manager", label: "Compliance Manager" },
+  { value: "policy_manager",     label: "Policy Manager"     },
+  { value: "vendor_manager",     label: "Vendor Manager"     },
+  { value: "control_owner",      label: "Control Owner"      },
+  { value: "auditor",            label: "Auditor"            },
+  { value: "viewer",             label: "Viewer"             },
+];
+
+function CreateUserModal({
+  tenants,
+  onClose,
+  onCreated,
+}: {
+  readonly tenants: AccessControlEntry[];
+  readonly onClose: () => void;
+  readonly onCreated: (user: SuperAdminUser) => void;
+}) {
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName]   = useState("");
+  const [email, setEmail]         = useState("");
+  const [role, setRole]           = useState("ciso");
+  const [tenantId, setTenantId]   = useState(tenants[0]?.tenant_id ?? "");
+  const [password, setPassword]   = useState("");
+  const [saving, setSaving]       = useState(false);
+  const [error, setError]         = useState("");
+  const [created, setCreated]     = useState<CreatedUser | null>(null);
+  const [copied, setCopied]       = useState(false);
+
+  async function handleCreate(e: React.FormEvent) {
+    e.preventDefault();
+    if (!email.trim() || !firstName.trim() || !lastName.trim() || !tenantId) {
+      setError("Please fill in all required fields.");
+      return;
+    }
+    if (password && password.length < 8) {
+      setError("Password must be at least 8 characters (or leave blank to auto-generate).");
+      return;
+    }
+    setSaving(true);
+    setError("");
+    try {
+      const user = await superAdminUsersApi.create({
+        email: email.trim().toLowerCase(),
+        first_name: firstName.trim(),
+        last_name: lastName.trim(),
+        role,
+        tenant_id: tenantId,
+        ...(password ? { password } : {}),
+      });
+      setCreated(user);
+      onCreated(user);
+    } catch (err: unknown) {
+      const detail = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
+      setError(typeof detail === "string" ? detail : "Failed to create user. Please try again.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function copyPassword() {
+    if (!created) return;
+    navigator.clipboard?.writeText(created.temporary_password).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+          <h2 className="font-semibold text-gray-900 flex items-center gap-2">
+            <UserPlus className="w-4 h-4 text-indigo-600" /> Create User
+          </h2>
+          <button type="button" onClick={onClose} disabled={saving}
+            className="p-1 rounded-lg hover:bg-gray-100 text-gray-400 disabled:opacity-40"><X className="w-4 h-4" /></button>
+        </div>
+
+        {created ? (
+          <div className="p-6 space-y-5">
+            <div className="flex items-center gap-2 text-green-700 bg-green-50 border border-green-200 px-4 py-3 rounded-xl text-sm">
+              <CheckCircle className="w-4 h-4 flex-shrink-0" />
+              User <strong>{created.email}</strong> created in {created.tenant_name}.
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">Temporary password</label>
+              <div className="flex items-center gap-2">
+                <code className="flex-1 px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm font-mono tracking-wide">
+                  {created.temporary_password}
+                </code>
+                <button type="button" onClick={copyPassword}
+                  className="p-2.5 border border-gray-200 rounded-xl text-gray-500 hover:bg-gray-50 transition-colors" title="Copy password">
+                  {copied ? <CheckCircle className="w-4 h-4 text-green-600" /> : <Copy className="w-4 h-4" />}
+                </button>
+              </div>
+              <p className="text-xs text-amber-600 mt-2">
+                This password is shown only once — share it with the user securely. They should change it after first login.
+              </p>
+            </div>
+            <button type="button" onClick={onClose}
+              className="w-full py-2.5 bg-indigo-600 text-white rounded-xl text-sm font-medium hover:bg-indigo-700 transition-colors">
+              Done
+            </button>
+          </div>
+        ) : (
+          <form onSubmit={handleCreate} className="p-6 space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">First name *</label>
+                <input value={firstName} onChange={e => setFirstName(e.target.value)}
+                  className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">Last name *</label>
+                <input value={lastName} onChange={e => setLastName(e.target.value)}
+                  className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+              </div>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">Email *</label>
+              <input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="user@company.com"
+                className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">Organization *</label>
+                <select value={tenantId} onChange={e => setTenantId(e.target.value)}
+                  className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white">
+                  {tenants.map(t => (
+                    <option key={t.tenant_id} value={t.tenant_id}>{t.tenant_name}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">Role *</label>
+                <select value={role} onChange={e => setRole(e.target.value)}
+                  className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white">
+                  {CREATE_ROLE_OPTIONS.map(r => (
+                    <option key={r.value} value={r.value}>{r.label}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">Password</label>
+              <input type="text" value={password} onChange={e => setPassword(e.target.value)} placeholder="Leave blank to auto-generate"
+                className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm font-mono focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+              <p className="text-xs text-gray-400 mt-1">Minimum 8 characters. If blank, a secure temporary password is generated.</p>
+            </div>
+
+            {error && (
+              <div className="flex items-center gap-2 text-red-600 text-sm bg-red-50 px-3 py-2.5 rounded-lg">
+                <AlertCircle className="w-4 h-4 flex-shrink-0" /> {error}
+              </div>
+            )}
+
+            <div className="flex gap-3 pt-1">
+              <button type="button" onClick={onClose} disabled={saving}
+                className="flex-1 py-2.5 border border-gray-200 rounded-xl text-sm font-medium text-gray-600 hover:bg-gray-50 disabled:opacity-60 transition-colors">
+                Cancel
+              </button>
+              <button type="submit" disabled={saving}
+                className="flex-1 py-2.5 bg-indigo-600 text-white rounded-xl text-sm font-medium hover:bg-indigo-700 disabled:opacity-60 transition-colors flex items-center justify-center gap-2">
+                {saving ? <><Loader2 className="w-4 h-4 animate-spin" /> Creating…</> : <><UserPlus className="w-4 h-4" /> Create User</>}
+              </button>
+            </div>
+          </form>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ── Tab: Users ────────────────────────────────────────────────────────────────
 
 function UsersTab() {
@@ -200,6 +378,8 @@ function UsersTab() {
   const [isDemo, setIsDemo]     = useState(false);
   const [busy, setBusy]         = useState<string | null>(null);
   const [editSub, setEditSub]   = useState<TenantSubscription | null>(null);
+  const [tenants, setTenants]   = useState<AccessControlEntry[]>([]);
+  const [showCreate, setShowCreate] = useState(false);
 
   useEffect(() => {
     Promise.all([
@@ -214,6 +394,9 @@ function UsersTab() {
         setLoading(false);
       })
       .catch(() => { setUsers(MOCK_USERS); setIsDemo(true); setLoading(false); });
+    superAdminAccessApi.listTenantAccess()
+      .then(setTenants)
+      .catch(() => setTenants([]));
   }, []);
 
   function handleSubSaved(updated: TenantSubscription) {
@@ -258,6 +441,16 @@ function UsersTab() {
   return (
     <div>
       {isDemo && <DemoBanner />}
+      <div className="flex justify-end mb-4">
+        <button
+          type="button"
+          onClick={() => setShowCreate(true)}
+          disabled={tenants.length === 0}
+          className="flex items-center gap-2 px-4 py-2.5 bg-indigo-600 text-white rounded-xl text-sm font-medium hover:bg-indigo-700 disabled:opacity-60 transition-colors"
+        >
+          <UserPlus className="w-4 h-4" /> Create User
+        </button>
+      </div>
       <div className="overflow-x-auto rounded-xl border border-gray-200 shadow-sm">
         <table className="w-full text-sm">
           <thead className="bg-gray-50 border-b border-gray-200">
@@ -386,6 +579,14 @@ function UsersTab() {
           sub={editSub}
           onClose={() => setEditSub(null)}
           onSaved={handleSubSaved}
+        />
+      )}
+
+      {showCreate && (
+        <CreateUserModal
+          tenants={tenants}
+          onClose={() => setShowCreate(false)}
+          onCreated={u => setUsers(prev => [u, ...prev])}
         />
       )}
     </div>
@@ -749,11 +950,43 @@ function SettingsTab() {
   const [notifNewUser, setNotifNewUser] = useState(true);
   const [notifNewTenant, setNotifNewTenant] = useState(true);
   const [saved, setSaved] = useState(false);
+  const [pwSaving, setPwSaving] = useState(false);
+  const [pwError, setPwError]   = useState("");
 
   function handleSave(e: React.FormEvent) {
     e.preventDefault();
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
+  }
+
+  async function handlePasswordSave(e: React.FormEvent) {
+    e.preventDefault();
+    setPwError("");
+    if (!currentPwd || !newPwd || !confirmPwd) {
+      setPwError("Please fill in all password fields.");
+      return;
+    }
+    if (newPwd.length < 8) {
+      setPwError("New password must be at least 8 characters.");
+      return;
+    }
+    if (newPwd !== confirmPwd) {
+      setPwError("New passwords do not match.");
+      return;
+    }
+    setPwSaving(true);
+    try {
+      const { authApi } = await import("../api/endpoints");
+      await authApi.changePassword(currentPwd, newPwd);
+      setCurrentPwd(""); setNewPwd(""); setConfirmPwd("");
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2500);
+    } catch (err: unknown) {
+      const detail = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
+      setPwError(typeof detail === "string" ? detail : "Failed to update password. Please try again.");
+    } finally {
+      setPwSaving(false);
+    }
   }
 
   return (
@@ -821,7 +1054,7 @@ function SettingsTab() {
         )}
 
         {sub === "security" && (
-          <form onSubmit={handleSave} className="bg-white rounded-xl border border-gray-200 shadow-sm p-6 space-y-5">
+          <form onSubmit={handlePasswordSave} className="bg-white rounded-xl border border-gray-200 shadow-sm p-6 space-y-5">
             <h3 className="font-semibold text-gray-900">Change Password</h3>
             <div>
               <label className="block text-xs font-medium text-gray-700 mb-1">Current Password</label>
@@ -838,11 +1071,14 @@ function SettingsTab() {
               <input type="password" value={confirmPwd} onChange={e => setConfirmPwd(e.target.value)} placeholder="Repeat new password"
                 className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
             </div>
-            <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-xs text-amber-700">
-              Default credentials: <strong>superadmin@platform.com / super123</strong> — change in production.
-            </div>
-            <button type="submit" className="px-5 py-2.5 bg-indigo-600 text-white rounded-xl text-sm font-medium hover:bg-indigo-700 transition-colors">
-              Update Password
+            {pwError && (
+              <div className="flex items-center gap-2 text-red-600 text-sm bg-red-50 px-3 py-2.5 rounded-lg">
+                <AlertCircle className="w-4 h-4 flex-shrink-0" /> {pwError}
+              </div>
+            )}
+            <button type="submit" disabled={pwSaving}
+              className="px-5 py-2.5 bg-indigo-600 text-white rounded-xl text-sm font-medium hover:bg-indigo-700 disabled:opacity-60 transition-colors flex items-center gap-2">
+              {pwSaving ? <><Loader2 className="w-4 h-4 animate-spin" /> Updating…</> : "Update Password"}
             </button>
           </form>
         )}

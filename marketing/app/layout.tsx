@@ -3,9 +3,9 @@ import "./globals.css";
 import { SITE_URL, SITE_NAME } from "./constants";
 import { I18nProvider } from "../i18n";
 
-const TITLE        = "GRCEye — Governance, Risk & Compliance Platform";
+const TITLE        = "GRCEye | Governance, Risk & Compliance Platform";
 const DESCRIPTION  =
-  "All-in-one GRC SaaS — 70+ frameworks, AI gap analysis, risk quantification, audits, policies, vendor risk and a public trust center.";
+  "All-in-one GRC SaaS: 70+ frameworks, AI gap analysis, risk quantification, audits, policies, vendor risk and a public trust center.";
 const OG_IMAGE     = "/android-chrome-512x512.png";
 
 export const viewport: Viewport = {
@@ -70,7 +70,7 @@ export const metadata: Metadata = {
         url:    OG_IMAGE,
         width:  512,
         height: 512,
-        alt:    "GRCEye — Governance, Risk & Compliance Platform",
+        alt:    "GRCEye | Governance, Risk & Compliance Platform",
       },
     ],
     locale: "en_US",
@@ -127,7 +127,7 @@ export default function RootLayout({ children }: { readonly children: React.Reac
   return (
     <html lang="en">
       <head>
-        {/* Explicit favicon tags — belt-and-suspenders alongside Next.js metadata */}
+        {/* Explicit favicon tags - belt-and-suspenders alongside Next.js metadata */}
         <link rel="icon"             href="/favicon.ico"            sizes="any" />
         <link rel="icon"             href="/favicon-16x16.png"      sizes="16x16"  type="image/png" />
         <link rel="icon"             href="/favicon-32x32.png"      sizes="32x32"  type="image/png" />
