@@ -1363,3 +1363,19 @@ export const reportBuilderApi = {
   exportFile: (dataset: string, format: "xlsx" | "csv") =>
     apiClient.post("/report-builder/export", { dataset, format }, { responseType: "blob" }).then((r) => r.data),
 };
+
+// ── Risk treatment plans (Elite Pack) ────────────────────────────────────────
+export const riskTreatmentApi = {
+  list: (riskId?: string) => apiClient.get("/risk-treatment", { params: riskId ? { risk_id: riskId } : undefined }).then((r) => r.data),
+  tracking: () => apiClient.get("/risk-treatment/tracking").then((r) => r.data),
+  upsert: (data: Record<string, unknown>) => apiClient.post("/risk-treatment", data).then((r) => r.data),
+  risks: () => apiClient.get("/risks", { params: { page_size: 200 } }).then((r) => r.data),
+};
+
+// ── Control effectiveness evaluations (Elite Pack) ───────────────────────────
+export const controlEvalApi = {
+  list: () => apiClient.get("/control-evaluations").then((r) => r.data),
+  due: () => apiClient.get("/control-evaluations/due").then((r) => r.data),
+  create: (data: Record<string, unknown>) => apiClient.post("/control-evaluations", data).then((r) => r.data),
+  controls: () => apiClient.get("/applied-controls").then((r) => r.data),
+};

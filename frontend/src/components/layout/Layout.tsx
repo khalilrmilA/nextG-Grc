@@ -17,7 +17,7 @@ import {
   ChevronRight, Bell, Settings, HelpCircle, Lock,
   Crown, X, Trash2, Wand2, Menu,
   AlertCircle, Info, ShieldAlert, ClipboardCheck, RefreshCw,
-  Eye, Users, Headphones, Map, ListTodo, Boxes, BarChart3,
+  Eye, Users, Headphones, Map, ListTodo, Boxes, BarChart3, Gauge,
 } from "lucide-react";
 
 // roles: null = visible to all authenticated non-auditor users
@@ -29,6 +29,8 @@ const NAV_GROUPS = [
       { to: "/dashboard",  icon: LayoutDashboard, label: "Dashboard",     module: "dashboard",  roles: null },
       { to: "/assets",     icon: Boxes,           label: "Assets",        module: "assets",     roles: null },
       { to: "/analytics",  icon: BarChart3,       label: "Analytics",     module: "analytics",  roles: null },
+      { to: "/risk-treatment", icon: ShieldAlert, label: "Risk Treatment", module: "risk-treatment", roles: ["tenant_admin","ciso","risk_manager","control_owner","viewer"] },
+      { to: "/control-effectiveness", icon: Gauge, label: "Control Effectiveness", module: "control-effectiveness", roles: ["tenant_admin","ciso","risk_manager","control_owner","viewer"] },
       { to: "/risk-cartography", icon: Map,           label: "Risk Cartography", module: "risk-cartography", roles: ["tenant_admin","ciso","risk_manager","compliance_manager","control_owner","viewer"] },
       { to: "/compliance", icon: CheckSquare,     label: "Compliance",    module: "compliance", roles: ["tenant_admin","ciso","risk_manager","compliance_manager","policy_manager","control_owner","viewer"] },
       { to: "/action-plan", icon: ListTodo,       label: "Action Plan",   module: "action-plan", roles: ["tenant_admin","ciso","risk_manager","compliance_manager","control_owner","viewer"] },
@@ -56,6 +58,8 @@ const PAGE_LABELS: Record<string, string> = {
   dashboard:  "Dashboard",
   assets:     "Assets",
   analytics:  "Analytics",
+  "risk-treatment": "Risk Treatment",
+  "control-effectiveness": "Control Effectiveness",
   risks:      "Risk Register",
   "risk-cartography": "Risk Cartography",
   "action-plan": "Action Plan",
