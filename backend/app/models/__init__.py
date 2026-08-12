@@ -45,6 +45,7 @@ from app.models.asset_history import AssetValuationHistory
 from app.models.scan_journal import ScanJournal
 from app.models.report_builder import ReportTemplate
 from app.models.governance import RaciAssignment, GovernanceDocument, GovernanceDocumentVersion
+from app.models.archive import ArchiveRecord
 
 __all__ = [
     "Tenant", "User", "UserRole",
@@ -74,4 +75,5 @@ __all__ = [
     "AssetValuationHistory", "ScanJournal",
     "ReportTemplate",
     "RaciAssignment", "GovernanceDocument", "GovernanceDocumentVersion",
+    "ArchiveRecord",
 ]
