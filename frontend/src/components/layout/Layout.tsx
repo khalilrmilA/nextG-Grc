@@ -93,6 +93,7 @@ function roleIcon(role: string) {
 }
 
 function planBadgeStyle(plan: PlanTier) {
+  if (plan === "elite")        return { bg: "from-yellow-500/10 to-orange-500/10", border: "border-yellow-500/30", text: "text-yellow-400", sub: "text-yellow-300/70" };
   if (plan === "enterprise")   return { bg: "from-yellow-500/10 to-orange-500/10", border: "border-yellow-500/20", text: "text-yellow-400", sub: "text-yellow-300/70" };
   if (plan === "professional") return { bg: "from-blue-500/10 to-indigo-500/10",  border: "border-blue-500/20",   text: "text-blue-400",   sub: "text-blue-300/70"   };
   if (plan === "starter")      return { bg: "from-purple-500/10 to-blue-500/10",  border: "border-purple-500/20", text: "text-purple-400", sub: "text-purple-300/70" };
@@ -555,12 +556,12 @@ export default function Layout() {
   const { Icon: RoleIcon, color: roleColor } = roleIcon(user?.role ?? "viewer");
   const initials = (user?.name ?? "U").charAt(0).toUpperCase();
   // Role label: super_admin → "Admin", everyone else → their company name
-  const planLabel = isSuperAdmin ? t("roles.admin") : (user?.org ?? PLAN_FEATURES[plan].label);
+  const planLabel = isSuperAdmin ? t("roles.admin") : (user?.org ?? PLAN_FEATURES[plan]?.label ?? "Elite Pack");
   function resolvePlanSub() {
     if (isSuperAdmin) return t("nav.platform_owner");
     if (isAdmin) return t("nav.account_owner");
     if (plan === "free_trial") return `${user?.daysRemaining ?? 14} days remaining`;
-    return PLAN_FEATURES[plan].label;
+    return PLAN_FEATURES[plan]?.label ?? "Elite Pack";
   }
   const planSub = resolvePlanSub();
 

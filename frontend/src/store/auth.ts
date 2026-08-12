@@ -1,5 +1,5 @@
 export type UserRole = "super_admin" | "tenant_admin" | "ciso" | "risk_manager" | "compliance_manager" | "auditor" | "policy_manager" | "vendor_manager" | "control_owner" | "viewer";
-export type PlanTier = "free_trial" | "starter" | "professional" | "enterprise";
+export type PlanTier = "free_trial" | "starter" | "professional" | "enterprise" | "elite";
 
 export interface AuthUser {
   email: string;
@@ -70,6 +70,14 @@ export const PLAN_FEATURES: Record<PlanTier, {
     maxAdmins: 999,
     maxIntegrations: 999,
     modules: ["dashboard", "risks", "compliance", "frameworks", "audits", "policies", "vendors"],
+    settingsTabs: ["profile", "organization", "notifications", "security", "api", "appearance"],
+  },
+  elite: {
+    label: "Elite Pack",
+    maxFrameworks: 999,
+    maxAdmins: 999,
+    maxIntegrations: 999,
+    modules: ["dashboard", "assets", "analytics", "risk-treatment", "control-effectiveness", "risks", "compliance", "frameworks", "audits", "policies", "vendors", "incidents", "vulnerabilities", "threats", "risk-scenarios", "risk-quantification", "applied-controls", "security-exceptions", "trust-center", "regulatory", "activity-log", "webhooks", "reports", "policy-generator"],
     settingsTabs: ["profile", "organization", "notifications", "security", "api", "appearance"],
   },
 };
