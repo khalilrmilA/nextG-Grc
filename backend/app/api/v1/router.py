@@ -45,6 +45,7 @@ from app.api.v1.endpoints import (
     risk_treatment,
     vuln_import,
     sso,
+    report_builder,
 )
 
 api_router = APIRouter()
@@ -93,3 +94,4 @@ api_router.include_router(cve.router, prefix="/cve", tags=["CVE Knowledge Base (
 api_router.include_router(risk_treatment.router, prefix="/risk-treatment", tags=["Risk Treatment (Elite Pack)"])
 api_router.include_router(vuln_import.router, prefix="/vuln-import", tags=["Vulnerability Scanner Import (Elite Pack)"])
 api_router.include_router(sso.router, prefix="/sso", tags=["AD/LDAP SSO (Elite Pack)"])
+api_router.include_router(report_builder.router, prefix="/report-builder", tags=["Report Builder (Elite Pack)"])
