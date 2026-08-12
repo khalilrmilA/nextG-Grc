@@ -1,7 +1,8 @@
 """Asset management model."""
 import enum
+from datetime import datetime
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-from sqlalchemy import String, Text, ForeignKey, Enum as SAEnum, JSON, Boolean
+from sqlalchemy import String, Text, ForeignKey, Enum as SAEnum, JSON, Boolean, DateTime
 from app.core.database import Base
 
 
@@ -62,6 +63,25 @@ class Asset(Base):
 
     # Security objectives (JSON: {"confidentiality": 3, "integrity": 3, "availability": 4})
     security_objectives: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+
+    # ISO 27005 primary/support classification (Elite Pack).
+    # 'primary' = process/information; 'support' = equipment/app/people/etc.
+    asset_class: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    # For a support asset: the primary asset id(s) it serves.
+    serves_asset_ids: Mapped[list] = mapped_column(JSON, default=list)
+
+    # Cartography links (Elite Pack).
+    business_process_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("business_processes.id"), nullable=True
+    )
+    org_entity_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("org_entities.id"), nullable=True
+    )
+
+    # Lifecycle (Elite Pack): acquisition -> in_use -> maintenance -> retired.
+    lifecycle_state: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    acquired_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    end_of_life_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
     # Tags
     tags: Mapped[list] = mapped_column(JSON, default=list)
