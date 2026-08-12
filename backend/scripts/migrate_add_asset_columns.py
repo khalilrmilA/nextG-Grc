@@ -1,8 +1,10 @@
-"""Idempotent migration: add Elite Pack asset columns to the assets table.
+"""Idempotent migration: reconcile the assets table with the Asset model.
 
-Adds: asset_class, serves_asset_ids, business_process_id, org_entity_id,
-lifecycle_state, acquired_at, end_of_life_at. (CIA/business_value/RTO/RPO/MTD
-and security_objectives already exist on the table.)
+Adds the Elite Pack columns AND the older model columns that were declared on
+Asset but never actually migrated into the DB (business_value, rto/rpo/mtd,
+security_objectives, hosting/location, contains_pii/phi/pci, tags, integration
+metadata) — their absence made GET /assets 500 with "no such column". The PRAGMA
+check keeps this idempotent, so listing every column is safe.
 
 New tables (asset_valuation_history, org_entities, business_processes) are
 created by create_all on startup.
@@ -13,6 +15,7 @@ import os
 import sqlite3
 
 COLUMNS = {
+    # Elite Pack columns
     "asset_class": "VARCHAR(20)",
     "serves_asset_ids": "JSON",
     "business_process_id": "VARCHAR(36)",
@@ -20,6 +23,22 @@ COLUMNS = {
     "lifecycle_state": "VARCHAR(20)",
     "acquired_at": "DATETIME",
     "end_of_life_at": "DATETIME",
+    # Older Asset model columns that were never migrated into the table
+    "hosting_type": "VARCHAR(50)",
+    "cloud_provider": "VARCHAR(50)",
+    "location": "VARCHAR(255)",
+    "contains_pii": "BOOLEAN DEFAULT 0",
+    "contains_phi": "BOOLEAN DEFAULT 0",
+    "contains_pci": "BOOLEAN DEFAULT 0",
+    "business_value": "VARCHAR(50)",
+    "rto_seconds": "INTEGER",
+    "rpo_seconds": "INTEGER",
+    "mtd_seconds": "INTEGER",
+    "security_objectives": "JSON",
+    "tags": "JSON",
+    "integration_source": "VARCHAR(100)",
+    "external_id": "VARCHAR(255)",
+    "raw_metadata": "JSON",
 }
 
 

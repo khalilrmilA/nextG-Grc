@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { Plus, Search, X, Loader2, Filter, Boxes, ShieldCheck, Layers, Crown } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { assetsApi, usersApi } from "@/api/endpoints";
+import { assetsApi, usersApi, authApi } from "@/api/endpoints";
 
 const CRIT_BADGE: Record<string, string> = {
   critical: "bg-red-100 text-red-700 border-red-200",
@@ -34,6 +34,7 @@ export default function AssetsPage() {
   const [items, setItems] = useState<any[]>([]);
   const [total, setTotal] = useState(0);
   const [users, setUsers] = useState<UserLite[]>([]);
+  const [me, setMe] = useState<UserLite | null>(null);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [search, setSearch] = useState("");
@@ -50,12 +51,16 @@ export default function AssetsPage() {
     owner_id: "",
     data_classification: "internal",
     lifecycle_state: "in_use",
-    business_value: 3,
+    business_value: "medium",
     confidentiality: 3,
     integrity: 3,
     availability: 3,
   };
   const [form, setForm] = useState({ ...emptyForm });
+
+  // Owner options: /users is tenant_admin-only, so always offer the current user
+  // as a fallback and merge in the tenant users when the admin listing succeeds.
+  const ownerOptions: UserLite[] = me ? [me, ...users.filter((u) => u.id !== me.id)] : users;
 
   async function load() {
     try {
@@ -70,18 +75,19 @@ export default function AssetsPage() {
     }
   }
 
-  async function loadUsers() {
-    try {
-      setUsers(await usersApi.list());
-    } catch {
-      setUsers([]);
-    }
-  }
-
   useEffect(() => {
     load();
-    loadUsers();
+    usersApi.list().then((u) => setUsers(u as UserLite[])).catch(() => setUsers([]));
+    authApi.getProfile()
+      .then((p: any) => setMe({ id: p.id, first_name: p.first_name, last_name: p.last_name, email: p.email }))
+      .catch(() => {});
   }, []);
+
+  function openModal() {
+    setError("");
+    setForm({ ...emptyForm, owner_id: me?.id || "" });
+    setShowModal(true);
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -125,7 +131,7 @@ export default function AssetsPage() {
   const primaryCount = items.filter((i) => i.asset_class === "primary").length;
   const criticalCount = items.filter((i) => i.criticality === "critical").length;
   const ownerName = (id?: string) => {
-    const u = users.find((x) => x.id === id);
+    const u = ownerOptions.find((x) => x.id === id);
     return u ? `${u.first_name} ${u.last_name}`.trim() : "—";
   };
 
@@ -143,7 +149,7 @@ export default function AssetsPage() {
           <p className="text-sm text-gray-500 mt-1">{t("assets.subtitle", "Primary & support assets with CIA valuation, ownership and lifecycle")}</p>
         </div>
         <button
-          onClick={() => { setError(""); setForm({ ...emptyForm }); setShowModal(true); }}
+          onClick={openModal}
           className="inline-flex items-center gap-2 bg-blue-600 text-white px-4 py-2.5 rounded-xl text-sm font-medium hover:bg-blue-700 transition-colors"
         >
           <Plus className="w-4 h-4" /> {t("assets.new_asset", "New Asset")}
@@ -299,19 +305,18 @@ export default function AssetsPage() {
                 <label className="block text-sm font-medium text-gray-700 mb-1">{t("assets.owner", "Business owner")} *</label>
                 <select value={form.owner_id} onChange={(e) => setForm({ ...form, owner_id: e.target.value })} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
                   <option value="">{t("assets.select_owner", "Select an owner…")}</option>
-                  {users.map((u) => <option key={u.id} value={u.id}>{u.first_name} {u.last_name} ({u.email})</option>)}
+                  {ownerOptions.map((u) => <option key={u.id} value={u.id}>{u.first_name} {u.last_name} ({u.email}){me && u.id === me.id ? " — you" : ""}</option>)}
                 </select>
               </div>
 
               {/* CIA valuation */}
               <div className="rounded-xl border border-gray-100 bg-gray-50/50 p-4">
                 <p className="text-sm font-semibold text-gray-700 mb-3">{t("assets.cia_valuation", "CIA valuation (1–5)")}</p>
-                <div className="grid grid-cols-4 gap-4">
+                <div className="grid grid-cols-3 gap-4">
                   {([
                     ["confidentiality", t("assets.confidentiality", "Confidentiality")],
                     ["integrity", t("assets.integrity", "Integrity")],
                     ["availability", t("assets.availability", "Availability")],
-                    ["business_value", t("assets.business_value", "Business value")],
                   ] as const).map(([key, label]) => (
                     <div key={key}>
                       <label className="block text-xs font-medium text-gray-600 mb-1">{label}</label>
@@ -323,6 +328,12 @@ export default function AssetsPage() {
                       />
                     </div>
                   ))}
+                </div>
+                <div className="mt-4">
+                  <label className="block text-xs font-medium text-gray-600 mb-1">{t("assets.business_value", "Business value")}</label>
+                  <select value={form.business_value} onChange={(e) => setForm({ ...form, business_value: e.target.value })} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    {CRITICALITIES.map((c) => <option key={c} value={c}>{c}</option>)}
+                  </select>
                 </div>
               </div>
 
