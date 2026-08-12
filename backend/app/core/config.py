@@ -48,6 +48,23 @@ class Settings(BaseSettings):
     KEYCLOAK_CLIENT_ID: str = "grc-backend"
     KEYCLOAK_CLIENT_SECRET: str = ""
 
+    # Active Directory / LDAP SSO (Elite Pack). Deployment-wide defaults; a tenant
+    # may override any of these via its settings["ldap"] JSON block.
+    LDAP_ENABLED: bool = False
+    LDAP_SERVER_URI: str = ""              # e.g. ldap://ad.stb.com.tn:389 (AD 2012)
+    LDAP_USE_SSL: bool = False
+    LDAP_BIND_DN: str = ""                 # service account DN (empty = anonymous bind)
+    LDAP_BIND_PASSWORD: str = ""
+    LDAP_USER_SEARCH_BASE: str = ""        # e.g. OU=Users,DC=stb,DC=com,DC=tn
+    LDAP_USER_FILTER: str = "(sAMAccountName={username})"
+    LDAP_ATTR_EMAIL: str = "mail"
+    LDAP_ATTR_FIRSTNAME: str = "givenName"
+    LDAP_ATTR_LASTNAME: str = "sn"
+    LDAP_DEFAULT_EMAIL_DOMAIN: str = ""    # fallback if the directory has no mail attr
+    LDAP_DEFAULT_TENANT_SLUG: str = ""     # tenant SSO logins map to when unspecified
+    LDAP_DEFAULT_ROLE: str = "viewer"      # role for auto-provisioned directory users
+    LDAP_AUTO_CREATE: bool = True          # create a local account on first SSO login
+
     # AWS S3
     AWS_ACCESS_KEY_ID: str = ""
     AWS_SECRET_ACCESS_KEY: str = ""
