@@ -20,10 +20,32 @@ from app.core.security import (
 from app.models.user import User, UserRole
 from app.models.tenant import Tenant
 from app.models.subscription import Subscription, SubscriptionTier, SubscriptionStatus
+from app.models.password_reset import PasswordResetToken
+from app.core.config import settings
+from app.core.password_policy import validate_password, PasswordPolicyError
 from app.api.v1.dependencies import get_current_user
+from datetime import datetime, timedelta, timezone
+import secrets
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
+
+# Brute-force lockout: after this many consecutive failures, lock for the window.
+MAX_FAILED_LOGINS = 5
+LOCKOUT_MINUTES = 15
+
+
+def _utcnow() -> datetime:
+    """Naive UTC now, matching the DateTime columns used across the models."""
+    return datetime.now(timezone.utc).replace(tzinfo=None)
+
+
+def _enforce_password_policy(password: str) -> None:
+    """Validate against the shared policy, surfacing failures as HTTP 422."""
+    try:
+        validate_password(password)
+    except PasswordPolicyError as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc))
 
 
 def _hash_email_for_log(email: str) -> str:
@@ -84,6 +106,7 @@ class TokenResponse(BaseModel):
     access_token: str
     refresh_token: str
     token_type: str = "bearer"
+    must_change_password: bool = False
 
 
 class RefreshRequest(BaseModel):
@@ -122,6 +145,14 @@ async def login(request: Request, body: LoginRequest, db: AsyncSession = Depends
         result = await db.execute(select(User).where(User.email == normalized_email))
         user = result.scalar_one_or_none()
 
+        # Account lockout: if the account is currently locked, reject early with 423.
+        if user and user.locked_until and user.locked_until > _utcnow():
+            logger.info("login.fail email_hash=%s reason=locked", email_hash)
+            raise HTTPException(
+                status.HTTP_423_LOCKED,
+                "Account temporarily locked due to failed login attempts. Try again later.",
+            )
+
         # Constant-ish handling: any user-existence / password / activation failure
         # returns the same generic 401 to prevent enumeration. We still differentiate
         # internally for logging and metrics.
@@ -129,17 +160,31 @@ async def login(request: Request, body: LoginRequest, db: AsyncSession = Depends
             logger.info("login.fail email_hash=%s reason=no_user", email_hash)
             raise HTTPException(status.HTTP_401_UNAUTHORIZED, _GENERIC_LOGIN_FAILURE)
         if not verify_password(body.password, user.hashed_password):
+            # Count the failure and lock the account once the threshold is crossed.
+            user.failed_login_count = (user.failed_login_count or 0) + 1
+            if user.failed_login_count >= MAX_FAILED_LOGINS:
+                user.locked_until = _utcnow() + timedelta(minutes=LOCKOUT_MINUTES)
+                user.failed_login_count = 0
+                logger.info("login.lock email_hash=%s", email_hash)
+            await db.commit()
             logger.info("login.fail email_hash=%s reason=bad_password", email_hash)
             raise HTTPException(status.HTTP_401_UNAUTHORIZED, _GENERIC_LOGIN_FAILURE)
         if not user.is_active:
             logger.info("login.fail email_hash=%s reason=disabled", email_hash)
             raise HTTPException(status.HTTP_401_UNAUTHORIZED, _GENERIC_LOGIN_FAILURE)
 
+        # Success — clear any failure/lock state.
+        if user.failed_login_count or user.locked_until:
+            user.failed_login_count = 0
+            user.locked_until = None
+            await db.commit()
+
         token_data = {"sub": user.id, "tenant_id": user.tenant_id, "role": user.role}
         logger.info("login.ok email_hash=%s", email_hash)
         return TokenResponse(
             access_token=create_access_token(token_data),
             refresh_token=create_refresh_token(token_data),
+            must_change_password=bool(user.must_change_password),
         )
     except HTTPException:
         raise
@@ -157,6 +202,8 @@ async def login(request: Request, body: LoginRequest, db: AsyncSession = Depends
 async def register(request: Request, body: RegisterRequest, db: AsyncSession = Depends(get_db)):
     # Normalize email to lowercase before storing — login form always sends lowercase
     body.email = body.email.strip().lower()
+    # Enforce the shared password policy (complexity + length).
+    _enforce_password_policy(body.password)
     # Check email uniqueness — generic 400 to avoid enumeration via this endpoint.
     existing = await db.execute(select(User).where(User.email == body.email))
     if existing.scalar_one_or_none():
@@ -207,6 +254,7 @@ async def register(request: Request, body: RegisterRequest, db: AsyncSession = D
         last_name=body.last_name,
         role=UserRole.CISO,
         is_verified=False,
+        password_changed_at=_utcnow(),
     )
     db.add(user)
     await db.flush()
@@ -459,7 +507,7 @@ async def refresh_token(request: Request, body: RefreshRequest, db: AsyncSession
 
 class ChangePasswordRequest(BaseModel):
     current_password: str
-    new_password: str = Field(..., min_length=8, max_length=200)
+    new_password: str = Field(..., min_length=12, max_length=200)
 
 
 @router.post("/change-password", status_code=status.HTTP_204_NO_CONTENT)
@@ -471,9 +519,12 @@ async def change_password(
     """Allow the authenticated user to change their own password."""
     if not verify_password(body.current_password, current_user.hashed_password):
         raise HTTPException(status_code=400, detail="Current password is incorrect")
+    _enforce_password_policy(body.new_password)
     result = await db.execute(select(User).where(User.id == current_user.id))
     user = result.scalar_one()
     user.hashed_password = hash_password(body.new_password)
+    user.password_changed_at = _utcnow()
+    user.must_change_password = False
     await db.commit()
     return None
 
@@ -482,12 +533,19 @@ class ForgotPasswordRequest(BaseModel):
     email: EmailStr
 
 
+def _hash_reset_token(raw: str) -> str:
+    return hashlib.sha256(raw.encode()).hexdigest()
+
+
 @router.post("/forgot-password", status_code=status.HTTP_204_NO_CONTENT)
 @limiter.limit("5/hour")
 async def forgot_password(request: Request, body: ForgotPasswordRequest, db: AsyncSession = Depends(get_db)):
-    """Generate a temporary password and send it to the user's email.
-    Always returns 204 to avoid email enumeration."""
-    import secrets, string
+    """Email a single-use, expiring password-reset LINK.
+
+    The account password is NOT changed here — only a token is issued. Always
+    returns 204 to avoid email enumeration. (Replaces the previous flow, which
+    overwrote the password on request and enabled account takeover.)
+    """
     email = body.email.strip().lower()
     result = await db.execute(select(User).where(User.email == email))
     user = result.scalar_one_or_none()
@@ -495,43 +553,72 @@ async def forgot_password(request: Request, body: ForgotPasswordRequest, db: Asy
         # Silent — don't reveal whether the email exists.
         return None
 
-    alphabet = string.ascii_letters + string.digits
-    tmp_password = "".join(secrets.choice(alphabet) for _ in range(16))
-    user_id, user_email = user.id, user.email
+    raw_token = secrets.token_urlsafe(32)
+    reset = PasswordResetToken(
+        user_id=user.id,
+        token_hash=_hash_reset_token(raw_token),
+        expires_at=_utcnow() + timedelta(hours=1),
+        requested_ip=(request.client.host if request.client else None),
+    )
+    db.add(reset)
+    await db.commit()
 
-    # Release the DB connection before the (slow) SMTP round-trip so the
-    # pool isn't pinned while we wait on the mail relay.
-    await db.rollback()
+    user_email = user.email
+    base = (getattr(settings, "FRONTEND_BASE_URL", "") or "https://grceye.com/app").rstrip("/")
+    reset_link = f"{base}/reset-password?token={raw_token}"
 
-    # Send the email FIRST — only change the password once delivery succeeded,
-    # otherwise a failed send would lock the user out of their current password.
     from app.services.email_service import send_email
-    sent = await send_email(
+    await send_email(
         to_email=user_email,
-        subject="Your temporary password — GRCEye",
+        subject="Reset your password — GRCEye",
         template_name="notification.html",
         context={
-            "title": "Password Reset",
+            "title": "Password Reset Requested",
             "message": (
-                f"A temporary password has been generated for your account: <strong>{tmp_password}</strong><br><br>"
-                "Please log in with this password and change it immediately in Settings → Security."
+                "We received a request to reset your GRCEye password. "
+                f'Click the link below to choose a new one (valid for 1 hour):<br><br>'
+                f'<a href="{reset_link}">Reset my password</a><br><br>'
+                "If you did not request this, you can safely ignore this email — "
+                "your password has not been changed."
             ),
         },
     )
-    if not sent:
-        logger.error(
-            "forgot-password: email delivery failed for %s — password left unchanged",
-            _hash_email_for_log(user_email),
-        )
-        return None
+    logger.info("forgot-password: reset link emailed to %s", _hash_email_for_log(user_email))
+    return None
 
-    result = await db.execute(select(User).where(User.id == user_id))
-    user = result.scalar_one_or_none()
-    if user is None:  # deleted while we were sending — nothing to update
-        return None
-    user.hashed_password = hash_password(tmp_password)
+
+class ResetPasswordRequest(BaseModel):
+    token: str
+    new_password: str = Field(..., min_length=12, max_length=200)
+
+
+@router.post("/reset-password", status_code=status.HTTP_204_NO_CONTENT)
+@limiter.limit("10/hour")
+async def reset_password(request: Request, body: ResetPasswordRequest, db: AsyncSession = Depends(get_db)):
+    """Complete a password reset using a valid, unexpired, unused token."""
+    _enforce_password_policy(body.new_password)
+    token_hash = _hash_reset_token(body.token)
+    result = await db.execute(
+        select(PasswordResetToken).where(PasswordResetToken.token_hash == token_hash)
+    )
+    token = result.scalar_one_or_none()
+    if token is None or token.used_at is not None or token.expires_at < _utcnow():
+        raise HTTPException(status_code=400, detail="Invalid or expired reset token")
+
+    user_result = await db.execute(select(User).where(User.id == token.user_id))
+    user = user_result.scalar_one_or_none()
+    if user is None:
+        raise HTTPException(status_code=400, detail="Invalid or expired reset token")
+
+    user.hashed_password = hash_password(body.new_password)
+    user.password_changed_at = _utcnow()
+    user.must_change_password = False
+    # Clear any lockout so the user can log straight in.
+    user.failed_login_count = 0
+    user.locked_until = None
+    token.used_at = _utcnow()
     await db.commit()
-    logger.info("forgot-password: temporary password emailed to %s", _hash_email_for_log(user_email))
+    logger.info("reset-password: password changed for user via token")
     return None
 
 

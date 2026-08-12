@@ -38,6 +38,7 @@ from app.api.v1.endpoints import (
     public_contact,
     support,
     license,
+    mfa,
 )
 
 api_router = APIRouter()
@@ -79,3 +80,4 @@ api_router.include_router(public_chat.router, prefix="/public", tags=["Public Su
 api_router.include_router(public_contact.router, prefix="/public", tags=["Public Contact Form"])
 api_router.include_router(support.router, prefix="/support/tickets", tags=["Support Tickets"])
 api_router.include_router(license.router, prefix="/license", tags=["License"])
+api_router.include_router(mfa.router, prefix="/mfa", tags=["MFA (Elite Pack)"])

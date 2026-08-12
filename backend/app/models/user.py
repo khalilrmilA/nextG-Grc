@@ -2,7 +2,7 @@
 import enum
 from datetime import datetime
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-from sqlalchemy import DateTime, String, Boolean, ForeignKey, Enum as SAEnum, JSON
+from sqlalchemy import DateTime, String, Boolean, ForeignKey, Enum as SAEnum, JSON, Integer
 from app.core.database import Base
 
 
@@ -38,6 +38,12 @@ class User(Base):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     is_verified: Mapped[bool] = mapped_column(Boolean, default=False)
     expires_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+    # Access hardening (Phase 0): forced first-login change + brute-force lockout.
+    must_change_password: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False, server_default="0")
+    failed_login_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False, server_default="0")
+    locked_until: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    password_changed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
     # SSO
     keycloak_id: Mapped[str | None] = mapped_column(String(255), unique=True, nullable=True)

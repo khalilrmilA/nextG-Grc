@@ -36,6 +36,8 @@ from app.models.notification import (
 from app.models.evidence_upload_token import EvidenceUploadToken
 from app.models.support import SupportTicket, TicketMessage, ChatSession, TicketStatus, TicketPriority, ChatStatus
 from app.models.license import IssuedLicense, LicenseActivation
+from app.models.password_reset import PasswordResetToken
+from app.models.mfa_device import MfaDevice
 
 __all__ = [
     "Tenant", "User", "UserRole",
@@ -60,4 +62,5 @@ __all__ = [
     "EvidenceUploadToken",
     "SupportTicket", "TicketMessage", "ChatSession", "TicketStatus", "TicketPriority", "ChatStatus",
     "IssuedLicense", "LicenseActivation",
+    "PasswordResetToken", "MfaDevice",
 ]
