@@ -44,6 +44,7 @@ from app.models.cve_entry import CveEntry, CveAnnotation
 from app.models.asset_history import AssetValuationHistory
 from app.models.scan_journal import ScanJournal
 from app.models.report_builder import ReportTemplate
+from app.models.governance import RaciAssignment, GovernanceDocument, GovernanceDocumentVersion
 
 __all__ = [
     "Tenant", "User", "UserRole",
@@ -72,4 +73,5 @@ __all__ = [
     "ControlEvaluation", "OrgEntity", "BusinessProcess", "CveEntry", "CveAnnotation",
     "AssetValuationHistory", "ScanJournal",
     "ReportTemplate",
+    "RaciAssignment", "GovernanceDocument", "GovernanceDocumentVersion",
 ]
