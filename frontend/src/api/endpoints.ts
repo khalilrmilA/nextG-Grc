@@ -1329,3 +1329,19 @@ export const supportApi = {
   updateChat: (ticketId: string, action: "accept" | "end") =>
     apiClient.patch<ChatSessionData>(`/support/tickets/${ticketId}/chat`, null, { params: { action } }).then((r) => r.data),
 };
+
+// ── Assets (Elite Pack) ──────────────────────────────────────────────────────
+// GET /assets returns { items, total, page, page_size }. CIA + lifecycle endpoints
+// are Elite-gated and 402 → elite-upsell for non-elite tenants.
+export const assetsApi = {
+  list: (params?: { page?: number; page_size?: number }) =>
+    apiClient.get("/assets", { params }).then((r) => r.data),
+  stats: () => apiClient.get("/assets/stats").then((r) => r.data),
+  get: (id: string) => apiClient.get(`/assets/${id}`).then((r) => r.data),
+  create: (data: Record<string, unknown>) => apiClient.post("/assets", data).then((r) => r.data),
+  update: (id: string, data: Record<string, unknown>) => apiClient.patch(`/assets/${id}`, data).then((r) => r.data),
+  remove: (id: string) => apiClient.delete(`/assets/${id}`),
+  cia: (id: string) => apiClient.get(`/assets/${id}/cia`).then((r) => r.data),
+  setCia: (id: string, data: Record<string, unknown>) => apiClient.put(`/assets/${id}/cia`, data).then((r) => r.data),
+  eolSoon: () => apiClient.get("/assets/lifecycle/eol-soon").then((r) => r.data),
+};

@@ -3,6 +3,8 @@ import { Lock } from "lucide-react";
 import { useAuthStore, hasAnyRole } from "./store/auth";
 import Layout from "./components/layout/Layout";
 import AuditorLayout from "./components/layout/AuditorLayout";
+import EliteUpsellListener from "./components/EliteUpsellListener";
+import AssetsPage from "./pages/AssetsPage";
 import LoginPage from "./pages/LoginPage";
 import RegisterPage from "./pages/RegisterPage";
 import ServiceDownPage from "./pages/ServiceDownPage";
@@ -144,6 +146,8 @@ function RoleRoute({ path, children }: { readonly path: string; readonly childre
 
 export default function App() {
   return (
+    <>
+    <EliteUpsellListener />
     <Routes>
       {/* ── Public routes (no authentication required) ── */}
       <Route path="/service-down" element={<ServiceDownPage />} />
@@ -180,6 +184,7 @@ export default function App() {
         }
       >
         <Route path="dashboard" element={<DashboardPage />} />
+        <Route path="assets" element={<AssetsPage />} />
         <Route path="risks" element={<RoleRoute path="/risks"><PrivateRoute requiredModule="risks"><RisksPage /></PrivateRoute></RoleRoute>} />
         <Route path="risk-cartography" element={<RoleRoute path="/risk-cartography"><PrivateRoute requiredModule="risks"><RiskCartographyPage /></PrivateRoute></RoleRoute>} />
         <Route path="action-plan" element={<RoleRoute path="/action-plan"><PrivateRoute requiredModule="compliance"><ActionPlanPage /></PrivateRoute></RoleRoute>} />
@@ -216,5 +221,6 @@ export default function App() {
         <Route path="help" element={<HelpPage />} />
       </Route>
     </Routes>
+    </>
   );
 }
