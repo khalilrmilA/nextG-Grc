@@ -30,6 +30,13 @@ router = APIRouter()
 _Gate = Depends(require_feature("custom_dashboards"))
 
 
+def _label(key) -> str:
+    """Human label for a group key — enum .value (not 'RiskSeverity.CRITICAL')."""
+    if key is None:
+        return "unspecified"
+    return str(getattr(key, "value", key))
+
+
 async def _count_by(db: AsyncSession, model, column, tenant_id: str) -> dict:
     """Grouped counts {value: n}; empty dict if the column/query fails."""
     try:
@@ -38,7 +45,7 @@ async def _count_by(db: AsyncSession, model, column, tenant_id: str) -> dict:
             .where(model.tenant_id == tenant_id)
             .group_by(column)
         )
-        return {str(k if k is not None else "unspecified"): int(v) for k, v in result.all()}
+        return {_label(k): int(v) for k, v in result.all()}
     except Exception:
         return {}
 
