@@ -106,9 +106,20 @@ class ApiClient {
           return Promise.reject(error);
         }
 
-        // 402 = license required/expired (self-hosted licensed builds only) —
-        // send the user to the activation page. Never fires on the SaaS.
+        // 402 handling: distinguish an Elite Pack feature-gate from a license issue.
         if (status === 402) {
+          const detail = (error.response?.data as { detail?: unknown } | undefined)?.detail;
+          const isFeatureGate =
+            !!detail && typeof detail === "object" &&
+            (detail as { error?: string }).error === "feature_not_in_plan";
+          if (isFeatureGate) {
+            // Elite Pack feature not in the tenant's plan — surface an upsell,
+            // never redirect (this is not an outage and not a license problem).
+            window.dispatchEvent(new CustomEvent("elite-upsell", { detail }));
+            (error as unknown as { isEliteUpsell?: boolean }).isEliteUpsell = true;
+            return Promise.reject(error);
+          }
+          // Otherwise: license required/expired (self-hosted) — go to activation.
           if (window.location.pathname !== "/license") {
             window.location.href = "/license";
           }
