@@ -39,6 +39,9 @@ from app.api.v1.endpoints import (
     support,
     license,
     mfa,
+    control_evaluation,
+    asset_graph,
+    cve,
 )
 
 api_router = APIRouter()
@@ -81,3 +84,6 @@ api_router.include_router(public_contact.router, prefix="/public", tags=["Public
 api_router.include_router(support.router, prefix="/support/tickets", tags=["Support Tickets"])
 api_router.include_router(license.router, prefix="/license", tags=["License"])
 api_router.include_router(mfa.router, prefix="/mfa", tags=["MFA (Elite Pack)"])
+api_router.include_router(control_evaluation.router, prefix="/control-evaluations", tags=["Control Effectiveness (Elite Pack)"])
+api_router.include_router(asset_graph.router, prefix="/asset-graph", tags=["Asset Cartography (Elite Pack)"])
+api_router.include_router(cve.router, prefix="/cve", tags=["CVE Knowledge Base (Elite Pack)"])

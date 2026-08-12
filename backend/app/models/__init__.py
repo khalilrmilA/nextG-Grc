@@ -38,6 +38,9 @@ from app.models.support import SupportTicket, TicketMessage, ChatSession, Ticket
 from app.models.license import IssuedLicense, LicenseActivation
 from app.models.password_reset import PasswordResetToken
 from app.models.mfa_device import MfaDevice
+from app.models.control_evaluation import ControlEvaluation
+from app.models.org_unit import OrgEntity, BusinessProcess
+from app.models.cve_entry import CveEntry, CveAnnotation
 
 __all__ = [
     "Tenant", "User", "UserRole",
@@ -63,4 +66,5 @@ __all__ = [
     "SupportTicket", "TicketMessage", "ChatSession", "TicketStatus", "TicketPriority", "ChatStatus",
     "IssuedLicense", "LicenseActivation",
     "PasswordResetToken", "MfaDevice",
+    "ControlEvaluation", "OrgEntity", "BusinessProcess", "CveEntry", "CveAnnotation",
 ]
