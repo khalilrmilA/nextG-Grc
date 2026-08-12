@@ -1345,3 +1345,21 @@ export const assetsApi = {
   setCia: (id: string, data: Record<string, unknown>) => apiClient.put(`/assets/${id}/cia`, data).then((r) => r.data),
   eolSoon: () => apiClient.get("/assets/lifecycle/eol-soon").then((r) => r.data),
 };
+
+// ── Module dashboards (Elite Pack) ───────────────────────────────────────────
+export const eliteDashboardsApi = {
+  assets: () => apiClient.get("/dashboards/assets").then((r) => r.data),
+  vulnerabilities: () => apiClient.get("/dashboards/vulnerabilities").then((r) => r.data),
+  threats: () => apiClient.get("/dashboards/threats").then((r) => r.data),
+  risks: () => apiClient.get("/dashboards/risks").then((r) => r.data),
+  controls: () => apiClient.get("/dashboards/controls").then((r) => r.data),
+  governance: () => apiClient.get("/dashboards/governance").then((r) => r.data),
+  audit: () => apiClient.get("/dashboards/audit").then((r) => r.data),
+};
+
+// ── Report builder (Elite Pack) ──────────────────────────────────────────────
+export const reportBuilderApi = {
+  datasets: () => apiClient.get("/report-builder/datasets").then((r) => r.data),
+  exportFile: (dataset: string, format: "xlsx" | "csv") =>
+    apiClient.post("/report-builder/export", { dataset, format }, { responseType: "blob" }).then((r) => r.data),
+};

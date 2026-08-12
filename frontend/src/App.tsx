@@ -5,6 +5,7 @@ import Layout from "./components/layout/Layout";
 import AuditorLayout from "./components/layout/AuditorLayout";
 import EliteUpsellListener from "./components/EliteUpsellListener";
 import AssetsPage from "./pages/AssetsPage";
+import AnalyticsPage from "./pages/AnalyticsPage";
 import LoginPage from "./pages/LoginPage";
 import RegisterPage from "./pages/RegisterPage";
 import ServiceDownPage from "./pages/ServiceDownPage";
@@ -185,6 +186,7 @@ export default function App() {
       >
         <Route path="dashboard" element={<DashboardPage />} />
         <Route path="assets" element={<AssetsPage />} />
+        <Route path="analytics" element={<AnalyticsPage />} />
         <Route path="risks" element={<RoleRoute path="/risks"><PrivateRoute requiredModule="risks"><RisksPage /></PrivateRoute></RoleRoute>} />
         <Route path="risk-cartography" element={<RoleRoute path="/risk-cartography"><PrivateRoute requiredModule="risks"><RiskCartographyPage /></PrivateRoute></RoleRoute>} />
         <Route path="action-plan" element={<RoleRoute path="/action-plan"><PrivateRoute requiredModule="compliance"><ActionPlanPage /></PrivateRoute></RoleRoute>} />
