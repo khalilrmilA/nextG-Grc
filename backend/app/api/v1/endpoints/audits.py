@@ -166,3 +166,76 @@ async def delete_finding(audit_id: str, fid: str, db: AsyncSession = Depends(get
     f = r.scalar_one_or_none()
     if not f: raise HTTPException(404, "Finding not found")
     await db.delete(f); await db.commit()
+
+
+# ── Evidence (activates the AuditEvidence model, which had no endpoints) ──────
+
+class EvidenceCreate(BaseModel):
+    name: str
+    description: str | None = None
+    file_name: str | None = None
+    s3_key: str | None = None
+
+class EvidenceOut(BaseModel):
+    id: str; audit_id: str; name: str; description: str | None
+    file_name: str | None; s3_key: str | None; uploaded_by_id: str | None
+    created_at: datetime
+    model_config = {"from_attributes": True}
+
+
+@router.get("/{audit_id}/evidence", response_model=list[EvidenceOut])
+async def list_evidence(audit_id: str, db: AsyncSession = Depends(get_db), _: User = Depends(get_current_user), tenant_id: str = Depends(get_tenant_id)):
+    await _audit(db, audit_id, tenant_id)
+    rows = (await db.execute(select(AuditEvidence).where(AuditEvidence.audit_id == audit_id).order_by(AuditEvidence.created_at.desc()))).scalars().all()
+    return [EvidenceOut.model_validate(e) for e in rows]
+
+@router.post("/{audit_id}/evidence", response_model=EvidenceOut, status_code=201)
+async def create_evidence(audit_id: str, body: EvidenceCreate, db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user), tenant_id: str = Depends(get_tenant_id)):
+    await _audit(db, audit_id, tenant_id)
+    e = AuditEvidence(audit_id=audit_id, name=body.name, description=body.description,
+                      file_name=body.file_name, s3_key=body.s3_key, uploaded_by_id=user.id)
+    db.add(e); await db.flush(); await db.commit(); await db.refresh(e)
+    return EvidenceOut.model_validate(e)
+
+@router.delete("/{audit_id}/evidence/{eid}", status_code=204)
+async def delete_evidence(audit_id: str, eid: str, db: AsyncSession = Depends(get_db), _: User = Depends(get_current_user), tenant_id: str = Depends(get_tenant_id)):
+    await _audit(db, audit_id, tenant_id)
+    r = await db.execute(select(AuditEvidence).where(AuditEvidence.id == eid, AuditEvidence.audit_id == audit_id))
+    e = r.scalar_one_or_none()
+    if not e: raise HTTPException(404, "Evidence not found")
+    await db.delete(e); await db.commit()
+
+
+# ── Recommendation tracking: overdue findings across the tenant's audits ─────
+
+class OverdueFindingOut(BaseModel):
+    id: str; audit_id: str; audit_title: str; title: str
+    severity: str; status: str; due_date: str | None
+    remediation_owner_id: str | None; recommendation: str | None
+
+@router.get("/findings/overdue", response_model=list[OverdueFindingOut])
+async def overdue_findings(db: AsyncSession = Depends(get_db), _: User = Depends(get_current_user), tenant_id: str = Depends(get_tenant_id)):
+    """Open/in-remediation findings whose due_date has passed (ISO dates compare lexically)."""
+    today = datetime.utcnow().date().isoformat()
+    q = (
+        select(AuditFinding, Audit.title)
+        .join(Audit, AuditFinding.audit_id == Audit.id)
+        .where(
+            Audit.tenant_id == tenant_id,
+            AuditFinding.due_date.is_not(None),
+            AuditFinding.due_date != "",
+            AuditFinding.due_date < today,
+            AuditFinding.status.in_([FindingStatus.OPEN, FindingStatus.IN_REMEDIATION]),
+        )
+        .order_by(AuditFinding.due_date.asc())
+    )
+    out = []
+    for f, audit_title in (await db.execute(q)).all():
+        out.append(OverdueFindingOut(
+            id=f.id, audit_id=f.audit_id, audit_title=audit_title, title=f.title,
+            severity=f.severity.value if hasattr(f.severity, "value") else str(f.severity),
+            status=f.status.value if hasattr(f.status, "value") else str(f.status),
+            due_date=f.due_date, remediation_owner_id=f.remediation_owner_id,
+            recommendation=f.recommendation,
+        ))
+    return out
