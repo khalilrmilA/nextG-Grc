@@ -1,157 +1,422 @@
-"""Asset cartography + org model endpoints (Elite Pack, RFP module 2).
+"""Asset cartography + organisation model (Elite Pack — RFP module 2).
 
-Gated behind require_feature("asset_cartography"). Manages organizational
-entities and business processes, and serves an auto-generated graph linking
-assets to the processes and entities they belong to (filterable).
+Delivers the tenant-scoped organisation backbone (org entities + business
+processes) and the asset cartography graph that links IT/business assets to the
+business processes and org entities they support.
+
+Every route is gated behind ``require_feature("asset_cartography")`` — the gate
+returns the authenticated ``User`` and answers 402 when the tenant's plan does
+not include the Elite Pack feature. Tenant isolation is enforced on every query
+via ``get_tenant_id``.
 """
-from typing import Annotated
+from datetime import datetime
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
-from app.models.user import User
-from app.models.org_unit import OrgEntity, BusinessProcess
-from app.models.asset import Asset
 from app.api.v1.dependencies.auth import get_tenant_id
 from app.api.v1.dependencies.features import require_feature
+from app.models.user import User
+from app.models.asset import Asset
+from app.models.org_unit import OrgEntity, BusinessProcess
 
 router = APIRouter()
 
-_GATE = require_feature("asset_cartography")
+_FEATURE = "asset_cartography"
 
 
-# ----- Org entities ---------------------------------------------------------
-class EntityIn(BaseModel):
+# -- Schemas ---------------------------------------------------------------
+
+class OrgEntityCreate(BaseModel):
     name: str
     parent_id: str | None = None
+    entity_type: str | None = None
     description: str | None = None
+    owner_id: str | None = None
 
 
-class EntityOut(BaseModel):
+class OrgEntityUpdate(BaseModel):
+    name: str | None = None
+    parent_id: str | None = None
+    entity_type: str | None = None
+    description: str | None = None
+    owner_id: str | None = None
+
+
+class OrgEntityOut(BaseModel):
     id: str
+    tenant_id: str
     name: str
-    parent_id: str | None = None
-    description: str | None = None
+    parent_id: str | None
+    entity_type: str | None
+    description: str | None
+    owner_id: str | None
+    created_at: datetime
+    updated_at: datetime
     model_config = {"from_attributes": True}
 
 
-@router.get("/entities", response_model=list[EntityOut])
-async def list_entities(
-    current_user: Annotated[User, Depends(_GATE)],
-    tenant_id: Annotated[str, Depends(get_tenant_id)],
-    db: Annotated[AsyncSession, Depends(get_db)],
-):
-    result = await db.execute(select(OrgEntity).where(OrgEntity.tenant_id == tenant_id))
-    return list(result.scalars().all())
-
-
-@router.post("/entities", response_model=EntityOut, status_code=status.HTTP_201_CREATED)
-async def create_entity(
-    body: EntityIn,
-    current_user: Annotated[User, Depends(_GATE)],
-    tenant_id: Annotated[str, Depends(get_tenant_id)],
-    db: Annotated[AsyncSession, Depends(get_db)],
-):
-    entity = OrgEntity(tenant_id=tenant_id, **body.model_dump())
-    db.add(entity)
-    await db.commit()
-    await db.refresh(entity)
-    return entity
-
-
-# ----- Business processes ---------------------------------------------------
-class ProcessIn(BaseModel):
+class BusinessProcessCreate(BaseModel):
     name: str
+    description: str | None = None
+    criticality: str | None = None
     owner_id: str | None = None
     entity_id: str | None = None
+    asset_ids: list[str] = []
+
+
+class BusinessProcessUpdate(BaseModel):
+    name: str | None = None
     description: str | None = None
+    criticality: str | None = None
+    owner_id: str | None = None
+    entity_id: str | None = None
+    asset_ids: list[str] | None = None
 
 
-class ProcessOut(BaseModel):
+class BusinessProcessOut(BaseModel):
     id: str
+    tenant_id: str
     name: str
-    owner_id: str | None = None
-    entity_id: str | None = None
-    description: str | None = None
+    description: str | None
+    criticality: str | None
+    owner_id: str | None
+    entity_id: str | None
+    asset_ids: list
+    created_at: datetime
+    updated_at: datetime
     model_config = {"from_attributes": True}
 
 
-@router.get("/processes", response_model=list[ProcessOut])
-async def list_processes(
-    current_user: Annotated[User, Depends(_GATE)],
-    tenant_id: Annotated[str, Depends(get_tenant_id)],
-    db: Annotated[AsyncSession, Depends(get_db)],
-):
-    result = await db.execute(select(BusinessProcess).where(BusinessProcess.tenant_id == tenant_id))
-    return list(result.scalars().all())
+class GraphNode(BaseModel):
+    id: str
+    label: str
+    type: str  # "entity" | "process" | "asset"
 
 
-@router.post("/processes", response_model=ProcessOut, status_code=status.HTTP_201_CREATED)
-async def create_process(
-    body: ProcessIn,
-    current_user: Annotated[User, Depends(_GATE)],
-    tenant_id: Annotated[str, Depends(get_tenant_id)],
-    db: Annotated[AsyncSession, Depends(get_db)],
+class GraphEdge(BaseModel):
+    source: str
+    target: str
+    kind: str  # "belongs_to" | "operated_by" | "depends_on" | "owned_by"
+
+
+class CartographyGraph(BaseModel):
+    nodes: list[GraphNode]
+    edges: list[GraphEdge]
+    stats: dict[str, int]
+
+
+# -- Helpers ---------------------------------------------------------------
+
+async def _get_entity(db: AsyncSession, tenant_id: str, eid: str) -> OrgEntity:
+    r = await db.execute(
+        select(OrgEntity).where(OrgEntity.id == eid, OrgEntity.tenant_id == tenant_id)
+    )
+    e = r.scalar_one_or_none()
+    if not e:
+        raise HTTPException(404, "Org entity not found")
+    return e
+
+
+async def _get_process(db: AsyncSession, tenant_id: str, pid: str) -> BusinessProcess:
+    r = await db.execute(
+        select(BusinessProcess).where(
+            BusinessProcess.id == pid, BusinessProcess.tenant_id == tenant_id
+        )
+    )
+    p = r.scalar_one_or_none()
+    if not p:
+        raise HTTPException(404, "Business process not found")
+    return p
+
+
+# -- Org entities ----------------------------------------------------------
+
+@router.get("/org-entities", response_model=list[OrgEntityOut])
+async def list_org_entities(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_feature(_FEATURE)),
+    tenant_id: str = Depends(get_tenant_id),
 ):
-    proc = BusinessProcess(tenant_id=tenant_id, **body.model_dump())
-    db.add(proc)
+    q = select(OrgEntity).where(OrgEntity.tenant_id == tenant_id).order_by(OrgEntity.created_at.desc())
+    return [OrgEntityOut.model_validate(e) for e in (await db.execute(q)).scalars().all()]
+
+
+@router.post("/org-entities", response_model=OrgEntityOut, status_code=201)
+async def create_org_entity(
+    body: OrgEntityCreate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_feature(_FEATURE)),
+    tenant_id: str = Depends(get_tenant_id),
+):
+    if body.parent_id:
+        await _get_entity(db, tenant_id, body.parent_id)  # validate parent belongs to tenant
+    e = OrgEntity(
+        tenant_id=tenant_id,
+        name=body.name,
+        parent_id=body.parent_id,
+        entity_type=body.entity_type,
+        description=body.description,
+        owner_id=body.owner_id,
+    )
+    db.add(e)
+    await db.flush()
     await db.commit()
-    await db.refresh(proc)
-    return proc
+    await db.refresh(e)
+    return OrgEntityOut.model_validate(e)
 
 
-# ----- Cartography graph ----------------------------------------------------
-@router.get("/cartography")
-async def cartography(
-    current_user: Annotated[User, Depends(_GATE)],
-    tenant_id: Annotated[str, Depends(get_tenant_id)],
-    db: Annotated[AsyncSession, Depends(get_db)],
+@router.get("/org-entities/{eid}", response_model=OrgEntityOut)
+async def get_org_entity(
+    eid: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_feature(_FEATURE)),
+    tenant_id: str = Depends(get_tenant_id),
+):
+    return OrgEntityOut.model_validate(await _get_entity(db, tenant_id, eid))
+
+
+@router.patch("/org-entities/{eid}", response_model=OrgEntityOut)
+async def update_org_entity(
+    eid: str,
+    body: OrgEntityUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_feature(_FEATURE)),
+    tenant_id: str = Depends(get_tenant_id),
+):
+    e = await _get_entity(db, tenant_id, eid)
+    if body.parent_id is not None:
+        if body.parent_id == eid:
+            raise HTTPException(400, "An org entity cannot be its own parent")
+        if body.parent_id:
+            await _get_entity(db, tenant_id, body.parent_id)
+    for f in ["name", "parent_id", "entity_type", "description", "owner_id"]:
+        v = getattr(body, f, None)
+        if v is not None:
+            setattr(e, f, v)
+    await db.commit()
+    await db.refresh(e)
+    return OrgEntityOut.model_validate(e)
+
+
+@router.delete("/org-entities/{eid}", status_code=204)
+async def delete_org_entity(
+    eid: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_feature(_FEATURE)),
+    tenant_id: str = Depends(get_tenant_id),
+):
+    e = await _get_entity(db, tenant_id, eid)
+    # Detach children and processes so no rows dangle against a deleted entity.
+    for child in (await db.execute(
+        select(OrgEntity).where(OrgEntity.tenant_id == tenant_id, OrgEntity.parent_id == eid)
+    )).scalars().all():
+        child.parent_id = None
+    for proc in (await db.execute(
+        select(BusinessProcess).where(
+            BusinessProcess.tenant_id == tenant_id, BusinessProcess.entity_id == eid
+        )
+    )).scalars().all():
+        proc.entity_id = None
+    await db.delete(e)
+    await db.commit()
+
+
+# -- Business processes -----------------------------------------------------
+
+@router.get("/business-processes", response_model=list[BusinessProcessOut])
+async def list_business_processes(
+    entity_id: str | None = None,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_feature(_FEATURE)),
+    tenant_id: str = Depends(get_tenant_id),
+):
+    q = select(BusinessProcess).where(BusinessProcess.tenant_id == tenant_id)
+    if entity_id:
+        q = q.where(BusinessProcess.entity_id == entity_id)
+    q = q.order_by(BusinessProcess.created_at.desc())
+    return [BusinessProcessOut.model_validate(p) for p in (await db.execute(q)).scalars().all()]
+
+
+@router.post("/business-processes", response_model=BusinessProcessOut, status_code=201)
+async def create_business_process(
+    body: BusinessProcessCreate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_feature(_FEATURE)),
+    tenant_id: str = Depends(get_tenant_id),
+):
+    if body.entity_id:
+        await _get_entity(db, tenant_id, body.entity_id)  # validate entity belongs to tenant
+    p = BusinessProcess(
+        tenant_id=tenant_id,
+        name=body.name,
+        description=body.description,
+        criticality=body.criticality,
+        owner_id=body.owner_id,
+        entity_id=body.entity_id,
+        asset_ids=body.asset_ids or [],
+    )
+    db.add(p)
+    await db.flush()
+    await db.commit()
+    await db.refresh(p)
+    return BusinessProcessOut.model_validate(p)
+
+
+@router.get("/business-processes/{pid}", response_model=BusinessProcessOut)
+async def get_business_process(
+    pid: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_feature(_FEATURE)),
+    tenant_id: str = Depends(get_tenant_id),
+):
+    return BusinessProcessOut.model_validate(await _get_process(db, tenant_id, pid))
+
+
+@router.patch("/business-processes/{pid}", response_model=BusinessProcessOut)
+async def update_business_process(
+    pid: str,
+    body: BusinessProcessUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_feature(_FEATURE)),
+    tenant_id: str = Depends(get_tenant_id),
+):
+    p = await _get_process(db, tenant_id, pid)
+    if body.entity_id:
+        await _get_entity(db, tenant_id, body.entity_id)
+    for f in ["name", "description", "criticality", "owner_id", "entity_id", "asset_ids"]:
+        v = getattr(body, f, None)
+        if v is not None:
+            setattr(p, f, v)
+    await db.commit()
+    await db.refresh(p)
+    return BusinessProcessOut.model_validate(p)
+
+
+@router.delete("/business-processes/{pid}", status_code=204)
+async def delete_business_process(
+    pid: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_feature(_FEATURE)),
+    tenant_id: str = Depends(get_tenant_id),
+):
+    p = await _get_process(db, tenant_id, pid)
+    await db.delete(p)
+    await db.commit()
+
+
+# -- Cartography graph ------------------------------------------------------
+
+@router.get("/cartography", response_model=CartographyGraph)
+async def get_cartography(
     entity: str | None = None,
     asset_type: str | None = None,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_feature(_FEATURE)),
+    tenant_id: str = Depends(get_tenant_id),
 ):
-    """Auto-generated graph: assets <-> business processes <-> org entities."""
-    entities = (await db.execute(
+    """Return the asset cartography graph for the tenant.
+
+    Nodes: org entities, business processes, and assets.
+    Edges:
+      * entity   -> parent entity  (kind="belongs_to")
+      * process  -> org entity      (kind="operated_by")
+      * process  -> asset           (kind="depends_on", from BusinessProcess.asset_ids)
+      * asset    -> process         (kind="owned_by", inferred when they share owner_id)
+
+    Optional filters:
+      * ``entity``     — restrict to an org entity and its descendant subtree
+                          (plus the processes/assets connected to it).
+      * ``asset_type`` — restrict asset nodes to a single Asset type.
+    """
+    entities = list((await db.execute(
         select(OrgEntity).where(OrgEntity.tenant_id == tenant_id)
-    )).scalars().all()
-    processes = (await db.execute(
+    )).scalars().all())
+    processes = list((await db.execute(
         select(BusinessProcess).where(BusinessProcess.tenant_id == tenant_id)
-    )).scalars().all()
-    asset_stmt = select(Asset).where(Asset.tenant_id == tenant_id)
+    )).scalars().all())
+
+    asset_q = select(Asset).where(Asset.tenant_id == tenant_id)
     if asset_type:
-        asset_stmt = asset_stmt.where(Asset.asset_type == asset_type)
-    assets = (await db.execute(asset_stmt)).scalars().all()
+        asset_q = asset_q.where(Asset.asset_type == asset_type)
+    assets = list((await db.execute(asset_q)).scalars().all())
 
-    nodes = []
-    edges = []
-    for e in entities:
-        if entity and e.id != entity:
-            continue
-        nodes.append({"id": e.id, "label": e.name, "type": "entity"})
-        if e.parent_id:
-            edges.append({"source": e.id, "target": e.parent_id, "kind": "child_of"})
-    for p in processes:
-        if entity and p.entity_id != entity:
-            continue
-        nodes.append({"id": p.id, "label": p.name, "type": "process"})
-        if p.entity_id:
-            edges.append({"source": p.id, "target": p.entity_id, "kind": "belongs_to"})
-    process_ids = {p.id for p in processes}
-    entity_ids = {e.id for e in entities}
-    for a in assets:
-        # Optional links, present once the assets module adds them.
-        proc_id = getattr(a, "business_process_id", None)
-        ent_id = getattr(a, "org_entity_id", None)
-        if entity and ent_id != entity and proc_id not in process_ids:
-            # Skip assets unrelated to the filtered entity.
-            if not (proc_id and any(p.id == proc_id and p.entity_id == entity for p in processes)):
+    # -- entity subtree filter --
+    if entity:
+        children_map: dict[str | None, list[str]] = {}
+        for e in entities:
+            children_map.setdefault(e.parent_id, []).append(e.id)
+        included_entity_ids: set[str] = set()
+        stack = [entity]
+        while stack:
+            cur = stack.pop()
+            if cur in included_entity_ids:
                 continue
-        nodes.append({"id": a.id, "label": a.name, "type": "asset", "asset_type": a.asset_type})
-        if proc_id and proc_id in process_ids:
-            edges.append({"source": a.id, "target": proc_id, "kind": "supports"})
-        if ent_id and ent_id in entity_ids:
-            edges.append({"source": a.id, "target": ent_id, "kind": "owned_by"})
+            included_entity_ids.add(cur)
+            stack.extend(children_map.get(cur, []))
+        entities = [e for e in entities if e.id in included_entity_ids]
+        processes = [p for p in processes if p.entity_id in included_entity_ids]
 
-    return {"nodes": nodes, "edges": edges}
+        # Keep only assets connected to the included processes (explicit link or shared owner).
+        proc_owner_ids = {p.owner_id for p in processes if p.owner_id}
+        explicit_asset_ids: set[str] = set()
+        for p in processes:
+            explicit_asset_ids.update(p.asset_ids or [])
+        assets = [
+            a for a in assets
+            if a.id in explicit_asset_ids or (a.owner_id and a.owner_id in proc_owner_ids)
+        ]
+
+    # -- build nodes --
+    nodes: list[GraphNode] = []
+    nodes.extend(GraphNode(id=e.id, label=e.name, type="entity") for e in entities)
+    nodes.extend(GraphNode(id=p.id, label=p.name, type="process") for p in processes)
+    nodes.extend(GraphNode(id=a.id, label=a.name, type="asset") for a in assets)
+    node_ids = {n.id for n in nodes}
+
+    # -- build edges --
+    edges: list[GraphEdge] = []
+    seen: set[tuple[str, str, str]] = set()
+
+    def _add_edge(source: str, target: str, kind: str) -> None:
+        if source in node_ids and target in node_ids:
+            key = (source, target, kind)
+            if key not in seen:
+                seen.add(key)
+                edges.append(GraphEdge(source=source, target=target, kind=kind))
+
+    # entity hierarchy: child -> parent
+    for e in entities:
+        if e.parent_id:
+            _add_edge(e.id, e.parent_id, "belongs_to")
+
+    # process -> operating entity
+    for p in processes:
+        if p.entity_id:
+            _add_edge(p.id, p.entity_id, "operated_by")
+
+    asset_owner_map = {a.id: a.owner_id for a in assets}
+    for p in processes:
+        linked = set(p.asset_ids or [])
+        # explicit process -> asset dependency
+        for aid in linked:
+            _add_edge(p.id, aid, "depends_on")
+        # inferred asset -> process by shared ownership (skip ones already linked)
+        if p.owner_id:
+            for aid, a_owner in asset_owner_map.items():
+                if aid in linked:
+                    continue
+                if a_owner and a_owner == p.owner_id:
+                    _add_edge(aid, p.id, "owned_by")
+
+    stats = {
+        "entities": len(entities),
+        "processes": len(processes),
+        "assets": len(assets),
+        "nodes": len(nodes),
+        "edges": len(edges),
+    }
+    return CartographyGraph(nodes=nodes, edges=edges, stats=stats)

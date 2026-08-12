@@ -1,32 +1,104 @@
-"""Vulnerability Management — track CVEs, misconfigs, and weaknesses."""
-from datetime import datetime
+"""Vulnerability Management — track CVEs, misconfigs, and weaknesses.
+
+Elite Pack (RFP module 3):
+- Robust list-field coercion: ``affected_systems`` / ``affected_assets`` accept a
+  comma-string OR a list and are always stored as a JSON list.
+- Validation workflow: manual vulnerabilities start ``pending_validation`` and a
+  security referent (CISO) validates them via POST /{id}/validate before they
+  enter risk analysis.
+- Composite impact scoring (gated: ``vuln_impact_scoring``) via POST /{id}/impact.
+"""
+from datetime import datetime, timezone
+from typing import Annotated
+
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
-from sqlalchemy import select, func
+from pydantic import BaseModel, field_validator
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
-from app.api.v1.dependencies.auth import get_current_user, get_tenant_id
-from app.models.user import User
-from app.models.vulnerability import Vulnerability, VulnSeverity, VulnStatus
+from app.api.v1.dependencies.auth import get_current_user, get_tenant_id, require_roles
+from app.api.v1.dependencies.features import require_feature
+from app.models.user import User, UserRole
+from app.models.asset import Asset
+from app.models.vulnerability import (
+    Vulnerability,
+    VulnSeverity,
+    VulnStatus,
+    compute_impact_score,
+    resolve_context_weight,
+)
 
 router = APIRouter()
+
+
+def _utcnow() -> datetime:
+    return datetime.now(timezone.utc).replace(tzinfo=None)
+
+
+def _to_str_list(value) -> list[str]:
+    """Coerce a comma-string OR list (OR None) into a clean list[str].
+
+    Fixes the bug where the frontend posted ``affected_systems`` as a single
+    comma-separated string straight into a JSON-list column.
+    """
+    if value is None:
+        return []
+    if isinstance(value, str):
+        return [s.strip() for s in value.split(",") if s.strip()]
+    if isinstance(value, (list, tuple, set)):
+        out: list[str] = []
+        for item in value:
+            if item is None:
+                continue
+            s = str(item).strip()
+            if s:
+                out.append(s)
+        return out
+    s = str(value).strip()
+    return [s] if s else []
+
+
+# Business value -> rank, to pick the most valuable linked asset for scoring.
+_BUSINESS_VALUE_RANK = {"critical": 4, "high": 3, "medium": 2, "low": 1}
+
 
 class VulnCreate(BaseModel):
     ref_id: str | None = None; title: str; description: str | None = None
     severity: str = "medium"; cvss_score: float | None = None
-    affected_assets: list[str] = []; affected_systems: list[str] = []
+    affected_assets: list[str] | str = []; affected_systems: list[str] | str = []
     remediation_plan: str | None = None; remediation_owner_id: str | None = None
     remediation_due_date: str | None = None; source: str | None = None
     references: list[str] = []; tags: list[str] = []
 
+    @field_validator("affected_assets", "affected_systems", mode="before")
+    @classmethod
+    def _coerce_lists(cls, v):
+        return _to_str_list(v)
+
+
 class VulnUpdate(BaseModel):
     title: str | None = None; description: str | None = None
     severity: str | None = None; status: str | None = None
-    cvss_score: float | None = None; affected_assets: list[str] | None = None
+    cvss_score: float | None = None; affected_assets: list[str] | str | None = None
+    affected_systems: list[str] | str | None = None
     remediation_plan: str | None = None; remediation_owner_id: str | None = None
     remediation_due_date: str | None = None; fixed_by_controls: list[str] | None = None
     tags: list[str] | None = None
+
+    @field_validator("affected_assets", "affected_systems", mode="before")
+    @classmethod
+    def _coerce_lists(cls, v):
+        return None if v is None else _to_str_list(v)
+
+
+class ImpactRequest(BaseModel):
+    """Recompute (context weight / label) or override the composite impact score."""
+    operational_context: str | None = None   # label, e.g. "internet_facing"
+    context_weight: float | None = None       # explicit multiplier, wins over label
+    override: float | None = None             # direct 0-100 override
+    justification: str | None = None          # required when overriding
+
 
 class VulnOut(BaseModel):
     id: str; tenant_id: str; ref_id: str | None; title: str; description: str | None
@@ -35,12 +107,16 @@ class VulnOut(BaseModel):
     remediation_plan: str | None; remediation_owner_id: str | None
     remediation_due_date: str | None; fixed_by_controls: list
     source: str | None; references: list; tags: list
+    validated_by_id: str | None; validated_at: datetime | None
+    impact_score: float | None; impact_override: float | None; impact_justification: str | None
     created_at: datetime; updated_at: datetime
     model_config = {"from_attributes": True}
+
 
 class VulnStats(BaseModel):
     total: int; open: int; in_remediation: int; mitigated: int; closed: int
     by_severity: dict[str, int]; avg_cvss: float | None
+
 
 @router.get("", response_model=list[VulnOut])
 async def list_vulns(severity: str | None = None, status_filter: str | None = None, db: AsyncSession = Depends(get_db), _: User = Depends(get_current_user), tenant_id: str = Depends(get_tenant_id)):
@@ -65,11 +141,13 @@ async def get_stats(db: AsyncSession = Depends(get_db), _: User = Depends(get_cu
 
 @router.post("", response_model=VulnOut, status_code=201)
 async def create_vuln(body: VulnCreate, db: AsyncSession = Depends(get_db), _: User = Depends(get_current_user), tenant_id: str = Depends(get_tenant_id)):
+    # New manual vulnerabilities enter the validation queue before risk analysis.
     v = Vulnerability(tenant_id=tenant_id, ref_id=body.ref_id, title=body.title, description=body.description,
-                      severity=body.severity, cvss_score=body.cvss_score, affected_assets=body.affected_assets,
+                      severity=body.severity, status=VulnStatus.PENDING_VALIDATION.value,
+                      cvss_score=body.cvss_score, affected_assets=body.affected_assets,
                       affected_systems=body.affected_systems, remediation_plan=body.remediation_plan,
                       remediation_owner_id=body.remediation_owner_id, remediation_due_date=body.remediation_due_date,
-                      source=body.source, references=body.references, tags=body.tags)
+                      source=body.source or "manual", references=body.references, tags=body.tags)
     db.add(v); await db.flush(); await db.commit(); await db.refresh(v)
     return VulnOut.model_validate(v)
 
@@ -85,11 +163,86 @@ async def update_vuln(vid: str, body: VulnUpdate, db: AsyncSession = Depends(get
     r = await db.execute(select(Vulnerability).where(Vulnerability.id == vid, Vulnerability.tenant_id == tenant_id))
     v = r.scalar_one_or_none()
     if not v: raise HTTPException(404, "Vulnerability not found")
-    for f in ["title","description","cvss_score","affected_assets","remediation_plan","remediation_owner_id","remediation_due_date","fixed_by_controls","tags"]:
+    for f in ["title","description","cvss_score","affected_assets","affected_systems","remediation_plan","remediation_owner_id","remediation_due_date","fixed_by_controls","tags"]:
         val = getattr(body, f, None)
         if val is not None: setattr(v, f, val)
     if body.severity: v.severity = body.severity
     if body.status: v.status = body.status
+    await db.commit(); await db.refresh(v)
+    return VulnOut.model_validate(v)
+
+@router.post("/{vid}/validate", response_model=VulnOut)
+async def validate_vuln(
+    vid: str,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: Annotated[User, Depends(require_roles(UserRole.CISO))],
+    tenant_id: Annotated[str, Depends(get_tenant_id)],
+):
+    """Security-referent validation gate — moves a vuln into risk analysis.
+
+    Restricted to the security referent (CISO; tenant/super admins auto-pass).
+    """
+    r = await db.execute(select(Vulnerability).where(Vulnerability.id == vid, Vulnerability.tenant_id == tenant_id))
+    v = r.scalar_one_or_none()
+    if not v:
+        raise HTTPException(404, "Vulnerability not found")
+    current = v.status if isinstance(v.status, str) else v.status.value
+    if current != VulnStatus.PENDING_VALIDATION.value:
+        raise HTTPException(400, "Vulnerability is not pending validation")
+    v.status = VulnStatus.VALIDATED.value
+    v.validated_by_id = current_user.id
+    v.validated_at = _utcnow()
+    await db.commit(); await db.refresh(v)
+    return VulnOut.model_validate(v)
+
+@router.post("/{vid}/impact", response_model=VulnOut)
+async def score_impact(
+    vid: str,
+    body: ImpactRequest,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: Annotated[User, Depends(require_feature("vuln_impact_scoring"))],
+    tenant_id: Annotated[str, Depends(get_tenant_id)],
+):
+    """Recompute or override the composite impact score (Elite Pack).
+
+    Without ``override``: recomputes ``impact_score`` = f(CVSS, operational
+    context weight, most-valuable linked asset's business value).
+    With ``override``: stores the manual value + required justification.
+    """
+    r = await db.execute(select(Vulnerability).where(Vulnerability.id == vid, Vulnerability.tenant_id == tenant_id))
+    v = r.scalar_one_or_none()
+    if not v:
+        raise HTTPException(404, "Vulnerability not found")
+
+    if body.override is not None:
+        if not (body.justification and body.justification.strip()):
+            raise HTTPException(400, "A justification is required to override the impact score")
+        v.impact_override = round(max(0.0, min(100.0, float(body.override))), 1)
+        v.impact_justification = body.justification.strip()
+        v.impact_score = v.impact_override
+        await db.commit(); await db.refresh(v)
+        return VulnOut.model_validate(v)
+
+    # Recompute from CVSS + operational context + most-valuable linked asset.
+    business_value = None
+    asset_ids = v.affected_assets or []
+    if asset_ids:
+        assets = (await db.execute(
+            select(Asset).where(Asset.tenant_id == tenant_id, Asset.id.in_(asset_ids))
+        )).scalars().all()
+        best_rank = -1
+        for a in assets:
+            rank = _BUSINESS_VALUE_RANK.get((a.business_value or "").strip().lower(), 0)
+            if rank > best_rank:
+                best_rank = rank
+                business_value = a.business_value
+
+    severity = v.severity if isinstance(v.severity, str) else v.severity.value
+    weight = resolve_context_weight(body.operational_context, body.context_weight)
+    v.impact_score = compute_impact_score(v.cvss_score, weight, business_value, severity)
+    v.impact_override = None  # recompute clears any prior manual override
+    if body.justification and body.justification.strip():
+        v.impact_justification = body.justification.strip()
     await db.commit(); await db.refresh(v)
     return VulnOut.model_validate(v)
 

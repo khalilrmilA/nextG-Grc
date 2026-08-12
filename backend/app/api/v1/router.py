@@ -43,6 +43,7 @@ from app.api.v1.endpoints import (
     asset_graph,
     cve,
     risk_treatment,
+    vuln_import,
 )
 
 api_router = APIRouter()
@@ -89,3 +90,4 @@ api_router.include_router(control_evaluation.router, prefix="/control-evaluation
 api_router.include_router(asset_graph.router, prefix="/asset-graph", tags=["Asset Cartography (Elite Pack)"])
 api_router.include_router(cve.router, prefix="/cve", tags=["CVE Knowledge Base (Elite Pack)"])
 api_router.include_router(risk_treatment.router, prefix="/risk-treatment", tags=["Risk Treatment (Elite Pack)"])
+api_router.include_router(vuln_import.router, prefix="/vuln-import", tags=["Vulnerability Scanner Import (Elite Pack)"])
