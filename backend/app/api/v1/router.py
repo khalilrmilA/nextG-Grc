@@ -46,6 +46,7 @@ from app.api.v1.endpoints import (
     vuln_import,
     sso,
     report_builder,
+    dashboards,
 )
 
 api_router = APIRouter()
@@ -95,3 +96,4 @@ api_router.include_router(risk_treatment.router, prefix="/risk-treatment", tags=
 api_router.include_router(vuln_import.router, prefix="/vuln-import", tags=["Vulnerability Scanner Import (Elite Pack)"])
 api_router.include_router(sso.router, prefix="/sso", tags=["AD/LDAP SSO (Elite Pack)"])
 api_router.include_router(report_builder.router, prefix="/report-builder", tags=["Report Builder (Elite Pack)"])
+api_router.include_router(dashboards.router, prefix="/dashboards", tags=["Module Dashboards (Elite Pack)"])
