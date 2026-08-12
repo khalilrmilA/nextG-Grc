@@ -1,6 +1,7 @@
 """Threat Library — browse, import MITRE ATT&CK, and fetch live threat feeds."""
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Annotated
+import httpx
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy import select
@@ -8,11 +9,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.api.v1.dependencies.auth import get_current_user, get_tenant_id
+from app.api.v1.dependencies.features import require_feature
 from app.models.user import User
 from app.models.threat import Threat, ThreatCategory
 from app.services.threat_feeds import fetch_all_threat_feeds
 
 router = APIRouter()
+
+PROBABILITY_LEVELS = ("rare", "peu_probable", "possible", "probable", "quasiment_certain")
+SEVERITY_LEVELS = ("mineur", "notable", "fort", "tres_fort", "critique")
 
 # ── MITRE ATT&CK source ────────────────────────────────────────────────────────
 MITRE_ATTACK_URL = "https://raw.githubusercontent.com/mitre/cti/master/enterprise-attack/enterprise-attack.json"
@@ -42,12 +47,47 @@ class ThreatCreate(BaseModel):
     typical_attack_vectors: list[str] = []
     affected_assets: list[str] = []
     mitre_ids: list[str] = []
+    require_validation: bool = False   # if true, threat starts pending review
+
+
+class ThreatUpdate(BaseModel):
+    name: str | None = None
+    description: str | None = None
+    category: str | None = None
+    typical_threat_actors: list[str] | None = None
+    typical_attack_vectors: list[str] | None = None
+    affected_assets: list[str] | None = None
+    mitre_ids: list[str] | None = None
+
+
+class ThreatProfileUpdate(BaseModel):
+    origin: str | None = None
+    objectives: str | None = None
+    aggravating_factors: str | None = None
+    occurrence_conditions: str | None = None
+    estimated_frequency: str | None = None
+    mode_operatoire: str | None = None
+    probability_level: str | None = None
+    severity_level: str | None = None
+    linked_asset_ids: list[str] | None = None
+    linked_vulnerability_ids: list[str] | None = None
 
 
 class ThreatOut(BaseModel):
     id: str; ref_id: str; name: str; description: str | None
     category: str; typical_threat_actors: list; typical_attack_vectors: list
     affected_assets: list; mitre_ids: list; is_builtin: bool; is_pending: bool
+    origin: str | None = None
+    objectives: str | None = None
+    aggravating_factors: str | None = None
+    occurrence_conditions: str | None = None
+    estimated_frequency: str | None = None
+    mode_operatoire: str | None = None
+    probability_level: str | None = None
+    severity_level: str | None = None
+    last_reviewed_at: str | None = None
+    linked_asset_ids: list = []
+    linked_vulnerability_ids: list = []
     created_at: datetime
     model_config = {"from_attributes": True}
 
@@ -93,9 +133,60 @@ async def create_threat(
     t = Threat(ref_id=body.ref_id, name=body.name, description=body.description,
                category=body.category, typical_threat_actors=body.typical_threat_actors,
                typical_attack_vectors=body.typical_attack_vectors, affected_assets=body.affected_assets,
-               mitre_ids=body.mitre_ids, is_builtin=False, is_pending=False, tenant_id=tenant_id)
+               mitre_ids=body.mitre_ids, is_builtin=False, is_pending=body.require_validation,
+               tenant_id=tenant_id)
     db.add(t)
     await db.flush()
+    await db.commit()
+    await db.refresh(t)
+    return ThreatOut.model_validate(t)
+
+
+async def _get_tenant_threat(tid: str, tenant_id: str, db: AsyncSession) -> Threat:
+    """Fetch a tenant-owned, editable threat (built-ins are read-only)."""
+    r = await db.execute(select(Threat).where(
+        Threat.id == tid, Threat.tenant_id == tenant_id, Threat.is_builtin == False))  # noqa: E712
+    t = r.scalar_one_or_none()
+    if not t:
+        raise HTTPException(404, "Threat not found or is built-in (read-only)")
+    return t
+
+
+@router.put("/{tid}", response_model=ThreatOut)
+async def update_threat(
+    tid: str,
+    body: ThreatUpdate,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    _: Annotated[User, Depends(get_current_user)],
+    tenant_id: Annotated[str, Depends(get_tenant_id)],
+):
+    """Edit a tenant-owned threat (built-in threats stay read-only)."""
+    t = await _get_tenant_threat(tid, tenant_id, db)
+    for field, value in body.model_dump(exclude_none=True).items():
+        setattr(t, field, value)
+    await db.commit()
+    await db.refresh(t)
+    return ThreatOut.model_validate(t)
+
+
+@router.put("/{tid}/profile", response_model=ThreatOut)
+async def update_threat_profile(
+    tid: str,
+    body: ThreatProfileUpdate,
+    current_user: Annotated[User, Depends(require_feature("threat_profiles"))],
+    tenant_id: Annotated[str, Depends(get_tenant_id)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    """Set the detailed threat profile + RFP probability/severity scales (Elite Pack)."""
+    if body.probability_level and body.probability_level not in PROBABILITY_LEVELS:
+        raise HTTPException(422, f"probability_level must be one of {PROBABILITY_LEVELS}")
+    if body.severity_level and body.severity_level not in SEVERITY_LEVELS:
+        raise HTTPException(422, f"severity_level must be one of {SEVERITY_LEVELS}")
+    t = await _get_tenant_threat(tid, tenant_id, db)
+    for field, value in body.model_dump(exclude_none=True).items():
+        setattr(t, field, value)
+    t.last_reviewed_at = datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
+    t.reviewed_by_id = current_user.id
     await db.commit()
     await db.refresh(t)
     return ThreatOut.model_validate(t)
