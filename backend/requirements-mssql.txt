@@ -1,0 +1,8 @@
+# Optional: SQL Server 2019 support (STB / RFP). Install alongside requirements.txt:
+#   pip install -r requirements.txt -r requirements-mssql.txt
+# REQUIRES OS-level unixODBC + Microsoft ODBC Driver 18 for SQL Server:
+#   Debian/Ubuntu: apt-get install unixodbc unixodbc-dev + msodbcsql18 (Microsoft repo)
+#   RHEL 8.5+:     yum install unixODBC unixODBC-devel + msodbcsql18
+# DATABASE_URL=mssql+aioodbc://user:pass@host:1433/grc?driver=ODBC+Driver+18+for+SQL+Server
+aioodbc>=0.5.0,<0.6.0
+pyodbc>=5.1.0,<6.0.0

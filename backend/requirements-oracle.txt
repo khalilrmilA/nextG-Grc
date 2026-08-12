@@ -1,0 +1,5 @@
+# Optional: Oracle 19c support (STB / RFP). Install alongside requirements.txt:
+#   pip install -r requirements.txt -r requirements-oracle.txt
+# oracledb runs in "thin" mode by default — no Oracle Instant Client needed.
+# DATABASE_URL=oracle+oracledb://user:pass@host:1521/?service_name=ORCLPDB1
+oracledb>=2.0.0,<3.0.0
