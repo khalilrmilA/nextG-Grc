@@ -9,6 +9,7 @@ class SubscriptionTier(str, enum.Enum):
     STARTER = "starter"
     PROFESSIONAL = "professional"
     ENTERPRISE = "enterprise"
+    ELITE = "elite"  # Elite Pack — unlocks the full STB / RFP cyber-risk capability set
 
     @classmethod
     def _missing_(cls, value: object):
@@ -34,6 +35,36 @@ class SubscriptionStatus(str, enum.Enum):
                     return member
         return None
 
+
+# ---------------------------------------------------------------------------
+# Elite Pack — the feature set delivered for the STB AO 20/2026 cyber-risk RFP.
+# These flags are unlocked ONLY by the ELITE tier (or an explicit custom_limits
+# override, or platform super admins). Every non-Elite tier gets them as False.
+# Gate endpoints with app.api.v1.dependencies.features.require_feature("<flag>").
+# ---------------------------------------------------------------------------
+ELITE_FEATURES = (
+    "elite_pack",             # master flag
+    "ad_ldap_sso",            # Active Directory / LDAP + OIDC SSO
+    "mfa",                    # TOTP multi-factor authentication
+    "cia_valuation",          # asset CID valuation grid + history
+    "asset_cartography",      # interactive asset ↔ process ↔ entity graph
+    "asset_lifecycle",        # lifecycle states + end-of-life alerts
+    "vuln_scanner_import",    # Nessus / Qualys / OpenVAS ingestion
+    "cve_knowledge_base",     # CVE/CWE/CAPEC base + daily NVD sync
+    "vuln_impact_scoring",    # composite CVSS × context × asset-value scoring
+    "threat_profiles",        # detailed threat profiles + probability/severity scales
+    "scenario_versioning",    # scenario/risk version history + timeline + diff
+    "control_effectiveness",  # 5-criteria control effectiveness evaluation
+    "risk_appetite",          # appetite thresholds + target-vs-threshold gating
+    "risk_treatment_plans",   # treatment options + multi-action plans + tracking
+    "advanced_reporting",     # report builder + Excel + scheduling + templates
+    "custom_dashboards",      # the full 9-dashboard set + export
+    "raci_governance",        # RACI matrix + document repository
+    "document_repository",    # unified governance document store with per-doc rights
+    "archiving",              # rule-based archiving + retention enforcement
+    "multi_db_support",       # Oracle 19c / SQL Server 2019 compatibility
+    "ocr_capture",            # optional French OCR document capture
+)
 
 # Feature limits per tier
 TIER_LIMITS = {
@@ -81,6 +112,19 @@ TIER_LIMITS = {
     },
 }
 
+# Elite tier = everything Enterprise has (unlimited) PLUS every Elite Pack feature.
+TIER_LIMITS[SubscriptionTier.ELITE] = {
+    **TIER_LIMITS[SubscriptionTier.ENTERPRISE],
+    **{feature: True for feature in ELITE_FEATURES},
+    "sla_uptime": 99.99,
+}
+
+# Every non-Elite tier gets the Elite Pack features defaulted to False (keeps the
+# `limits` map complete so gating checks never KeyError on older tiers).
+for _tier_limits in TIER_LIMITS.values():
+    for _feature in ELITE_FEATURES:
+        _tier_limits.setdefault(_feature, False)
+
 
 class Subscription(Base):
     """Tenant subscription details."""
@@ -126,3 +170,7 @@ class Subscription(Base):
         base = TIER_LIMITS.get(self.tier, TIER_LIMITS[SubscriptionTier.STARTER]).copy()
         base.update(self.custom_limits or {})
         return base
+
+    def has_feature(self, feature: str) -> bool:
+        """True if the tenant's effective plan unlocks `feature` (Elite Pack aware)."""
+        return bool(self.limits.get(feature, False))

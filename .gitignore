@@ -54,3 +54,6 @@ backend/.env.dev
 backend/.env.production
 frontend/.env.local
 frontend/.env.production
+
+# Elite Pack DB snapshots
+backend/grc_dev.db.bak-*
