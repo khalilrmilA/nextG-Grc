@@ -46,6 +46,7 @@ from app.models.scan_journal import ScanJournal
 from app.models.report_builder import ReportTemplate
 from app.models.governance import RaciAssignment, GovernanceDocument, GovernanceDocumentVersion
 from app.models.archive import ArchiveRecord
+from app.models.scenario_version import RiskScenarioVersion
 
 __all__ = [
     "Tenant", "User", "UserRole",
@@ -76,4 +77,5 @@ __all__ = [
     "ReportTemplate",
     "RaciAssignment", "GovernanceDocument", "GovernanceDocumentVersion",
     "ArchiveRecord",
+    "RiskScenarioVersion",
 ]
