@@ -74,6 +74,19 @@ class Risk(Base):
         SAEnum(RiskSeverity, values_callable=lambda x: [e.value for e in x]), nullable=True
     )
 
+    # Risk appetite threshold (Elite Pack): residual/inherent score above this is
+    # "over appetite" and should be flagged for treatment.
+    appetite_threshold: Mapped[float | None] = mapped_column(Float, nullable=True)
+
+    @property
+    def over_appetite(self) -> bool | None:
+        if self.appetite_threshold is None:
+            return None
+        score = self.residual_risk_score if self.residual_risk_score is not None else self.inherent_risk_score
+        if score is None:
+            return None
+        return score > self.appetite_threshold
+
     # Linked framework controls
     linked_controls: Mapped[list] = mapped_column(JSON, default=list)
 
@@ -130,6 +143,10 @@ class RiskTreatment(Base):
         String(36), ForeignKey("users.id"), nullable=True
     )
     progress_percentage: Mapped[int] = mapped_column(Integer, default=0)
+
+    # Planning (Elite Pack): estimated cost + start of the treatment schedule.
+    estimated_cost: Mapped[float | None] = mapped_column(Float, nullable=True)
+    start_date: Mapped[str | None] = mapped_column(String(20), nullable=True)
 
     # If "transfer" — name of insurer or third party
     transfer_to: Mapped[str | None] = mapped_column(String(255), nullable=True)

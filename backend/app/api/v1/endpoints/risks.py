@@ -18,6 +18,20 @@ router = APIRouter()
 _RISK_NOT_FOUND = "Risk not found"
 
 
+def _compute_severity(likelihood: float | None, impact: float | None) -> RiskSeverity | None:
+    """Derive severity from likelihood × impact (shared by create + update)."""
+    if likelihood and impact:
+        score = likelihood * impact
+        if score >= 20:
+            return RiskSeverity.CRITICAL
+        if score >= 12:
+            return RiskSeverity.HIGH
+        if score >= 6:
+            return RiskSeverity.MEDIUM
+        return RiskSeverity.LOW
+    return None
+
+
 class RiskCreate(BaseModel):
     title: str
     description: str | None = None
@@ -45,6 +59,7 @@ class RiskUpdate(BaseModel):
     tags: list[str] | None = None
     linked_controls: list[str] | None = None
     next_review_date: str | None = None
+    appetite_threshold: float | None = None
 
 
 class RiskResponse(BaseModel):
@@ -62,6 +77,8 @@ class RiskResponse(BaseModel):
     residual_impact: float | None
     residual_risk_score: float | None
     severity: RiskSeverity | None
+    appetite_threshold: float | None = None
+    over_appetite: bool | None = None
     tags: list
     linked_controls: list
     linked_assets: list
@@ -126,17 +143,7 @@ async def create_risk(
     )),
 ):
     # Auto-calculate severity
-    severity = None
-    if body.likelihood and body.impact:
-        score = body.likelihood * body.impact
-        if score >= 20:
-            severity = RiskSeverity.CRITICAL
-        elif score >= 12:
-            severity = RiskSeverity.HIGH
-        elif score >= 6:
-            severity = RiskSeverity.MEDIUM
-        else:
-            severity = RiskSeverity.LOW
+    severity = _compute_severity(body.likelihood, body.impact)
 
     risk = Risk(
         tenant_id=tenant_id,
@@ -179,8 +186,13 @@ async def update_risk(
     if not risk:
         raise HTTPException(status_code=404, detail=_RISK_NOT_FOUND)
 
-    for field, value in body.model_dump(exclude_none=True).items():
+    provided = body.model_dump(exclude_none=True)
+    for field, value in provided.items():
         setattr(risk, field, value)
+
+    # Recompute severity when likelihood/impact changed and severity wasn't set explicitly.
+    if "severity" not in provided and ("likelihood" in provided or "impact" in provided):
+        risk.severity = _compute_severity(risk.likelihood, risk.impact)
 
     return RiskResponse.model_validate(risk)
 
