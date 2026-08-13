@@ -1433,6 +1433,17 @@ export const mfaApi = {
   disable: () => apiClient.post("/mfa/disable").then((r) => r.data),
 };
 
+// ── OCR document capture (Elite Pack) ────────────────────────────────────────
+export const ocrApi = {
+  status: () => apiClient.get("/ocr/status").then((r) => r.data),
+  extract: (file: File, lang: string) => {
+    const fd = new FormData();
+    fd.append("file", file);
+    fd.append("lang", lang);
+    return apiClient.post("/ocr/extract", fd, { headers: { "Content-Type": "multipart/form-data" } }).then((r) => r.data);
+  },
+};
+
 // ── AD/LDAP SSO (Elite Pack) ─────────────────────────────────────────────────
 export const ssoApi = {
   status: (tenantSlug?: string) => apiClient.get("/sso/ldap/status", { params: tenantSlug ? { tenant_slug: tenantSlug } : {} }).then((r) => r.data),

@@ -401,6 +401,16 @@ aside:hover ::-webkit-scrollbar-thumb:hover {
 [dir="rtl"] .pl-2 { padding-left: 0; padding-right: 0.5rem; }
 [dir="rtl"] .pl-3 { padding-left: 0; padding-right: 0.75rem; }
 [dir="rtl"] .pl-4 { padding-left: 0; padding-right: 1rem; }
+
+/* ── Tables, headers & labels: right-align in RTL (Elite pages + app-wide) ── */
+[dir="rtl"] .text-left { text-align: right; }
+[dir="rtl"] .text-right { text-align: left; }
+/* ── Search-field icons + padding: flip the left-anchored icon to the right ── */
+[dir="rtl"] .absolute.left-3 { left: auto; right: 0.75rem; }
+[dir="rtl"] .pl-10 { padding-left: 1rem; padding-right: 2.5rem; }
+/* ── Modal/panel edge helpers used by the Elite pages ── */
+[dir="rtl"] .left-1\/2 { left: auto; right: 50%; }
+[dir="rtl"] .-translate-x-1\/2 { --tw-translate-x: 50%; }
 [dir="rtl"] .pl-5 { padding-left: 0; padding-right: 1.25rem; }
 [dir="rtl"] .pl-6 { padding-left: 0; padding-right: 1.5rem; }
 [dir="rtl"] .pl-8 { padding-left: 0; padding-right: 2rem; }

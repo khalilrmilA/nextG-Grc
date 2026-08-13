@@ -17,7 +17,7 @@ import {
   ChevronRight, Bell, Settings, HelpCircle, Lock,
   Crown, X, Trash2, Wand2, Menu,
   AlertCircle, Info, ShieldAlert, ClipboardCheck, RefreshCw,
-  Eye, Users, Headphones, Map, ListTodo, Boxes, BarChart3, Gauge, Bug, Radar, Scale, Archive, Database, KeyRound,
+  Eye, Users, Headphones, Map, ListTodo, Boxes, BarChart3, Gauge, Bug, Radar, Scale, Archive, Database, KeyRound, ScanLine,
 } from "lucide-react";
 
 // roles: null = visible to all authenticated non-auditor users
@@ -52,6 +52,7 @@ const NAV_GROUPS = [
       { to: "/audits",           icon: ClipboardList,  label: "Audits",             module: "audits",           roles: ["tenant_admin","ciso","compliance_manager","viewer"] },
       { to: "/policies",         icon: FileText,       label: "Policies",           module: "policies",         roles: ["tenant_admin","ciso","compliance_manager","policy_manager","viewer"] },
       { to: "/policy-generator", icon: Wand2,          label: "Doc Generator",      module: "policy-generator", roles: ["tenant_admin","ciso","policy_manager","viewer"] },
+      { to: "/ocr",              icon: ScanLine,       label: "Document Capture",   module: "ocr",              roles: null },
       { to: "/vendors",          icon: Building2,      label: "3rd Parties (TPRM)", module: "vendors",          roles: ["tenant_admin","ciso","vendor_manager","viewer"] },
       { to: "/reports",          icon: ClipboardCheck, label: "Reports",            module: "reports",          roles: null },
       { to: "/support",          icon: Headphones,     label: "Support",            module: "support",          roles: null },
@@ -90,6 +91,7 @@ const PAGE_LABELS: Record<string, string> = {
   audits:     "Audits",
   policies:          "Policies",
   "policy-generator": "Doc Generator",
+  ocr:               "Document Capture",
   vendors:           "3rd Parties",
   reports:    "Reports",
   incidents:  "Incidents",

@@ -65,6 +65,21 @@ export const eliteEn = {
     access_key: "Access key", secret_key: "Secret key", demo_note: "Demo connector simulates a pull that matches your assets.", live_note: "Live pull needs a reachable scanner + valid credentials.", add: "Add",
   },
   sso: { or: "or", ldap_login: "Sign in with company directory", username: "Directory username", ldap_hint: "Use your Active Directory / LDAP credentials." },
+  nav: { ocr: "Document Capture" },
+  ocr: {
+    title: "Document Capture (OCR)", elite: "Elite Pack",
+    subtitle: "Extract text from scanned documents and PDFs — French and English recognition, page by page",
+    drop: "Drop a scan or PDF here, or click to browse",
+    accepts: "PDF, PNG, JPEG, TIFF — up to {{mb}} MB, first {{pages}} pages",
+    language: "Language", extract: "Extract text",
+    hint: "PDFs that already carry a text layer are read directly — only scanned pages go through OCR, so digital documents come back instantly and exactly.",
+    no_result: "Extracted text will appear here.", copy: "Copy", copied: "Copied", download: "Download .txt",
+    pages_read: "{{count}} of {{total}} pages", image: "Image", chars: "{{n}} characters",
+    m_text: "Text layer", m_ocr: "OCR", m_mixed: "Mixed",
+    truncated: "Only the first {{count}} pages were processed out of {{total}}.",
+    engine_missing: "The OCR engine is not installed on this server. Install tesseract-ocr and tesseract-ocr-fra to enable capture.",
+    err_too_big: "File exceeds the {{mb}} MB limit", err_failed: "Extraction failed. Check the file and try again.",
+  },
 };
 
 export const eliteFr = {
@@ -129,6 +144,21 @@ export const eliteFr = {
     access_key: "Clé d'accès", secret_key: "Clé secrète", demo_note: "Le connecteur démo simule une récupération correspondant à vos actifs.", live_note: "La récupération réelle nécessite un scanner accessible et des identifiants valides.", add: "Ajouter",
   },
   sso: { or: "ou", ldap_login: "Se connecter avec l'annuaire d'entreprise", username: "Identifiant annuaire", ldap_hint: "Utilisez vos identifiants Active Directory / LDAP." },
+  nav: { ocr: "Capture de documents" },
+  ocr: {
+    title: "Capture de documents (OCR)", elite: "Elite Pack",
+    subtitle: "Extrayez le texte des documents numérisés et des PDF — reconnaissance française et anglaise, page par page",
+    drop: "Déposez un scan ou un PDF ici, ou cliquez pour parcourir",
+    accepts: "PDF, PNG, JPEG, TIFF — jusqu'à {{mb}} Mo, {{pages}} premières pages",
+    language: "Langue", extract: "Extraire le texte",
+    hint: "Les PDF disposant déjà d'une couche texte sont lus directement — seules les pages numérisées passent par l'OCR, les documents natifs sont donc restitués instantanément et fidèlement.",
+    no_result: "Le texte extrait apparaîtra ici.", copy: "Copier", copied: "Copié", download: "Télécharger .txt",
+    pages_read: "{{count}} pages sur {{total}}", image: "Image", chars: "{{n}} caractères",
+    m_text: "Couche texte", m_ocr: "OCR", m_mixed: "Mixte",
+    truncated: "Seules les {{count}} premières pages ont été traitées sur {{total}}.",
+    engine_missing: "Le moteur OCR n'est pas installé sur ce serveur. Installez tesseract-ocr et tesseract-ocr-fra pour activer la capture.",
+    err_too_big: "Le fichier dépasse la limite de {{mb}} Mo", err_failed: "L'extraction a échoué. Vérifiez le fichier et réessayez.",
+  },
 };
 
 export const eliteAr = {
@@ -193,4 +223,19 @@ export const eliteAr = {
     access_key: "مفتاح الوصول", secret_key: "المفتاح السري", demo_note: "الموصل التجريبي يحاكي جلبًا يطابق أصولك.", live_note: "الجلب الفعلي يتطلب ماسحًا يمكن الوصول إليه وبيانات اعتماد صحيحة.", add: "إضافة",
   },
   sso: { or: "أو", ldap_login: "تسجيل الدخول عبر دليل الشركة", username: "اسم مستخدم الدليل", ldap_hint: "استخدم بيانات اعتماد Active Directory / LDAP." },
+  nav: { ocr: "التقاط المستندات" },
+  ocr: {
+    title: "التقاط المستندات (OCR)", elite: "Elite Pack",
+    subtitle: "استخرج النص من المستندات الممسوحة وملفات PDF — تعرّف بالفرنسية والإنجليزية، صفحة بصفحة",
+    drop: "أفلت ملف مسح ضوئي أو PDF هنا، أو انقر للاختيار",
+    accepts: "PDF أو PNG أو JPEG أو TIFF — حتى {{mb}} ميغابايت، أول {{pages}} صفحات",
+    language: "اللغة", extract: "استخراج النص",
+    hint: "ملفات PDF التي تحتوي على طبقة نص تُقرأ مباشرة — الصفحات الممسوحة فقط تمر عبر OCR، لذا تعود المستندات الرقمية فورًا وبدقة.",
+    no_result: "سيظهر النص المستخرج هنا.", copy: "نسخ", copied: "تم النسخ", download: "تنزيل .txt",
+    pages_read: "{{count}} من {{total}} صفحات", image: "صورة", chars: "{{n}} حرفًا",
+    m_text: "طبقة نص", m_ocr: "OCR", m_mixed: "مختلط",
+    truncated: "تمت معالجة أول {{count}} صفحات فقط من أصل {{total}}.",
+    engine_missing: "محرك OCR غير مثبّت على هذا الخادم. ثبّت tesseract-ocr و tesseract-ocr-fra لتفعيل الالتقاط.",
+    err_too_big: "حجم الملف يتجاوز {{mb}} ميغابايت", err_failed: "فشل الاستخراج. تحقّق من الملف وحاول مجددًا.",
+  },
 };
