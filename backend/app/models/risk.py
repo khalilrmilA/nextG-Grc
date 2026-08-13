@@ -70,6 +70,19 @@ class Risk(Base):
             return self.residual_likelihood * self.residual_impact
         return None
 
+    # Target (desired future state after planned treatment) — mirrors RiskScenario.
+    target_likelihood: Mapped[float | None] = mapped_column(Float, nullable=True)
+    target_impact: Mapped[float | None] = mapped_column(Float, nullable=True)
+
+    @property
+    def target_risk_score(self) -> float | None:
+        if self.target_likelihood and self.target_impact:
+            return self.target_likelihood * self.target_impact
+        return None
+
+    # Which risk matrix drives this risk's scoring (null = the tenant's default / builtin 5x5).
+    risk_matrix_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+
     severity: Mapped[RiskSeverity | None] = mapped_column(
         SAEnum(RiskSeverity, values_callable=lambda x: [e.value for e in x]), nullable=True
     )

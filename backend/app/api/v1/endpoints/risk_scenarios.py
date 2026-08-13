@@ -9,6 +9,7 @@ from app.core.database import get_db
 from app.api.v1.dependencies.auth import get_current_user, get_tenant_id
 from app.models.user import User
 from app.models.risk_scenario import RiskScenario
+from app.services import risk_scoring
 
 router = APIRouter()
 
@@ -47,13 +48,9 @@ class ScenarioOut(BaseModel):
     created_at: datetime; updated_at: datetime
     model_config = {"from_attributes": True}
 
-def _risk_level(prob, impact):
-    if not prob or not impact: return None
-    score = prob * impact
-    if score >= 16: return "critical"
-    if score >= 10: return "high"
-    if score >= 5: return "medium"
-    return "low"
+def _level(definition, prob, impact):
+    """Qualitative risk level from the tenant's active matrix (unified with the risk register)."""
+    return risk_scoring.score_and_level(definition, prob, impact)[1]
 
 @router.get("", response_model=list[ScenarioOut])
 async def list_scenarios(treatment: str | None = None, db: AsyncSession = Depends(get_db), _: User = Depends(get_current_user), tenant_id: str = Depends(get_tenant_id)):
@@ -63,15 +60,16 @@ async def list_scenarios(treatment: str | None = None, db: AsyncSession = Depend
 
 @router.post("", response_model=ScenarioOut, status_code=201)
 async def create_scenario(body: ScenarioCreate, db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user), tenant_id: str = Depends(get_tenant_id)):
+    definition, _ = await risk_scoring.resolve_matrix(db, tenant_id)
     s = RiskScenario(
         tenant_id=tenant_id, name=body.name, description=body.description,
         treatment=body.treatment, threat_ids=body.threat_ids,
         vulnerability_ids=body.vulnerability_ids, asset_ids=body.asset_ids,
         applied_control_ids=body.applied_control_ids,
         current_probability=body.current_probability, current_impact=body.current_impact,
-        current_risk_level=_risk_level(body.current_probability, body.current_impact),
+        current_risk_level=_level(definition, body.current_probability, body.current_impact),
         target_probability=body.target_probability, target_impact=body.target_impact,
-        target_risk_level=_risk_level(body.target_probability, body.target_impact),
+        target_risk_level=_level(definition, body.target_probability, body.target_impact),
         strength_of_knowledge=body.strength_of_knowledge, threat_actor=body.threat_actor,
         owner_id=body.owner_id or user.id, estimated_loss_min=body.estimated_loss_min,
         estimated_loss_max=body.estimated_loss_max, estimated_loss_likely=body.estimated_loss_likely,
@@ -99,8 +97,9 @@ async def update_scenario(sid: str, body: ScenarioUpdate, db: AsyncSession = Dep
               "justification","existing_controls_description","tags"]:
         v = getattr(body, f, None)
         if v is not None: setattr(s, f, v)
-    s.current_risk_level = _risk_level(s.current_probability, s.current_impact)
-    s.target_risk_level = _risk_level(s.target_probability, s.target_impact)
+    definition, _ = await risk_scoring.resolve_matrix(db, tenant_id)
+    s.current_risk_level = _level(definition, s.current_probability, s.current_impact)
+    s.target_risk_level = _level(definition, s.target_probability, s.target_impact)
     await db.commit(); await db.refresh(s)
     return ScenarioOut.model_validate(s)
 

@@ -1,6 +1,9 @@
-"""Idempotent migration: add Elite Pack risk-treatment columns.
+"""Idempotent migration: add Elite Pack risk-treatment + matrix-scoring columns.
 
-Adds risks.appetite_threshold and risk_treatments.(estimated_cost, start_date).
+Adds:
+  risks.appetite_threshold, risks.target_likelihood, risks.target_impact,
+  risks.risk_matrix_id  (matrix-driven residual/target scoring)
+  risk_treatments.(estimated_cost, start_date)
 
 Usage: python -m scripts.migrate_add_risk_columns
 """
@@ -8,7 +11,12 @@ import os
 import sqlite3
 
 TABLE_COLUMNS = {
-    "risks": {"appetite_threshold": "FLOAT"},
+    "risks": {
+        "appetite_threshold": "FLOAT",
+        "target_likelihood": "FLOAT",
+        "target_impact": "FLOAT",
+        "risk_matrix_id": "VARCHAR(36)",
+    },
     "risk_treatments": {"estimated_cost": "FLOAT", "start_date": "VARCHAR(20)"},
 }
 

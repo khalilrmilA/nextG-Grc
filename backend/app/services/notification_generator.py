@@ -228,6 +228,33 @@ async def check_risk_review_deadlines(db: AsyncSession) -> int:
     return created
 
 
+async def check_risk_appetite_breaches(db: AsyncSession) -> int:
+    """Alert when a risk's residual/inherent score exceeds its appetite threshold (Elite)."""
+    created = 0
+    result = await db.execute(select(Risk).where(Risk.appetite_threshold.isnot(None)))
+    for risk in result.scalars().all():
+        if not risk.over_appetite:
+            continue
+        score = risk.residual_risk_score if risk.residual_risk_score is not None else risk.inherent_risk_score
+        recipients = await get_recipients_for_tenant(db, risk.tenant_id)
+        for user in recipients:
+            if not await notification_exists(db, user.id, NotificationType.RISK_OVER_APPETITE, risk.id, within_days=7):
+                await create_notification(
+                    db,
+                    user=user,
+                    notif_type=NotificationType.RISK_OVER_APPETITE,
+                    title=f"Risk over appetite: {risk.title[:50]}",
+                    message=(f"Risk '{risk.title}' has a residual score of {score} which exceeds "
+                             f"the appetite threshold of {risk.appetite_threshold}. Treatment is required."),
+                    entity_id=risk.id,
+                    entity_type="risk",
+                    link=f"/risks?highlight={risk.id}",
+                    severity="critical",
+                )
+                created += 1
+    return created
+
+
 async def check_pending_ciso_contracts(db: AsyncSession) -> int:
     """Notify CISO about contracts waiting for their review."""
     created = 0
@@ -405,6 +432,7 @@ async def run_all_checks(db: AsyncSession) -> dict:
     results = {
         "vendor_contracts": 0,
         "risk_reviews": 0,
+        "risk_appetite": 0,
         "ciso_contracts": 0,
         "compliance_gaps": 0,
         "action_plan_deadlines": 0,
@@ -419,6 +447,11 @@ async def run_all_checks(db: AsyncSession) -> dict:
         results["risk_reviews"] = await check_risk_review_deadlines(db)
     except Exception as e:
         print(f"Risk review check failed: {e}")
+
+    try:
+        results["risk_appetite"] = await check_risk_appetite_breaches(db)
+    except Exception as e:
+        print(f"Risk appetite check failed: {e}")
 
     try:
         results["ciso_contracts"] = await check_pending_ciso_contracts(db)

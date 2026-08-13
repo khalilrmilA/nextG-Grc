@@ -11,6 +11,7 @@ class NotificationType(str, enum.Enum):
     RISK_NEW = "risk_new"
     RISK_OVERDUE = "risk_overdue"
     RISK_STATUS_CHANGED = "risk_status_changed"
+    RISK_OVER_APPETITE = "risk_over_appetite"
     # Audit events
     AUDIT_ASSIGNED = "audit_assigned"
     AUDIT_DUE = "audit_due"

@@ -9,6 +9,7 @@ from app.core.database import get_db
 from app.api.v1.dependencies.auth import get_current_user, get_tenant_id
 from app.models.user import User
 from app.models.risk_matrix import RiskMatrix
+from app.services.risk_scoring import DEFAULT_MATRIX_5X5, DEFAULT_MATRIX_3X3
 
 router = APIRouter()
 
@@ -21,28 +22,10 @@ class MatrixOut(BaseModel):
     created_at: datetime; updated_at: datetime
     model_config = {"from_attributes": True}
 
-# Prebuilt matrices
-BUILTIN_5X5 = {
-    "probability": {"count": 5, "labels": ["Very Low", "Low", "Medium", "High", "Very High"]},
-    "impact": {"count": 5, "labels": ["Negligible", "Minor", "Moderate", "Major", "Catastrophic"]},
-    "risk_levels": [
-        {"name": "low", "color": "#22c55e", "min_score": 1, "max_score": 6},
-        {"name": "medium", "color": "#eab308", "min_score": 7, "max_score": 12},
-        {"name": "high", "color": "#f97316", "min_score": 13, "max_score": 18},
-        {"name": "critical", "color": "#ef4444", "min_score": 19, "max_score": 25},
-    ],
-    "grid": [[1,2,3,4,5],[2,4,6,8,10],[3,6,9,12,15],[4,8,12,16,20],[5,10,15,20,25]],
-}
-BUILTIN_3X3 = {
-    "probability": {"count": 3, "labels": ["Low", "Medium", "High"]},
-    "impact": {"count": 3, "labels": ["Low", "Medium", "High"]},
-    "risk_levels": [
-        {"name": "low", "color": "#22c55e", "min_score": 1, "max_score": 3},
-        {"name": "medium", "color": "#eab308", "min_score": 4, "max_score": 6},
-        {"name": "high", "color": "#ef4444", "min_score": 7, "max_score": 9},
-    ],
-    "grid": [[1,2,3],[2,4,6],[3,6,9]],
-}
+# Prebuilt matrices (canonical definitions live in services.risk_scoring so the
+# scoring engine and this endpoint never drift apart).
+BUILTIN_5X5 = DEFAULT_MATRIX_5X5
+BUILTIN_3X3 = DEFAULT_MATRIX_3X3
 
 @router.get("", response_model=list[MatrixOut])
 async def list_matrices(db: AsyncSession = Depends(get_db), _: User = Depends(get_current_user), tenant_id: str = Depends(get_tenant_id)):
@@ -63,6 +46,24 @@ async def create_matrix(body: MatrixCreate, db: AsyncSession = Depends(get_db), 
                    definition=body.definition, is_default=body.is_default, is_builtin=False)
     db.add(m); await db.flush(); await db.commit(); await db.refresh(m)
     return MatrixOut.model_validate(m)
+
+@router.put("/{mid}/default", response_model=MatrixOut)
+async def set_default_matrix(mid: str, db: AsyncSession = Depends(get_db), _: User = Depends(get_current_user), tenant_id: str = Depends(get_tenant_id)):
+    """Activate a tenant-owned matrix as the default that drives risk scoring.
+
+    Clears is_default on the tenant's other matrices so exactly one is active.
+    """
+    r = await db.execute(select(RiskMatrix).where(RiskMatrix.id == mid, RiskMatrix.tenant_id == tenant_id))
+    m = r.scalar_one_or_none()
+    if not m:
+        raise HTTPException(404, "Matrix not found")
+    others = (await db.execute(select(RiskMatrix).where(RiskMatrix.tenant_id == tenant_id, RiskMatrix.is_default == True))).scalars().all()  # noqa: E712
+    for o in others:
+        o.is_default = False
+    m.is_default = True
+    await db.commit(); await db.refresh(m)
+    return MatrixOut.model_validate(m)
+
 
 @router.delete("/{mid}", status_code=204)
 async def delete_matrix(mid: str, db: AsyncSession = Depends(get_db), _: User = Depends(get_current_user), tenant_id: str = Depends(get_tenant_id)):
