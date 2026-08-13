@@ -312,19 +312,19 @@ def _parse_findings(tool: str, filename: str | None, content: bytes) -> list[Par
     return parse_csv(content)
 
 
-async def import_scan(
+async def ingest_findings(
     db: AsyncSession,
     *,
     tenant_id: str,
     tool: str,
-    filename: str | None,
-    content: bytes,
+    findings: list[ParsedFinding],
+    filename: str | None = None,
     created_by_id: str | None = None,
 ) -> ScanJournal:
-    """Parse a scanner export, create vulnerabilities, and journal the run.
+    """Persist already-parsed findings (asset-match + dedup) and journal the run.
 
-    Never raises for parse/import errors: it records them on the ScanJournal
-    (status='failed', error=...) so the caller can surface a clean summary.
+    Shared by file import and connector sync. Never raises: errors are recorded
+    on the ScanJournal (status='failed', error=...).
     """
     journal = ScanJournal(
         tenant_id=tenant_id,
@@ -337,10 +337,9 @@ async def import_scan(
     db.add(journal)
     await db.flush()
 
-    imported = matched = skipped = parsed = 0
+    imported = matched = skipped = 0
+    parsed = len(findings)
     try:
-        findings = _parse_findings(tool, filename, content)
-        parsed = len(findings)
         asset_index = await _build_asset_index(db, tenant_id)
         seen = await _existing_dedup_keys(db, tenant_id)
 
@@ -390,3 +389,34 @@ async def import_scan(
     await db.commit()
     await db.refresh(journal)
     return journal
+
+
+async def import_scan(
+    db: AsyncSession,
+    *,
+    tenant_id: str,
+    tool: str,
+    filename: str | None,
+    content: bytes,
+    created_by_id: str | None = None,
+) -> ScanJournal:
+    """Parse a scanner export file, then ingest the findings (file-import path)."""
+    tool_l = (tool or "csv").strip().lower()
+    try:
+        findings = _parse_findings(tool, filename, content)
+    except Exception as exc:  # noqa: BLE001 — record a failed journal, don't 500
+        journal = ScanJournal(
+            tenant_id=tenant_id, tool=tool_l, filename=filename,
+            started_at=_utcnow(), finished_at=_utcnow(),
+            status=SCAN_STATUS_FAILED, error=f"{type(exc).__name__}: {exc}"[:2000],
+            created_by_id=created_by_id,
+            parsed_count=0, imported_count=0, matched_count=0, skipped_count=0,
+        )
+        db.add(journal)
+        await db.commit()
+        await db.refresh(journal)
+        return journal
+    return await ingest_findings(
+        db, tenant_id=tenant_id, tool=tool_l, findings=findings,
+        filename=filename, created_by_id=created_by_id,
+    )

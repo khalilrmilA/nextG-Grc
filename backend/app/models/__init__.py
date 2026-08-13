@@ -47,6 +47,7 @@ from app.models.report_builder import ReportTemplate
 from app.models.governance import RaciAssignment, GovernanceDocument, GovernanceDocumentVersion
 from app.models.archive import ArchiveRecord
 from app.models.scenario_version import RiskScenarioVersion
+from app.models.scanner_connector import ScannerConnector
 
 __all__ = [
     "Tenant", "User", "UserRole",
@@ -78,4 +79,5 @@ __all__ = [
     "RaciAssignment", "GovernanceDocument", "GovernanceDocumentVersion",
     "ArchiveRecord",
     "RiskScenarioVersion",
+    "ScannerConnector",
 ]

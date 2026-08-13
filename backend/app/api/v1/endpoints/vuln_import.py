@@ -19,6 +19,8 @@ from app.models.scan_journal import ScanJournal
 from app.api.v1.dependencies.auth import get_tenant_id
 from app.api.v1.dependencies.features import require_feature
 from app.services.scanner_import import import_scan
+from app.models.scanner_connector import ScannerConnector
+from app.services.scanner_connectors import sync_connector, test_connector
 
 router = APIRouter()
 
@@ -94,3 +96,120 @@ async def list_journals(
         .limit(limit)
     )
     return [ScanJournalOut.model_validate(j) for j in result.scalars().all()]
+
+
+# ---------------------------------------------------------------------------
+# Scanner connectors (live API integration — RFP 'Collecte automatique')
+# ---------------------------------------------------------------------------
+_CONNECTOR_TOOLS = {"tenable", "nessus", "qualys", "openvas", "demo"}
+
+
+class ConnectorIn(BaseModel):
+    name: str
+    tool: str
+    base_url: str | None = None
+    api_key: str | None = None
+    api_secret: str | None = None
+    verify_ssl: bool = True
+    schedule_enabled: bool = False
+    interval_hours: int = 168
+
+
+class ConnectorOut(BaseModel):
+    id: str
+    name: str
+    tool: str
+    base_url: str | None = None
+    verify_ssl: bool
+    enabled: bool
+    schedule_enabled: bool
+    interval_hours: int
+    last_sync_at: datetime | None = None
+    last_status: str | None = None
+    model_config = {"from_attributes": True}  # note: secrets deliberately not exposed
+
+
+class ConnectorTestOut(BaseModel):
+    ok: bool
+    message: str
+
+
+async def _get_connector(db: AsyncSession, cid: str, tenant_id: str) -> ScannerConnector:
+    result = await db.execute(
+        select(ScannerConnector).where(
+            ScannerConnector.id == cid, ScannerConnector.tenant_id == tenant_id
+        )
+    )
+    conn = result.scalar_one_or_none()
+    if conn is None:
+        raise HTTPException(404, "Connector not found")
+    return conn
+
+
+@router.post("/connectors", response_model=ConnectorOut, status_code=201)
+async def create_connector(
+    body: ConnectorIn,
+    current_user: Annotated[User, Depends(_GATE)],
+    tenant_id: Annotated[str, Depends(get_tenant_id)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    if body.tool not in _CONNECTOR_TOOLS:
+        raise HTTPException(400, f"tool must be one of {sorted(_CONNECTOR_TOOLS)}")
+    conn = ScannerConnector(
+        tenant_id=tenant_id, name=body.name, tool=body.tool, base_url=body.base_url,
+        api_key=body.api_key, api_secret=body.api_secret, verify_ssl=body.verify_ssl,
+        schedule_enabled=body.schedule_enabled, interval_hours=body.interval_hours,
+    )
+    db.add(conn)
+    await db.commit()
+    await db.refresh(conn)
+    return conn
+
+
+@router.get("/connectors", response_model=list[ConnectorOut])
+async def list_connectors(
+    current_user: Annotated[User, Depends(_GATE)],
+    tenant_id: Annotated[str, Depends(get_tenant_id)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    result = await db.execute(
+        select(ScannerConnector).where(ScannerConnector.tenant_id == tenant_id)
+        .order_by(ScannerConnector.created_at.desc())
+    )
+    return list(result.scalars().all())
+
+
+@router.delete("/connectors/{cid}", status_code=204)
+async def delete_connector(
+    cid: str,
+    current_user: Annotated[User, Depends(_GATE)],
+    tenant_id: Annotated[str, Depends(get_tenant_id)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    conn = await _get_connector(db, cid, tenant_id)
+    await db.delete(conn)
+    await db.commit()
+    return None
+
+
+@router.post("/connectors/{cid}/test", response_model=ConnectorTestOut)
+async def test_conn(
+    cid: str,
+    current_user: Annotated[User, Depends(_GATE)],
+    tenant_id: Annotated[str, Depends(get_tenant_id)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    conn = await _get_connector(db, cid, tenant_id)
+    return await test_connector(conn)
+
+
+@router.post("/connectors/{cid}/sync", response_model=ScanJournalOut)
+async def sync_conn(
+    cid: str,
+    current_user: Annotated[User, Depends(_GATE)],
+    tenant_id: Annotated[str, Depends(get_tenant_id)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    conn = await _get_connector(db, cid, tenant_id)
+    journal = await sync_connector(db, conn, created_by_id=current_user.id)
+    return ScanJournalOut.model_validate(journal)
