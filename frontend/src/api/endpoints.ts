@@ -1379,3 +1379,14 @@ export const controlEvalApi = {
   create: (data: Record<string, unknown>) => apiClient.post("/control-evaluations", data).then((r) => r.data),
   controls: () => apiClient.get("/applied-controls").then((r) => r.data),
 };
+
+// ── Vulnerability scanner import (Elite Pack) ────────────────────────────────
+export const vulnImportApi = {
+  upload: (file: File, tool: string) => {
+    const fd = new FormData();
+    fd.append("file", file);
+    fd.append("tool", tool);
+    return apiClient.post("/vuln-import/upload", fd, { headers: { "Content-Type": "multipart/form-data" } }).then((r) => r.data);
+  },
+  journal: () => apiClient.get("/vuln-import/journal").then((r) => r.data),
+};

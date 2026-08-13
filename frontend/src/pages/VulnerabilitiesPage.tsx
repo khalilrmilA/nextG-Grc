@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
-import { Plus, Search, X, Loader2, Filter, Bug, ShieldCheck, Wrench, BarChart3 } from "lucide-react";
+import { Plus, Search, X, Loader2, Filter, Bug, ShieldCheck, Wrench, BarChart3, Upload, Download } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { vulnerabilitiesApi } from "@/api/endpoints";
+import { vulnerabilitiesApi, vulnImportApi } from "@/api/endpoints";
 
 const SEV_BADGE: Record<string, string> = {
   critical: "bg-red-100 text-red-700 border-red-200",
@@ -34,6 +34,44 @@ export default function VulnerabilitiesPage() {
   const [statusFilter, setStatusFilter] = useState("");
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
+
+  // Scanner import
+  const [showImport, setShowImport] = useState(false);
+  const [importTool, setImportTool] = useState("csv");
+  const [importFile, setImportFile] = useState<File | null>(null);
+  const [importing, setImporting] = useState(false);
+  const [importResult, setImportResult] = useState<any>(null);
+
+  const SAMPLE_CSV = `Name,Severity,CVSS,CVE,Host,Solution
+Apache Struts 2 Remote Code Execution,Critical,9.8,CVE-2017-5638,Internet Banking Portal,Upgrade to Struts 2.5.13 or later
+OpenSSL Heartbleed,High,7.5,CVE-2014-0160,SWIFT Gateway,Patch OpenSSL to 1.0.1g+
+Outdated jQuery (Cross-Site Scripting),Medium,6.1,CVE-2020-11022,Internet Banking Portal,Upgrade jQuery to 3.5+
+SMBv1 protocol enabled,High,8.1,CVE-2017-0144,Domain Controller AD,Disable SMBv1
+Weak SSH ciphers,Low,3.7,,Backup Storage Array,Restrict to strong ciphers`;
+
+  function downloadSample() {
+    const blob = new Blob([SAMPLE_CSV], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = "sample-openvas-scan.csv";
+    document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+  }
+
+  async function handleImport(e: React.FormEvent) {
+    e.preventDefault();
+    if (!importFile) return;
+    setImporting(true); setImportResult(null);
+    try {
+      const journal = await vulnImportApi.upload(importFile, importTool);
+      setImportResult(journal);
+      setLoading(true);
+      load(); loadStats();
+    } catch (err: any) {
+      setImportResult({ status: "failed", error: err?.response?.data?.detail || "Import failed" });
+    } finally {
+      setImporting(false);
+    }
+  }
 
   const [form, setForm] = useState({
     ref_id: "",
@@ -103,12 +141,20 @@ export default function VulnerabilitiesPage() {
           <h1 className="text-2xl font-bold text-gray-900">{t("vulnerabilities.title")}</h1>
           <p className="text-sm text-gray-500 mt-1">{t("vulnerabilities.subtitle")}</p>
         </div>
-        <button
-          onClick={() => setShowModal(true)}
-          className="inline-flex items-center gap-2 bg-blue-600 text-white px-4 py-2.5 rounded-xl text-sm font-medium hover:bg-blue-700 transition-colors"
-        >
-          <Plus className="w-4 h-4" /> {t("vulnerabilities.new_vulnerability")}
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => { setImportResult(null); setImportFile(null); setShowImport(true); }}
+            className="inline-flex items-center gap-2 bg-white border border-gray-200 text-gray-700 px-4 py-2.5 rounded-xl text-sm font-medium hover:bg-gray-50 transition-colors"
+          >
+            <Upload className="w-4 h-4" /> {t("vulnerabilities.import_scan", "Import scan")}
+          </button>
+          <button
+            onClick={() => setShowModal(true)}
+            className="inline-flex items-center gap-2 bg-blue-600 text-white px-4 py-2.5 rounded-xl text-sm font-medium hover:bg-blue-700 transition-colors"
+          >
+            <Plus className="w-4 h-4" /> {t("vulnerabilities.new_vulnerability")}
+          </button>
+        </div>
       </div>
 
       {/* Stats */}
@@ -252,6 +298,55 @@ export default function VulnerabilitiesPage() {
                 <button type="button" onClick={() => setShowModal(false)} className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800">{t("common.cancel")}</button>
                 <button type="submit" disabled={submitting} className="inline-flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-xl text-sm font-medium hover:bg-blue-700 disabled:opacity-50">
                   {submitting && <Loader2 className="w-4 h-4 animate-spin" />} {t("vulnerabilities.new_vulnerability")}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Scanner import modal */}
+      {showImport && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setShowImport(false)} />
+          <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-lg mx-4 p-6">
+            <div className="flex items-center justify-between mb-2">
+              <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+                <Upload className="w-5 h-5 text-blue-600" /> {t("vulnerabilities.import_title", "Import scanner results")}
+              </h2>
+              <button onClick={() => setShowImport(false)} className="text-gray-400 hover:text-gray-600"><X className="w-5 h-5" /></button>
+            </div>
+            <p className="text-sm text-gray-500 mb-5">{t("vulnerabilities.import_help", "Upload a Nessus (.nessus) file or a Qualys / OpenVAS CSV export. Findings are parsed, deduplicated and auto-matched to your assets.")}</p>
+            <form onSubmit={handleImport} className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">{t("vulnerabilities.scanner", "Scanner")}</label>
+                  <select value={importTool} onChange={(e) => setImportTool(e.target.value)} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    <option value="csv">Generic CSV</option>
+                    <option value="openvas">OpenVAS</option>
+                    <option value="qualys">Qualys</option>
+                    <option value="nessus">Nessus / Tenable</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">{t("vulnerabilities.file", "Scan file")}</label>
+                  <input type="file" accept=".csv,.nessus,.xml" onChange={(e) => setImportFile(e.target.files?.[0] || null)} className="w-full text-sm text-gray-600 file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:bg-blue-50 file:text-blue-700 file:text-sm hover:file:bg-blue-100" />
+                </div>
+              </div>
+              <button type="button" onClick={downloadSample} className="inline-flex items-center gap-1.5 text-xs text-blue-600 hover:text-blue-700 font-medium">
+                <Download className="w-3.5 h-3.5" /> {t("vulnerabilities.sample", "Download a sample OpenVAS CSV to try it")}
+              </button>
+              {importResult && (
+                <div className={`p-3 rounded-xl text-sm ${importResult.status === "completed" ? "bg-green-50 text-green-700" : "bg-red-50 text-red-700"}`}>
+                  {importResult.status === "completed"
+                    ? `Imported ${importResult.imported_count} findings (${importResult.matched_count} matched to assets, ${importResult.skipped_count} duplicates skipped) from ${importResult.parsed_count} parsed.`
+                    : `Import failed: ${importResult.error || "unknown error"}`}
+                </div>
+              )}
+              <div className="flex justify-end gap-3 pt-1">
+                <button type="button" onClick={() => setShowImport(false)} className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800">{t("common.close", "Close")}</button>
+                <button type="submit" disabled={importing || !importFile} className="inline-flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-xl text-sm font-medium hover:bg-blue-700 disabled:opacity-50">
+                  {importing && <Loader2 className="w-4 h-4 animate-spin" />} {t("vulnerabilities.import_run", "Import")}
                 </button>
               </div>
             </form>

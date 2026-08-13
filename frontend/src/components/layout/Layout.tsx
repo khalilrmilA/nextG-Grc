@@ -17,7 +17,7 @@ import {
   ChevronRight, Bell, Settings, HelpCircle, Lock,
   Crown, X, Trash2, Wand2, Menu,
   AlertCircle, Info, ShieldAlert, ClipboardCheck, RefreshCw,
-  Eye, Users, Headphones, Map, ListTodo, Boxes, BarChart3, Gauge,
+  Eye, Users, Headphones, Map, ListTodo, Boxes, BarChart3, Gauge, Bug, Radar,
 } from "lucide-react";
 
 // roles: null = visible to all authenticated non-auditor users
@@ -35,6 +35,13 @@ const NAV_GROUPS = [
       { to: "/compliance", icon: CheckSquare,     label: "Compliance",    module: "compliance", roles: ["tenant_admin","ciso","risk_manager","compliance_manager","policy_manager","control_owner","viewer"] },
       { to: "/action-plan", icon: ListTodo,       label: "Action Plan",   module: "action-plan", roles: ["tenant_admin","ciso","risk_manager","compliance_manager","control_owner","viewer"] },
       { to: "/framework",  icon: BookOpen,        label: "Frameworks",    module: "frameworks", roles: ["tenant_admin","ciso","compliance_manager","policy_manager","viewer"] },
+    ],
+  },
+  {
+    label: "Security",
+    items: [
+      { to: "/vulnerabilities", icon: Bug,   label: "Vulnerabilities", module: "vulnerabilities", roles: null },
+      { to: "/threats",         icon: Radar, label: "Threat Library",  module: "threats",         roles: null },
     ],
   },
   {
