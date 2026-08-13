@@ -24,6 +24,28 @@ MIGRATIONS = [
 ]
 
 
+def check_ocr_prerequisites() -> None:
+    """OCR document capture needs OS packages, not just pip. Warn, never fail."""
+    import shutil
+
+    missing: list[str] = []
+    if not shutil.which("tesseract"):
+        missing.append("tesseract-ocr + tesseract-ocr-fra (apt)")
+    if not shutil.which("pdftoppm"):
+        missing.append("poppler-utils (apt)")
+    for module, package in (("pytesseract", "pytesseract"), ("pypdf", "pypdf"), ("pdf2image", "pdf2image")):
+        try:
+            importlib.import_module(module)
+        except ModuleNotFoundError:
+            missing.append(f"{package} (pip)")
+    if missing:
+        print("WARNING: OCR document capture will return 503 until these are installed:")
+        for item in missing:
+            print(f"  - {item}")
+    else:
+        print("OCR prerequisites OK (tesseract, poppler, pytesseract, pypdf, pdf2image).")
+
+
 def main() -> int:
     rc = 0
     for name in MIGRATIONS:
@@ -35,6 +57,8 @@ def main() -> int:
         except Exception as exc:  # noqa: BLE001 - report and continue
             print(f"ERROR in {name}: {exc}")
             rc = 1
+    print("--- OCR prerequisites ---")
+    check_ocr_prerequisites()
     print("\nDone. Restart the backend so create_all builds the new tables, "
           "then grant the pack with scripts.grant_elite_pack.")
     return rc
