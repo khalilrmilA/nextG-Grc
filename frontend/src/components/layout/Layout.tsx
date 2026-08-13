@@ -17,7 +17,7 @@ import {
   ChevronRight, Bell, Settings, HelpCircle, Lock,
   Crown, X, Trash2, Wand2, Menu,
   AlertCircle, Info, ShieldAlert, ClipboardCheck, RefreshCw,
-  Eye, Users, Headphones, Map, ListTodo, Boxes, BarChart3, Gauge, Bug, Radar, Scale, Archive,
+  Eye, Users, Headphones, Map, ListTodo, Boxes, BarChart3, Gauge, Bug, Radar, Scale, Archive, Database, KeyRound,
 } from "lucide-react";
 
 // roles: null = visible to all authenticated non-auditor users
@@ -40,8 +40,10 @@ const NAV_GROUPS = [
   {
     label: "Security",
     items: [
-      { to: "/vulnerabilities", icon: Bug,   label: "Vulnerabilities", module: "vulnerabilities", roles: null },
-      { to: "/threats",         icon: Radar, label: "Threat Library",  module: "threats",         roles: null },
+      { to: "/vulnerabilities", icon: Bug,      label: "Vulnerabilities",   module: "vulnerabilities", roles: null },
+      { to: "/cve",             icon: Database,  label: "CVE Knowledge Base", module: "cve",            roles: null },
+      { to: "/threats",         icon: Radar,    label: "Threat Library",    module: "threats",         roles: null },
+      { to: "/mfa-setup",       icon: KeyRound, label: "Two-Factor (MFA)",  module: "mfa-setup",       roles: null },
     ],
   },
   {
@@ -76,6 +78,8 @@ const PAGE_LABELS: Record<string, string> = {
   "control-effectiveness": "Control Effectiveness",
   governance:  "Governance",
   archiving:   "Archiving",
+  cve:         "CVE Knowledge Base",
+  "mfa-setup": "Two-Factor (MFA)",
   risks:      "Risk Register",
   "risk-cartography": "Risk Cartography",
   "action-plan": "Action Plan",

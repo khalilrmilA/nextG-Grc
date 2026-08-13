@@ -1417,3 +1417,18 @@ export const archivingApi = {
   purgeExpired: () => apiClient.post("/archiving/purge-expired").then((r) => r.data),
   exportFile: (format: "xlsx" | "csv") => apiClient.get("/archiving/export/download", { params: { format }, responseType: "blob" }).then((r) => r.data),
 };
+
+// ── CVE knowledge base (Elite Pack) ──────────────────────────────────────────
+export const cveApi = {
+  search: (params?: Record<string, unknown>) => apiClient.get("/cve", { params }).then((r) => r.data),
+  sync: (days = 7) => apiClient.post("/cve/sync", null, { params: { days } }).then((r) => r.data),
+  annotate: (cveId: string, data: Record<string, unknown>) => apiClient.put(`/cve/${cveId}/annotation`, data).then((r) => r.data),
+};
+
+// ── MFA / TOTP (Elite Pack) ──────────────────────────────────────────────────
+export const mfaApi = {
+  status: () => apiClient.get("/mfa/status").then((r) => r.data),
+  enroll: () => apiClient.post("/mfa/enroll").then((r) => r.data),
+  verify: (code: string) => apiClient.post("/mfa/verify", { code }).then((r) => r.data),
+  disable: () => apiClient.post("/mfa/disable").then((r) => r.data),
+};

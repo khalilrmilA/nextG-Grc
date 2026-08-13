@@ -10,6 +10,8 @@ import RiskTreatmentPage from "./pages/RiskTreatmentPage";
 import ControlEffectivenessPage from "./pages/ControlEffectivenessPage";
 import GovernancePage from "./pages/GovernancePage";
 import ArchivingPage from "./pages/ArchivingPage";
+import CvePage from "./pages/CvePage";
+import MfaSetupPage from "./pages/MfaSetupPage";
 import LoginPage from "./pages/LoginPage";
 import RegisterPage from "./pages/RegisterPage";
 import ServiceDownPage from "./pages/ServiceDownPage";
@@ -195,6 +197,8 @@ export default function App() {
         <Route path="control-effectiveness" element={<ControlEffectivenessPage />} />
         <Route path="governance" element={<GovernancePage />} />
         <Route path="archiving" element={<ArchivingPage />} />
+        <Route path="cve" element={<CvePage />} />
+        <Route path="mfa-setup" element={<MfaSetupPage />} />
         <Route path="risks" element={<RoleRoute path="/risks"><PrivateRoute requiredModule="risks"><RisksPage /></PrivateRoute></RoleRoute>} />
         <Route path="risk-cartography" element={<RoleRoute path="/risk-cartography"><PrivateRoute requiredModule="risks"><RiskCartographyPage /></PrivateRoute></RoleRoute>} />
         <Route path="action-plan" element={<RoleRoute path="/action-plan"><PrivateRoute requiredModule="compliance"><ActionPlanPage /></PrivateRoute></RoleRoute>} />
