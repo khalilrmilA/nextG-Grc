@@ -39,7 +39,7 @@ export default function CvePage() {
       setItems(Array.isArray(d) ? d : []);
     } catch { setItems([]); } finally { setLoading(false); }
   }
-  useEffect(() => { load(); /* eslint-disable-next-line */ }, [relFilter]);
+  useEffect(() => { load(); /* eslint-disable-next-line */ }, [relFilter, minCvss]);
 
   async function sync() {
     setSyncing(true); setSyncMsg("");

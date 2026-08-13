@@ -11,6 +11,8 @@ const SEV_BADGE: Record<string, string> = {
 };
 
 const STATUS_BADGE: Record<string, string> = {
+  pending_validation: "bg-amber-100 text-amber-700 border-amber-200",
+  validated: "bg-indigo-100 text-indigo-700 border-indigo-200",
   open: "bg-blue-100 text-blue-700 border-blue-200",
   in_remediation: "bg-yellow-100 text-yellow-700 border-yellow-200",
   mitigated: "bg-green-100 text-green-700 border-green-200",
@@ -20,7 +22,7 @@ const STATUS_BADGE: Record<string, string> = {
 };
 
 const SEVERITY_OPTIONS = ["critical", "high", "medium", "low"];
-const STATUS_OPTIONS = ["open", "in_remediation", "mitigated", "accepted", "closed", "false_positive"];
+const STATUS_OPTIONS = ["pending_validation", "validated", "open", "in_remediation", "mitigated", "accepted", "closed", "false_positive"];
 const SOURCE_OPTIONS = ["pen_test", "scan", "manual", "bug_bounty"];
 
 export default function VulnerabilitiesPage() {
