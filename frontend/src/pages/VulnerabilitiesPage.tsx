@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
-import { Plus, Search, X, Loader2, Filter, Bug, ShieldCheck, Wrench, BarChart3, Upload, Download } from "lucide-react";
+import { Plus, Search, X, Loader2, Filter, Bug, ShieldCheck, Wrench, BarChart3, Upload, Download, Plug, RefreshCw, Trash2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { vulnerabilitiesApi, vulnImportApi } from "@/api/endpoints";
+import { vulnerabilitiesApi, vulnImportApi, scannerConnectorsApi } from "@/api/endpoints";
 
 const SEV_BADGE: Record<string, string> = {
   critical: "bg-red-100 text-red-700 border-red-200",
@@ -73,6 +73,57 @@ Weak SSH ciphers,Low,3.7,,Backup Storage Array,Restrict to strong ciphers`;
     }
   }
 
+  // Scanner connectors (live API sync)
+  const [showConn, setShowConn] = useState(false);
+  const [connectors, setConnectors] = useState<any[]>([]);
+  const [connLoading, setConnLoading] = useState(false);
+  const [connMsg, setConnMsg] = useState("");
+  const [connBusy, setConnBusy] = useState("");
+  const [addingConn, setAddingConn] = useState(false);
+  const emptyConn = { name: "", tool: "demo", base_url: "", api_key: "", api_secret: "" };
+  const [connForm, setConnForm] = useState({ ...emptyConn });
+  const connNeedsUrl = connForm.tool !== "demo";
+  const connNeedsKeys = connForm.tool === "tenable";
+
+  async function loadConnectors() {
+    setConnLoading(true);
+    try { setConnectors(await scannerConnectorsApi.list()); } catch { setConnectors([]); } finally { setConnLoading(false); }
+  }
+  async function addConnector(e: React.FormEvent) {
+    e.preventDefault();
+    if (!connForm.name.trim()) return;
+    setAddingConn(true); setConnMsg("");
+    try {
+      await scannerConnectorsApi.create({
+        name: connForm.name, tool: connForm.tool,
+        base_url: connForm.base_url || null, api_key: connForm.api_key || null, api_secret: connForm.api_secret || null,
+      });
+      setConnForm({ ...emptyConn });
+      loadConnectors();
+    } catch (err: any) {
+      setConnMsg(err?.response?.data?.detail || "Could not add connector");
+    } finally { setAddingConn(false); }
+  }
+  async function testConn(id: string) {
+    setConnBusy(id + ":test"); setConnMsg("");
+    try { const r = await scannerConnectorsApi.test(id); setConnMsg((r.ok ? "✓ " : "✗ ") + r.message); }
+    catch { setConnMsg("Test failed"); } finally { setConnBusy(""); }
+  }
+  async function syncConn(id: string) {
+    setConnBusy(id + ":sync"); setConnMsg("");
+    try {
+      const j = await scannerConnectorsApi.sync(id);
+      setConnMsg(j.status === "completed"
+        ? `✓ Synced: ${j.imported_count} imported, ${j.matched_count} matched, ${j.skipped_count} skipped`
+        : `✗ ${j.error || "sync failed"}`);
+      loadConnectors(); setLoading(true); load(); loadStats();
+    } catch { setConnMsg("Sync failed"); } finally { setConnBusy(""); }
+  }
+  async function deleteConn(id: string) {
+    setConnBusy(id + ":del");
+    try { await scannerConnectorsApi.remove(id); loadConnectors(); } catch {} finally { setConnBusy(""); }
+  }
+
   const [form, setForm] = useState({
     ref_id: "",
     title: "",
@@ -142,6 +193,12 @@ Weak SSH ciphers,Low,3.7,,Backup Storage Array,Restrict to strong ciphers`;
           <p className="text-sm text-gray-500 mt-1">{t("vulnerabilities.subtitle")}</p>
         </div>
         <div className="flex items-center gap-2">
+          <button
+            onClick={() => { setConnMsg(""); loadConnectors(); setShowConn(true); }}
+            className="inline-flex items-center gap-2 bg-white border border-gray-200 text-gray-700 px-4 py-2.5 rounded-xl text-sm font-medium hover:bg-gray-50 transition-colors"
+          >
+            <Plug className="w-4 h-4" /> {t("vulnerabilities.connectors", "Connectors")}
+          </button>
           <button
             onClick={() => { setImportResult(null); setImportFile(null); setShowImport(true); }}
             className="inline-flex items-center gap-2 bg-white border border-gray-200 text-gray-700 px-4 py-2.5 rounded-xl text-sm font-medium hover:bg-gray-50 transition-colors"
@@ -347,6 +404,76 @@ Weak SSH ciphers,Low,3.7,,Backup Storage Array,Restrict to strong ciphers`;
                 <button type="button" onClick={() => setShowImport(false)} className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800">{t("common.close", "Close")}</button>
                 <button type="submit" disabled={importing || !importFile} className="inline-flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-xl text-sm font-medium hover:bg-blue-700 disabled:opacity-50">
                   {importing && <Loader2 className="w-4 h-4 animate-spin" />} {t("vulnerabilities.import_run", "Import")}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Scanner connectors modal */}
+      {showConn && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setShowConn(false)} />
+          <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-2xl mx-4 p-6 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between mb-2">
+              <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+                <Plug className="w-5 h-5 text-blue-600" /> {t("vulnerabilities.connectors_title", "Scanner connectors")}
+              </h2>
+              <button onClick={() => setShowConn(false)} className="text-gray-400 hover:text-gray-600"><X className="w-5 h-5" /></button>
+            </div>
+            <p className="text-sm text-gray-500 mb-4">{t("vulnerabilities.connectors_help", "Connect to Nessus/Tenable, Qualys or OpenVAS to pull findings automatically. Sync on demand or on a schedule; every run is journaled.")}</p>
+
+            {connMsg && <div className="mb-4 p-3 rounded-xl text-sm bg-blue-50 text-blue-700">{connMsg}</div>}
+
+            <div className="space-y-2 mb-6">
+              {connLoading ? (
+                <div className="flex items-center justify-center py-6"><Loader2 className="w-5 h-5 animate-spin text-blue-500" /></div>
+              ) : connectors.length === 0 ? (
+                <p className="text-sm text-gray-400 py-2">{t("vulnerabilities.no_connectors", "No connectors yet. Add one below.")}</p>
+              ) : connectors.map((cn) => (
+                <div key={cn.id} className="flex items-center gap-3 border border-gray-100 rounded-xl px-4 py-3">
+                  <div className="w-9 h-9 rounded-lg bg-blue-50 flex items-center justify-center"><Plug className="w-4 h-4 text-blue-600" /></div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-gray-900 truncate">{cn.name}</p>
+                    <p className="text-xs text-gray-500 capitalize">{cn.tool}{cn.schedule_enabled ? ` · every ${cn.interval_hours}h` : ""}{cn.last_status ? ` · last: ${cn.last_status}` : ""}</p>
+                  </div>
+                  <button onClick={() => testConn(cn.id)} disabled={!!connBusy} className="text-xs px-3 py-1.5 rounded-lg border border-gray-200 hover:bg-gray-50 disabled:opacity-50">
+                    {connBusy === cn.id + ":test" ? "…" : t("vulnerabilities.test", "Test")}
+                  </button>
+                  <button onClick={() => syncConn(cn.id)} disabled={!!connBusy} className="inline-flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50">
+                    {connBusy === cn.id + ":sync" ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />} {t("vulnerabilities.sync_now", "Sync now")}
+                  </button>
+                  <button onClick={() => deleteConn(cn.id)} disabled={!!connBusy} className="text-gray-400 hover:text-red-500 disabled:opacity-50"><Trash2 className="w-4 h-4" /></button>
+                </div>
+              ))}
+            </div>
+
+            <form onSubmit={addConnector} className="border-t border-gray-100 pt-4 space-y-3">
+              <p className="text-sm font-semibold text-gray-700">{t("vulnerabilities.add_connector", "Add connector")}</p>
+              <div className="grid grid-cols-2 gap-3">
+                <input value={connForm.name} onChange={(e) => setConnForm({ ...connForm, name: e.target.value })} placeholder={t("vulnerabilities.conn_name", "Name")} className="border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                <select value={connForm.tool} onChange={(e) => setConnForm({ ...connForm, tool: e.target.value })} className="border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                  <option value="demo">Demo (simulated)</option>
+                  <option value="tenable">Tenable.io</option>
+                  <option value="nessus">Nessus</option>
+                  <option value="qualys">Qualys</option>
+                  <option value="openvas">OpenVAS</option>
+                </select>
+              </div>
+              {connNeedsUrl && (
+                <input value={connForm.base_url} onChange={(e) => setConnForm({ ...connForm, base_url: e.target.value })} placeholder={connForm.tool === "tenable" ? "https://cloud.tenable.com" : "https://scanner.host:port"} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              )}
+              {connNeedsKeys && (
+                <div className="grid grid-cols-2 gap-3">
+                  <input value={connForm.api_key} onChange={(e) => setConnForm({ ...connForm, api_key: e.target.value })} placeholder={t("vulnerabilities.access_key", "Access key")} className="border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                  <input value={connForm.api_secret} onChange={(e) => setConnForm({ ...connForm, api_secret: e.target.value })} placeholder={t("vulnerabilities.secret_key", "Secret key")} type="password" className="border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                </div>
+              )}
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-xs text-gray-400">{connForm.tool === "demo" ? t("vulnerabilities.demo_note", "Demo connector simulates a pull that matches your assets.") : t("vulnerabilities.live_note", "Live pull needs a reachable scanner + valid credentials.")}</p>
+                <button type="submit" disabled={addingConn} className="inline-flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-xl text-sm font-medium hover:bg-blue-700 disabled:opacity-50">
+                  {addingConn && <Loader2 className="w-4 h-4 animate-spin" />} {t("vulnerabilities.add", "Add")}
                 </button>
               </div>
             </form>

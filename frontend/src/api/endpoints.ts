@@ -1390,3 +1390,12 @@ export const vulnImportApi = {
   },
   journal: () => apiClient.get("/vuln-import/journal").then((r) => r.data),
 };
+
+// ── Scanner connectors (live API sync — Elite Pack) ──────────────────────────
+export const scannerConnectorsApi = {
+  list: () => apiClient.get("/vuln-import/connectors").then((r) => r.data),
+  create: (data: Record<string, unknown>) => apiClient.post("/vuln-import/connectors", data).then((r) => r.data),
+  remove: (id: string) => apiClient.delete(`/vuln-import/connectors/${id}`),
+  test: (id: string) => apiClient.post(`/vuln-import/connectors/${id}/test`).then((r) => r.data),
+  sync: (id: string) => apiClient.post(`/vuln-import/connectors/${id}/sync`).then((r) => r.data),
+};
