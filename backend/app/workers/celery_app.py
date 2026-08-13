@@ -11,6 +11,7 @@ celery_app = Celery(
         "app.workers.tasks.notifications",
         "app.workers.tasks.compliance_scoring",
         "app.workers.tasks.vendor_assessments",
+        "app.workers.tasks.reports",
     ],
 )
 
@@ -40,6 +41,10 @@ celery_app.conf.update(
         "check-vendor-assessment-due": {
             "task": "app.workers.tasks.vendor_assessments.send_assessment_reminders",
             "schedule": 86400.0,  # daily
+        },
+        "deliver-scheduled-reports": {
+            "task": "app.workers.tasks.reports.generate_scheduled_reports",
+            "schedule": 1800.0,  # every 30 min (in-process loop covers pm2 prod)
         },
     },
 )

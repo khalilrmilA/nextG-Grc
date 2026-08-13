@@ -14,6 +14,7 @@ from app.core.database import engine, Base, AsyncSessionLocal
 from app.api.v1.router import api_router
 from app.core.seed_mandatory_docs import seed_mandatory_documents
 from app.services.threat_scheduler import start_threat_scheduler
+from app.services.report_scheduler import start_report_scheduler
 from app.core.activity_middleware import ActivityLogMiddleware
 from app.core.license_middleware import LicenseEnforcementMiddleware
 from app.core.security_middleware import SecurityHeadersMiddleware
@@ -44,18 +45,21 @@ async def lifespan(application: FastAPI):
             traces_sample_rate=0.1 if settings.ENVIRONMENT == "production" else 1.0,
         )
 
-    # Start background threat feed scheduler (runs every 24h automatically)
+    # Start background schedulers (threat feed every 24h; scheduled reports every 5m)
     _scheduler_task = asyncio.create_task(start_threat_scheduler())
+    _report_task = asyncio.create_task(start_report_scheduler())
 
     yield
 
-    # Graceful shutdown — cancel the background task
+    # Graceful shutdown — cancel the background tasks
     _scheduler_task.cancel()
-    try:
-        await _scheduler_task
-    except asyncio.CancelledError:
-        logger.info("Threat scheduler cancelled — shutting down")
-        raise
+    _report_task.cancel()
+    for _task in (_scheduler_task, _report_task):
+        try:
+            await _task
+        except asyncio.CancelledError:
+            pass
+    logger.info("Background schedulers cancelled — shutting down")
 
     logger.info("Shutting down GRC Platform")
     await engine.dispose()

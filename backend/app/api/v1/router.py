@@ -51,6 +51,7 @@ from app.api.v1.endpoints import (
     archiving,
     scenario_versions,
     ocr,
+    report_schedules,
 )
 
 api_router = APIRouter()
@@ -105,3 +106,4 @@ api_router.include_router(governance.router, prefix="/governance", tags=["Govern
 api_router.include_router(archiving.router, prefix="/archiving", tags=["Archiving & Retention (Elite Pack)"])
 api_router.include_router(scenario_versions.router, prefix="/scenario-versions", tags=["Scenario Versioning (Elite Pack)"])
 api_router.include_router(ocr.router, prefix="/ocr", tags=["OCR Document Capture (Elite Pack)"])
+api_router.include_router(report_schedules.router, prefix="/report-schedules", tags=["Scheduled Reports (Elite Pack)"])

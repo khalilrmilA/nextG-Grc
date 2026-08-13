@@ -71,6 +71,57 @@ async def send_email(
         return False
 
 
+async def send_report_email(
+    *,
+    to_email: str,
+    subject: str,
+    pdf_bytes: bytes,
+    filename: str,
+    body_text: str = "Please find the attached report.",
+) -> bool:
+    """Send an email with a PDF attachment (used by scheduled reports).
+
+    Returns True on success, False on failure (logs the error). Falls back to a
+    [DEV EMAIL] log line when SMTP is not configured — never raises.
+    """
+    if not settings.SMTP_HOST:
+        logger.warning("SMTP host not configured — report email not sent to %s", to_email)
+        logger.info("[DEV EMAIL] Report to: %s | Subject: %s | %s (%d bytes)", to_email, subject, filename, len(pdf_bytes or b""))
+        return False
+
+    try:
+        from email.mime.application import MIMEApplication
+
+        msg = MIMEMultipart("mixed")
+        msg["Subject"] = subject
+        msg["From"] = settings.EMAIL_FROM
+        msg["To"] = to_email
+        msg.attach(MIMEText(f"<p>{body_text}</p>", "html"))
+
+        part = MIMEApplication(pdf_bytes, _subtype="pdf")
+        part.add_header("Content-Disposition", "attachment", filename=filename)
+        msg.attach(part)
+
+        smtp_kwargs: dict = {
+            "hostname": settings.SMTP_HOST,
+            "port": settings.SMTP_PORT,
+            "use_tls": settings.SMTP_PORT == 465,
+            "start_tls": settings.SMTP_PORT == 587,
+            "timeout": 30,
+        }
+        if settings.SMTP_USER and settings.SMTP_PASSWORD:
+            smtp_kwargs["username"] = settings.SMTP_USER
+            smtp_kwargs["password"] = settings.SMTP_PASSWORD
+
+        await aiosmtplib.send(msg, **smtp_kwargs)
+        logger.info("Report email sent to %s: %s", to_email, subject)
+        return True
+
+    except Exception as exc:
+        logger.error("Failed to send report email to %s: %s", to_email, exc)
+        return False
+
+
 # ── Typed helpers for each notification type ─────────────────────────────────
 
 async def send_notification_email(*, to_email: str, subject: str, body: str, action_url: str | None = None) -> bool:

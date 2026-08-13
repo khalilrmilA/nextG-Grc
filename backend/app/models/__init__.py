@@ -48,6 +48,7 @@ from app.models.governance import RaciAssignment, GovernanceDocument, Governance
 from app.models.archive import ArchiveRecord
 from app.models.scenario_version import RiskScenarioVersion
 from app.models.scanner_connector import ScannerConnector
+from app.models.report_schedule import ReportSchedule, ReportFrequency
 
 __all__ = [
     "Tenant", "User", "UserRole",
@@ -80,4 +81,5 @@ __all__ = [
     "ArchiveRecord",
     "RiskScenarioVersion",
     "ScannerConnector",
+    "ReportSchedule", "ReportFrequency",
 ]
