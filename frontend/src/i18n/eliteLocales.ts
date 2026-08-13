@@ -1,0 +1,196 @@
+/**
+ * Elite Pack translations (EN/FR/AR), merged into the `translation` namespace
+ * via i18n.addResourceBundle so the large per-language locale files stay untouched.
+ * The RFP requires French + Arabic (with RTL) for the whole interface.
+ */
+export const eliteEn = {
+  elite: { upsell_title: "Elite Pack feature", upsell_default: "This capability is part of the Elite Pack." },
+  common: { cancel: "Cancel", save: "Save", close: "Close", description: "Description", notes: "Notes", content: "Content" },
+  assets: {
+    title: "Asset Inventory", elite: "Elite Pack", subtitle: "Primary & support assets with CIA valuation, ownership and lifecycle",
+    new_asset: "New Asset", stat_total: "Total assets", stat_primary: "Primary assets", stat_critical: "Critical",
+    search_placeholder: "Search assets…", all_criticalities: "All criticalities", all_classes: "Primary & support",
+    col_name: "Name", col_type: "Type", col_class: "Class", col_criticality: "Criticality", col_cia: "C·I·A", col_owner: "Owner", col_lifecycle: "Lifecycle",
+    no_assets: "No assets yet. Add your first asset to build the inventory.", owner: "Business owner", select_owner: "Select an owner…",
+    cia_valuation: "CIA valuation (1–5)", confidentiality: "Confidentiality", integrity: "Integrity", availability: "Availability", business_value: "Business value",
+    error_name_required: "Name is required", error_owner_required: "A business owner is required", error_create_failed: "Could not create asset",
+  },
+  analytics: {
+    title: "Analytics & Dashboards", elite: "Elite Pack", subtitle: "Per-module KPIs across the whole risk programme, with Excel/CSV export",
+    export_title: "Report export", export_sub: "Download any dataset as a formatted Excel workbook or CSV", dataset: "Dataset", unavailable: "No data",
+  },
+  treatment: {
+    title: "Risk Treatment", elite: "Elite Pack", subtitle: "Treatment decisions per risk — mitigate / accept / transfer / avoid — with schedule, cost and tracking",
+    new: "New treatment", stat_total: "Treatment plans", stat_overdue: "Overdue", stat_at_risk: "Due today / at risk",
+    empty: "No treatment plans yet. Add one to start tracking mitigation.", col_risk: "Risk", col_option: "Option", col_progress: "Progress", col_due: "Due", col_cost: "Est. cost",
+    select_risk: "Select a risk…", progress: "Progress %", cost: "Est. cost ($)", transfer_to: "Transfer to", justification: "Acceptance justification",
+    error_risk_required: "Select a risk", error_justification: "Acceptance requires a justification", error_save: "Could not save treatment",
+  },
+  ctrleval: {
+    title: "Control Effectiveness", elite: "Elite Pack", subtitle: "Evaluate controls on the 5 STB criteria → performance level, with a re-assessment due list",
+    new: "New evaluation", stat_total: "Evaluations", stat_due: "Due for re-assessment",
+    no_controls: "No applied controls to evaluate yet — add controls first, then score their effectiveness here.",
+    empty: "No evaluations yet. Score a control on the 5 criteria to derive its performance level.",
+    col_control: "Control", col_perf: "Performance", select_control: "Select a control…", criteria: "5 criteria (0–2)", next: "Next evaluation",
+    error_control: "Select a control to evaluate", error_save: "Could not save evaluation",
+  },
+  governance: {
+    title: "Governance", elite: "Elite Pack", subtitle: "RACI responsibility matrix and the governance document repository",
+    raci: "RACI matrix", activity: "Activity / decision", module: "Module", add: "Add", responsible: "Responsible", no_raci: "No RACI assignments yet.",
+    documents: "Document repository", new_doc: "New document", no_docs: "No documents yet.", doc_title: "Title", typology: "Typology", access: "Access", version: "Version",
+  },
+  archiving: {
+    title: "Archiving & Retention", elite: "Elite Pack", subtitle: "Snapshot records with a retention window, consult without restoring, and export the archive",
+    export: "Export", new: "Archive record", stat_total: "Archived records", stat_expired: "Past retention",
+    enforce: "Retention", enforce_sub: "Delete records past their retention", purge: "Purge expired",
+    entity: "Entity", reason: "Reason", archived: "Archived", retention_until: "Retention until", indefinite: "indefinite", empty: "No archived records yet.", retention_days: "Retention (days)",
+  },
+  cve: {
+    title: "CVE Knowledge Base", elite: "Elite Pack", subtitle: "Search the NVD CVE catalog, sync the latest, and triage relevance for your environment",
+    sync: "Sync from NVD", search: "Search CVE id or description…", any_cvss: "Any CVSS", all_relevance: "All relevance", apply: "Search",
+    empty: "No CVEs in the catalog yet. Click 'Sync from NVD' to pull the latest.", col_id: "CVE", col_cvss: "CVSS", col_desc: "Description", col_rel: "Relevance", triage: "Triage…",
+  },
+  mfa: {
+    title: "Two-Factor Authentication", elite: "Elite Pack", subtitle: "Protect your account with a time-based one-time password (TOTP) from an authenticator app",
+    enabled: "Two-factor authentication is enabled", enabled_sub: "Your account is protected by an authenticator app.", disable: "Disable",
+    not_enabled: "Two-factor is not enabled", not_enabled_sub: "Add a second factor with Google Authenticator, Microsoft Authenticator, or any TOTP app.", enable: "Enable 2FA",
+    step1: "1. Add this key to your authenticator app", step1_sub: "Scan the setup URI, or enter the secret key manually.", step2: "2. Enter the 6-digit code from the app", verify: "Verify & enable",
+  },
+  vulnerabilities: {
+    import_scan: "Import scan", connectors: "Connectors", import_title: "Import scanner results",
+    import_help: "Upload a Nessus (.nessus) file or a Qualys / OpenVAS CSV export. Findings are parsed, deduplicated and auto-matched to your assets.",
+    scanner: "Scanner", file: "Scan file", sample: "Download a sample OpenVAS CSV to try it", import_run: "Import",
+    connectors_title: "Scanner connectors", connectors_help: "Connect to Nessus/Tenable, Qualys or OpenVAS to pull findings automatically. Sync on demand or on a schedule; every run is journaled.",
+    no_connectors: "No connectors yet. Add one below.", test: "Test", sync_now: "Sync now", add_connector: "Add connector", conn_name: "Name",
+    access_key: "Access key", secret_key: "Secret key", demo_note: "Demo connector simulates a pull that matches your assets.", live_note: "Live pull needs a reachable scanner + valid credentials.", add: "Add",
+  },
+  sso: { or: "or", ldap_login: "Sign in with company directory", username: "Directory username", ldap_hint: "Use your Active Directory / LDAP credentials." },
+};
+
+export const eliteFr = {
+  elite: { upsell_title: "Fonctionnalité Elite Pack", upsell_default: "Cette fonctionnalité fait partie de l'Elite Pack." },
+  common: { cancel: "Annuler", save: "Enregistrer", close: "Fermer", description: "Description", notes: "Notes", content: "Contenu" },
+  assets: {
+    title: "Inventaire des actifs", elite: "Elite Pack", subtitle: "Actifs primaires et supports avec valorisation CID, propriété et cycle de vie",
+    new_asset: "Nouvel actif", stat_total: "Total des actifs", stat_primary: "Actifs primaires", stat_critical: "Critiques",
+    search_placeholder: "Rechercher des actifs…", all_criticalities: "Toutes criticités", all_classes: "Primaires et supports",
+    col_name: "Nom", col_type: "Type", col_class: "Classe", col_criticality: "Criticité", col_cia: "C·I·D", col_owner: "Propriétaire", col_lifecycle: "Cycle de vie",
+    no_assets: "Aucun actif pour le moment. Ajoutez votre premier actif pour constituer l'inventaire.", owner: "Propriétaire métier", select_owner: "Choisir un propriétaire…",
+    cia_valuation: "Valorisation CID (1–5)", confidentiality: "Confidentialité", integrity: "Intégrité", availability: "Disponibilité", business_value: "Valeur métier",
+    error_name_required: "Le nom est requis", error_owner_required: "Un propriétaire métier est requis", error_create_failed: "Impossible de créer l'actif",
+  },
+  analytics: {
+    title: "Analytique et tableaux de bord", elite: "Elite Pack", subtitle: "Indicateurs par module sur tout le dispositif de gestion des risques, avec export Excel/CSV",
+    export_title: "Export de rapport", export_sub: "Téléchargez n'importe quel jeu de données en classeur Excel ou CSV", dataset: "Jeu de données", unavailable: "Aucune donnée",
+  },
+  treatment: {
+    title: "Traitement des risques", elite: "Elite Pack", subtitle: "Décisions de traitement par risque — réduire / accepter / transférer / éviter — avec échéancier, coût et suivi",
+    new: "Nouveau traitement", stat_total: "Plans de traitement", stat_overdue: "En retard", stat_at_risk: "À échéance / à risque",
+    empty: "Aucun plan de traitement. Ajoutez-en un pour suivre l'atténuation.", col_risk: "Risque", col_option: "Option", col_progress: "Avancement", col_due: "Échéance", col_cost: "Coût estimé",
+    select_risk: "Choisir un risque…", progress: "Avancement %", cost: "Coût estimé ($)", transfer_to: "Transféré à", justification: "Justification d'acceptation",
+    error_risk_required: "Sélectionnez un risque", error_justification: "L'acceptation nécessite une justification", error_save: "Impossible d'enregistrer le traitement",
+  },
+  ctrleval: {
+    title: "Efficacité des contrôles", elite: "Elite Pack", subtitle: "Évaluez les contrôles selon les 5 critères STB → niveau de performance, avec liste des réévaluations dues",
+    new: "Nouvelle évaluation", stat_total: "Évaluations", stat_due: "À réévaluer",
+    no_controls: "Aucun contrôle appliqué à évaluer — ajoutez d'abord des contrôles, puis évaluez leur efficacité ici.",
+    empty: "Aucune évaluation. Notez un contrôle sur les 5 critères pour en déduire le niveau de performance.",
+    col_control: "Contrôle", col_perf: "Performance", select_control: "Choisir un contrôle…", criteria: "5 critères (0–2)", next: "Prochaine évaluation",
+    error_control: "Sélectionnez un contrôle à évaluer", error_save: "Impossible d'enregistrer l'évaluation",
+  },
+  governance: {
+    title: "Gouvernance", elite: "Elite Pack", subtitle: "Matrice de responsabilités RACI et référentiel documentaire de gouvernance",
+    raci: "Matrice RACI", activity: "Activité / décision", module: "Module", add: "Ajouter", responsible: "Responsable", no_raci: "Aucune affectation RACI.",
+    documents: "Référentiel documentaire", new_doc: "Nouveau document", no_docs: "Aucun document.", doc_title: "Titre", typology: "Typologie", access: "Accès", version: "Version",
+  },
+  archiving: {
+    title: "Archivage et rétention", elite: "Elite Pack", subtitle: "Archivez des enregistrements avec une durée de rétention, consultez sans restaurer, et exportez l'archive",
+    export: "Exporter", new: "Archiver", stat_total: "Enregistrements archivés", stat_expired: "Rétention dépassée",
+    enforce: "Rétention", enforce_sub: "Supprimer les enregistrements au-delà de leur rétention", purge: "Purger expirés",
+    entity: "Entité", reason: "Motif", archived: "Archivé", retention_until: "Rétention jusqu'au", indefinite: "indéfinie", empty: "Aucun enregistrement archivé.", retention_days: "Rétention (jours)",
+  },
+  cve: {
+    title: "Base de connaissances CVE", elite: "Elite Pack", subtitle: "Recherchez le catalogue CVE du NVD, synchronisez les dernières et triez la pertinence pour votre environnement",
+    sync: "Synchroniser depuis NVD", search: "Rechercher un identifiant CVE ou une description…", any_cvss: "Tout CVSS", all_relevance: "Toute pertinence", apply: "Rechercher",
+    empty: "Aucune CVE dans le catalogue. Cliquez sur « Synchroniser depuis NVD ».", col_id: "CVE", col_cvss: "CVSS", col_desc: "Description", col_rel: "Pertinence", triage: "Trier…",
+  },
+  mfa: {
+    title: "Authentification à deux facteurs", elite: "Elite Pack", subtitle: "Protégez votre compte avec un mot de passe à usage unique (TOTP) d'une application d'authentification",
+    enabled: "L'authentification à deux facteurs est activée", enabled_sub: "Votre compte est protégé par une application d'authentification.", disable: "Désactiver",
+    not_enabled: "La double authentification n'est pas activée", not_enabled_sub: "Ajoutez un second facteur avec Google Authenticator, Microsoft Authenticator ou toute application TOTP.", enable: "Activer la 2FA",
+    step1: "1. Ajoutez cette clé à votre application d'authentification", step1_sub: "Scannez l'URI de configuration ou saisissez la clé manuellement.", step2: "2. Saisissez le code à 6 chiffres de l'application", verify: "Vérifier et activer",
+  },
+  vulnerabilities: {
+    import_scan: "Importer un scan", connectors: "Connecteurs", import_title: "Importer les résultats du scanner",
+    import_help: "Importez un fichier Nessus (.nessus) ou un export CSV Qualys / OpenVAS. Les vulnérabilités sont analysées, dédupliquées et associées automatiquement à vos actifs.",
+    scanner: "Scanner", file: "Fichier de scan", sample: "Télécharger un exemple de CSV OpenVAS pour tester", import_run: "Importer",
+    connectors_title: "Connecteurs de scanners", connectors_help: "Connectez-vous à Nessus/Tenable, Qualys ou OpenVAS pour récupérer automatiquement les vulnérabilités. Synchronisation à la demande ou planifiée ; chaque exécution est journalisée.",
+    no_connectors: "Aucun connecteur. Ajoutez-en un ci-dessous.", test: "Tester", sync_now: "Synchroniser", add_connector: "Ajouter un connecteur", conn_name: "Nom",
+    access_key: "Clé d'accès", secret_key: "Clé secrète", demo_note: "Le connecteur démo simule une récupération correspondant à vos actifs.", live_note: "La récupération réelle nécessite un scanner accessible et des identifiants valides.", add: "Ajouter",
+  },
+  sso: { or: "ou", ldap_login: "Se connecter avec l'annuaire d'entreprise", username: "Identifiant annuaire", ldap_hint: "Utilisez vos identifiants Active Directory / LDAP." },
+};
+
+export const eliteAr = {
+  elite: { upsell_title: "ميزة Elite Pack", upsell_default: "هذه الميزة جزء من باقة Elite Pack." },
+  common: { cancel: "إلغاء", save: "حفظ", close: "إغلاق", description: "الوصف", notes: "ملاحظات", content: "المحتوى" },
+  assets: {
+    title: "جرد الأصول", elite: "Elite Pack", subtitle: "الأصول الأساسية والداعمة مع تقييم السرية والسلامة والتوافر والملكية ودورة الحياة",
+    new_asset: "أصل جديد", stat_total: "إجمالي الأصول", stat_primary: "الأصول الأساسية", stat_critical: "حرجة",
+    search_placeholder: "البحث في الأصول…", all_criticalities: "كل مستويات الأهمية", all_classes: "أساسية وداعمة",
+    col_name: "الاسم", col_type: "النوع", col_class: "الفئة", col_criticality: "الأهمية", col_cia: "س·ل·ت", col_owner: "المالك", col_lifecycle: "دورة الحياة",
+    no_assets: "لا توجد أصول بعد. أضف أول أصل لبناء الجرد.", owner: "مالك الأعمال", select_owner: "اختر مالكًا…",
+    cia_valuation: "تقييم CIA (1–5)", confidentiality: "السرية", integrity: "السلامة", availability: "التوافر", business_value: "القيمة التجارية",
+    error_name_required: "الاسم مطلوب", error_owner_required: "مالك الأعمال مطلوب", error_create_failed: "تعذّر إنشاء الأصل",
+  },
+  analytics: {
+    title: "التحليلات ولوحات المعلومات", elite: "Elite Pack", subtitle: "مؤشرات الأداء لكل وحدة عبر برنامج المخاطر بالكامل، مع تصدير Excel/CSV",
+    export_title: "تصدير التقرير", export_sub: "نزّل أي مجموعة بيانات كملف Excel أو CSV", dataset: "مجموعة البيانات", unavailable: "لا توجد بيانات",
+  },
+  treatment: {
+    title: "معالجة المخاطر", elite: "Elite Pack", subtitle: "قرارات المعالجة لكل خطر — تخفيف / قبول / نقل / تجنّب — مع جدول زمني وتكلفة ومتابعة",
+    new: "معالجة جديدة", stat_total: "خطط المعالجة", stat_overdue: "متأخرة", stat_at_risk: "مستحقة اليوم / معرّضة للخطر",
+    empty: "لا توجد خطط معالجة بعد. أضف واحدة لبدء تتبّع التخفيف.", col_risk: "الخطر", col_option: "الخيار", col_progress: "التقدّم", col_due: "الاستحقاق", col_cost: "التكلفة التقديرية",
+    select_risk: "اختر خطرًا…", progress: "التقدّم %", cost: "التكلفة التقديرية ($)", transfer_to: "نقل إلى", justification: "مبرر القبول",
+    error_risk_required: "اختر خطرًا", error_justification: "يتطلب القبول مبررًا", error_save: "تعذّر حفظ المعالجة",
+  },
+  ctrleval: {
+    title: "فعالية الضوابط", elite: "Elite Pack", subtitle: "قيّم الضوابط وفق معايير STB الخمسة → مستوى الأداء، مع قائمة إعادة التقييم المستحقة",
+    new: "تقييم جديد", stat_total: "التقييمات", stat_due: "مستحقة لإعادة التقييم",
+    no_controls: "لا توجد ضوابط مطبّقة للتقييم — أضف ضوابط أولًا ثم قيّم فعاليتها هنا.",
+    empty: "لا توجد تقييمات بعد. قيّم ضابطًا وفق المعايير الخمسة لاستنتاج مستوى الأداء.",
+    col_control: "الضابط", col_perf: "الأداء", select_control: "اختر ضابطًا…", criteria: "5 معايير (0–2)", next: "التقييم التالي",
+    error_control: "اختر ضابطًا للتقييم", error_save: "تعذّر حفظ التقييم",
+  },
+  governance: {
+    title: "الحوكمة", elite: "Elite Pack", subtitle: "مصفوفة مسؤوليات RACI ومستودع وثائق الحوكمة",
+    raci: "مصفوفة RACI", activity: "النشاط / القرار", module: "الوحدة", add: "إضافة", responsible: "المسؤول", no_raci: "لا توجد تعيينات RACI بعد.",
+    documents: "مستودع الوثائق", new_doc: "وثيقة جديدة", no_docs: "لا توجد وثائق بعد.", doc_title: "العنوان", typology: "التصنيف", access: "الوصول", version: "الإصدار",
+  },
+  archiving: {
+    title: "الأرشفة والاحتفاظ", elite: "Elite Pack", subtitle: "أرشف السجلات بمدة احتفاظ، واطّلع دون استعادة، وصدّر الأرشيف",
+    export: "تصدير", new: "أرشفة سجل", stat_total: "السجلات المؤرشفة", stat_expired: "تجاوزت الاحتفاظ",
+    enforce: "الاحتفاظ", enforce_sub: "حذف السجلات التي تجاوزت مدة الاحتفاظ", purge: "حذف المنتهية",
+    entity: "الكيان", reason: "السبب", archived: "مؤرشف", retention_until: "الاحتفاظ حتى", indefinite: "غير محدّد", empty: "لا توجد سجلات مؤرشفة بعد.", retention_days: "الاحتفاظ (أيام)",
+  },
+  cve: {
+    title: "قاعدة معارف CVE", elite: "Elite Pack", subtitle: "ابحث في كتالوج CVE من NVD وزامن الأحدث وصنّف الأهمية لبيئتك",
+    sync: "المزامنة من NVD", search: "ابحث عن معرّف CVE أو وصف…", any_cvss: "أي CVSS", all_relevance: "كل الأهمية", apply: "بحث",
+    empty: "لا توجد ثغرات CVE في الكتالوج بعد. اضغط « المزامنة من NVD ».", col_id: "CVE", col_cvss: "CVSS", col_desc: "الوصف", col_rel: "الأهمية", triage: "تصنيف…",
+  },
+  mfa: {
+    title: "المصادقة الثنائية", elite: "Elite Pack", subtitle: "احمِ حسابك بكلمة مرور لمرة واحدة مبنية على الوقت (TOTP) من تطبيق مصادقة",
+    enabled: "المصادقة الثنائية مفعّلة", enabled_sub: "حسابك محمي بتطبيق مصادقة.", disable: "تعطيل",
+    not_enabled: "المصادقة الثنائية غير مفعّلة", not_enabled_sub: "أضف عاملًا ثانيًا عبر Google Authenticator أو Microsoft Authenticator أو أي تطبيق TOTP.", enable: "تفعيل 2FA",
+    step1: "1. أضف هذا المفتاح إلى تطبيق المصادقة", step1_sub: "امسح رمز الإعداد أو أدخل المفتاح يدويًا.", step2: "2. أدخل الرمز المكوّن من 6 أرقام من التطبيق", verify: "تحقّق وفعّل",
+  },
+  vulnerabilities: {
+    import_scan: "استيراد فحص", connectors: "الموصلات", import_title: "استيراد نتائج الماسح",
+    import_help: "ارفع ملف Nessus (.nessus) أو تصدير CSV من Qualys / OpenVAS. تُحلَّل النتائج وتُزال التكرارات وتُربط تلقائيًا بأصولك.",
+    scanner: "الماسح", file: "ملف الفحص", sample: "نزّل نموذج CSV من OpenVAS للتجربة", import_run: "استيراد",
+    connectors_title: "موصلات الماسحات", connectors_help: "اتصل بـ Nessus/Tenable أو Qualys أو OpenVAS لجلب النتائج تلقائيًا. مزامنة عند الطلب أو مجدولة؛ كل تشغيل مسجَّل.",
+    no_connectors: "لا توجد موصلات بعد. أضف واحدًا أدناه.", test: "اختبار", sync_now: "مزامنة الآن", add_connector: "إضافة موصل", conn_name: "الاسم",
+    access_key: "مفتاح الوصول", secret_key: "المفتاح السري", demo_note: "الموصل التجريبي يحاكي جلبًا يطابق أصولك.", live_note: "الجلب الفعلي يتطلب ماسحًا يمكن الوصول إليه وبيانات اعتماد صحيحة.", add: "إضافة",
+  },
+  sso: { or: "أو", ldap_login: "تسجيل الدخول عبر دليل الشركة", username: "اسم مستخدم الدليل", ldap_hint: "استخدم بيانات اعتماد Active Directory / LDAP." },
+};

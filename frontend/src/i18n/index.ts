@@ -3,6 +3,7 @@ import { initReactI18next } from "react-i18next";
 import en from "./locales/en";
 import fr from "./locales/fr";
 import ar from "./locales/ar";
+import { eliteEn, eliteFr, eliteAr } from "./eliteLocales";
 
 export type Language = "en" | "fr" | "ar";
 export const LANGUAGES: { code: Language; label: string; nativeLabel: string; rtl: boolean }[] = [
@@ -54,6 +55,11 @@ i18n
       escapeValue: false,
     },
   });
+
+// Merge the Elite Pack translations into each language (deep merge, overwrite).
+i18n.addResourceBundle("en", "translation", eliteEn, true, true);
+i18n.addResourceBundle("fr", "translation", eliteFr, true, true);
+i18n.addResourceBundle("ar", "translation", eliteAr, true, true);
 
 // Apply direction immediately on load
 applyDirection(savedLang);

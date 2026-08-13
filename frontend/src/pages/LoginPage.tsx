@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { Eye, EyeOff, Loader2, X } from "lucide-react";
@@ -22,6 +22,57 @@ export default function LoginPage() {
   const [error, setError]       = useState("");
   const [loading, setLoading]   = useState(false);
   const navigate = useNavigate();
+
+  // AD/LDAP SSO (only shown when a directory is configured on the server)
+  const [ssoEnabled, setSsoEnabled] = useState(false);
+  const [ssoUser, setSsoUser] = useState("");
+  const [ssoPass, setSsoPass] = useState("");
+  const [ssoLoading, setSsoLoading] = useState(false);
+  const [ssoError, setSsoError] = useState("");
+
+  useEffect(() => {
+    import("../api/endpoints").then(({ ssoApi }) => {
+      ssoApi.status().then((s) => setSsoEnabled(!!s?.enabled)).catch(() => setSsoEnabled(false));
+    });
+  }, []);
+
+  async function enrichAndRedirect() {
+    try {
+      const { authApi: api } = await import("../api/endpoints");
+      const profile = await api.getProfile();
+      const current = authSession.getUser();
+      if (current) {
+        authSession.login({
+          ...current,
+          role: (profile.role as UserRole), roles: profile.roles ?? [],
+          org: profile.tenant_name || current.org,
+          name: [profile.first_name, profile.last_name].filter(Boolean).join(" ") || current.name,
+          tenant_id: profile.tenant_id, primary_framework_id: profile.primary_framework_id,
+          selected_framework_ids: profile.selected_framework_ids, org_size: profile.org_size,
+          primary_assessment_id: profile.primary_assessment_id, accessible_modules: profile.accessible_modules,
+        });
+      }
+    } catch {/* best-effort */}
+    redirectAfterLogin(authSession.getUser()?.role);
+  }
+
+  async function handleSsoLogin(e: React.FormEvent) {
+    e.preventDefault();
+    setSsoLoading(true); setSsoError("");
+    try {
+      const { ssoApi } = await import("../api/endpoints");
+      const tokenData = await ssoApi.login({ username: ssoUser.trim(), password: ssoPass });
+      authSession.login({
+        email: ssoUser.trim(), name: ssoUser.trim(), role: "ciso" as UserRole, plan: "enterprise" as PlanTier, org: "",
+        accessToken: tokenData.access_token, refreshToken: tokenData.refresh_token,
+      });
+      await enrichAndRedirect();
+    } catch {
+      setSsoError(t("public.login.err_invalid"));
+    } finally {
+      setSsoLoading(false);
+    }
+  }
 
   // Forgot password modal state
   const [showForgot, setShowForgot]   = useState(false);
@@ -199,6 +250,25 @@ export default function LoginPage() {
               {loading ? <><Loader2 className="w-4 h-4 animate-spin" /> {t("public.login.submitting")}</> : t("public.login.submit")}
             </button>
           </form>
+
+          {ssoEnabled && (
+            <div className="mt-5">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="flex-1 h-px bg-gray-100" />
+                <span className="text-xs text-gray-400">{t("sso.or", "or")}</span>
+                <div className="flex-1 h-px bg-gray-100" />
+              </div>
+              {ssoError && <div className="mb-3 px-4 py-2.5 bg-red-50 border border-red-200 rounded-xl text-red-700 text-sm">{ssoError}</div>}
+              <form onSubmit={handleSsoLogin} className="space-y-3">
+                <input value={ssoUser} onChange={(e) => setSsoUser(e.target.value)} required placeholder={t("sso.username", "Directory username")} className="w-full px-3.5 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                <input value={ssoPass} onChange={(e) => setSsoPass(e.target.value)} required type="password" placeholder={t("public.login.password_placeholder")} className="w-full px-3.5 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                <button type="submit" disabled={ssoLoading} className="w-full bg-slate-800 hover:bg-slate-900 disabled:opacity-60 text-white font-medium py-2.5 px-4 rounded-xl text-sm transition-colors flex items-center justify-center gap-2">
+                  {ssoLoading ? <><Loader2 className="w-4 h-4 animate-spin" /> {t("public.login.submitting")}</> : t("sso.ldap_login", "Sign in with company directory")}
+                </button>
+                <p className="text-xs text-gray-400 text-center">{t("sso.ldap_hint", "Use your Active Directory / LDAP credentials.")}</p>
+              </form>
+            </div>
+          )}
 
             <div className="flex items-center gap-3 my-5">
             <div className="flex-1 h-px bg-gray-100" />

@@ -1432,3 +1432,9 @@ export const mfaApi = {
   verify: (code: string) => apiClient.post("/mfa/verify", { code }).then((r) => r.data),
   disable: () => apiClient.post("/mfa/disable").then((r) => r.data),
 };
+
+// ── AD/LDAP SSO (Elite Pack) ─────────────────────────────────────────────────
+export const ssoApi = {
+  status: (tenantSlug?: string) => apiClient.get("/sso/ldap/status", { params: tenantSlug ? { tenant_slug: tenantSlug } : {} }).then((r) => r.data),
+  login: (data: { username: string; password: string; tenant_slug?: string }) => apiClient.post("/sso/ldap/login", data).then((r) => r.data),
+};
