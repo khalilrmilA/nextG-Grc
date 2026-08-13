@@ -17,7 +17,7 @@ import {
   ChevronRight, Bell, Settings, HelpCircle, Lock,
   Crown, X, Trash2, Wand2, Menu,
   AlertCircle, Info, ShieldAlert, ClipboardCheck, RefreshCw,
-  Eye, Users, Headphones, Map, ListTodo, Boxes, BarChart3, Gauge, Bug, Radar,
+  Eye, Users, Headphones, Map, ListTodo, Boxes, BarChart3, Gauge, Bug, Radar, Scale, Archive,
 } from "lucide-react";
 
 // roles: null = visible to all authenticated non-auditor users
@@ -55,6 +55,13 @@ const NAV_GROUPS = [
       { to: "/support",          icon: Headphones,     label: "Support",            module: "support",          roles: null },
     ],
   },
+  {
+    label: "Governance",
+    items: [
+      { to: "/governance", icon: Scale,   label: "Governance", module: "governance", roles: ["tenant_admin","ciso","compliance_manager","policy_manager","viewer"] },
+      { to: "/archiving",  icon: Archive, label: "Archiving",  module: "archiving",  roles: ["tenant_admin","ciso","compliance_manager","viewer"] },
+    ],
+  },
 ];
 
 const AUDITOR_NAV = [
@@ -67,6 +74,8 @@ const PAGE_LABELS: Record<string, string> = {
   analytics:  "Analytics",
   "risk-treatment": "Risk Treatment",
   "control-effectiveness": "Control Effectiveness",
+  governance:  "Governance",
+  archiving:   "Archiving",
   risks:      "Risk Register",
   "risk-cartography": "Risk Cartography",
   "action-plan": "Action Plan",

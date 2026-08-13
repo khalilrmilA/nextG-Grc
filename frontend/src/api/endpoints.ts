@@ -1399,3 +1399,21 @@ export const scannerConnectorsApi = {
   test: (id: string) => apiClient.post(`/vuln-import/connectors/${id}/test`).then((r) => r.data),
   sync: (id: string) => apiClient.post(`/vuln-import/connectors/${id}/sync`).then((r) => r.data),
 };
+
+// ── Governance: RACI + document repository (Elite Pack) ──────────────────────
+export const governanceApi = {
+  raciList: () => apiClient.get("/governance/raci").then((r) => r.data),
+  raciCreate: (data: Record<string, unknown>) => apiClient.post("/governance/raci", data).then((r) => r.data),
+  raciDelete: (id: string) => apiClient.delete(`/governance/raci/${id}`),
+  docsList: () => apiClient.get("/governance/documents").then((r) => r.data),
+  docsCreate: (data: Record<string, unknown>) => apiClient.post("/governance/documents", data).then((r) => r.data),
+  docsDelete: (id: string) => apiClient.delete(`/governance/documents/${id}`),
+};
+
+// ── Archiving + retention (Elite Pack) ───────────────────────────────────────
+export const archivingApi = {
+  list: () => apiClient.get("/archiving").then((r) => r.data),
+  create: (data: Record<string, unknown>) => apiClient.post("/archiving", data).then((r) => r.data),
+  purgeExpired: () => apiClient.post("/archiving/purge-expired").then((r) => r.data),
+  exportFile: (format: "xlsx" | "csv") => apiClient.get("/archiving/export/download", { params: { format }, responseType: "blob" }).then((r) => r.data),
+};
