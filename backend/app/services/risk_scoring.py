@@ -112,7 +112,14 @@ async def resolve_matrix(db: AsyncSession, tenant_id: str, matrix_id: str | None
             return DEFAULT_MATRIX_3X3, "Simple 3x3 Matrix"
         if matrix_id == "builtin-5x5":
             return DEFAULT_MATRIX_5X5, "Standard 5x5 Matrix"
-        m = (await db.execute(select(RiskMatrix).where(RiskMatrix.id == matrix_id))).scalar_one_or_none()
+        # Only a matrix the tenant owns (or a shared builtin) may drive their scoring —
+        # never another tenant's, even if a forged risk_matrix_id is supplied.
+        m = (await db.execute(
+            select(RiskMatrix).where(
+                RiskMatrix.id == matrix_id,
+                (RiskMatrix.tenant_id == tenant_id) | (RiskMatrix.is_builtin == True),  # noqa: E712
+            )
+        )).scalar_one_or_none()
         if m and m.definition:
             return m.definition, m.name
 

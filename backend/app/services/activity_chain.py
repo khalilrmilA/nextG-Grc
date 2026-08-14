@@ -29,9 +29,24 @@ def _utcnow() -> datetime:
     return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
+def _canonical_ts(dt: datetime | None) -> str:
+    """Backend-stable timestamp for hashing.
+
+    The created_at column is DateTime(timezone=True): SQLite round-trips it naive but
+    Postgres/Oracle/MSSQL return it tz-aware, so raw isoformat() would differ between
+    write and verify and falsely flag tampering. Normalize to naive-UTC at SECOND
+    precision (no sub-second round-trip differences across drivers) for a stable hash.
+    """
+    if dt is None:
+        return ""
+    if dt.tzinfo is not None:
+        dt = dt.astimezone(timezone.utc).replace(tzinfo=None)
+    return dt.strftime("%Y-%m-%dT%H:%M:%S")
+
+
 def compute_entry_hash(entry: ActivityLog, prev_hash: str) -> str:
     """Deterministic SHA-256 over the entry's immutable fields + the chain link."""
-    created = entry.created_at.isoformat() if getattr(entry, "created_at", None) else ""
+    created = _canonical_ts(getattr(entry, "created_at", None))
     payload = "|".join([
         str(entry.seq or ""),
         prev_hash or "",
