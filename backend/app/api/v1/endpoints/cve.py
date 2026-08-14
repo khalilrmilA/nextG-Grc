@@ -66,7 +66,9 @@ async def search_cve(
         stmt = stmt.where(cast(CveEntry.cwe_ids, String).ilike(f"%{cwe}%"))
     if published_after is not None:
         stmt = stmt.where(CveEntry.published_at >= published_after)
-    stmt = stmt.order_by(CveEntry.last_modified.desc().nullslast())
+    # Newest-published first so the catalog surfaces the latest CVEs, not decade-old
+    # entries that NVD merely re-scored recently.
+    stmt = stmt.order_by(CveEntry.published_at.desc().nullslast(), CveEntry.last_modified.desc().nullslast())
     stmt = stmt.offset((page - 1) * page_size).limit(page_size)
     entries = (await db.execute(stmt)).scalars().all()
 
