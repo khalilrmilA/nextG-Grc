@@ -50,7 +50,19 @@ Disallow: /cheat
 Disallow: /vendor-collab/
 Disallow: /service-down
 
+# Block the private SPA dashboard (proxied under /app), the API, the auditor portal,
+# and the Vite build/dev paths — none of these should ever be indexed.
+Disallow: /app
+Disallow: /api/
+Disallow: /auditor
+Disallow: /assets/
+Disallow: /src/
+Disallow: /@vite/
+Disallow: /node_modules/
+
 # Block search-result spam from crawlers
 Disallow: /*?*
 
+# Explicit host + sitemap
+Host: https://grceye.com
 Sitemap: https://grceye.com/sitemap.xml
