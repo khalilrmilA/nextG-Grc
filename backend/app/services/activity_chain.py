@@ -8,13 +8,14 @@ Concurrency: the activity middleware writes from independent sessions across two
 uvicorn workers, so appends race. A UNIQUE(tenant_id, seq) index lets exactly one
 writer win each seq; losers get an IntegrityError and retry against the new tail.
 """
+import asyncio
 import hashlib
 import json
 import logging
 from datetime import datetime, timezone
 
 from sqlalchemy import select
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import IntegrityError, OperationalError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.activity_log import ActivityLog
@@ -69,7 +70,7 @@ async def chain_and_add(db: AsyncSession, entry: ActivityLog) -> ActivityLog:
     if entry.created_at is None:
         entry.created_at = _utcnow()
 
-    for _ in range(_MAX_RETRIES):
+    for attempt in range(_MAX_RETRIES):
         prev_seq, prev_hash = await _tail(db, entry.tenant_id)
         entry.seq = prev_seq + 1
         entry.prev_hash = prev_hash
@@ -78,8 +79,11 @@ async def chain_and_add(db: AsyncSession, entry: ActivityLog) -> ActivityLog:
         try:
             await db.commit()
             return entry
-        except IntegrityError:
-            await db.rollback()  # another writer took this seq — retry against the new tail
+        except (IntegrityError, OperationalError):
+            # IntegrityError: another writer took this seq. OperationalError: SQLite
+            # "database is locked". Either way, roll back and retry against a fresh tail.
+            await db.rollback()
+            await asyncio.sleep(0.02 * (attempt + 1))  # brief backoff to let the winner commit
             continue
 
     # Contention floor: record it unchained rather than lose the audit trail.
