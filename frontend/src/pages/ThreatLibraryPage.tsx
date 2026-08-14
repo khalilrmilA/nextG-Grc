@@ -403,35 +403,35 @@ export default function ThreatLibraryPage() {
             </span>
           </div>
           <div className="divide-y divide-gray-50">
-            {pending.map((t: any) => (
+            {pending.map((th: any) => (
               <div
-                key={t.id}
+                key={th.id}
                 className="flex items-start gap-4 px-6 py-4 hover:bg-gray-50/40 transition-colors cursor-pointer"
-                onClick={() => setDetail(t)}
+                onClick={() => setDetail(th)}
               >
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
-                    {t.ref_id && <span className="font-mono text-xs text-gray-400">{t.ref_id}</span>}
-                    <span className="font-medium text-sm text-gray-900">{t.name}</span>
-                    <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-semibold border ${CATEGORY_BADGE[t.category] || "bg-gray-100 text-gray-600 border-gray-200"}`}>
-                      {fmt(t.category || "cyber_attack")}
+                    {th.ref_id && <span className="font-mono text-xs text-gray-400">{th.ref_id}</span>}
+                    <span className="font-medium text-sm text-gray-900">{th.name}</span>
+                    <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-semibold border ${CATEGORY_BADGE[th.category] || "bg-gray-100 text-gray-600 border-gray-200"}`}>
+                      {fmt(th.category || "cyber_attack")}
                     </span>
-                    {t.severity && (
-                      <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-semibold border ${SEVERITY_BADGE[t.severity] || "bg-gray-100 text-gray-600 border-gray-200"}`}>
-                        {fmt(t.severity)}
+                    {th.severity && (
+                      <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-semibold border ${SEVERITY_BADGE[th.severity] || "bg-gray-100 text-gray-600 border-gray-200"}`}>
+                        {fmt(th.severity)}
                       </span>
                     )}
                   </div>
-                  {t.description && (
-                    <p className="text-xs text-gray-500 mt-1 line-clamp-2">{t.description}</p>
+                  {th.description && (
+                    <p className="text-xs text-gray-500 mt-1 line-clamp-2">{th.description}</p>
                   )}
                   <div className="flex flex-wrap gap-1 mt-1.5">
-                    {t.typical_threat_actors?.slice(0, 3).map((a: string, i: number) => (
+                    {th.typical_threat_actors?.slice(0, 3).map((a: string, i: number) => (
                       <span key={i} className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs bg-red-50 text-red-600 border border-red-100">
                         <AlertTriangle className="w-2.5 h-2.5" />{a}
                       </span>
                     ))}
-                    {t.typical_attack_vectors?.slice(0, 3).map((v: string, i: number) => (
+                    {th.typical_attack_vectors?.slice(0, 3).map((v: string, i: number) => (
                       <span key={i} className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs bg-orange-50 text-orange-600 border border-orange-100">
                         <Tag className="w-2.5 h-2.5" />{v}
                       </span>
@@ -440,19 +440,19 @@ export default function ThreatLibraryPage() {
                 </div>
                 <div className="flex items-center gap-2 shrink-0" onClick={(e) => e.stopPropagation()}>
                   <button
-                    onClick={() => handleApprove(t.id)}
-                    disabled={actioning === t.id}
+                    onClick={() => handleApprove(th.id)}
+                    disabled={actioning === th.id}
                     className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-green-600 text-white text-xs font-medium rounded-lg hover:bg-green-700 disabled:opacity-50 transition-colors"
                   >
-                    {actioning === t.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <ThumbsUp className="w-3 h-3" />}
+                    {actioning === th.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <ThumbsUp className="w-3 h-3" />}
                     {t("threats.btn_approve")}
                   </button>
                   <button
-                    onClick={() => handleReject(t.id)}
-                    disabled={actioning === t.id}
+                    onClick={() => handleReject(th.id)}
+                    disabled={actioning === th.id}
                     className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border border-red-200 text-red-600 text-xs font-medium rounded-lg hover:bg-red-50 disabled:opacity-50 transition-colors"
                   >
-                    {actioning === t.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <ThumbsDown className="w-3 h-3" />}
+                    {actioning === th.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <ThumbsDown className="w-3 h-3" />}
                     {t("threats.btn_reject")}
                   </button>
                 </div>
