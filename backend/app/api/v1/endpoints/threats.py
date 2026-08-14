@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 from typing import Annotated
 import httpx
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -90,6 +90,16 @@ class ThreatOut(BaseModel):
     linked_vulnerability_ids: list = []
     created_at: datetime
     model_config = {"from_attributes": True}
+
+    # Builtin threat rows (and older seeded rows) predate these JSON list columns, so
+    # they come back NULL. Coerce NULL -> [] so serialization never 500s the endpoint.
+    @field_validator(
+        "typical_threat_actors", "typical_attack_vectors", "affected_assets", "mitre_ids",
+        "linked_asset_ids", "linked_vulnerability_ids", mode="before",
+    )
+    @classmethod
+    def _none_to_list(cls, v):
+        return v if isinstance(v, list) else ([] if v is None else v)
 
 
 class ImportOut(BaseModel):
