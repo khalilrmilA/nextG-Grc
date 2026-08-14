@@ -80,6 +80,37 @@ async def _journal_login(request: Request, email: str, success: bool, reason: st
         logger.warning("login journal write failed")
 
 
+def _device_label(ua: str | None) -> str:
+    """Human-readable device label from a User-Agent string (best effort)."""
+    ua = ua or ""
+    browser = "Edge" if "Edg" in ua else next((b for b in ("Chrome", "Firefox", "Safari", "Opera") if b in ua), "Browser")
+    for token, name in (
+        ("Windows", "Windows"), ("Macintosh", "macOS"), ("Mac OS", "macOS"),
+        ("Android", "Android"), ("iPhone", "iOS"), ("iPad", "iPadOS"), ("Linux", "Linux"),
+    ):
+        if token in ua:
+            return f"{browser} on {name}"
+    return browser
+
+
+async def _create_session(request: Request, user: User, db: AsyncSession):
+    """Create a UserSession row for a successful login (drives 'Active Sessions')."""
+    from app.models.user_session import UserSession
+    ua = request.headers.get("user-agent") or ""
+    sess = UserSession(
+        user_id=user.id,
+        tenant_id=user.tenant_id,
+        device=_device_label(ua),
+        user_agent=ua[:500],
+        ip_address=_client_ip(request),
+        last_seen=_utcnow(),
+    )
+    db.add(sess)
+    await db.commit()
+    await db.refresh(sess)
+    return sess
+
+
 # Slugs that are publicly visible (Trust Center) and shouldn't be squatted on
 # self-service registration. Extend as needed; full impersonation prevention
 # requires email-domain verification, which lives in a future fix.
@@ -226,6 +257,11 @@ async def login(request: Request, body: LoginRequest, db: AsyncSession = Depends
             await db.commit()
 
         token_data = {"sub": user.id, "tenant_id": user.tenant_id, "role": user.role}
+        try:
+            session = await _create_session(request, user, db)
+            token_data["sid"] = session.id
+        except Exception:  # noqa: BLE001 — a session-tracking hiccup must not block login
+            logger.warning("session create failed")
         logger.info("login.ok email_hash=%s", email_hash)
         await _journal_login(request, normalized_email, True, "ok", user)
         return TokenResponse(
@@ -242,6 +278,61 @@ async def login(request: Request, body: LoginRequest, db: AsyncSession = Depends
             status.HTTP_500_INTERNAL_SERVER_ERROR,
             "Internal server error",
         )
+
+
+class SessionOut(BaseModel):
+    id: str
+    device: str | None = None
+    ip_address: str | None = None
+    last_seen: datetime | None = None
+    created_at: datetime
+    current: bool = False
+    model_config = {"from_attributes": True}
+
+
+@router.get("/sessions", response_model=list[SessionOut])
+async def list_sessions(
+    request: Request,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: AsyncSession = Depends(get_db),
+):
+    """List the current user's active (non-revoked) sessions, newest first."""
+    from app.models.user_session import UserSession
+    cur_sid = None
+    auth = request.headers.get("Authorization", "")
+    if auth.startswith("Bearer "):
+        try:
+            cur_sid = decode_token(auth[7:]).get("sid")
+        except Exception:  # noqa: BLE001
+            cur_sid = None
+    rows = (await db.execute(
+        select(UserSession)
+        .where(UserSession.user_id == current_user.id, UserSession.revoked_at.is_(None))
+        .order_by(UserSession.last_seen.desc().nullslast(), UserSession.created_at.desc())
+    )).scalars().all()
+    return [
+        SessionOut(id=s.id, device=s.device, ip_address=s.ip_address,
+                   last_seen=s.last_seen, created_at=s.created_at, current=(s.id == cur_sid))
+        for s in rows
+    ]
+
+
+@router.delete("/sessions/{sid}", status_code=status.HTTP_204_NO_CONTENT)
+async def revoke_session(
+    sid: str,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: AsyncSession = Depends(get_db),
+):
+    """Revoke one of the current user's sessions — its tokens stop working."""
+    from app.models.user_session import UserSession
+    s = (await db.execute(
+        select(UserSession).where(UserSession.id == sid, UserSession.user_id == current_user.id)
+    )).scalar_one_or_none()
+    if not s:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Session not found")
+    if s.revoked_at is None:
+        s.revoked_at = _utcnow()
+        await db.commit()
 
 
 @router.post("/register", response_model=TokenResponse, status_code=status.HTTP_201_CREATED)

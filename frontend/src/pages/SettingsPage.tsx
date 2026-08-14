@@ -492,10 +492,9 @@ function SecurityTab() {
   const [showCurrent, setShowCurrent] = useState(false);
   const [showNew, setShowNew]         = useState(false);
   const [pw, setPw]   = useState({ current: "", next: "", confirm: "" });
-  const [sessions]    = useState([
-    { id: "1", device: "Chrome / Windows 11", location: "Paris, FR",  ip: "192.168.1.64", current: true,  last: "Now"         },
-    { id: "2", device: "Safari / macOS",       location: "Lyon, FR",   ip: "10.0.0.5",    current: false, last: "2 days ago"  },
-  ]);
+  const [sessions, setSessions] = useState<any[]>([]);
+  const [sessLoading, setSessLoading] = useState(true);
+  const [revoking, setRevoking] = useState("");
   const [saved, setSaved] = useState(false);
   const [pwError, setPwError] = useState("");
   const [saving, setSaving] = useState(false);
@@ -516,6 +515,34 @@ function SecurityTab() {
     } finally {
       setSaving(false);
     }
+  }
+
+  useEffect(() => {
+    let alive = true;
+    authApi.listSessions()
+      .then((s: any[]) => { if (alive) setSessions(Array.isArray(s) ? s : []); })
+      .catch(() => { if (alive) setSessions([]); })
+      .finally(() => { if (alive) setSessLoading(false); });
+    return () => { alive = false; };
+  }, []);
+
+  async function revokeSession(id: string) {
+    setRevoking(id);
+    try {
+      await authApi.revokeSession(id);
+      setSessions((prev) => prev.filter((s) => s.id !== id));
+    } catch { /* ignore */ } finally { setRevoking(""); }
+  }
+
+  function relTime(iso?: string | null) {
+    if (!iso) return "";
+    const diff = Date.now() - new Date(iso).getTime();
+    if (diff < 60_000) return "Just now";
+    const m = Math.floor(diff / 60_000);
+    if (m < 60) return `${m}m ago`;
+    const h = Math.floor(m / 60);
+    if (h < 24) return `${h}h ago`;
+    return `${Math.floor(h / 24)}d ago`;
   }
 
   return (
@@ -575,20 +602,31 @@ function SecurityTab() {
       <div className="bg-white border border-gray-200 rounded-xl p-5">
         <p className="text-sm font-semibold text-gray-800 mb-3">{t("settings.active_sessions")}</p>
         <div className="space-y-3">
-          {sessions.map(s => (
-            <div key={s.id} className="flex items-center justify-between py-2 border-b border-gray-100 last:border-0">
-              <div>
-                <p className="text-sm font-medium text-gray-800">
-                  {s.device}{" "}
-                  {s.current && <span className="ml-2 px-1.5 py-0.5 bg-green-100 text-green-700 text-xs rounded-full">{t("settings.current_session")}</span>}
-                </p>
-                <p className="text-xs text-gray-400 mt-0.5">{s.location} · {s.ip} · {s.last}</p>
+          {sessLoading ? (
+            <div className="flex items-center gap-2 text-sm text-gray-400 py-2"><Loader2 className="w-4 h-4 animate-spin" /> {t("common.loading", "Loading…")}</div>
+          ) : sessions.length === 0 ? (
+            <p className="text-sm text-gray-400 py-2">{t("settings.no_sessions", "No active sessions.")}</p>
+          ) : (
+            sessions.map((s: any) => (
+              <div key={s.id} className="flex items-center justify-between py-2 border-b border-gray-100 last:border-0">
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-gray-800">
+                    {s.device || "Session"}{" "}
+                    {s.current && <span className="ml-2 px-1.5 py-0.5 bg-green-100 text-green-700 text-xs rounded-full">{t("settings.current_session")}</span>}
+                  </p>
+                  <p className="text-xs text-gray-400 mt-0.5">
+                    {[s.ip_address, relTime(s.last_seen || s.created_at)].filter(Boolean).join(" · ")}
+                  </p>
+                </div>
+                {!s.current && (
+                  <button type="button" onClick={() => revokeSession(s.id)} disabled={revoking === s.id}
+                    className="text-xs text-red-500 hover:text-red-700 font-medium disabled:opacity-50 shrink-0">
+                    {revoking === s.id ? t("common.loading", "…") : t("settings.revoke")}
+                  </button>
+                )}
               </div>
-              {!s.current && (
-                <button type="button" className="text-xs text-red-500 hover:text-red-700 font-medium">{t("settings.revoke")}</button>
-              )}
-            </div>
-          ))}
+            ))
+          )}
         </div>
       </div>
     </div>

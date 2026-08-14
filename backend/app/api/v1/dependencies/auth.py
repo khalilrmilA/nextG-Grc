@@ -70,6 +70,20 @@ async def get_current_user(
             detail="Demo accounts are read-only. Upgrade to a full account to use this feature.",
         )
 
+    # Active-sessions revocation: reject a token whose session was revoked. Fail-open on
+    # any error (or tokens with no sid) so this can never lock users out of the app.
+    sid = payload.get("sid")
+    if sid:
+        try:
+            from app.models.user_session import UserSession
+            sess = (await db.execute(select(UserSession).where(UserSession.id == sid))).scalar_one_or_none()
+            if sess is not None and sess.revoked_at is not None:
+                raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Session revoked. Please sign in again.")
+        except HTTPException:
+            raise
+        except Exception:
+            pass  # never break auth on a session-check error
+
     return user
 
 

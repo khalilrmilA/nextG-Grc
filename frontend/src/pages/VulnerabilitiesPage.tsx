@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Plus, Search, X, Loader2, Filter, Bug, ShieldCheck, Wrench, BarChart3, Upload, Download, Plug, RefreshCw, Trash2 } from "lucide-react";
+import { Plus, Search, X, Loader2, Filter, Bug, ShieldCheck, Wrench, BarChart3, Upload, Download, Plug, RefreshCw, Trash2, ChevronRight, Check } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { vulnerabilitiesApi, vulnImportApi, scannerConnectorsApi } from "@/api/endpoints";
 
@@ -36,6 +36,12 @@ export default function VulnerabilitiesPage() {
   const [statusFilter, setStatusFilter] = useState("");
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
+
+  // Detail / actions modal
+  const [detail, setDetail] = useState<any>(null);
+  const [detailForm, setDetailForm] = useState<any>({});
+  const [detailBusy, setDetailBusy] = useState("");
+  const [detailErr, setDetailErr] = useState("");
 
   // Scanner import
   const [showImport, setShowImport] = useState(false);
@@ -182,6 +188,52 @@ Weak SSH ciphers,Low,3.7,,Backup Storage Array,Restrict to strong ciphers`;
     }
   }
 
+  function openDetail(item: any) {
+    setDetail(item);
+    setDetailErr("");
+    setDetailForm({
+      title: item.title ?? "",
+      severity: item.severity ?? "medium",
+      cvss_score: item.cvss_score ?? "",
+      status: item.status ?? "open",
+      remediation_due_date: item.remediation_due_date ? String(item.remediation_due_date).slice(0, 10) : "",
+      description: item.description ?? "",
+    });
+  }
+  function refreshAll() { setLoading(true); load(); loadStats(); }
+
+  async function saveDetail() {
+    if (!detail) return;
+    setDetailBusy("save"); setDetailErr("");
+    try {
+      const payload: any = { ...detailForm };
+      payload.cvss_score = payload.cvss_score === "" ? null : parseFloat(payload.cvss_score);
+      if (!payload.remediation_due_date) delete payload.remediation_due_date;
+      await vulnerabilitiesApi.update(detail.id, payload);
+      setDetail(null); refreshAll();
+    } catch (e: any) { setDetailErr(e?.response?.data?.detail || t("common.error", "Something went wrong.")); }
+    finally { setDetailBusy(""); }
+  }
+  async function validateDetail() {
+    if (!detail) return;
+    setDetailBusy("validate"); setDetailErr("");
+    try {
+      await vulnerabilitiesApi.validate(detail.id);
+      setDetail(null); refreshAll();
+    } catch (e: any) { setDetailErr(e?.response?.data?.detail || t("common.error", "Something went wrong.")); }
+    finally { setDetailBusy(""); }
+  }
+  async function deleteDetail() {
+    if (!detail) return;
+    if (!confirm(t("vulnerabilities.confirm_delete", "Delete this vulnerability?"))) return;
+    setDetailBusy("delete"); setDetailErr("");
+    try {
+      await vulnerabilitiesApi.delete(detail.id);
+      setDetail(null); refreshAll();
+    } catch (e: any) { setDetailErr(e?.response?.data?.detail || t("common.error", "Something went wrong.")); }
+    finally { setDetailBusy(""); }
+  }
+
   const filtered = items.filter((i) =>
     (i.title?.toLowerCase().includes(search.toLowerCase()) || i.ref_id?.toLowerCase().includes(search.toLowerCase()))
   );
@@ -280,11 +332,16 @@ Weak SSH ciphers,Low,3.7,,Backup Storage Array,Restrict to strong ciphers`;
                 <th className="text-left px-6 py-3 font-medium text-gray-500">{t("vulnerabilities.col_cvss")}</th>
                 <th className="text-left px-6 py-3 font-medium text-gray-500">{t("vulnerabilities.col_status")}</th>
                 <th className="text-left px-6 py-3 font-medium text-gray-500">{t("vulnerabilities.col_remediation_due")}</th>
+                <th className="px-6 py-3"></th>
               </tr>
             </thead>
             <tbody>
               {filtered.map((item: any) => (
-                <tr key={item.id} className="border-b border-gray-50 hover:bg-gray-50/50 transition-colors">
+                <tr
+                  key={item.id}
+                  onClick={() => openDetail(item)}
+                  className="group border-b border-gray-50 hover:bg-blue-50/40 transition-colors cursor-pointer"
+                >
                   <td className="px-6 py-4 font-mono text-xs text-gray-700">{item.ref_id}</td>
                   <td className="px-6 py-4 font-medium text-gray-900">{item.title}</td>
                   <td className="px-6 py-4">
@@ -299,12 +356,82 @@ Weak SSH ciphers,Low,3.7,,Backup Storage Array,Restrict to strong ciphers`;
                     </span>
                   </td>
                   <td className="px-6 py-4 text-gray-500">{item.remediation_due_date ? new Date(item.remediation_due_date).toLocaleDateString() : "-"}</td>
+                  <td className="px-6 py-4 text-right"><ChevronRight className="w-4 h-4 text-gray-300 group-hover:text-blue-400 inline" /></td>
                 </tr>
               ))}
             </tbody>
           </table>
         )}
       </div>
+
+      {/* Detail / actions modal */}
+      {detail && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setDetail(null)} />
+          <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-lg mx-4 max-h-[88vh] overflow-auto">
+            <div className="flex items-start justify-between px-6 pt-6 pb-4 border-b border-gray-100">
+              <div className="min-w-0 pr-4">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="font-mono text-xs text-gray-400">{detail.ref_id}</span>
+                  <span className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold border ${STATUS_BADGE[detailForm.status] || "bg-gray-100 text-gray-600"}`}>{detailForm.status?.replace(/_/g, " ")}</span>
+                </div>
+                <h3 className="font-semibold text-gray-900 mt-1">{detail.title}</h3>
+              </div>
+              <button onClick={() => setDetail(null)} className="text-gray-400 hover:text-gray-600"><X className="w-5 h-5" /></button>
+            </div>
+
+            <div className="px-6 py-5 space-y-4">
+              {detailErr && <div className="p-3 bg-red-50 text-red-700 rounded-xl text-sm">{detailErr}</div>}
+              <div>
+                <label className="text-xs font-medium text-gray-500">{t("vulnerabilities.col_title", "Title")}</label>
+                <input value={detailForm.title} onChange={(e) => setDetailForm({ ...detailForm, title: e.target.value })} className="w-full mt-1 border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-medium text-gray-500">{t("vulnerabilities.col_status", "Status")}</label>
+                  <select value={detailForm.status} onChange={(e) => setDetailForm({ ...detailForm, status: e.target.value })} className="w-full mt-1 border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    {STATUS_OPTIONS.map((s) => <option key={s} value={s}>{s.replace(/_/g, " ")}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-gray-500">{t("vulnerabilities.col_severity", "Severity")}</label>
+                  <select value={detailForm.severity} onChange={(e) => setDetailForm({ ...detailForm, severity: e.target.value })} className="w-full mt-1 border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    {SEVERITY_OPTIONS.map((s) => <option key={s} value={s}>{s}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-gray-500">{t("vulnerabilities.col_cvss", "CVSS")}</label>
+                  <input type="number" step="0.1" min="0" max="10" value={detailForm.cvss_score} onChange={(e) => setDetailForm({ ...detailForm, cvss_score: e.target.value })} className="w-full mt-1 border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-gray-500">{t("vulnerabilities.col_remediation_due", "Remediation due")}</label>
+                  <input type="date" value={detailForm.remediation_due_date} onChange={(e) => setDetailForm({ ...detailForm, remediation_due_date: e.target.value })} className="w-full mt-1 border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                </div>
+              </div>
+              <div>
+                <label className="text-xs font-medium text-gray-500">{t("common.description", "Description")}</label>
+                <textarea rows={3} value={detailForm.description} onChange={(e) => setDetailForm({ ...detailForm, description: e.target.value })} className="w-full mt-1 border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between gap-3 px-6 py-4 border-t border-gray-100">
+              <button onClick={deleteDetail} disabled={!!detailBusy} className="inline-flex items-center gap-1.5 text-sm text-red-600 hover:text-red-700 disabled:opacity-50">
+                {detailBusy === "delete" ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />} {t("common.delete", "Delete")}
+              </button>
+              <div className="flex items-center gap-2">
+                {detailForm.status === "pending_validation" && (
+                  <button onClick={validateDetail} disabled={!!detailBusy} className="inline-flex items-center gap-1.5 bg-white border border-indigo-200 text-indigo-700 px-4 py-2 rounded-xl text-sm font-medium hover:bg-indigo-50 disabled:opacity-50">
+                    {detailBusy === "validate" ? <Loader2 className="w-4 h-4 animate-spin" /> : <ShieldCheck className="w-4 h-4" />} {t("vulnerabilities.validate", "Validate")}
+                  </button>
+                )}
+                <button onClick={saveDetail} disabled={!!detailBusy} className="inline-flex items-center gap-1.5 bg-blue-600 text-white px-4 py-2 rounded-xl text-sm font-medium hover:bg-blue-700 disabled:opacity-50">
+                  {detailBusy === "save" ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />} {t("common.save", "Save changes")}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Create Modal */}
       {showModal && (
