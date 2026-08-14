@@ -27,7 +27,7 @@ export const eliteEn = {
     error_risk_required: "Select a risk", error_justification: "Acceptance requires a justification", error_save: "Could not save treatment",
   },
   ctrleval: {
-    title: "Control Effectiveness", elite: "Elite Pack", subtitle: "Evaluate controls on the 5 STB criteria → performance level, with a re-assessment due list",
+    title: "Control Effectiveness", elite: "Elite Pack", subtitle: "Evaluate controls on the 5 effectiveness criteria → performance level, with a re-assessment due list",
     new: "New evaluation", stat_total: "Evaluations", stat_due: "Due for re-assessment",
     no_controls: "No applied controls to evaluate yet — add controls first, then score their effectiveness here.",
     empty: "No evaluations yet. Score a control on the 5 criteria to derive its performance level.",
@@ -106,7 +106,7 @@ export const eliteFr = {
     error_risk_required: "Sélectionnez un risque", error_justification: "L'acceptation nécessite une justification", error_save: "Impossible d'enregistrer le traitement",
   },
   ctrleval: {
-    title: "Efficacité des contrôles", elite: "Elite Pack", subtitle: "Évaluez les contrôles selon les 5 critères STB → niveau de performance, avec liste des réévaluations dues",
+    title: "Efficacité des contrôles", elite: "Elite Pack", subtitle: "Évaluez les contrôles selon les 5 critères d'efficacité → niveau de performance, avec liste des réévaluations dues",
     new: "Nouvelle évaluation", stat_total: "Évaluations", stat_due: "À réévaluer",
     no_controls: "Aucun contrôle appliqué à évaluer — ajoutez d'abord des contrôles, puis évaluez leur efficacité ici.",
     empty: "Aucune évaluation. Notez un contrôle sur les 5 critères pour en déduire le niveau de performance.",
@@ -185,7 +185,7 @@ export const eliteAr = {
     error_risk_required: "اختر خطرًا", error_justification: "يتطلب القبول مبررًا", error_save: "تعذّر حفظ المعالجة",
   },
   ctrleval: {
-    title: "فعالية الضوابط", elite: "Elite Pack", subtitle: "قيّم الضوابط وفق معايير STB الخمسة → مستوى الأداء، مع قائمة إعادة التقييم المستحقة",
+    title: "فعالية الضوابط", elite: "Elite Pack", subtitle: "قيّم الضوابط وفق المعايير الخمسة للفعالية → مستوى الأداء، مع قائمة إعادة التقييم المستحقة",
     new: "تقييم جديد", stat_total: "التقييمات", stat_due: "مستحقة لإعادة التقييم",
     no_controls: "لا توجد ضوابط مطبّقة للتقييم — أضف ضوابط أولًا ثم قيّم فعاليتها هنا.",
     empty: "لا توجد تقييمات بعد. قيّم ضابطًا وفق المعايير الخمسة لاستنتاج مستوى الأداء.",

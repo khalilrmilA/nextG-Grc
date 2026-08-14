@@ -95,7 +95,7 @@ export default function ControlEffectivenessPage() {
               <Crown className="w-3 h-3" /> {t("ctrleval.elite", "Elite Pack")}
             </span>
           </div>
-          <p className="text-sm text-gray-500 mt-1">{t("ctrleval.subtitle", "Evaluate controls on the 5 STB criteria → performance level, with a re-assessment due list")}</p>
+          <p className="text-sm text-gray-500 mt-1">{t("ctrleval.subtitle", "Evaluate controls on the 5 effectiveness criteria → performance level, with a re-assessment due list")}</p>
         </div>
         <button onClick={() => { setError(""); setForm({ ...emptyForm }); setShowModal(true); }} className="inline-flex items-center gap-2 bg-blue-600 text-white px-4 py-2.5 rounded-xl text-sm font-medium hover:bg-blue-700 transition-colors">
           <Plus className="w-4 h-4" /> {t("ctrleval.new", "New evaluation")}
