@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Search, Loader2, Crown, RefreshCw, Database } from "lucide-react";
+import { Search, Loader2, Crown, RefreshCw, Database, ChevronDown } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { cveApi } from "@/api/endpoints";
 
@@ -27,17 +27,39 @@ export default function CvePage() {
   const [syncing, setSyncing] = useState(false);
   const [syncMsg, setSyncMsg] = useState("");
   const [busy, setBusy] = useState("");
+  const [page, setPage] = useState(1);
+  const [hasMore, setHasMore] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
 
-  async function load() {
-    setLoading(true);
+  const PAGE_SIZE = 200;  // backend caps page_size at 200; "Load more" appends the rest
+
+  async function fetchPage(p: number) {
+    const params: any = { page_size: PAGE_SIZE, page: p };
+    if (q) params.q = q;
+    if (minCvss) params.min_cvss = parseFloat(minCvss);
+    if (relFilter) params.relevance = relFilter;
+    const d = await cveApi.search(params);
+    return Array.isArray(d) ? d : [];
+  }
+
+  async function load() {  // (re)load from page 1
+    setLoading(true); setPage(1);
     try {
-      const params: any = { page_size: 100 };
-      if (q) params.q = q;
-      if (minCvss) params.min_cvss = parseFloat(minCvss);
-      if (relFilter) params.relevance = relFilter;
-      const d = await cveApi.search(params);
-      setItems(Array.isArray(d) ? d : []);
-    } catch { setItems([]); } finally { setLoading(false); }
+      const d = await fetchPage(1);
+      setItems(d);
+      setHasMore(d.length === PAGE_SIZE);
+    } catch { setItems([]); setHasMore(false); } finally { setLoading(false); }
+  }
+
+  async function loadMore() {
+    const next = page + 1;
+    setLoadingMore(true);
+    try {
+      const d = await fetchPage(next);
+      setItems((prev) => [...prev, ...d]);
+      setPage(next);
+      setHasMore(d.length === PAGE_SIZE);
+    } catch { /* keep what we have */ } finally { setLoadingMore(false); }
   }
   useEffect(() => { load(); /* eslint-disable-next-line */ }, [relFilter, minCvss]);
 
@@ -139,6 +161,22 @@ export default function CvePage() {
           </div>
         )}
       </div>
+
+      {!loading && items.length > 0 && (
+        <div className="flex items-center justify-between text-sm text-gray-500">
+          <span>{t("cve.showing", "Showing")} {items.length}{hasMore ? "+" : ""} {t("cve.count_label", "CVEs")}</span>
+          {hasMore && (
+            <button
+              onClick={loadMore}
+              disabled={loadingMore}
+              className="inline-flex items-center gap-2 bg-white border border-gray-200 text-gray-700 px-4 py-2 rounded-xl text-sm font-medium hover:bg-gray-50 disabled:opacity-50"
+            >
+              {loadingMore ? <Loader2 className="w-4 h-4 animate-spin" /> : <ChevronDown className="w-4 h-4" />}
+              {t("cve.load_more", "Load more")}
+            </button>
+          )}
+        </div>
+      )}
     </div>
   );
 }
