@@ -62,7 +62,13 @@ def _extract(cve: dict) -> dict:
 
 
 async def sync_recent_cves(db: AsyncSession, days: int = 1) -> dict:
-    """Upsert CVEs modified in the last `days` days. Returns a summary dict."""
+    """Upsert CVEs PUBLISHED in the last `days` days. Returns a summary dict.
+
+    Filters by publication date (pubStartDate/pubEndDate), not last-modified — NVD
+    re-scores decade-old CVEs constantly, so a lastMod window floods the catalog with
+    ancient entries and never surfaces genuinely new ones. Publication date gives the
+    actual latest CVEs. NVD caps a pub-date window at 120 days.
+    """
     summary = {"added": 0, "updated": 0, "errors": [], "fetched": 0}
     try:
         import httpx  # lazy: keep app import safe if httpx is absent
@@ -71,10 +77,10 @@ async def sync_recent_cves(db: AsyncSession, days: int = 1) -> dict:
         return summary
 
     end = datetime.now(timezone.utc)
-    start = end - timedelta(days=max(1, days))
+    start = end - timedelta(days=min(max(1, days), 120))
     params = {
-        "lastModStartDate": start.strftime("%Y-%m-%dT%H:%M:%S.000"),
-        "lastModEndDate": end.strftime("%Y-%m-%dT%H:%M:%S.000"),
+        "pubStartDate": start.strftime("%Y-%m-%dT%H:%M:%S.000"),
+        "pubEndDate": end.strftime("%Y-%m-%dT%H:%M:%S.000"),
         "resultsPerPage": 500,
     }
     try:
