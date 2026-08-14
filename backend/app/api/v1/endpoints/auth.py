@@ -7,7 +7,7 @@ from sqlalchemy import select
 from pydantic import BaseModel, EmailStr, Field
 from typing import Annotated, Any
 
-from app.core.database import get_db
+from app.core.database import get_db, AsyncSessionLocal
 from app.core.rate_limit import limiter
 from app.core.security import (
     create_access_token,
@@ -19,6 +19,7 @@ from app.core.security import (
 )
 from app.models.user import User, UserRole
 from app.models.tenant import Tenant
+from app.models.login_event import LoginEvent
 from app.models.subscription import Subscription, SubscriptionTier, SubscriptionStatus
 from app.models.password_reset import PasswordResetToken
 from app.core.config import settings
@@ -51,6 +52,32 @@ def _enforce_password_policy(password: str) -> None:
 def _hash_email_for_log(email: str) -> str:
     """Hash an email so logs are debuggable without storing PII in plaintext."""
     return hashlib.sha256(email.lower().encode()).hexdigest()[:12]
+
+
+def _client_ip(request: Request) -> str | None:
+    """Real client IP, honoring X-Forwarded-For (prod sits behind the marketing proxy)."""
+    xff = request.headers.get("x-forwarded-for")
+    if xff:
+        return xff.split(",")[0].strip()[:50]
+    return request.client.host if request.client else None
+
+
+async def _journal_login(request: Request, email: str, success: bool, reason: str, user: User | None = None) -> None:
+    """Persist an authentication attempt (best-effort, isolated session — never breaks login)."""
+    try:
+        async with AsyncSessionLocal() as jdb:
+            jdb.add(LoginEvent(
+                tenant_id=getattr(user, "tenant_id", None),
+                user_id=getattr(user, "id", None),
+                email=email,
+                success=success,
+                reason=reason,
+                ip_address=_client_ip(request),
+                user_agent=(request.headers.get("user-agent") or "")[:500],
+            ))
+            await jdb.commit()
+    except Exception:  # noqa: BLE001 — journaling must never affect the login result
+        logger.warning("login journal write failed")
 
 
 # Slugs that are publicly visible (Trust Center) and shouldn't be squatted on
@@ -148,6 +175,7 @@ async def login(request: Request, body: LoginRequest, db: AsyncSession = Depends
         # Account lockout: if the account is currently locked, reject early with 423.
         if user and user.locked_until and user.locked_until > _utcnow():
             logger.info("login.fail email_hash=%s reason=locked", email_hash)
+            await _journal_login(request, normalized_email, False, "locked", user)
             raise HTTPException(
                 status.HTTP_423_LOCKED,
                 "Account temporarily locked due to failed login attempts. Try again later.",
@@ -158,6 +186,7 @@ async def login(request: Request, body: LoginRequest, db: AsyncSession = Depends
         # internally for logging and metrics.
         if not user or not user.hashed_password:
             logger.info("login.fail email_hash=%s reason=no_user", email_hash)
+            await _journal_login(request, normalized_email, False, "no_user")
             raise HTTPException(status.HTTP_401_UNAUTHORIZED, _GENERIC_LOGIN_FAILURE)
         if not verify_password(body.password, user.hashed_password):
             # Count the failure and lock the account once the threshold is crossed.
@@ -168,9 +197,11 @@ async def login(request: Request, body: LoginRequest, db: AsyncSession = Depends
                 logger.info("login.lock email_hash=%s", email_hash)
             await db.commit()
             logger.info("login.fail email_hash=%s reason=bad_password", email_hash)
+            await _journal_login(request, normalized_email, False, "bad_password", user)
             raise HTTPException(status.HTTP_401_UNAUTHORIZED, _GENERIC_LOGIN_FAILURE)
         if not user.is_active:
             logger.info("login.fail email_hash=%s reason=disabled", email_hash)
+            await _journal_login(request, normalized_email, False, "disabled", user)
             raise HTTPException(status.HTTP_401_UNAUTHORIZED, _GENERIC_LOGIN_FAILURE)
 
         # Success — clear any failure/lock state.
@@ -181,6 +212,7 @@ async def login(request: Request, body: LoginRequest, db: AsyncSession = Depends
 
         token_data = {"sub": user.id, "tenant_id": user.tenant_id, "role": user.role}
         logger.info("login.ok email_hash=%s", email_hash)
+        await _journal_login(request, normalized_email, True, "ok", user)
         return TokenResponse(
             access_token=create_access_token(token_data),
             refresh_token=create_refresh_token(token_data),

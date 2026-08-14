@@ -7,8 +7,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.api.v1.dependencies.auth import get_current_user, get_tenant_id
+from app.api.v1.dependencies.features import require_feature
 from app.models.user import User
 from app.models.activity_log import ActivityLog
+from app.models.login_event import LoginEvent
+from app.services.activity_chain import compute_entry_hash, _utcnow
 
 router = APIRouter()
 
@@ -23,6 +26,8 @@ class LogEntry(BaseModel):
     entity_name: str | None
     details: dict | None
     ip_address: str | None
+    seq: int | None = None
+    entry_hash: str | None = None
     created_at: datetime
     model_config = {"from_attributes": True}
 
@@ -64,6 +69,90 @@ async def list_activity_logs(
         items=[LogEntry.model_validate(i) for i in items],
         total=total,
     )
+
+
+@router.get("/verify")
+async def verify_chain(
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_feature("tamper_evident_log")),
+    tenant_id: str = Depends(get_tenant_id),
+):
+    """Recompute the tenant's activity-log hash chain and report its integrity (Elite Pack).
+
+    Walks the chained entries in seq order; any tampered/deleted/reordered row makes the
+    recomputed hash diverge and is reported as the first broken sequence number.
+    """
+    rows = list((await db.execute(
+        select(ActivityLog)
+        .where(ActivityLog.tenant_id == tenant_id, ActivityLog.seq.isnot(None))
+        .order_by(ActivityLog.seq.asc())
+    )).scalars().all())
+
+    unchained = (await db.execute(
+        select(func.count(ActivityLog.id)).where(
+            ActivityLog.tenant_id == tenant_id, ActivityLog.seq.is_(None)
+        )
+    )).scalar() or 0
+
+    prev_hash = ""
+    expected_seq = 1
+    broken_seq: int | None = None
+    reason: str | None = None
+    for row in rows:
+        if row.seq != expected_seq:
+            broken_seq, reason = row.seq, f"sequence gap (expected {expected_seq}, got {row.seq})"
+            break
+        if (row.prev_hash or "") != prev_hash:
+            broken_seq, reason = row.seq, "prev_hash mismatch"
+            break
+        if row.entry_hash != compute_entry_hash(row, prev_hash):
+            broken_seq, reason = row.seq, "entry_hash mismatch (row was altered)"
+            break
+        prev_hash = row.entry_hash
+        expected_seq += 1
+
+    return {
+        "valid": broken_seq is None,
+        "chained_entries": len(rows),
+        "unchained_legacy_entries": unchained,
+        "first_broken_seq": broken_seq,
+        "reason": reason,
+        "verified_at": _utcnow().isoformat(timespec="seconds"),
+    }
+
+
+class LoginEventOut(BaseModel):
+    id: str
+    tenant_id: str | None
+    user_id: str | None
+    email: str
+    success: bool
+    reason: str | None
+    ip_address: str | None
+    user_agent: str | None
+    created_at: datetime
+    model_config = {"from_attributes": True}
+
+
+@router.get("/login-events", response_model=list[LoginEventOut])
+async def list_login_events(
+    success: bool | None = None,
+    limit: int = 100,
+    offset: int = 0,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_feature("tamper_evident_log")),
+    tenant_id: str = Depends(get_tenant_id),
+):
+    """List authentication attempts for the tenant, newest first (Elite Pack).
+
+    Includes failures (bad password / locked / unknown user) that never reach the
+    normal activity log.
+    """
+    q = select(LoginEvent).where(LoginEvent.tenant_id == tenant_id)
+    if success is not None:
+        q = q.where(LoginEvent.success == success)
+    rows = (await db.execute(q.order_by(LoginEvent.created_at.desc()).limit(limit).offset(offset))).scalars().all()
+    return [LoginEventOut.model_validate(r) for r in rows]
 
 
 async def log_activity(

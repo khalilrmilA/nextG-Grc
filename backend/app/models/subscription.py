@@ -64,6 +64,7 @@ ELITE_FEATURES = (
     "archiving",              # rule-based archiving + retention enforcement
     "multi_db_support",       # Oracle 19c / SQL Server 2019 compatibility
     "ocr_capture",            # optional French OCR document capture
+    "tamper_evident_log",     # hash-chained activity log integrity + login journaling views
 )
 
 # Feature limits per tier

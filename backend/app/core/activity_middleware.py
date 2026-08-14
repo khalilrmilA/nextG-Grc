@@ -11,6 +11,7 @@ from jose import jwt, JWTError
 from app.core.config import settings
 from app.core.database import AsyncSessionLocal
 from app.models.activity_log import ActivityLog
+from app.services.activity_chain import chain_and_add
 
 logger = logging.getLogger(__name__)
 
@@ -143,7 +144,7 @@ class ActivityLogMiddleware(BaseHTTPMiddleware):
 
         try:
             async with AsyncSessionLocal() as db:
-                db.add(ActivityLog(
+                await chain_and_add(db, ActivityLog(
                     tenant_id=tenant_id,
                     user_id=user_id,
                     user_email=payload.get("email", ""),
@@ -154,7 +155,6 @@ class ActivityLogMiddleware(BaseHTTPMiddleware):
                     details={"method": request.method, "path": path},
                     ip_address=ip,
                 ))
-                await db.commit()
         except Exception as exc:
             logger.warning("ActivityLog write failed: %s", exc)
 

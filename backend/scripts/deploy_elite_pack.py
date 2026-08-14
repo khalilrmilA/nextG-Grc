@@ -2,8 +2,9 @@
 
 New TABLES (mfa_devices, password_reset_tokens, control_evaluations, org_entities,
 business_processes, cve_entries, cve_annotations, asset_valuation_history,
-scan_journals) are auto-created by Base.metadata.create_all on app startup.
-This runner handles the new COLUMNS added to EXISTING tables.
+scan_journals, report_schedules, login_events) are auto-created by
+Base.metadata.create_all on app startup. This runner handles the new COLUMNS added to
+EXISTING tables (and the activity_logs hash-chain index).
 
 Deploy sequence:
     cd backend
@@ -21,6 +22,7 @@ MIGRATIONS = [
     "scripts.migrate_add_risk_columns",
     "scripts.migrate_add_threat_columns",
     "scripts.migrate_add_vuln_columns",
+    "scripts.migrate_add_activity_chain_columns",
 ]
 
 
