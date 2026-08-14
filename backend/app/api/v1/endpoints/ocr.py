@@ -8,7 +8,7 @@ scans. tesseract runs in a worker thread so it never blocks the event loop.
 import asyncio
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Response, UploadFile
 from pydantic import BaseModel
 
 from app.core.config import settings
@@ -104,3 +104,75 @@ async def extract(
     except Exception as exc:  # noqa: BLE001 — surface a clean 422, no 500
         raise HTTPException(422, f"OCR failed: {type(exc).__name__}: {exc}")
     return OcrOut(chars=len(result["text"]), **result)
+
+
+class OcrPdfIn(BaseModel):
+    text: str
+    filename: str | None = None
+    title: str | None = None
+
+
+def _render_text_pdf(text: str, title: str = "Extracted Text") -> bytes:
+    """Render extracted text into a clean, paginated PDF (ReportLab).
+
+    Prefers a Unicode TTF (DejaVuSans) so French accents and most scripts render;
+    falls back to Helvetica (Latin-1) when no TTF is on the host.
+    """
+    import io
+    import os
+    from xml.sax.saxutils import escape
+
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib.units import cm
+    from reportlab.lib.styles import getSampleStyleSheet
+    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
+    from reportlab.pdfbase import pdfmetrics
+    from reportlab.pdfbase.ttfonts import TTFont
+
+    font_name = "Helvetica"
+    for path in (
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+        "/usr/share/fonts/truetype/dejavu/DejaVuSansCondensed.ttf",
+        "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
+    ):
+        if os.path.exists(path):
+            try:
+                pdfmetrics.registerFont(TTFont("OcrBody", path))
+                font_name = "OcrBody"
+                break
+            except Exception:  # noqa: BLE001 — fall back to Helvetica
+                pass
+
+    buf = io.BytesIO()
+    doc = SimpleDocTemplate(
+        buf, pagesize=A4, title=title,
+        topMargin=2 * cm, bottomMargin=2 * cm, leftMargin=2 * cm, rightMargin=2 * cm,
+    )
+    styles = getSampleStyleSheet()
+    head = styles["Title"]; head.fontName = font_name
+    body = styles["BodyText"]; body.fontName = font_name; body.fontSize = 10; body.leading = 14
+
+    story = [Paragraph(escape(title), head), Spacer(1, 0.4 * cm)]
+    for line in (text or "").split("\n"):
+        if line.strip():
+            story.append(Paragraph(escape(line), body))
+        else:
+            story.append(Spacer(1, 0.25 * cm))
+    if len(story) <= 2:
+        story.append(Paragraph("(no text)", body))
+    doc.build(story)
+    return buf.getvalue()
+
+
+@router.post("/export-pdf")
+async def export_pdf(body: OcrPdfIn, current_user: Annotated[User, Depends(_GATE)]):
+    """Turn extracted text into a downloadable PDF."""
+    if not (body.text or "").strip():
+        raise HTTPException(400, "No text to export")
+    pdf = await asyncio.to_thread(_render_text_pdf, body.text, body.title or "Extracted Text")
+    stem = (body.filename or "extraction").rsplit(".", 1)[0] or "extraction"
+    return Response(
+        content=pdf,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{stem}.pdf"'},
+    )

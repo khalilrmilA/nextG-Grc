@@ -28,6 +28,7 @@ export default function OcrCapturePage() {
   const [error, setError] = useState("");
   const [result, setResult] = useState<OcrResult | null>(null);
   const [copied, setCopied] = useState(false);
+  const [pdfBusy, setPdfBusy] = useState(false);
   const [dragging, setDragging] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -81,6 +82,23 @@ export default function OcrCapturePage() {
     a.download = `${(file?.name || "extraction").replace(/\.[^.]+$/, "")}.txt`;
     a.click();
     URL.revokeObjectURL(url);
+  }
+
+  async function downloadPdf() {
+    if (!result) return;
+    setPdfBusy(true); setError("");
+    try {
+      const stem = (file?.name || "extraction").replace(/\.[^.]+$/, "");
+      const blob = await ocrApi.exportPdf(result.text, stem, stem);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${stem}.pdf`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      setError(t("ocr.err_pdf", "Could not generate the PDF. Please try again."));
+    } finally { setPdfBusy(false); }
   }
 
   const langOptions = status?.selectable_languages?.length ? status.selectable_languages : ["fra+eng", "fra", "eng"];
@@ -189,6 +207,9 @@ export default function OcrCapturePage() {
                   </button>
                   <button onClick={downloadText} className="inline-flex items-center gap-1.5 bg-white border border-gray-200 text-gray-700 px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-gray-50">
                     <Download className="w-3.5 h-3.5" /> {t("ocr.download", "Download .txt")}
+                  </button>
+                  <button onClick={downloadPdf} disabled={pdfBusy} className="inline-flex items-center gap-1.5 bg-red-600 text-white px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-red-700 disabled:opacity-50">
+                    {pdfBusy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FileText className="w-3.5 h-3.5" />} {t("ocr.download_pdf", "Download PDF")}
                   </button>
                 </div>
               </div>

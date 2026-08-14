@@ -1442,6 +1442,8 @@ export const ocrApi = {
     fd.append("lang", lang);
     return apiClient.post("/ocr/extract", fd, { headers: { "Content-Type": "multipart/form-data" } }).then((r) => r.data);
   },
+  exportPdf: (text: string, filename?: string, title?: string) =>
+    apiClient.post("/ocr/export-pdf", { text, filename, title }, { responseType: "blob" }).then((r) => r.data as Blob),
 };
 
 // ── AD/LDAP SSO (Elite Pack) ─────────────────────────────────────────────────
