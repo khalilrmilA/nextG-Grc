@@ -173,5 +173,12 @@ class Subscription(Base):
         return base
 
     def has_feature(self, feature: str) -> bool:
-        """True if the tenant's effective plan unlocks `feature` (Elite Pack aware)."""
+        """True if the tenant's effective plan unlocks `feature`.
+
+        Elite Pack is god mode — EVERY feature is unlocked, including any flag added in
+        the future that isn't yet listed in ELITE_FEATURES. Non-Elite tiers fall back to
+        their effective limits map (tier defaults + custom_limits overrides).
+        """
+        if self.tier == SubscriptionTier.ELITE:
+            return True
         return bool(self.limits.get(feature, False))

@@ -79,17 +79,10 @@ async def get_enabled_modules(db: AsyncSession = Depends(get_db), _: User = Depe
     t = r.scalar_one_or_none()
     if not t: raise HTTPException(404, "Tenant not found")
     features = t.features or {}
-    return {
-        "modules": {
-            "dashboard": True,
-            "risks": features.get("risks", True),
-            "compliance": features.get("compliance", True),
-            "frameworks": features.get("frameworks", True),
-            "audits": features.get("audits", True),
-            "policies": features.get("policies", True),
-            "vendors": features.get("vendors", True),
-            "assets": features.get("assets", True),
-            "reports": features.get("reports", True),
-            "ai": features.get("ai", True),
-        }
-    }
+    keys = ["dashboard", "risks", "compliance", "frameworks", "audits", "policies", "vendors", "assets", "reports", "ai"]
+    # Elite Pack = god mode: every module enabled regardless of tenant.features toggles.
+    from app.models.subscription import Subscription
+    sub = (await db.execute(select(Subscription).where(Subscription.tenant_id == tenant_id))).scalar_one_or_none()
+    if sub and sub.tier.value == "elite":
+        return {"modules": {k: True for k in keys}}
+    return {"modules": {k: (True if k == "dashboard" else features.get(k, True)) for k in keys}}

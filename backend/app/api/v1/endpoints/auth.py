@@ -142,12 +142,24 @@ class RefreshRequest(BaseModel):
 
 _GENERIC_LOGIN_FAILURE = "Invalid email or password"
 
+# Every module in the application — the Elite Pack (god mode) gets all of them, including
+# the new Elite modules that the per-tier lists below don't enumerate.
+ALL_MODULES = [
+    "dashboard", "risks", "risk-scenarios", "risk-quantification", "compliance", "frameworks",
+    "incidents", "vulnerabilities", "cve", "threats", "applied-controls", "security-exceptions",
+    "audits", "policies", "policy-generator", "vendors", "reports", "report-schedules",
+    "regulatory", "trust-center", "activity-log", "webhooks", "assets", "governance", "archiving",
+    "dashboards", "control-evaluations", "asset-graph", "risk-treatment", "vuln-import",
+    "scenario-versions", "ocr", "mfa-setup", "settings", "help",
+]
+
 # Module access mapping by subscription tier/status
 TIER_MODULES = {
     "trialing": ["dashboard", "risks", "compliance", "frameworks", "audits", "policies", "vendors", "incidents", "vulnerabilities", "threats", "risk-scenarios", "risk-quantification", "applied-controls", "security-exceptions", "trust-center", "regulatory", "activity-log", "webhooks", "reports", "policy-generator"],
     "starter": ["dashboard", "risks", "compliance", "frameworks", "audits", "policies"],
     "professional": ["dashboard", "risks", "compliance", "frameworks", "audits", "policies", "vendors", "incidents", "vulnerabilities", "threats", "risk-scenarios", "risk-quantification", "applied-controls", "security-exceptions", "trust-center", "regulatory", "activity-log", "webhooks", "reports", "policy-generator"],
     "enterprise": ["dashboard", "risks", "compliance", "frameworks", "audits", "policies", "vendors", "incidents", "vulnerabilities", "threats", "risk-scenarios", "risk-quantification", "applied-controls", "security-exceptions", "trust-center", "regulatory", "activity-log", "webhooks", "reports", "policy-generator"],
+    "elite": ALL_MODULES,
 }
 
 async def get_accessible_modules(tenant_id: str, db: AsyncSession) -> list[str]:
@@ -157,6 +169,9 @@ async def get_accessible_modules(tenant_id: str, db: AsyncSession) -> list[str]:
     subscription = sub_result.scalar_one_or_none()
     if not subscription:
         return TIER_MODULES.get("starter", [])
+    # Elite Pack = god mode: every module, regardless of trial/active status.
+    if subscription.tier.value == "elite":
+        return ALL_MODULES
     # During trial, give full professional access
     if subscription.status.value == "trialing":
         return TIER_MODULES.get("trialing", [])

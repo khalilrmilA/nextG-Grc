@@ -73,12 +73,20 @@ export const PLAN_FEATURES: Record<PlanTier, {
     settingsTabs: ["profile", "organization", "notifications", "security", "api", "appearance"],
   },
   elite: {
+    // Elite Pack = god mode: every module + every settings tab, no plan gate anywhere.
     label: "Elite Pack",
     maxFrameworks: 999,
     maxAdmins: 999,
     maxIntegrations: 999,
-    modules: ["dashboard", "assets", "analytics", "risk-treatment", "control-effectiveness", "risks", "compliance", "frameworks", "audits", "policies", "vendors", "incidents", "vulnerabilities", "threats", "risk-scenarios", "risk-quantification", "applied-controls", "security-exceptions", "trust-center", "regulatory", "activity-log", "webhooks", "reports", "policy-generator"],
-    settingsTabs: ["profile", "organization", "notifications", "security", "api", "appearance"],
+    modules: [
+      "dashboard", "assets", "analytics", "risk-treatment", "control-effectiveness", "risk-cartography",
+      "risks", "action-plan", "compliance", "frameworks", "incidents", "vulnerabilities", "cve", "threats",
+      "applied-controls", "security-exceptions", "audits", "policies", "policy-generator", "ocr", "vendors",
+      "reports", "report-schedules", "support", "regulatory", "trust-center", "risk-quantification",
+      "activity-log", "webhooks", "risk-scenarios", "governance", "archiving", "dashboards",
+      "asset-graph", "vuln-import", "scenario-versions", "control-evaluations", "mfa-setup", "settings", "help",
+    ],
+    settingsTabs: ["profile", "organization", "framework", "notifications", "security", "ai-access", "api", "appearance", "admin"],
   },
 };
 
