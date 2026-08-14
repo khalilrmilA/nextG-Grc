@@ -282,6 +282,9 @@ async def update_risk(
         await _alert_over_appetite(db, risk)
 
     definition, matrix_name = await risk_scoring.resolve_matrix(db, tenant_id, risk.risk_matrix_id)
+    # Reload server-computed columns (updated_at onupdate) in async context so the
+    # sync _enrich never triggers a lazy refresh (MissingGreenlet).
+    await db.refresh(risk)
     return _enrich(risk, definition, matrix_name)
 
 
@@ -380,6 +383,8 @@ async def set_risk_appetite(
     if risk.over_appetite and not was_over:
         await _alert_over_appetite(db, risk)
     await db.flush()
+    # Reload server-computed columns (updated_at onupdate) before the sync _enrich.
+    await db.refresh(risk)
     return _enrich(risk, definition, matrix_name)
 
 
