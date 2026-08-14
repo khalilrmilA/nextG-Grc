@@ -199,31 +199,34 @@ export default function OcrCapturePage() {
                 </div>
               )}
 
-              <textarea
-                readOnly value={result.text}
-                dir="auto"
-                className="w-full h-80 border border-gray-200 rounded-xl p-3 text-sm font-mono text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-
-              {result.pages.length > 1 && (
-                <div className="flex flex-wrap gap-2">
-                  {result.pages.map((p) => (
-                    <span
-                      key={p.page}
-                      title={p.method === "text_layer" ? t("ocr.m_text", "Text layer") : t("ocr.m_ocr", "OCR")}
-                      className={`rounded-full px-2.5 py-0.5 text-xs font-semibold border ${
-                        p.chars === 0
-                          ? "bg-gray-100 text-gray-500 border-gray-200"
-                          : p.method === "text_layer"
-                            ? "bg-green-100 text-green-700 border-green-200"
-                            : "bg-purple-100 text-purple-700 border-purple-200"
-                      }`}
-                    >
-                      p.{p.page} · {p.chars}
-                    </span>
-                  ))}
-                </div>
-              )}
+              {/* Document reader — one white "sheet" per page on a soft canvas */}
+              <div className="max-h-[32rem] overflow-auto rounded-xl bg-gray-50 border border-gray-200 p-4 space-y-4">
+                {(result.pages?.length
+                  ? result.pages
+                  : [{ page: 1, method: result.method, chars: result.chars, text: result.text }]
+                ).map((p) => (
+                  <div key={p.page} className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden">
+                    <div className="flex items-center justify-between px-4 py-2 border-b border-gray-100 bg-gray-50/70">
+                      <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-gray-500">
+                        <FileText className="w-3.5 h-3.5 text-gray-400" />
+                        {t("ocr.page", "Page")} {p.page}
+                      </span>
+                      <div className="flex items-center gap-2">
+                        <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+                          p.chars === 0 ? "bg-gray-100 text-gray-400"
+                            : p.method === "text_layer" ? "bg-green-100 text-green-700" : "bg-purple-100 text-purple-700"
+                        }`}>
+                          {p.method === "text_layer" ? t("ocr.m_text", "Text layer") : t("ocr.m_ocr", "OCR")}
+                        </span>
+                        <span className="text-[10px] text-gray-400 tabular-nums">{t("ocr.chars_short", "{{n}} chars", { n: p.chars })}</span>
+                      </div>
+                    </div>
+                    <pre dir="auto" className="px-5 py-4 text-[13px] leading-relaxed text-gray-800 whitespace-pre-wrap break-words font-sans selection:bg-blue-100">
+                      {p.text?.trim() ? p.text : <span className="text-gray-300 italic">{t("ocr.empty_page", "— no text on this page —")}</span>}
+                    </pre>
+                  </div>
+                ))}
+              </div>
             </>
           )}
         </div>
