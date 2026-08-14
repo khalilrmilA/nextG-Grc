@@ -15,6 +15,7 @@ import { useAppearance, appearanceStore, type ThemeMode, type Density, type Acce
 import { useFramework } from "../context/FrameworkContext";
 import AiAccessRequestDialog from "../components/features/ai/AiAccessRequestDialog";
 import LicenseKeyModal from "../components/license/LicenseKeyModal";
+import MfaPanel from "../components/MfaPanel";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -491,7 +492,6 @@ function SecurityTab() {
   const [showCurrent, setShowCurrent] = useState(false);
   const [showNew, setShowNew]         = useState(false);
   const [pw, setPw]   = useState({ current: "", next: "", confirm: "" });
-  const [mfa, setMfa] = useState(false);
   const [sessions]    = useState([
     { id: "1", device: "Chrome / Windows 11", location: "Paris, FR",  ip: "192.168.1.64", current: true,  last: "Now"         },
     { id: "2", device: "Safari / macOS",       location: "Lyon, FR",   ip: "10.0.0.5",    current: false, last: "2 days ago"  },
@@ -561,22 +561,15 @@ function SecurityTab() {
         </div>
       </div>
 
-      <div className="bg-white border border-gray-200 rounded-xl p-5">
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="text-sm font-semibold text-gray-800">{t("settings.two_factor_title")}</p>
-            <p className="text-xs text-gray-400 mt-0.5">{t("settings.two_factor_desc")}</p>
-          </div>
-          <button type="button" onClick={() => setMfa(v => !v)}
-            className={`relative inline-flex h-5 w-9 flex-shrink-0 rounded-full transition-colors ${mfa ? "bg-blue-600" : "bg-gray-200"}`}>
-            <span className={`inline-block h-4 w-4 rounded-full bg-white shadow transform transition-transform mt-0.5 ${mfa ? "translate-x-4" : "translate-x-0.5"}`} />
-          </button>
+      <div className="space-y-2">
+        <div className="flex items-center gap-2">
+          <p className="text-sm font-semibold text-gray-800">{t("settings.two_factor_title", "Two-Factor Authentication")}</p>
+          <span className="inline-flex items-center gap-1 rounded-full bg-gradient-to-r from-yellow-500/10 to-orange-500/10 border border-yellow-500/20 px-2 py-0.5 text-[11px] font-semibold text-yellow-600">
+            <Crown className="w-3 h-3" /> {t("mfa.elite", "Elite Pack")}
+          </span>
         </div>
-        {mfa && (
-          <div className="mt-4 p-3 bg-blue-50 border border-blue-100 rounded-lg text-xs text-blue-700">
-            {t("settings.two_factor_setup")}
-          </div>
-        )}
+        <p className="text-xs text-gray-400">{t("settings.two_factor_desc", "Protect your account with a time-based one-time password (TOTP) from an authenticator app.")}</p>
+        <MfaPanel />
       </div>
 
       <div className="bg-white border border-gray-200 rounded-xl p-5">
