@@ -59,3 +59,6 @@ frontend/.env.production
 backend/grc_dev.db
 backend/grc_dev.db.bak-*
 backend/grc_dev.db.pre-elite*
+
+# Local DB backups (rotated by scripts.backup_db)
+backend/backups/
