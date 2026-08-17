@@ -55,5 +55,7 @@ backend/.env.production
 frontend/.env.local
 frontend/.env.production
 
-# Elite Pack DB snapshots
+# Live database + snapshots — never commit real client data
+backend/grc_dev.db
 backend/grc_dev.db.bak-*
+backend/grc_dev.db.pre-elite*
