@@ -73,9 +73,10 @@ def create_application() -> FastAPI:
         title=settings.APP_NAME,
         version=settings.APP_VERSION,
         description="GRC SaaS Platform API — Governance, Risk & Compliance",
-        openapi_url=f"{settings.API_V1_PREFIX}/openapi.json",
-        docs_url=f"{settings.API_V1_PREFIX}/docs",
-        redoc_url=f"{settings.API_V1_PREFIX}/redoc",
+        # Hide the interactive API docs + schema in production (exposed only in dev/staging).
+        openapi_url=None if is_production() else f"{settings.API_V1_PREFIX}/openapi.json",
+        docs_url=None if is_production() else f"{settings.API_V1_PREFIX}/docs",
+        redoc_url=None if is_production() else f"{settings.API_V1_PREFIX}/redoc",
         lifespan=lifespan,
     )
 
