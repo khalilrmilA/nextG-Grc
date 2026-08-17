@@ -13,6 +13,8 @@ import ArchivingPage from "./pages/ArchivingPage";
 import CvePage from "./pages/CvePage";
 import MfaSetupPage from "./pages/MfaSetupPage";
 import OcrCapturePage from "./pages/OcrCapturePage";
+import SystemCheckPage from "./pages/SystemCheckPage";
+import DocumentationPage from "./pages/DocumentationPage";
 import LoginPage from "./pages/LoginPage";
 import RegisterPage from "./pages/RegisterPage";
 import ServiceDownPage from "./pages/ServiceDownPage";
@@ -201,6 +203,8 @@ export default function App() {
         <Route path="cve" element={<CvePage />} />
         <Route path="mfa-setup" element={<MfaSetupPage />} />
         <Route path="ocr" element={<OcrCapturePage />} />
+        <Route path="system-check" element={<SystemCheckPage />} />
+        <Route path="documentation" element={<DocumentationPage />} />
         <Route path="risks" element={<RoleRoute path="/risks"><PrivateRoute requiredModule="risks"><RisksPage /></PrivateRoute></RoleRoute>} />
         <Route path="risk-cartography" element={<RoleRoute path="/risk-cartography"><PrivateRoute requiredModule="risks"><RiskCartographyPage /></PrivateRoute></RoleRoute>} />
         <Route path="action-plan" element={<RoleRoute path="/action-plan"><PrivateRoute requiredModule="compliance"><ActionPlanPage /></PrivateRoute></RoleRoute>} />

@@ -62,6 +62,7 @@ const NAV_GROUPS = [
     items: [
       { to: "/governance", icon: Scale,   label: "Governance", module: "governance", roles: ["tenant_admin","ciso","compliance_manager","policy_manager","viewer"] },
       { to: "/archiving",  icon: Archive, label: "Archiving",  module: "archiving",  roles: ["tenant_admin","ciso","compliance_manager","viewer"] },
+      { to: "/system-check", icon: ClipboardCheck, label: "System Check", module: "system-check", roles: ["tenant_admin","ciso"] },
     ],
   },
 ];
@@ -747,6 +748,7 @@ export default function Layout() {
             </NavLink>
           )}
           {[
+            { to: "/documentation", icon: BookOpen, label: t("nav.documentation", "Documentation") },
             { to: "/settings", icon: Settings,   label: t("nav.settings") },
             { to: "/help",     icon: HelpCircle, label: t("nav.help")     },
           ].map(({ to, icon: Icon, label }) => (

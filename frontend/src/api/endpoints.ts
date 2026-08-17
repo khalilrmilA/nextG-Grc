@@ -1455,3 +1455,8 @@ export const ssoApi = {
   status: (tenantSlug?: string) => apiClient.get("/sso/ldap/status", { params: tenantSlug ? { tenant_slug: tenantSlug } : {} }).then((r) => r.data),
   login: (data: { username: string; password: string; tenant_slug?: string }) => apiClient.post("/sso/ldap/login", data).then((r) => r.data),
 };
+
+// ── System self-test (in-app acceptance checks) ──────────────────────────────
+export const systemApi = {
+  selfTest: () => apiClient.get("/system/self-test").then((r) => r.data),
+};
