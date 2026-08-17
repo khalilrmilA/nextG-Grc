@@ -4,12 +4,15 @@ Pulls recently-modified CVEs from the NVD REST API 2.0 and upserts them into the
 CveEntry catalog. Defensive: network/parse errors are collected, never raised, so
 a scheduled or manual sync degrades gracefully. Not called at import time.
 """
+import asyncio
 import logging
+import os
 from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import select
+from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.database import AsyncSessionLocal
 from app.models.cve_entry import CveEntry
 
 logger = logging.getLogger(__name__)
@@ -115,3 +118,42 @@ async def sync_recent_cves(db: AsyncSession, days: int = 1) -> dict:
             summary["errors"].append(f"{fields['cve_id']}: {exc}")
     await db.commit()
     return summary
+
+
+async def _recently_synced(db: AsyncSession, hours: int = 20) -> bool:
+    """True if the catalog gained a CVE within the last `hours` (a sync ran recently).
+
+    Also serves as cross-worker coordination: once one uvicorn worker syncs and adds
+    fresh CVEs, the other worker sees a recent newest-entry and skips its own run.
+    """
+    newest = (await db.execute(select(func.max(CveEntry.created_at)))).scalar()
+    if not newest:
+        return False
+    if newest.tzinfo is None:
+        newest = newest.replace(tzinfo=timezone.utc)
+    return (datetime.now(timezone.utc) - newest).total_seconds() < hours * 3600
+
+
+async def start_cve_auto_sync() -> None:
+    """In-process daily NVD sync (no Redis/beat needed). Disable with ENABLE_CVE_AUTOSYNC=0.
+
+    Wakes every 6h but only calls NVD when the catalog is stale (>20h since the newest
+    entry), so it settles to roughly once a day and won't hit NVD's rate limit.
+    """
+    if os.getenv("ENABLE_CVE_AUTOSYNC", "1") == "0":
+        logger.info("CVE auto-sync disabled via ENABLE_CVE_AUTOSYNC=0")
+        return
+    await asyncio.sleep(180)  # let startup settle + stagger the two workers
+    logger.info("CVE auto-sync started (checks every 6h, syncs when stale)")
+    while True:
+        try:
+            async with AsyncSessionLocal() as db:
+                if not await _recently_synced(db, hours=20):
+                    res = await sync_recent_cves(db, days=3)
+                    logger.info("CVE auto-sync ran: added=%s updated=%s fetched=%s",
+                                res.get("added"), res.get("updated"), res.get("fetched"))
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:  # noqa: BLE001 — never let the loop die
+            logger.warning("CVE auto-sync tick failed: %s", exc)
+        await asyncio.sleep(6 * 3600)

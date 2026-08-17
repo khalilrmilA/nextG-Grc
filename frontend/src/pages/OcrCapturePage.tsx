@@ -19,6 +19,31 @@ const LANG_LABELS: Record<string, string> = {
   "ara+fra": "العربية + Français", "ara+eng": "العربية + English", ara: "العربية",
 };
 
+/**
+ * Best-effort clean-up of the odd spacing that some PDF text layers carry ("SI MUL ATI
+ * ON"). Non-destructive: collapses runs of spaces, rejoins fully letter-spaced words
+ * ("R I S K" -> "RISK"), and joins bullet-separated all-caps fragments into single words
+ * — but never glues multi-word segments (guarded by length) or touches mixed-case prose.
+ */
+function tidy(text: string): string {
+  if (!text) return text;
+  const collapseSeg = (seg: string) => {
+    if (/[a-z]/.test(seg)) return seg;           // has lowercase → prose, leave it
+    const joined = seg.replace(/\s+/g, "");
+    return joined.length <= 12 ? joined : seg;   // single word → join; multi-word → leave
+  };
+  return text
+    .split("\n")
+    .map((raw) => {
+      let s = raw.replace(/[ \t]{2,}/g, " ").trim();
+      s = s.replace(/\b(?:[A-Za-z] ){2,}[A-Za-z]\b/g, (m) => m.replace(/ /g, ""));
+      if (/[·•|]/.test(s)) s = s.split(/\s*[·•|]\s*/).map(collapseSeg).join(" · ");
+      return s.replace(/\s+([,.;:!?])/g, "$1");
+    })
+    .join("\n")
+    .replace(/\n{3,}/g, "\n\n");
+}
+
 export default function OcrCapturePage() {
   const { t } = useTranslation();
   const [status, setStatus] = useState<OcrStatus | null>(null);
@@ -29,7 +54,9 @@ export default function OcrCapturePage() {
   const [result, setResult] = useState<OcrResult | null>(null);
   const [copied, setCopied] = useState(false);
   const [pdfBusy, setPdfBusy] = useState(false);
+  const [tidySpacing, setTidySpacing] = useState(false);
   const [dragging, setDragging] = useState(false);
+  const shown = (txt: string) => (tidySpacing ? tidy(txt) : txt);
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -69,14 +96,14 @@ export default function OcrCapturePage() {
   async function copyText() {
     if (!result) return;
     try {
-      await navigator.clipboard.writeText(result.text);
+      await navigator.clipboard.writeText(shown(result.text));
       setCopied(true); setTimeout(() => setCopied(false), 1600);
     } catch { /* clipboard blocked — the textarea is selectable anyway */ }
   }
 
   function downloadText() {
     if (!result) return;
-    const url = URL.createObjectURL(new Blob([result.text], { type: "text/plain;charset=utf-8" }));
+    const url = URL.createObjectURL(new Blob([shown(result.text)], { type: "text/plain;charset=utf-8" }));
     const a = document.createElement("a");
     a.href = url;
     a.download = `${(file?.name || "extraction").replace(/\.[^.]+$/, "")}.txt`;
@@ -89,7 +116,7 @@ export default function OcrCapturePage() {
     setPdfBusy(true); setError("");
     try {
       const stem = (file?.name || "extraction").replace(/\.[^.]+$/, "");
-      const blob = await ocrApi.exportPdf(result.text, stem, stem);
+      const blob = await ocrApi.exportPdf(shown(result.text), stem, stem);
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
@@ -199,6 +226,10 @@ export default function OcrCapturePage() {
                     {result.method === "text_layer" ? t("ocr.m_text", "Text layer") : result.method === "mixed" ? t("ocr.m_mixed", "Mixed") : t("ocr.m_ocr", "OCR")}
                   </span>
                   <span className="text-gray-400">{t("ocr.chars", "{{n}} characters", { n: result.chars })}</span>
+                  <label className="inline-flex items-center gap-1.5 text-gray-500 cursor-pointer select-none ml-1" title={t("ocr.tidy_hint", "Collapse odd letter-spacing from the PDF text layer (e.g. 'SI MUL ATI ON' → 'SIMULATION')")}>
+                    <input type="checkbox" checked={tidySpacing} onChange={(e) => setTidySpacing(e.target.checked)} className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 w-3.5 h-3.5" />
+                    {t("ocr.tidy", "Tidy spacing")}
+                  </label>
                 </div>
                 <div className="flex items-center gap-2">
                   <button onClick={copyText} className="inline-flex items-center gap-1.5 bg-white border border-gray-200 text-gray-700 px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-gray-50">
@@ -243,7 +274,7 @@ export default function OcrCapturePage() {
                       </div>
                     </div>
                     <pre dir="auto" className="px-5 py-4 text-[13px] leading-relaxed text-gray-800 whitespace-pre-wrap break-words font-sans selection:bg-blue-100">
-                      {p.text?.trim() ? p.text : <span className="text-gray-300 italic">{t("ocr.empty_page", "— no text on this page —")}</span>}
+                      {p.text?.trim() ? shown(p.text) : <span className="text-gray-300 italic">{t("ocr.empty_page", "— no text on this page —")}</span>}
                     </pre>
                   </div>
                 ))}
