@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { ScanLine, Loader2, Crown, Upload, FileText, Copy, Check, Download, AlertTriangle } from "lucide-react";
+import { ScanLine, Loader2, Crown, Upload, FileText, FileSearch, Copy, Check, Download, AlertTriangle } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { ocrApi } from "@/api/endpoints";
 
@@ -54,6 +54,8 @@ export default function OcrCapturePage() {
   const [result, setResult] = useState<OcrResult | null>(null);
   const [copied, setCopied] = useState(false);
   const [pdfBusy, setPdfBusy] = useState(false);
+  const [searchBusy, setSearchBusy] = useState(false);
+  const [notice, setNotice] = useState("");
   const [tidySpacing, setTidySpacing] = useState(false);
   const [dragging, setDragging] = useState(false);
   const shown = (txt: string) => (tidySpacing ? tidy(txt) : txt);
@@ -128,6 +130,25 @@ export default function OcrCapturePage() {
     } finally { setPdfBusy(false); }
   }
 
+  // Rebuilds the ORIGINAL scan as a searchable PDF (image kept, invisible OCR text layer).
+  async function downloadSearchablePdf() {
+    if (!file) return;
+    setSearchBusy(true); setError(""); setNotice("");
+    try {
+      const stem = file.name.replace(/\.[^.]+$/, "");
+      const { blob, truncated, totalPages, pageCount } = await ocrApi.searchablePdf(file, lang);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${stem}-searchable.pdf`;
+      a.click();
+      URL.revokeObjectURL(url);
+      if (truncated) setNotice(t("ocr.searchable_truncated", "Searchable PDF built from the first {{count}} of {{total}} pages.", { count: pageCount, total: totalPages }));
+    } catch {
+      setError(t("ocr.err_searchable", "Could not build the searchable PDF. Please try again."));
+    } finally { setSearchBusy(false); }
+  }
+
   const langOptions = status?.selectable_languages?.length ? status.selectable_languages : ["fra+eng", "fra", "eng"];
 
   return (
@@ -140,14 +161,14 @@ export default function OcrCapturePage() {
           </span>
         </div>
         <p className="text-sm text-gray-500 mt-1">
-          {t("ocr.subtitle", "Extract text from scanned documents and PDFs — French and English recognition, page by page")}
+          {t("ocr.subtitle", "Extract text from scanned documents and PDFs — French, English and Arabic recognition, page by page — or rebuild a scan as a searchable PDF")}
         </p>
       </div>
 
       {status && !status.ocr_available && (
         <div className="flex items-start gap-2 p-3 rounded-xl text-sm bg-amber-50 text-amber-800 border border-amber-100">
           <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
-          {t("ocr.engine_missing", "The OCR engine is not installed on this server. Install tesseract-ocr and tesseract-ocr-fra to enable capture.")}
+          {t("ocr.engine_missing", "The OCR engine is not installed on this server. Install tesseract-ocr with the fra, eng and ara language packs to enable capture.")}
         </div>
       )}
 
@@ -239,11 +260,18 @@ export default function OcrCapturePage() {
                   <button onClick={downloadText} className="inline-flex items-center gap-1.5 bg-white border border-gray-200 text-gray-700 px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-gray-50">
                     <Download className="w-3.5 h-3.5" /> {t("ocr.download", "Download .txt")}
                   </button>
-                  <button onClick={downloadPdf} disabled={pdfBusy} className="inline-flex items-center gap-1.5 bg-red-600 text-white px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-red-700 disabled:opacity-50">
-                    {pdfBusy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FileText className="w-3.5 h-3.5" />} {t("ocr.download_pdf", "Download PDF")}
+                  <button onClick={downloadSearchablePdf} disabled={searchBusy} title={t("ocr.searchable_hint", "Rebuild the original document with a selectable, searchable text layer — pages keep their look")} className="inline-flex items-center gap-1.5 bg-indigo-600 text-white px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-indigo-700 disabled:opacity-50">
+                    {searchBusy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FileSearch className="w-3.5 h-3.5" />} {t("ocr.download_searchable", "Searchable PDF")}
+                  </button>
+                  <button onClick={downloadPdf} disabled={pdfBusy} title={t("ocr.text_pdf_hint", "Clean, reflowed text as a new PDF")} className="inline-flex items-center gap-1.5 bg-red-600 text-white px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-red-700 disabled:opacity-50">
+                    {pdfBusy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FileText className="w-3.5 h-3.5" />} {t("ocr.download_pdf", "Text PDF")}
                   </button>
                 </div>
               </div>
+
+              {notice && (
+                <div className="p-3 rounded-xl text-xs bg-indigo-50 text-indigo-800 border border-indigo-100">{notice}</div>
+              )}
 
               {result.truncated && (
                 <div className="p-3 rounded-xl text-xs bg-amber-50 text-amber-800 border border-amber-100">

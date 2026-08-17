@@ -94,7 +94,7 @@ class Settings(BaseSettings):
     # File uploads
     UPLOADS_DIR: str = "uploads"
     MAX_UPLOAD_SIZE_MB: int = 2
-    OCR_MAX_UPLOAD_SIZE_MB: int = 20   # scanned PDFs need far more headroom than the global cap
+    OCR_MAX_UPLOAD_SIZE_MB: int = 40   # full scanned tenders (image-only PDFs) run large
     FRONTEND_BASE_URL: str = "http://localhost:4000"
 
     # Ollama (local AI)

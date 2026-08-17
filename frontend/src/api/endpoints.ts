@@ -1448,6 +1448,14 @@ export const ocrApi = {
   },
   exportPdf: (text: string, filename?: string, title?: string) =>
     apiClient.post("/ocr/export-pdf", { text, filename, title }, { responseType: "blob" }).then((r) => r.data as Blob),
+  searchablePdf: (file: File, lang: string) => {
+    const fd = new FormData();
+    fd.append("file", file);
+    fd.append("lang", lang);
+    return apiClient
+      .post("/ocr/searchable-pdf", fd, { headers: { "Content-Type": "multipart/form-data" }, responseType: "blob" })
+      .then((r) => ({ blob: r.data as Blob, truncated: r.headers["x-truncated"] === "1", totalPages: Number(r.headers["x-total-pages"] || 0), pageCount: Number(r.headers["x-page-count"] || 0) }));
+  },
 };
 
 // ── AD/LDAP SSO (Elite Pack) ─────────────────────────────────────────────────

@@ -159,6 +159,98 @@ def ocr_pdf(content: bytes, lang: str = DEFAULT_LANG, max_pages: int = 20) -> di
     }
 
 
+def _has_arabic(text: str) -> bool:
+    return any("؀" <= ch <= "ۿ" or "ݐ" <= ch <= "ݿ" for ch in (text or ""))
+
+
+def shape_rtl(text: str) -> str:
+    """Reshape + bidi-reorder Arabic so it renders connected and right-to-left.
+
+    ReportLab has no bidi/shaping engine, so raw Arabic comes out as isolated,
+    left-to-right glyphs. arabic_reshaper joins the letter forms and python-bidi
+    puts them in visual order. Non-Arabic text is returned untouched. Best-effort:
+    if the libraries are missing the original text is returned rather than failing.
+    """
+    if not _has_arabic(text):
+        return text
+    try:
+        import arabic_reshaper  # noqa: WPS433 (lazy — optional dep)
+        from bidi.algorithm import get_display  # noqa: WPS433
+
+        return get_display(arabic_reshaper.reshape(text))
+    except Exception:  # noqa: BLE001 — never let a font/dep issue break export
+        return text
+
+
+def build_searchable_pdf(
+    content: bytes,
+    lang: str = DEFAULT_LANG,
+    filename: str | None = None,
+    content_type: str | None = None,
+    max_pages: int = 20,
+) -> dict:
+    """Turn a scan (image or image-only PDF) into a *searchable* PDF.
+
+    The output looks exactly like the original — every page keeps its picture —
+    but carries an invisible, selectable OCR text layer, so a document that was
+    "all screenshots" becomes copy-, search- and index-able. Pages that already
+    have a real text layer are copied through verbatim (crisp + already
+    searchable); only scanned pages are rasterised and OCR-sandwiched.
+    """
+    lang = normalize_lang(lang)
+    pytesseract = _pytesseract()
+
+    # Single image → one searchable page.
+    if not is_pdf(content, filename, content_type):
+        image = _pil_image().open(io.BytesIO(content))
+        if image.mode not in ("L", "RGB"):
+            image = image.convert("RGB")
+        image.info["dpi"] = (_RASTER_DPI, _RASTER_DPI)
+        pdf_bytes = pytesseract.image_to_pdf_or_hocr(image, lang=lang, extension="pdf")
+        return {"pdf": pdf_bytes, "page_count": 1, "total_pages": 1,
+                "truncated": False, "ocr_pages": 1, "kept_pages": 0}
+
+    from pypdf import PdfWriter  # noqa: WPS433 (writer only needed here)
+
+    reader = _pypdf()(io.BytesIO(content))
+    convert_from_bytes = _pdf2image()
+    total_pages = len(reader.pages)
+    page_count = min(total_pages, max_pages)
+
+    writer = PdfWriter()
+    ocr_pages = kept_pages = 0
+    for index in range(page_count):
+        try:
+            layer = (reader.pages[index].extract_text() or "").strip()
+        except Exception:
+            layer = ""
+        if len(layer) >= _TEXT_LAYER_MIN_CHARS:
+            writer.add_page(reader.pages[index])          # already digital → keep as-is
+            kept_pages += 1
+            continue
+        images = convert_from_bytes(content, dpi=_RASTER_DPI, first_page=index + 1, last_page=index + 1)
+        if not images:
+            writer.add_page(reader.pages[index])
+            kept_pages += 1
+            continue
+        img = images[0]
+        img.info["dpi"] = (_RASTER_DPI, _RASTER_DPI)
+        page_pdf = pytesseract.image_to_pdf_or_hocr(img, lang=lang, extension="pdf")
+        writer.append(io.BytesIO(page_pdf))               # searchable sandwich page
+        ocr_pages += 1
+
+    out = io.BytesIO()
+    writer.write(out)
+    return {
+        "pdf": out.getvalue(),
+        "page_count": page_count,
+        "total_pages": total_pages,
+        "truncated": total_pages > page_count,
+        "ocr_pages": ocr_pages,
+        "kept_pages": kept_pages,
+    }
+
+
 def extract_document(
     content: bytes,
     lang: str = DEFAULT_LANG,

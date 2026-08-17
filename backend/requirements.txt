@@ -24,6 +24,10 @@ Pillow>=12.2.0,<13.0.0
 pytesseract>=0.3.13,<0.4.0
 pypdf>=5.1.0,<6.0.0
 pdf2image>=1.17.0,<2.0.0
+arabic-reshaper>=3.0.0,<4.0.0   # shape Arabic for the OCR text-reflow PDF
+python-bidi>=0.6.0              # bidi reorder Arabic text before rendering
+# OCR OS packages (apt): poppler-utils, tesseract-ocr, tesseract-ocr-fra,
+#   tesseract-ocr-eng, tesseract-ocr-ara, fonts-hosny-amiri (Arabic Naskh for the reflow PDF)
 python-docx>=1.1.2,<2.0.0
 openpyxl>=3.1.5,<4.0.0
 reportlab>=4.2.5,<5.0.0

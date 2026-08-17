@@ -106,7 +106,7 @@ export const eliteEn = {
   },
   ocr: {
     title: "Document Capture (OCR)", elite: "Elite Pack",
-    subtitle: "Extract text from scanned documents and PDFs — French and English recognition, page by page",
+    subtitle: "Extract text from scanned documents and PDFs — French, English and Arabic recognition, page by page — or rebuild a scan as a searchable PDF",
     drop: "Drop a scan or PDF here, or click to browse",
     accepts: "PDF, PNG, JPEG, TIFF — up to {{mb}} MB, first {{pages}} pages",
     language: "Language", extract: "Extract text",
@@ -115,8 +115,13 @@ export const eliteEn = {
     pages_read: "{{count}} of {{total}} pages", image: "Image", chars: "{{n}} characters",
     m_text: "Text layer", m_ocr: "OCR", m_mixed: "Mixed",
     truncated: "Only the first {{count}} pages were processed out of {{total}}.",
-    engine_missing: "The OCR engine is not installed on this server. Install tesseract-ocr and tesseract-ocr-fra to enable capture.",
+    engine_missing: "The OCR engine is not installed on this server. Install tesseract-ocr with the fra, eng and ara language packs to enable capture.",
     err_too_big: "File exceeds the {{mb}} MB limit", err_failed: "Extraction failed. Check the file and try again.",
+    download_pdf: "Text PDF", download_searchable: "Searchable PDF",
+    searchable_hint: "Rebuild the original document with a selectable, searchable text layer — pages keep their look",
+    text_pdf_hint: "Clean, reflowed text as a new PDF",
+    searchable_truncated: "Searchable PDF built from the first {{count}} of {{total}} pages.",
+    err_searchable: "Could not build the searchable PDF. Please try again.",
   },
 };
 
@@ -223,7 +228,7 @@ export const eliteFr = {
   },
   ocr: {
     title: "Capture de documents (OCR)", elite: "Elite Pack",
-    subtitle: "Extrayez le texte des documents numérisés et des PDF — reconnaissance française et anglaise, page par page",
+    subtitle: "Extrayez le texte des documents numérisés et des PDF — reconnaissance française, anglaise et arabe, page par page — ou reconstruisez un scan en PDF interrogeable",
     drop: "Déposez un scan ou un PDF ici, ou cliquez pour parcourir",
     accepts: "PDF, PNG, JPEG, TIFF — jusqu'à {{mb}} Mo, {{pages}} premières pages",
     language: "Langue", extract: "Extraire le texte",
@@ -232,8 +237,13 @@ export const eliteFr = {
     pages_read: "{{count}} pages sur {{total}}", image: "Image", chars: "{{n}} caractères",
     m_text: "Couche texte", m_ocr: "OCR", m_mixed: "Mixte",
     truncated: "Seules les {{count}} premières pages ont été traitées sur {{total}}.",
-    engine_missing: "Le moteur OCR n'est pas installé sur ce serveur. Installez tesseract-ocr et tesseract-ocr-fra pour activer la capture.",
+    engine_missing: "Le moteur OCR n'est pas installé sur ce serveur. Installez tesseract-ocr avec les modules de langue fra, eng et ara pour activer la capture.",
     err_too_big: "Le fichier dépasse la limite de {{mb}} Mo", err_failed: "L'extraction a échoué. Vérifiez le fichier et réessayez.",
+    download_pdf: "PDF texte", download_searchable: "PDF interrogeable",
+    searchable_hint: "Reconstruit le document d'origine avec une couche de texte sélectionnable et interrogeable — les pages gardent leur apparence",
+    text_pdf_hint: "Texte propre et redisposé dans un nouveau PDF",
+    searchable_truncated: "PDF interrogeable construit à partir des {{count}} premières pages sur {{total}}.",
+    err_searchable: "Impossible de construire le PDF interrogeable. Veuillez réessayer.",
   },
 };
 
@@ -340,7 +350,7 @@ export const eliteAr = {
   },
   ocr: {
     title: "التقاط المستندات (OCR)", elite: "Elite Pack",
-    subtitle: "استخرج النص من المستندات الممسوحة وملفات PDF — تعرّف بالفرنسية والإنجليزية، صفحة بصفحة",
+    subtitle: "استخرج النص من المستندات الممسوحة وملفات PDF — تعرّف بالفرنسية والإنجليزية والعربية، صفحة بصفحة — أو أعد بناء المسح كملف PDF قابل للبحث",
     drop: "أفلت ملف مسح ضوئي أو PDF هنا، أو انقر للاختيار",
     accepts: "PDF أو PNG أو JPEG أو TIFF — حتى {{mb}} ميغابايت، أول {{pages}} صفحات",
     language: "اللغة", extract: "استخراج النص",
@@ -349,7 +359,12 @@ export const eliteAr = {
     pages_read: "{{count}} من {{total}} صفحات", image: "صورة", chars: "{{n}} حرفًا",
     m_text: "طبقة نص", m_ocr: "OCR", m_mixed: "مختلط",
     truncated: "تمت معالجة أول {{count}} صفحات فقط من أصل {{total}}.",
-    engine_missing: "محرك OCR غير مثبّت على هذا الخادم. ثبّت tesseract-ocr و tesseract-ocr-fra لتفعيل الالتقاط.",
+    engine_missing: "محرك OCR غير مثبّت على هذا الخادم. ثبّت tesseract-ocr مع حزم اللغة fra و eng و ara لتفعيل الالتقاط.",
     err_too_big: "حجم الملف يتجاوز {{mb}} ميغابايت", err_failed: "فشل الاستخراج. تحقّق من الملف وحاول مجددًا.",
+    download_pdf: "PDF نصّي", download_searchable: "PDF قابل للبحث",
+    searchable_hint: "يعيد بناء المستند الأصلي بطبقة نص قابلة للتحديد والبحث — مع الحفاظ على مظهر الصفحات",
+    text_pdf_hint: "نص نظيف ومعاد تنسيقه في ملف PDF جديد",
+    searchable_truncated: "تم بناء PDF القابل للبحث من أول {{count}} صفحات من أصل {{total}}.",
+    err_searchable: "تعذّر بناء PDF القابل للبحث. حاول مجددًا.",
   },
 };

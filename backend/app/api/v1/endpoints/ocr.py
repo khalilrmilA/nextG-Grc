@@ -18,8 +18,10 @@ from app.services.ocr_service import (
     DEFAULT_LANG,
     OcrUnavailableError,
     available_languages,
+    build_searchable_pdf,
     engine_status,
     extract_document,
+    shape_rtl,
 )
 
 router = APIRouter()
@@ -27,7 +29,8 @@ router = APIRouter()
 _GATE = require_feature("ocr_capture")
 
 # Scanned PDFs blow past the platform-wide 2 MB upload cap, so OCR carries its own.
-MAX_PAGES = 20
+# 40 pages covers a full RFP/tender while keeping a single synchronous request bounded.
+MAX_PAGES = 40
 
 
 class OcrPageOut(BaseModel):
@@ -112,11 +115,16 @@ class OcrPdfIn(BaseModel):
     title: str | None = None
 
 
+def _has_arabic(text: str) -> bool:
+    return any("؀" <= ch <= "ۿ" or "ݐ" <= ch <= "ݿ" for ch in (text or ""))
+
+
 def _render_text_pdf(text: str, title: str = "Extracted Text") -> bytes:
     """Render extracted text into a clean, paginated PDF (ReportLab).
 
-    Prefers a Unicode TTF (DejaVuSans) so French accents and most scripts render;
-    falls back to Helvetica (Latin-1) when no TTF is on the host.
+    Latin text uses a Unicode TTF (DejaVuSans) so French accents render. Arabic
+    lines are reshaped + bidi-reordered and set in Amiri, right-aligned — so a
+    mixed FR/AR extraction comes out readable in both scripts.
     """
     import io
     import os
@@ -124,12 +132,13 @@ def _render_text_pdf(text: str, title: str = "Extracted Text") -> bytes:
 
     from reportlab.lib.pagesizes import A4
     from reportlab.lib.units import cm
-    from reportlab.lib.styles import getSampleStyleSheet
+    from reportlab.lib.enums import TA_RIGHT
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
     from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
     from reportlab.pdfbase import pdfmetrics
     from reportlab.pdfbase.ttfonts import TTFont
 
-    font_name = "Helvetica"
+    latin_font = "Helvetica"
     for path in (
         "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
         "/usr/share/fonts/truetype/dejavu/DejaVuSansCondensed.ttf",
@@ -138,9 +147,22 @@ def _render_text_pdf(text: str, title: str = "Extracted Text") -> bytes:
         if os.path.exists(path):
             try:
                 pdfmetrics.registerFont(TTFont("OcrBody", path))
-                font_name = "OcrBody"
+                latin_font = "OcrBody"
                 break
             except Exception:  # noqa: BLE001 — fall back to Helvetica
+                pass
+
+    arabic_font = latin_font
+    for path in (
+        "/usr/share/fonts/opentype/fonts-hosny-amiri/Amiri-Regular.ttf",
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+    ):
+        if os.path.exists(path):
+            try:
+                pdfmetrics.registerFont(TTFont("OcrArabic", path))
+                arabic_font = "OcrArabic"
+                break
+            except Exception:  # noqa: BLE001
                 pass
 
     buf = io.BytesIO()
@@ -149,13 +171,18 @@ def _render_text_pdf(text: str, title: str = "Extracted Text") -> bytes:
         topMargin=2 * cm, bottomMargin=2 * cm, leftMargin=2 * cm, rightMargin=2 * cm,
     )
     styles = getSampleStyleSheet()
-    head = styles["Title"]; head.fontName = font_name
-    body = styles["BodyText"]; body.fontName = font_name; body.fontSize = 10; body.leading = 14
+    head = styles["Title"]
+    head.fontName = arabic_font if _has_arabic(title) else latin_font
+    body = ParagraphStyle("OcrLatin", parent=styles["BodyText"], fontName=latin_font, fontSize=10, leading=14)
+    body_ar = ParagraphStyle("OcrRtl", parent=body, fontName=arabic_font, alignment=TA_RIGHT, wordWrap="RTL")
 
-    story = [Paragraph(escape(title), head), Spacer(1, 0.4 * cm)]
+    story = [Paragraph(escape(shape_rtl(title)), head), Spacer(1, 0.4 * cm)]
     for line in (text or "").split("\n"):
         if line.strip():
-            story.append(Paragraph(escape(line), body))
+            if _has_arabic(line):
+                story.append(Paragraph(escape(shape_rtl(line)), body_ar))
+            else:
+                story.append(Paragraph(escape(line), body))
         else:
             story.append(Spacer(1, 0.25 * cm))
     if len(story) <= 2:
@@ -175,4 +202,45 @@ async def export_pdf(body: OcrPdfIn, current_user: Annotated[User, Depends(_GATE
         content=pdf,
         media_type="application/pdf",
         headers={"Content-Disposition": f'attachment; filename="{stem}.pdf"'},
+    )
+
+
+@router.post("/searchable-pdf")
+async def searchable_pdf(
+    current_user: Annotated[User, Depends(_GATE)],
+    lang: Annotated[str, Form()] = DEFAULT_LANG,
+    file: UploadFile = File(...),
+):
+    """Rebuild a scanned (image-only) document as a *searchable* PDF.
+
+    Keeps every page's picture but adds an invisible OCR text layer, so a file
+    that was "all screenshots" (e.g. a scanned tender) becomes a full,
+    selectable, searchable PDF. Digital pages are copied through untouched.
+    """
+    content = await file.read()
+    if not content:
+        raise HTTPException(400, "Empty file")
+    max_bytes = settings.OCR_MAX_UPLOAD_SIZE_MB * 1024 * 1024
+    if len(content) > max_bytes:
+        raise HTTPException(413, f"File exceeds {settings.OCR_MAX_UPLOAD_SIZE_MB} MB limit")
+    try:
+        result = await asyncio.to_thread(
+            build_searchable_pdf, content, lang, file.filename, file.content_type, MAX_PAGES,
+        )
+    except OcrUnavailableError as exc:
+        raise HTTPException(503, str(exc))
+    except Exception as exc:  # noqa: BLE001 — surface a clean 422, no 500
+        raise HTTPException(422, f"Searchable-PDF build failed: {type(exc).__name__}: {exc}")
+    stem = (file.filename or "document").rsplit(".", 1)[0] or "document"
+    return Response(
+        content=result["pdf"],
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f'attachment; filename="{stem}-searchable.pdf"',
+            "X-Total-Pages": str(result["total_pages"]),
+            "X-Page-Count": str(result["page_count"]),
+            "X-Truncated": "1" if result["truncated"] else "0",
+            "X-Ocr-Pages": str(result["ocr_pages"]),
+            "Access-Control-Expose-Headers": "X-Total-Pages, X-Page-Count, X-Truncated, X-Ocr-Pages",
+        },
     )
