@@ -170,6 +170,8 @@ class RiskResponse(BaseModel):
     next_review_date: str | None
     last_reviewed_at: str | None
     reopen_reason: str | None = None
+    target_validated_at: str | None = None
+    target_calculation_notes: str | None = None
     created_at: datetime
     updated_at: datetime
 
@@ -195,6 +197,8 @@ def _enrich(risk: Risk, definition: dict, matrix_name: str) -> RiskResponse:
         tags=risk.tags or [], linked_controls=risk.linked_controls or [], linked_assets=risk.linked_assets or [],
         next_review_date=risk.next_review_date, last_reviewed_at=risk.last_reviewed_at,
         reopen_reason=risk.reopen_reason,
+        target_validated_at=risk.target_validated_at,
+        target_calculation_notes=risk.target_calculation_notes,
         created_at=risk.created_at, updated_at=risk.updated_at,
     )
 
@@ -428,6 +432,63 @@ async def set_risk_appetite(
         await _alert_target_over_appetite(db, risk)
     await db.flush()
     # Reload server-computed columns (updated_at onupdate) before the sync _enrich.
+    await db.refresh(risk)
+    return _enrich(risk, definition, matrix_name)
+
+
+class ValidateTargetInput(BaseModel):
+    calculation_notes: str | None = None
+
+
+@router.post("/{risk_id}/validate-target", response_model=RiskResponse)
+async def validate_target(
+    risk_id: str,
+    body: ValidateTargetInput,
+    tenant_id: str = Depends(get_tenant_id),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_roles(UserRole.CISO, UserRole.RISK_MANAGER)),
+):
+    """Elite Pack: final validation gate for a risk's treatment plan.
+
+    RFP rules covered:
+    - "Utilisé comme critère de validation finale du plan de traitement" — the
+      TARGET (post-treatment) score is the gate: this rejects (400) validating
+      a plan whose planned end-state still breaches the appetite threshold, or
+      whose appetite/target aren't even set yet (nothing to validate against).
+    - "Traçabilité du calcul et des hypothèses prises en compte" — on success,
+      stamps target_validated_at and persists the caller-supplied
+      calculation_notes into target_calculation_notes for that trail.
+    """
+    await _assert_feature(db, tenant_id, current_user, "risk_appetite")
+    result = await db.execute(select(Risk).where(Risk.id == risk_id, Risk.tenant_id == tenant_id))
+    risk = result.scalar_one_or_none()
+    if not risk:
+        raise HTTPException(status_code=404, detail=_RISK_NOT_FOUND)
+
+    if risk.appetite_threshold is None:
+        raise HTTPException(
+            status_code=400,
+            detail="Set an appetite threshold before validating the treatment target.",
+        )
+    if risk.target_risk_score is None:
+        raise HTTPException(
+            status_code=400,
+            detail="Set a target likelihood and impact before validating the treatment target.",
+        )
+    if risk.target_over_appetite:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Target score {risk.target_risk_score} still exceeds the appetite threshold "
+                f"of {risk.appetite_threshold}. Strengthen the treatment plan before validating."
+            ),
+        )
+
+    risk.target_validated_at = datetime.utcnow().isoformat()
+    risk.target_calculation_notes = body.calculation_notes
+
+    definition, matrix_name = await risk_scoring.resolve_matrix(db, tenant_id, risk.risk_matrix_id)
+    await db.flush()
     await db.refresh(risk)
     return _enrich(risk, definition, matrix_name)
 

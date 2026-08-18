@@ -116,6 +116,15 @@ class Risk(Base):
     # into the activity-log middleware to carry structured before/after detail.
     reopen_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
 
+    # Target-validation gate (Elite Pack, RFP gap fix): the RFP requires the TARGET
+    # (post-treatment) score to be usable as the treatment plan's "final validation
+    # criterion", plus traceability of the calculation/hypotheses behind it. Set by
+    # POST /risks/{id}/validate-target (risks.py) — that endpoint refuses to stamp
+    # target_validated_at while target_over_appetite is still true. New columns —
+    # see backend/scripts/migrate_add_treatment_scenario_links.py.
+    target_validated_at: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    target_calculation_notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+
     # Linked framework controls
     linked_controls: Mapped[list] = mapped_column(JSON, default=list)
 
@@ -157,12 +166,33 @@ class RiskAssessment(Base):
 
 
 class RiskTreatment(Base):
-    """Risk treatment plan for a specific risk."""
+    """Risk treatment plan for a specific risk.
+
+    NOTE (RFP gap fix, deferred sub-point): the RFP asks for more than one
+    treatment plan per risk, which would mean dropping the `unique=True` below.
+    SQLite has no `ALTER TABLE ... DROP CONSTRAINT` — a inline column `UNIQUE`
+    becomes part of the table's CREATE-TABLE DDL (an internal
+    `sqlite_autoindex_risk_treatments_*`), so removing it safely requires a
+    full table rebuild (create new table, copy rows, drop+rename) on a
+    database backing live production data. That rebuild is deliberately NOT
+    done here — see backend/app/api/v1/endpoints/risk_treatment.py's module
+    docstring / this session's commit message for the full reasoning. The
+    `linked_scenario_ids` column directly below IS implemented (plain
+    additive column, safe on SQLite).
+    """
     __tablename__ = "risk_treatments"
 
     risk_id: Mapped[str] = mapped_column(
         String(36), ForeignKey("risks.id"), nullable=False, unique=True
     )
+
+    # Direct association to the risk scenario(s) this plan addresses (Elite Pack,
+    # RFP gap fix: "pas d'association directe du plan à un ou plusieurs scénarios
+    # de risque"). A plan may span more than one scenario chain for the same risk.
+    # Tenant-scoped IDOR-checked on write — see risk_treatment.py's
+    # _assert_scenarios_in_tenant. New column — see
+    # backend/scripts/migrate_add_treatment_scenario_links.py.
+    linked_scenario_ids: Mapped[list] = mapped_column(JSON, default=list)
     treatment_option: Mapped[RiskTreatmentOption] = mapped_column(
         SAEnum(RiskTreatmentOption, values_callable=lambda x: [e.value for e in x]), nullable=False
     )

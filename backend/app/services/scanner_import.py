@@ -7,11 +7,30 @@ Parses vulnerability-scanner exports into ``Vulnerability`` rows:
 Findings are auto-matched to existing assets by IP / hostname where possible,
 deduplicated by ``(ref_id-or-title, asset)`` against both the existing register
 and within the same file, and every run writes a ``ScanJournal`` audit row.
+
+RFP gap fix — auto-add remediation controls: "l'import de scanners ne crée que
+des vulnérabilités" (scanner import only ever created Vulnerability rows, never
+the resulting remediation action). When a finding carries a distinct fix
+recommendation (Nessus <solution>, or a CSV solution/remediation/impact column
+— see ``ParsedFinding.solution``), ``ingest_findings`` now also creates a
+linked ``AppliedControl`` in ``planned`` status referencing the vulnerability
+via ``AppliedControl.vulnerability_ids``. Dedup key: the *normalized*
+remediation text (whitespace-collapsed, lowercased, hashed), stored on
+``AppliedControl.ref_id`` as ``SCAN-REM-<hash>`` — so a re-sync of the same
+scan, or a different scan recommending the identical fix, reuses the existing
+control (appending the new vulnerability id) instead of creating a duplicate.
+This is deliberately the simple version: one control per unique remediation
+text, only for newly-imported (non-deduped) vulnerabilities in this run —
+vulnerabilities skipped as duplicates in this run are not retroactively linked
+to a control (their control, if any, would already exist from whichever
+earlier sync first imported them).
 """
 from __future__ import annotations
 
 import csv
+import hashlib
 import io
+import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 
@@ -19,6 +38,7 @@ from defusedxml.ElementTree import fromstring as safe_xml_fromstring
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.applied_control import AppliedControl, ControlStatus
 from app.models.asset import Asset
 from app.models.scan_journal import (
     ScanJournal,
@@ -27,6 +47,19 @@ from app.models.scan_journal import (
     SCAN_STATUS_RUNNING,
 )
 from app.models.vulnerability import Vulnerability, VulnStatus
+
+_REMEDIATION_KEY_PREFIX = "SCAN-REM-"
+
+
+def _remediation_key(solution: str) -> str:
+    """Stable dedup key for a remediation text: normalize whitespace/case, hash.
+
+    Hashing (rather than storing the raw text) keeps the key short enough for
+    AppliedControl.ref_id (VARCHAR(50)) regardless of how long the scanner's
+    solution text is.
+    """
+    normalized = " ".join(solution.split()).strip().lower()
+    return _REMEDIATION_KEY_PREFIX + hashlib.sha1(normalized.encode("utf-8")).hexdigest()[:16]
 
 
 def _utcnow() -> datetime:
@@ -303,6 +336,21 @@ async def _existing_dedup_keys(db: AsyncSession, tenant_id: str) -> set[tuple[st
     return keys
 
 
+async def _build_control_remediation_index(db: AsyncSession, tenant_id: str) -> dict[str, AppliedControl]:
+    """Map remediation dedup key (AppliedControl.ref_id) -> existing control.
+
+    Only controls this pipeline created (ref_id prefixed SCAN-REM-) — a
+    tenant's manually-created controls are never matched/mutated here.
+    """
+    result = await db.execute(
+        select(AppliedControl).where(
+            AppliedControl.tenant_id == tenant_id,
+            AppliedControl.ref_id.like(f"{_REMEDIATION_KEY_PREFIX}%"),
+        )
+    )
+    return {c.ref_id: c for c in result.scalars().all() if c.ref_id}
+
+
 def _parse_findings(tool: str, filename: str | None, content: bytes) -> list[ParsedFinding]:
     tool_l = (tool or "").strip().lower()
     fname = (filename or "").strip().lower()
@@ -342,6 +390,7 @@ async def ingest_findings(
     try:
         asset_index = await _build_asset_index(db, tenant_id)
         seen = await _existing_dedup_keys(db, tenant_id)
+        control_index = await _build_control_remediation_index(db, tenant_id)
 
         for f in findings:
             asset_id = _match_asset(asset_index, f.host_name, f.host_ip)
@@ -353,9 +402,14 @@ async def ingest_findings(
             if ident:
                 seen.add(key)
 
+            # Generate the id up front (rather than relying on the column
+            # default at flush time) so it's available immediately below to
+            # link the auto-created remediation control.
+            vuln_id = str(uuid.uuid4())
             system_label = f.host_name or f.host_ip
             refs = list(f.references or [])
             vuln = Vulnerability(
+                id=vuln_id,
                 tenant_id=tenant_id,
                 ref_id=f.ref_id,
                 title=f.title,
@@ -374,6 +428,26 @@ async def ingest_findings(
             imported += 1
             if asset_id:
                 matched += 1
+
+            # Auto-add the remediation control this finding calls for (RFP gap
+            # fix — see module docstring for the exact dedup behavior).
+            solution = (f.solution or "").strip()
+            if solution:
+                rkey = _remediation_key(solution)
+                control = control_index.get(rkey)
+                if control is None:
+                    control = AppliedControl(
+                        tenant_id=tenant_id,
+                        ref_id=rkey,
+                        name=("Remediate: " + solution.splitlines()[0].strip())[:500],
+                        description=solution,
+                        status=ControlStatus.PLANNED.value,
+                        vulnerability_ids=[vuln_id],
+                    )
+                    db.add(control)
+                    control_index[rkey] = control
+                elif vuln_id not in (control.vulnerability_ids or []):
+                    control.vulnerability_ids = [*(control.vulnerability_ids or []), vuln_id]
 
         journal.status = SCAN_STATUS_COMPLETED
     except Exception as exc:  # noqa: BLE001 — record, don't leak a 500

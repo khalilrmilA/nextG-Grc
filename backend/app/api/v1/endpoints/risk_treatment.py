@@ -2,14 +2,25 @@
 
 Wires up the previously-unused RiskTreatment model: one treatment decision per
 risk (accept / mitigate / transfer / avoid) with justification, schedule, cost,
-owner and progress, plus an execution-tracking view that flags overdue plans.
-Gated behind require_feature("risk_treatment_plans").
+owner and progress, direct links to the risk scenario(s) it addresses
+(linked_scenario_ids), plus an execution-tracking view — flat (GET /tracking)
+or aggregated by responsible owner (GET /tracking/by-responsible) — that flags
+overdue / at-risk / over-budget plans. Gated behind
+require_feature("risk_treatment_plans").
+
+One-plan-per-risk is still enforced (both the DB's risk_treatments.risk_id
+UNIQUE constraint and the create-or-replace logic in upsert_treatment below).
+The RFP asks for this to be relaxed; it is deliberately NOT done in this pass
+because SQLite can't drop an inline column UNIQUE constraint without a full
+table rebuild, which is too risky to run against a database backing live
+production data — see the RiskTreatment model docstring (app/models/risk.py)
+and the `fix(treatment-refinement)` commit message for the full reasoning.
 """
 from datetime import date
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -37,6 +48,9 @@ class TreatmentIn(BaseModel):
     actual_cost: float | None = None
     transfer_to: str | None = None
     acceptance_justification: str | None = None
+    # RFP gap fix: direct plan -> scenario(s) association. Validated tenant-scoped
+    # (each id must be a RiskScenario belonging to this tenant) in the handler.
+    linked_scenario_ids: list[str] = []
 
 
 class TreatmentPatch(BaseModel):
@@ -50,6 +64,7 @@ class TreatmentPatch(BaseModel):
     actual_cost: float | None = None
     transfer_to: str | None = None
     acceptance_justification: str | None = None
+    linked_scenario_ids: list[str] | None = None
 
 
 class TreatmentOut(BaseModel):
@@ -66,17 +81,28 @@ class TreatmentOut(BaseModel):
     priority: str | None = None
     transfer_to: str | None = None
     acceptance_justification: str | None = None
+    linked_scenario_ids: list[str] = []
     model_config = {"from_attributes": True}
+
+    @field_validator("linked_scenario_ids", mode="before")
+    @classmethod
+    def _default_scenario_list(cls, v):
+        # Rows written before the migration have this column as NULL, not [].
+        return v or []
 
 
 class TrackingRow(BaseModel):
     id: str
     risk_id: str
     treatment_option: RiskTreatmentOption
+    owner_id: str | None = None
     progress_percentage: int
     due_date: str | None = None
+    estimated_cost: float | None = None
+    actual_cost: float | None = None
     overdue: bool
     at_risk: bool
+    over_budget: bool
 
 
 async def _risk_in_tenant(risk_id: str, tenant_id: str, db: AsyncSession) -> Risk:
@@ -86,6 +112,29 @@ async def _risk_in_tenant(risk_id: str, tenant_id: str, db: AsyncSession) -> Ris
     if risk is None:
         raise HTTPException(status_code=404, detail="Risk not found")
     return risk
+
+
+async def _assert_scenarios_in_tenant(scenario_ids: list[str] | None, tenant_id: str, db: AsyncSession) -> None:
+    """Tenant-scoped IDOR check for `linked_scenario_ids`.
+
+    Mirrors `assert_assets_in_tenant` (app/core/security_utils.py, used by
+    vulnerabilities.py's affected_assets) but implemented locally against
+    RiskScenario since risk_treatment.py already imports that model.
+    Pass-through if scenario_ids is falsy (empty list / not provided).
+    """
+    if not scenario_ids:
+        return
+    ids = list(dict.fromkeys(scenario_ids))  # de-dupe, preserve order
+    result = await db.execute(
+        select(RiskScenario.id).where(RiskScenario.id.in_(ids), RiskScenario.tenant_id == tenant_id)
+    )
+    found = {row[0] for row in result.all()}
+    missing = [i for i in ids if i not in found]
+    if missing:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Invalid linked_scenario_ids: unknown scenario id(s) {missing}",
+        )
 
 
 def _require_justification(option: RiskTreatmentOption, justification: str | None) -> None:
@@ -139,9 +188,16 @@ async def upsert_treatment(
     tenant_id: Annotated[str, Depends(get_tenant_id)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
-    """Create or replace the treatment plan for a risk (one per risk)."""
+    """Create or replace the treatment plan for a risk (one per risk).
+
+    NOTE: still enforced as one-per-risk (create-or-replace) at both the DB
+    level (risk_treatments.risk_id UNIQUE) and here — see the deferred
+    constraint-relaxation note on the RiskTreatment model / this session's
+    commit message.
+    """
     risk = await _risk_in_tenant(body.risk_id, tenant_id, db)
     _require_justification(body.treatment_option, body.acceptance_justification)
+    await _assert_scenarios_in_tenant(body.linked_scenario_ids, tenant_id, db)
 
     existing = (await db.execute(
         select(RiskTreatment).where(RiskTreatment.risk_id == body.risk_id)
@@ -179,30 +235,87 @@ async def list_treatments(
     return list((await db.execute(stmt)).scalars().all())
 
 
+def _build_tracking_row(t: RiskTreatment, today: str) -> TrackingRow:
+    """Shared row-shaping for the flat and by-responsible tracking views."""
+    overdue = bool(t.due_date and t.due_date < today and (t.progress_percentage or 0) < 100)
+    at_risk = bool(
+        not overdue and t.due_date and t.due_date <= today and (t.progress_percentage or 0) < 100
+    )
+    over_budget = bool(
+        t.actual_cost is not None and t.estimated_cost is not None and t.actual_cost > t.estimated_cost
+    )
+    return TrackingRow(
+        id=t.id, risk_id=t.risk_id, treatment_option=t.treatment_option, owner_id=t.owner_id,
+        progress_percentage=t.progress_percentage or 0, due_date=t.due_date,
+        estimated_cost=t.estimated_cost, actual_cost=t.actual_cost,
+        overdue=overdue, at_risk=at_risk, over_budget=over_budget,
+    )
+
+
+async def _tenant_treatments(tenant_id: str, db: AsyncSession) -> list[RiskTreatment]:
+    return list((await db.execute(
+        select(RiskTreatment)
+        .join(Risk, Risk.id == RiskTreatment.risk_id)
+        .where(Risk.tenant_id == tenant_id)
+    )).scalars().all())
+
+
 @router.get("/tracking", response_model=list[TrackingRow])
 async def tracking(
     current_user: Annotated[User, Depends(_GATE)],
     tenant_id: Annotated[str, Depends(get_tenant_id)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
-    """Execution tracking: flag overdue (past due, <100%) and at-risk plans."""
-    rows = list((await db.execute(
-        select(RiskTreatment)
-        .join(Risk, Risk.id == RiskTreatment.risk_id)
-        .where(Risk.tenant_id == tenant_id)
-    )).scalars().all())
+    """Execution tracking: flag overdue (past due, <100%), at-risk, and
+    over-budget (actual_cost > estimated_cost) plans."""
+    rows = await _tenant_treatments(tenant_id, db)
     today = date.today().isoformat()
-    out = []
+    return [_build_tracking_row(t, today) for t in rows]
+
+
+class ResponsibleGroupOut(BaseModel):
+    """One responsible owner's slice of the tracking view (RFP gap fix: 'la vue
+    de suivi n'agrege pas par responsable')."""
+    owner_id: str | None = None
+    total: int
+    overdue: int
+    at_risk: int
+    over_budget: int
+    avg_progress: float
+    treatments: list[TrackingRow]
+
+
+@router.get("/tracking/by-responsible", response_model=list[ResponsibleGroupOut])
+async def tracking_by_responsible(
+    current_user: Annotated[User, Depends(_GATE)],
+    tenant_id: Annotated[str, Depends(get_tenant_id)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    """Same execution-tracking data as GET /tracking, aggregated by the treatment
+    plan's owner_id (the RFP's "responsable"). `owner_id=None` groups plans with
+    no owner assigned yet, sorted last. Per-group counts: total, overdue, at-risk,
+    and over-budget (actual_cost > estimated_cost, from this session's earlier
+    actual_cost field)."""
+    rows = await _tenant_treatments(tenant_id, db)
+    today = date.today().isoformat()
+
+    groups: dict[str | None, list[TrackingRow]] = {}
     for t in rows:
-        overdue = bool(t.due_date and t.due_date < today and (t.progress_percentage or 0) < 100)
-        at_risk = bool(
-            not overdue and t.due_date and t.due_date <= today and (t.progress_percentage or 0) < 100
+        groups.setdefault(t.owner_id, []).append(_build_tracking_row(t, today))
+
+    out = [
+        ResponsibleGroupOut(
+            owner_id=owner_id,
+            total=len(items),
+            overdue=sum(1 for i in items if i.overdue),
+            at_risk=sum(1 for i in items if i.at_risk),
+            over_budget=sum(1 for i in items if i.over_budget),
+            avg_progress=round(sum(i.progress_percentage for i in items) / len(items), 1) if items else 0.0,
+            treatments=items,
         )
-        out.append(TrackingRow(
-            id=t.id, risk_id=t.risk_id, treatment_option=t.treatment_option,
-            progress_percentage=t.progress_percentage or 0, due_date=t.due_date,
-            overdue=overdue, at_risk=at_risk,
-        ))
+        for owner_id, items in groups.items()
+    ]
+    out.sort(key=lambda g: (g.owner_id is None, g.owner_id or ""))
     return out
 
 
@@ -225,6 +338,8 @@ async def patch_treatment(
     option = updates.get("treatment_option", treatment.treatment_option)
     justification = updates.get("acceptance_justification", treatment.acceptance_justification)
     _require_justification(option, justification)
+    if "linked_scenario_ids" in updates:
+        await _assert_scenarios_in_tenant(updates["linked_scenario_ids"], tenant_id, db)
     for k, v in updates.items():
         setattr(treatment, k, v)
     # Re-derive priority from the linked risk on every update — its severity may
