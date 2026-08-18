@@ -113,6 +113,7 @@ const ADMIN_ROLES = ["tenant_admin"];
 const CISO_AND_ADMIN = [...ADMIN_ROLES, "ciso"];
 // viewer = full read-only access to all modules — write ops blocked at HTTP client level
 const ROUTE_ROLES: Record<string, string[]> = {
+  "/analytics":           [...CISO_AND_ADMIN, "risk_manager", "compliance_manager", "control_owner", "viewer"],
   "/risks":               [...CISO_AND_ADMIN, "risk_manager", "compliance_manager", "control_owner", "viewer"],
   "/risk-cartography":    [...CISO_AND_ADMIN, "risk_manager", "compliance_manager", "control_owner", "viewer"],
   "/action-plan":         [...CISO_AND_ADMIN, "risk_manager", "compliance_manager", "control_owner", "viewer"],
@@ -195,7 +196,7 @@ export default function App() {
       >
         <Route path="dashboard" element={<DashboardPage />} />
         <Route path="assets" element={<AssetsPage />} />
-        <Route path="analytics" element={<AnalyticsPage />} />
+        <Route path="analytics" element={<RoleRoute path="/analytics"><AnalyticsPage /></RoleRoute>} />
         <Route path="risk-treatment" element={<RiskTreatmentPage />} />
         <Route path="control-effectiveness" element={<ControlEffectivenessPage />} />
         <Route path="governance" element={<GovernancePage />} />
