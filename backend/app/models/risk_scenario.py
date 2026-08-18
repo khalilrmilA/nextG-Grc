@@ -28,6 +28,12 @@ class RiskScenario(Base):
     tenant_id: Mapped[str] = mapped_column(String(36), ForeignKey("tenants.id"), nullable=False, index=True)
     risk_assessment_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)  # parent assessment
 
+    # RFP rule: scenario -> risk-register consolidation. Auto-populated the first
+    # time this scenario is created/edited; never overwritten with a different risk.
+    linked_risk_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("risks.id"), nullable=True, index=True
+    )
+
     # Core info
     name: Mapped[str] = mapped_column(String(500), nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)

@@ -76,6 +76,29 @@ async def _alert_over_appetite(db: AsyncSession, risk: Risk) -> int:
     return created
 
 
+async def _alert_target_over_appetite(db: AsyncSession, risk: Risk) -> int:
+    """RFP rule: a treatment plan's TARGET (post-treatment) score must also clear
+    appetite — a residual score can look fine today while the planned end-state
+    still breaches it. Distinct notification type/message from the residual alert
+    so the two don't get conflated."""
+    created = 0
+    recipients = await get_recipients_for_tenant(db, risk.tenant_id)
+    for user in recipients:
+        if await notification_exists(db, user.id, NotificationType.RISK_TARGET_OVER_APPETITE, risk.id, within_days=7):
+            continue
+        await create_notification(
+            db, user=user, notif_type=NotificationType.RISK_TARGET_OVER_APPETITE,
+            title=f"Target risk still over appetite: {risk.title[:50]}",
+            message=(f"Risk '{risk.title}' has a TARGET score of {risk.target_risk_score} which still "
+                     f"exceeds the appetite threshold of {risk.appetite_threshold} even after the planned "
+                     f"treatment. The treatment plan may need to be strengthened."),
+            entity_id=risk.id, entity_type="risk",
+            link=f"/risks?highlight={risk.id}", severity="high",
+        )
+        created += 1
+    return created
+
+
 class RiskCreate(BaseModel):
     title: str
     description: str | None = None
@@ -112,6 +135,8 @@ class RiskUpdate(BaseModel):
     linked_controls: list[str] | None = None
     next_review_date: str | None = None
     appetite_threshold: float | None = None
+    # RFP rule: required when `status` transitions FROM closed to anything else.
+    reopen_reason: str | None = None
 
 
 class RiskResponse(BaseModel):
@@ -144,6 +169,7 @@ class RiskResponse(BaseModel):
     linked_assets: list
     next_review_date: str | None
     last_reviewed_at: str | None
+    reopen_reason: str | None = None
     created_at: datetime
     updated_at: datetime
 
@@ -168,6 +194,7 @@ def _enrich(risk: Risk, definition: dict, matrix_name: str) -> RiskResponse:
         severity=risk.severity, appetite_threshold=risk.appetite_threshold, over_appetite=risk.over_appetite,
         tags=risk.tags or [], linked_controls=risk.linked_controls or [], linked_assets=risk.linked_assets or [],
         next_review_date=risk.next_review_date, last_reviewed_at=risk.last_reviewed_at,
+        reopen_reason=risk.reopen_reason,
         created_at=risk.created_at, updated_at=risk.updated_at,
     )
 
@@ -269,7 +296,18 @@ async def update_risk(
     if "appetite_threshold" in provided:
         await _assert_feature(db, tenant_id, current_user, "risk_appetite")
 
+    # RFP rule: reopening a closed risk requires an explicit justification. Guard
+    # the transition FROM closed to any other status before anything is mutated.
+    new_status = provided.get("status")
+    if risk.status == RiskStatus.CLOSED and new_status is not None and new_status != RiskStatus.CLOSED:
+        if not (body.reopen_reason and body.reopen_reason.strip()):
+            raise HTTPException(
+                status_code=422,
+                detail="Reopening a closed risk requires a justification (reopen_reason).",
+            )
+
     was_over = risk.over_appetite
+    was_target_over = risk.target_over_appetite
     for field, value in provided.items():
         setattr(risk, field, value)
 
@@ -280,6 +318,9 @@ async def update_risk(
     # Immediate alert when a risk newly breaches its appetite.
     if risk.over_appetite and not was_over:
         await _alert_over_appetite(db, risk)
+    # Distinct alert when the planned TARGET score still breaches appetite.
+    if risk.target_over_appetite and not was_target_over:
+        await _alert_target_over_appetite(db, risk)
 
     definition, matrix_name = await risk_scoring.resolve_matrix(db, tenant_id, risk.risk_matrix_id)
     # Reload server-computed columns (updated_at onupdate) in async context so the
@@ -377,11 +418,14 @@ async def set_risk_appetite(
         raise HTTPException(status_code=404, detail=_RISK_NOT_FOUND)
 
     was_over = risk.over_appetite
+    was_target_over = risk.target_over_appetite
     for field, value in body.model_dump(exclude_none=True).items():
         setattr(risk, field, value)
     definition, matrix_name = await _apply_scoring(db, tenant_id, risk)
     if risk.over_appetite and not was_over:
         await _alert_over_appetite(db, risk)
+    if risk.target_over_appetite and not was_target_over:
+        await _alert_target_over_appetite(db, risk)
     await db.flush()
     # Reload server-computed columns (updated_at onupdate) before the sync _enrich.
     await db.refresh(risk)

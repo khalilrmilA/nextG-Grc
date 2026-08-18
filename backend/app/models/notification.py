@@ -12,6 +12,7 @@ class NotificationType(str, enum.Enum):
     RISK_OVERDUE = "risk_overdue"
     RISK_STATUS_CHANGED = "risk_status_changed"
     RISK_OVER_APPETITE = "risk_over_appetite"
+    RISK_TARGET_OVER_APPETITE = "risk_target_over_appetite"
     # Audit events
     AUDIT_ASSIGNED = "audit_assigned"
     AUDIT_DUE = "audit_due"
@@ -34,6 +35,18 @@ class NotificationType(str, enum.Enum):
     # Share link events
     SHARE_LINK_VIEWED = "share_link_viewed"
     SHARE_LINK_UPLOAD = "share_link_upload"
+    # Governance events
+    RACI_RESPONSIBLE_CHANGED = "raci_responsible_changed"
+    # Compliance action items
+    COMPLIANCE_ACTION_OVERDUE = "compliance_action_overdue"
+    # Threat events
+    THREAT_CRITICAL = "threat_critical"
+    # Asset events
+    ASSET_EOL = "asset_eol"
+    # Applied control events
+    CONTROL_EXPIRED = "control_expired"
+    # Auth / security events
+    NEW_DEVICE_LOGIN = "new_device_login"
     # General
     WEEKLY_DIGEST = "weekly_digest"
     SYSTEM = "system"

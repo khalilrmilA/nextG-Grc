@@ -16,6 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_db
 from app.models.user import User
 from app.models.risk import Risk, RiskTreatment, RiskTreatmentOption
+from app.models.risk_scenario import RiskScenario, ScenarioTreatment
 from app.api.v1.dependencies.auth import get_tenant_id
 from app.api.v1.dependencies.features import require_feature
 
@@ -84,8 +85,13 @@ async def _risk_in_tenant(risk_id: str, tenant_id: str, db: AsyncSession) -> Ris
 
 
 def _require_justification(option: RiskTreatmentOption, justification: str | None) -> None:
-    if option == RiskTreatmentOption.ACCEPT and not (justification and justification.strip()):
-        raise HTTPException(status_code=422, detail="Acceptance requires a justification.")
+    """RFP rule: "une justification est requise pour chaque décision" — every
+    treatment option (mitigate/accept/transfer/avoid), not just acceptance."""
+    if not (justification and justification.strip()):
+        raise HTTPException(
+            status_code=422,
+            detail=f"A justification is required for treatment option '{option.value}'.",
+        )
 
 
 @router.post("", response_model=TreatmentOut, status_code=status.HTTP_201_CREATED)
@@ -184,3 +190,38 @@ async def patch_treatment(
     await db.commit()
     await db.refresh(treatment)
     return treatment
+
+
+class UntreatedScenarioOut(BaseModel):
+    id: str
+    name: str
+    current_probability: int | None = None
+    current_impact: int | None = None
+    current_risk_level: str | None = None
+    owner_id: str | None = None
+    model_config = {"from_attributes": True}
+
+
+@router.get("/untreated", response_model=list[UntreatedScenarioOut])
+async def untreated_evaluated_scenarios(
+    current_user: Annotated[User, Depends(_GATE)],
+    tenant_id: Annotated[str, Depends(get_tenant_id)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    """RFP rule: "le choix d'une option n'est pas rendu obligatoire pour tout risque
+    évalué" — surface risk scenarios still at the default `untreated` state that
+    have actually been evaluated (probability + impact both set), so the gap is
+    visible/actionable instead of silently sitting on default data.
+
+    Deliberately NOT a blocking DB constraint: many existing scenarios are already
+    `untreated` and a hard requirement would break them retroactively.
+    """
+    rows = (await db.execute(
+        select(RiskScenario).where(
+            RiskScenario.tenant_id == tenant_id,
+            RiskScenario.treatment == ScenarioTreatment.UNTREATED.value,
+            RiskScenario.current_probability.isnot(None),
+            RiskScenario.current_impact.isnot(None),
+        ).order_by(RiskScenario.created_at.desc())
+    )).scalars().all()
+    return rows

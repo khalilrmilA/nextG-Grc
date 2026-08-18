@@ -100,6 +100,22 @@ class Risk(Base):
             return None
         return score > self.appetite_threshold
 
+    @property
+    def target_over_appetite(self) -> bool | None:
+        """RFP rule: the TARGET (post-treatment-plan) score must also clear appetite.
+
+        A residual score can look fine today while the *planned* end-state still
+        breaches appetite — this flags that case separately from `over_appetite`.
+        """
+        if self.appetite_threshold is None or self.target_risk_score is None:
+            return None
+        return self.target_risk_score > self.appetite_threshold
+
+    # Reopen justification (RFP rule): required when a closed risk transitions back
+    # to any other status. Persisted on the row since there is no per-request hook
+    # into the activity-log middleware to carry structured before/after detail.
+    reopen_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+
     # Linked framework controls
     linked_controls: Mapped[list] = mapped_column(JSON, default=list)
 
