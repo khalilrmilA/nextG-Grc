@@ -36,6 +36,7 @@ class ScenarioCreate(BaseModel):
     estimated_loss_likely: float | None = None; justification: str | None = None
     existing_controls_description: str | None = None; tags: list[str] = []
     appetite_threshold: float | None = None
+    next_review_date: str | None = None
 
 class ScenarioUpdate(BaseModel):
     name: str | None = None; description: str | None = None; treatment: str | None = None
@@ -49,6 +50,7 @@ class ScenarioUpdate(BaseModel):
     justification: str | None = None; existing_controls_description: str | None = None
     tags: list[str] | None = None
     appetite_threshold: float | None = None
+    next_review_date: str | None = None
 
 class ScenarioOut(BaseModel):
     id: str; tenant_id: str; name: str; description: str | None; treatment: str
@@ -61,6 +63,7 @@ class ScenarioOut(BaseModel):
     justification: str | None; owner_id: str | None; tags: list
     linked_risk_id: str | None = None
     appetite_threshold: float | None = None
+    next_review_date: str | None = None
     created_at: datetime; updated_at: datetime
     model_config = {"from_attributes": True}
 
@@ -185,6 +188,7 @@ async def create_scenario(body: ScenarioCreate, db: AsyncSession = Depends(get_d
         estimated_loss_max=body.estimated_loss_max, estimated_loss_likely=body.estimated_loss_likely,
         justification=body.justification, existing_controls_description=body.existing_controls_description,
         tags=body.tags, appetite_threshold=body.appetite_threshold,
+        next_review_date=body.next_review_date,
     )
     db.add(s); await db.flush()
 
@@ -231,7 +235,7 @@ async def update_scenario(sid: str, body: ScenarioUpdate, db: AsyncSession = Dep
     for f in ["name","description","treatment","threat_ids","vulnerability_ids","asset_ids","applied_control_ids",
               "current_probability","current_impact","target_probability","target_impact","strength_of_knowledge",
               "threat_actor","owner_id","estimated_loss_min","estimated_loss_max","estimated_loss_likely",
-              "justification","existing_controls_description","tags","appetite_threshold"]:
+              "justification","existing_controls_description","tags","appetite_threshold","next_review_date"]:
         v = getattr(body, f, None)
         if v is not None: setattr(s, f, v)
     definition, _ = await risk_scoring.resolve_matrix(db, tenant_id)

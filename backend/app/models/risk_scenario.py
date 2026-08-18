@@ -82,3 +82,11 @@ class RiskScenario(Base):
     # tighter bar than the consolidated risk. Gated behind the same "risk_appetite"
     # feature flag as the risk-register version (see risk_scenarios.py).
     appetite_threshold: Mapped[float | None] = mapped_column(Float, nullable=True)
+
+    # RFP gap fix: "la revue annuelle des scenarios n'est pas outillee" — only Risk
+    # had next_review_date + review-deadline notifications. Mirrors Risk.next_review_date
+    # (ISO date string) so a scenario can carry its own review schedule independent of
+    # its linked Risk's. New column on an existing table — see
+    # scripts/migrate_add_scenario_review_date.py. Alerting: see
+    # check_scenario_review_deadlines() in notification_generator.py.
+    next_review_date: Mapped[str | None] = mapped_column(String(20), nullable=True)

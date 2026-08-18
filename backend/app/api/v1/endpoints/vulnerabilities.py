@@ -29,6 +29,7 @@ from app.models.vulnerability import (
     compute_impact_score,
     resolve_context_weight,
 )
+from app.models.vulnerability_impact_history import VulnerabilityImpactHistory
 
 router = APIRouter()
 
@@ -137,6 +138,16 @@ class VulnOut(BaseModel):
 class VulnStats(BaseModel):
     total: int; open: int; in_remediation: int; mitigated: int; closed: int
     by_severity: dict[str, int]; avg_cvss: float | None
+
+
+class ImpactHistoryOut(BaseModel):
+    """A single before/after snapshot of a vulnerability's impact score (RFP gap
+    fix: the prior audit trail kept only the latest score, not the successive
+    values)."""
+    id: str; vulnerability_id: str; score: float; override: bool
+    context_weight: float | None; justification: str | None
+    changed_by_id: str | None; created_at: datetime
+    model_config = {"from_attributes": True}
 
 
 @router.get("", response_model=list[VulnOut])
@@ -255,6 +266,12 @@ async def score_impact(
         v.impact_override = round(max(0.0, min(100.0, float(body.override))), 1)
         v.impact_justification = body.justification.strip()
         v.impact_score = v.impact_override
+        # RFP gap fix: persist a before/after history row, not just the latest value.
+        db.add(VulnerabilityImpactHistory(
+            vulnerability_id=v.id, score=v.impact_score, override=True,
+            context_weight=None, justification=v.impact_justification,
+            changed_by_id=current_user.id,
+        ))
         await db.commit(); await db.refresh(v)
         return VulnOut.model_validate(v)
 
@@ -278,8 +295,40 @@ async def score_impact(
     v.impact_override = None  # recompute clears any prior manual override
     if body.justification and body.justification.strip():
         v.impact_justification = body.justification.strip()
+    # RFP gap fix: persist a before/after history row, not just the latest value.
+    db.add(VulnerabilityImpactHistory(
+        vulnerability_id=v.id, score=v.impact_score, override=False,
+        context_weight=weight, justification=v.impact_justification,
+        changed_by_id=current_user.id,
+    ))
     await db.commit(); await db.refresh(v)
     return VulnOut.model_validate(v)
+
+@router.get("/{vid}/impact-history", response_model=list[ImpactHistoryOut])
+async def get_impact_history(
+    vid: str,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    _: Annotated[User, Depends(get_current_user)],
+    tenant_id: Annotated[str, Depends(get_tenant_id)],
+):
+    """Ordered (newest-first) before/after impact-score history for a vulnerability.
+
+    Tenant-scoped through the parent Vulnerability row rather than trusting a bare
+    vulnerability_id — a 404 here means either the vulnerability doesn't exist or
+    doesn't belong to this tenant, so history for another tenant's vulnerability
+    can never leak.
+    """
+    v = (await db.execute(
+        select(Vulnerability).where(Vulnerability.id == vid, Vulnerability.tenant_id == tenant_id)
+    )).scalar_one_or_none()
+    if not v:
+        raise HTTPException(404, "Vulnerability not found")
+    rows = (await db.execute(
+        select(VulnerabilityImpactHistory)
+        .where(VulnerabilityImpactHistory.vulnerability_id == vid)
+        .order_by(VulnerabilityImpactHistory.created_at.desc())
+    )).scalars().all()
+    return [ImpactHistoryOut.model_validate(r) for r in rows]
 
 @router.delete("/{vid}", status_code=204)
 async def delete_vuln(vid: str, db: AsyncSession = Depends(get_db), _: User = Depends(get_current_user), tenant_id: str = Depends(get_tenant_id)):

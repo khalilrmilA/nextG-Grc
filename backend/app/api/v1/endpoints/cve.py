@@ -52,6 +52,7 @@ async def search_cve(
     q: str | None = None,
     min_cvss: float | None = None,
     cwe: str | None = None,
+    vector: str | None = None,
     published_after: datetime | None = None,
     relevance: str | None = None,
     page: int = Query(1, ge=1),
@@ -66,6 +67,11 @@ async def search_cve(
     if cwe:
         # JSON list stored as text; cast + ILIKE works on both SQLite and Postgres.
         stmt = stmt.where(cast(CveEntry.cwe_ids, String).ilike(f"%{cwe}%"))
+    if vector:
+        # RFP gap fix: no attack-vector filter existed even though cvss_vector is
+        # stored (e.g. "CVSS:3.1/AV:N/AC:L/..."). Substring match on a fragment
+        # like "AV:N" is the practical filter shape for a free-text vector string.
+        stmt = stmt.where(CveEntry.cvss_vector.ilike(f"%{vector}%"))
     if published_after is not None:
         stmt = stmt.where(CveEntry.published_at >= published_after)
     # Newest-published first so the catalog surfaces the latest CVEs, not decade-old

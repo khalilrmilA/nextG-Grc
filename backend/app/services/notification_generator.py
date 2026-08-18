@@ -15,6 +15,12 @@ Handles:
 - Risk treatment plan budget overrun (actual_cost > estimated_cost)
 - Asset periodic review deadlines (14/7/0 day window + overdue, mirrors
   check_risk_review_deadlines)
+- Risk scenario periodic review deadlines (14/7/0 day window + overdue, mirrors
+  check_risk_review_deadlines; RFP gap fix — scenarios had no next_review_date /
+  alerting of their own before)
+- Audit finding (recommendation) deadlines within 7 days or overdue, for OPEN/
+  IN_REMEDIATION findings (RFP gap fix — "pas de notification sur les
+  échéances critiques des recommandations")
 """
 import json
 from datetime import datetime, timedelta
@@ -31,6 +37,8 @@ from app.models.action_item import ActionItem, ActionItemStatus
 from app.models.asset import Asset
 from app.models.applied_control import AppliedControl
 from app.models.login_event import LoginEvent
+from app.models.risk_scenario import RiskScenario
+from app.models.audit import Audit, AuditFinding, FindingStatus
 
 
 async def get_recipients_for_tenant(db: AsyncSession, tenant_id: str) -> list[User]:
@@ -756,6 +764,87 @@ async def check_asset_review_deadlines(db: AsyncSession) -> int:
     return created
 
 
+async def check_scenario_review_deadlines(db: AsyncSession) -> int:
+    """RFP gap fix: "la revue annuelle des scenarios n'est pas outillee (pas de
+    date de prochaine revue ni d'alerte associee — seuls les risques ont
+    next_review_date et notifications)." Mirrors check_risk_review_deadlines's
+    day-window logic exactly (14/7/0 days, capped at 30 days overdue) applied to
+    RiskScenario.next_review_date instead of Risk.next_review_date.
+
+    Uses NotificationType.SYSTEM rather than a dedicated SCENARIO_REVIEW_DUE
+    member: adding a new NotificationType means editing app/models/notification.py,
+    which is being touched concurrently by other work in this same tree. The
+    notification's `data.entity_id`/`entity_type` (risk_scenario) still fully
+    disambiguate these from any other SYSTEM notification for dedup + routing.
+    """
+    created = 0
+    today = datetime.utcnow().date()
+
+    result = await db.execute(
+        select(RiskScenario).where(RiskScenario.next_review_date.isnot(None))
+    )
+    scenarios = result.scalars().all()
+
+    for scenario in scenarios:
+        if not scenario.next_review_date:
+            continue
+        try:
+            review_date = datetime.fromisoformat(scenario.next_review_date).date()
+        except (ValueError, TypeError):
+            continue
+
+        days_remaining = (review_date - today).days
+
+        # Trigger at 14, 7, 0 days, and if overdue (cap at 30 days overdue)
+        if days_remaining > 14 or days_remaining < -30:
+            continue
+
+        if days_remaining < 0:
+            severity = "critical"
+            title = f"Scenario review OVERDUE: {scenario.name[:50]}"
+            message = f"Risk scenario '{scenario.name}' review is overdue by {abs(days_remaining)} days."
+        elif days_remaining == 0:
+            severity = "high"
+            title = f"Scenario review due TODAY: {scenario.name[:50]}"
+            message = f"Risk scenario '{scenario.name}' needs to be reviewed today."
+        elif days_remaining <= 7:
+            severity = "medium"
+            title = f"Scenario review due in {days_remaining} days"
+            message = f"Risk scenario '{scenario.name}' needs review within {days_remaining} days."
+        else:
+            severity = "info"
+            title = f"Upcoming scenario review in {days_remaining} days"
+            message = f"Risk scenario '{scenario.name}' scheduled for review in {days_remaining} days."
+
+        recipients: dict[str, User] = {}
+        if scenario.owner_id:
+            owner_result = await db.execute(
+                select(User).where(User.id == scenario.owner_id, User.is_active == True)  # noqa: E712
+            )
+            owner = owner_result.scalar_one_or_none()
+            if owner:
+                recipients[owner.id] = owner
+        for user in await get_recipients_for_tenant(db, scenario.tenant_id):
+            recipients[user.id] = user
+
+        for user in recipients.values():
+            if not await notification_exists(db, user.id, NotificationType.SYSTEM, scenario.id, within_days=3):
+                await create_notification(
+                    db,
+                    user=user,
+                    notif_type=NotificationType.SYSTEM,
+                    title=title,
+                    message=message,
+                    entity_id=scenario.id,
+                    entity_type="risk_scenario",
+                    link=f"/risk-scenarios?highlight={scenario.id}",
+                    severity=severity,
+                )
+                created += 1
+
+    return created
+
+
 async def check_control_expiration(db: AsyncSession) -> int:
     """Notify the control owner + CISO/admins about AppliedControl rows nearing or past
     their expiration date (30-day warning window, matching the vendor/risk check style).
@@ -909,6 +998,83 @@ async def check_new_device_login(
     return True
 
 
+async def check_finding_deadlines(db: AsyncSession) -> int:
+    """RFP gap fix: "Pas de notification sur les échéances critiques des
+    recommandations" — alert on audit finding (recommendation) deadlines
+    within 7 days or overdue, for findings that are still OPEN or
+    IN_REMEDIATION. Query shape mirrors GET /audits/findings/overdue
+    (audits.py) — join AuditFinding to its parent Audit for tenant scoping —
+    but this check fires proactively within a 7-day window too, not only once
+    a finding is already overdue, and caps at 30 days overdue like the other
+    periodic deadline checks in this file (check_risk_review_deadlines,
+    check_asset_review_deadlines).
+    """
+    created = 0
+    today = datetime.utcnow().date()
+
+    result = await db.execute(
+        select(AuditFinding, Audit)
+        .join(Audit, Audit.id == AuditFinding.audit_id)
+        .where(
+            AuditFinding.due_date.isnot(None),
+            AuditFinding.due_date != "",
+            AuditFinding.status.in_([FindingStatus.OPEN, FindingStatus.IN_REMEDIATION]),
+        )
+    )
+
+    for finding, audit in result.all():
+        try:
+            due = datetime.fromisoformat(finding.due_date).date()
+        except (ValueError, TypeError):
+            continue
+
+        days_remaining = (due - today).days
+        # Trigger within 7 days, and if overdue (cap at 30 days overdue like the other checks)
+        if days_remaining > 7 or days_remaining < -30:
+            continue
+
+        if days_remaining < 0:
+            severity = "critical"
+            title = f"Recommendation OVERDUE: {finding.title[:50]}"
+            message = f"The recommendation '{finding.title}' from audit '{audit.title}' is overdue by {abs(days_remaining)} days."
+        elif days_remaining == 0:
+            severity = "high"
+            title = f"Recommendation due TODAY: {finding.title[:50]}"
+            message = f"The recommendation '{finding.title}' from audit '{audit.title}' is due today."
+        else:
+            severity = "medium"
+            title = f"Recommendation due in {days_remaining} days: {finding.title[:50]}"
+            message = f"The recommendation '{finding.title}' from audit '{audit.title}' needs to be addressed within {days_remaining} day(s)."
+
+        recipients: dict[str, User] = {}
+        if finding.remediation_owner_id:
+            owner_result = await db.execute(
+                select(User).where(User.id == finding.remediation_owner_id, User.is_active == True)  # noqa: E712
+            )
+            owner = owner_result.scalar_one_or_none()
+            if owner:
+                recipients[owner.id] = owner
+        for user in await get_recipients_for_tenant(db, audit.tenant_id):
+            recipients[user.id] = user
+
+        for user in recipients.values():
+            if not await notification_exists(db, user.id, NotificationType.AUDIT_FINDING_DEADLINE, finding.id, within_days=3):
+                await create_notification(
+                    db,
+                    user=user,
+                    notif_type=NotificationType.AUDIT_FINDING_DEADLINE,
+                    title=title,
+                    message=message,
+                    entity_id=finding.id,
+                    entity_type="audit_finding",
+                    link=f"/audits?highlight={audit.id}",
+                    severity=severity,
+                )
+                created += 1
+
+    return created
+
+
 async def run_all_checks(db: AsyncSession) -> dict:
     """Run all notification checks and return a summary."""
     results = {
@@ -924,6 +1090,8 @@ async def run_all_checks(db: AsyncSession) -> dict:
         "treatment_overdue": 0,
         "treatment_budget_overrun": 0,
         "asset_review_deadlines": 0,
+        "scenario_review_deadlines": 0,
+        "finding_deadlines": 0,
     }
 
     try:
@@ -985,6 +1153,16 @@ async def run_all_checks(db: AsyncSession) -> dict:
         results["asset_review_deadlines"] = await check_asset_review_deadlines(db)
     except Exception as e:
         print(f"Asset review deadline check failed: {e}")
+
+    try:
+        results["scenario_review_deadlines"] = await check_scenario_review_deadlines(db)
+    except Exception as e:
+        print(f"Scenario review deadline check failed: {e}")
+
+    try:
+        results["finding_deadlines"] = await check_finding_deadlines(db)
+    except Exception as e:
+        print(f"Finding deadline check failed: {e}")
 
     await db.commit()
     results["total"] = sum(results.values())

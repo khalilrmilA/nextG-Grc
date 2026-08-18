@@ -23,6 +23,7 @@ from app.models.incident_timeline import IncidentTimelineEntry
 from app.models.regulatory_update import RegulatoryUpdate
 from app.models.threat import Threat
 from app.models.vulnerability import Vulnerability
+from app.models.vulnerability_impact_history import VulnerabilityImpactHistory
 from app.models.risk_scenario import RiskScenario
 from app.models.applied_control import AppliedControl
 from app.models.security_exception import SecurityException, RiskAcceptance
@@ -45,7 +46,7 @@ from app.models.asset_history import AssetValuationHistory
 from app.models.scan_journal import ScanJournal
 from app.models.report_builder import ReportTemplate
 from app.models.governance import RaciAssignment, GovernanceDocument, GovernanceDocumentVersion
-from app.models.archive import ArchiveRecord
+from app.models.archive import ArchiveRecord, ArchivingRule
 from app.models.scenario_version import RiskScenarioVersion
 from app.models.scanner_connector import ScannerConnector
 from app.models.report_schedule import ReportSchedule, ReportFrequency
@@ -67,7 +68,7 @@ __all__ = [
     "ActivityLog",
     "Incident", "IncidentTimelineEntry",
     "RegulatoryUpdate",
-    "Threat", "Vulnerability", "RiskScenario",
+    "Threat", "Vulnerability", "VulnerabilityImpactHistory", "RiskScenario",
     "AppliedControl", "SecurityException", "RiskAcceptance", "RiskMatrix", "RiskCartography",
     "Subscription", "SubscriptionTier",
     "Notification", "NotificationPreference", "NotificationType",
@@ -80,7 +81,7 @@ __all__ = [
     "AssetValuationHistory", "ScanJournal",
     "ReportTemplate",
     "RaciAssignment", "GovernanceDocument", "GovernanceDocumentVersion",
-    "ArchiveRecord",
+    "ArchiveRecord", "ArchivingRule",
     "RiskScenarioVersion",
     "ScannerConnector",
     "ReportSchedule", "ReportFrequency",

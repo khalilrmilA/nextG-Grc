@@ -17,6 +17,7 @@ from app.core.database import get_db
 from app.models.user import User
 from app.models.asset import Asset
 from app.models.vulnerability import Vulnerability
+from app.models.cve_entry import CveEntry, CveAnnotation
 from app.models.threat import Threat
 from app.models.risk import Risk
 from app.models.applied_control import AppliedControl
@@ -89,6 +90,40 @@ async def assets_dashboard(
     }
 
 
+async def _cve_summary(db: AsyncSession, tenant_id: str, top_n: int = 5) -> dict:
+    """Pertinent-CVE rollup for the vulnerabilities dashboard (RFP gap fix — CVEs
+    weren't surfaced in any dashboard: dashboards.py referenced no CVE entity).
+
+    Joins CveAnnotation (per-tenant relevance triage) to the global CveEntry
+    catalog, keeping only entries this tenant has marked "pertinent", and returns
+    a count plus the top few by CVSS score. Defensive like every other tile here —
+    an empty/degraded result on failure rather than a 500 for the whole dashboard.
+    """
+    try:
+        result = await db.execute(
+            select(CveEntry)
+            .join(CveAnnotation, CveAnnotation.cve_id == CveEntry.cve_id)
+            .where(CveAnnotation.tenant_id == tenant_id, CveAnnotation.relevance == "pertinent")
+        )
+        entries = result.scalars().all()
+    except Exception:
+        return {"pertinent_count": 0, "top": []}
+
+    top_entries = sorted(entries, key=lambda e: (e.cvss_score or 0.0), reverse=True)[:top_n]
+    return {
+        "pertinent_count": len(entries),
+        "top": [
+            {
+                "cve_id": e.cve_id,
+                "cvss_score": e.cvss_score,
+                "cvss_vector": e.cvss_vector,
+                "description": (e.description or "")[:200],
+            }
+            for e in top_entries
+        ],
+    }
+
+
 @router.get("/vulnerabilities")
 async def vulnerabilities_dashboard(
     current_user: Annotated[User, _Gate],
@@ -100,6 +135,7 @@ async def vulnerabilities_dashboard(
         "by_severity": await _count_by(db, Vulnerability, Vulnerability.severity, tenant_id),
         "by_status": await _count_by(db, Vulnerability, Vulnerability.status, tenant_id),
         "avg_cvss": await _agg(db, Vulnerability, func.avg(Vulnerability.cvss_score), tenant_id),
+        "cve": await _cve_summary(db, tenant_id),
     }
 
 
