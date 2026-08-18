@@ -436,6 +436,63 @@ async def generate_audit_report(db: AsyncSession, tenant_id: str, org: str) -> b
     return buf.getvalue()
 
 
+async def generate_single_audit_report(db: AsyncSession, audit: Audit, org: str) -> bytes:
+    """Per-engagement audit report (distinct from the tenant-wide ``generate_audit_report``
+    aggregate above). Used by ``POST /audits/{id}/report/generate`` so a specific audit's
+    report can be persisted to ``Audit.report_url`` and then routed through the
+    report-approval workflow before distribution.
+    """
+    buf = BytesIO()
+    doc = SimpleDocTemplate(buf, pagesize=A4, leftMargin=0.6*inch, rightMargin=0.6*inch, topMargin=0.5*inch, bottomMargin=0.5*inch)
+    st = _styles()
+    els = []
+    start = audit.actual_start or audit.planned_start or audit.created_at.strftime("%d %b %Y") if audit.created_at else "—"
+    end = audit.actual_end or audit.planned_end or datetime.utcnow().strftime("%d %b %Y")
+    els.extend(_header(st, org, f"Audit Report — {audit.title}", start, end))
+
+    findings = list((await db.execute(select(AuditFinding).where(AuditFinding.audit_id == audit.id))).scalars().all())
+    crit_f = len([f for f in findings if f.severity == "critical"])
+    high_f = len([f for f in findings if f.severity == "high"])
+    open_f = len([f for f in findings if f.status in ("open", "in_remediation")])
+
+    atype = getattr(audit, "audit_type", None)
+    atype = atype.value if hasattr(atype, "value") else str(atype or "—")
+    astatus = getattr(audit, "status", None)
+    astatus = astatus.value if hasattr(astatus, "value") else str(astatus or "—")
+
+    els.append(_kpi_bar([
+        {"value": atype.title(), "label": "Audit Type"},
+        {"value": astatus.replace("_", " ").title(), "label": "Status"},
+        {"value": len(findings), "label": "Findings"},
+        {"value": crit_f + high_f, "label": "High / Critical"},
+        {"value": open_f, "label": "Open"},
+    ]))
+
+    if audit.scope:
+        els.append(_section(st, "Scope"))
+        els.append(Paragraph(audit.scope, st["Body"]))
+
+    if audit.executive_summary:
+        els.append(_section(st, "Executive Summary"))
+        els.append(Paragraph(audit.executive_summary, st["Body"]))
+
+    els.append(_section(st, "Findings"))
+    f_rows = []
+    for f in sorted(findings, key=lambda f: {"critical": 0, "high": 1, "medium": 2, "low": 3, "observation": 4}.get(str(f.severity.value if hasattr(f.severity, "value") else f.severity), 5)):
+        sev = f.severity.value if hasattr(f.severity, "value") else str(f.severity)
+        stat = f.status.value if hasattr(f.status, "value") else str(f.status)
+        f_rows.append([(f.title or "—")[:50], sev.title(), stat.replace("_", " ").title(), f.due_date or "—"])
+    els.append(_table(["Finding", "Severity", "Status", "Due"], f_rows, [PAGE_W * 0.45, PAGE_W * 0.18, PAGE_W * 0.22, PAGE_W * 0.15]))
+
+    if audit.report_approved_at:
+        els.append(_section(st, "Approval"))
+        els.append(Paragraph(f"Report approved on {audit.report_approved_at}.", st["Body"]))
+
+    els.append(_footer())
+    doc.build(els)
+    return buf.getvalue()
+
+
 # ── Dispatcher ────────────────────────────────────────────────────────────
 
 REPORT_GENERATORS = {

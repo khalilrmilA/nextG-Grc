@@ -47,6 +47,20 @@ class Policy(Base):
     review_frequency_months: Mapped[int] = mapped_column(Integer, default=12)
     next_review_date: Mapped[str | None] = mapped_column(String(20), nullable=True)
 
+    # Governance lifecycle dates (RFP gap: "date de mise en vigueur" / "date d'expiration"
+    # distinct from the review cycle). ISO date strings, matching this codebase's
+    # date-as-string convention (see next_review_date above, Risk.next_review_date, etc).
+    effective_date: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    expiration_date: Mapped[str | None] = mapped_column(String(20), nullable=True)
+
+    # Structured linkage to the org model (RFP gap: policy -> process/entity/department).
+    business_process_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("business_processes.id"), nullable=True
+    )
+    org_entity_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("org_entities.id"), nullable=True
+    )
+
     # Relationships
     tenant: Mapped["Tenant"] = relationship("Tenant", back_populates="policies")
     versions: Mapped[list["PolicyVersion"]] = relationship(

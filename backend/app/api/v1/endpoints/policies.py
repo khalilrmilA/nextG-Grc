@@ -12,6 +12,7 @@ from app.core.security_utils import assert_user_in_tenant
 from app.api.v1.dependencies.auth import get_current_user, get_tenant_id
 from app.models.user import User
 from app.models.policy import Policy, PolicyVersion, PolicyAttestation, PolicyStatus, AttestationStatus
+from app.models.org_unit import OrgEntity, BusinessProcess
 
 router = APIRouter()
 
@@ -28,6 +29,10 @@ class PolicyCreate(BaseModel):
     linked_controls: list[str] = []
     review_frequency_months: int = 12
     next_review_date: str | None = None
+    effective_date: str | None = None
+    expiration_date: str | None = None
+    business_process_id: str | None = None
+    org_entity_id: str | None = None
     content: str | None = None  # initial version content
 
 class PolicyUpdate(BaseModel):
@@ -39,12 +44,19 @@ class PolicyUpdate(BaseModel):
     linked_controls: list[str] | None = None
     review_frequency_months: int | None = None
     next_review_date: str | None = None
+    effective_date: str | None = None
+    expiration_date: str | None = None
+    business_process_id: str | None = None
+    org_entity_id: str | None = None
 
 class PolicyOut(BaseModel):
     id: str; tenant_id: str; title: str; policy_number: str | None
     description: str | None; category: str | None; owner_id: str | None
     status: str; linked_controls: list; review_frequency_months: int
-    next_review_date: str | None; version_count: int = 0
+    next_review_date: str | None
+    effective_date: str | None = None; expiration_date: str | None = None
+    business_process_id: str | None = None; org_entity_id: str | None = None
+    version_count: int = 0
     attestation_count: int = 0; pending_attestations: int = 0
     created_at: datetime; updated_at: datetime
     model_config = {"from_attributes": True}
@@ -79,6 +91,20 @@ async def _policy(db, pid, tid):
     if not p: raise HTTPException(404, "Policy not found")
     return p
 
+async def _assert_process_in_tenant(db, process_id, tenant_id):
+    """Close cross-tenant IDOR on attacker-supplied business_process_id (mirrors assert_user_in_tenant)."""
+    if not process_id: return
+    r = await db.execute(select(BusinessProcess.id).where(BusinessProcess.id == process_id, BusinessProcess.tenant_id == tenant_id))
+    if r.scalar_one_or_none() is None:
+        raise HTTPException(400, "Invalid business_process_id: not in this tenant")
+
+async def _assert_entity_in_tenant(db, entity_id, tenant_id):
+    """Close cross-tenant IDOR on attacker-supplied org_entity_id (mirrors assert_user_in_tenant)."""
+    if not entity_id: return
+    r = await db.execute(select(OrgEntity.id).where(OrgEntity.id == entity_id, OrgEntity.tenant_id == tenant_id))
+    if r.scalar_one_or_none() is None:
+        raise HTTPException(400, "Invalid org_entity_id: not in this tenant")
+
 async def _enrich(db, policy):
     vc = (await db.execute(select(func.count(PolicyVersion.id)).where(PolicyVersion.policy_id == policy.id))).scalar() or 0
     ac = (await db.execute(select(func.count(PolicyAttestation.id)).where(PolicyAttestation.policy_id == policy.id))).scalar() or 0
@@ -98,11 +124,15 @@ async def list_policies(db: AsyncSession = Depends(get_db), _: User = Depends(ge
 @router.post("", response_model=PolicyOut, status_code=201)
 async def create_policy(body: PolicyCreate, db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user), tenant_id: str = Depends(get_tenant_id)):
     await assert_user_in_tenant(db, body.owner_id, tenant_id, field_name="owner_id")
+    await _assert_process_in_tenant(db, body.business_process_id, tenant_id)
+    await _assert_entity_in_tenant(db, body.org_entity_id, tenant_id)
     p = Policy(tenant_id=tenant_id, title=body.title, description=body.description,
                category=body.category, policy_number=body.policy_number,
                owner_id=body.owner_id or user.id, linked_controls=body.linked_controls,
                review_frequency_months=body.review_frequency_months,
-               next_review_date=body.next_review_date)
+               next_review_date=body.next_review_date,
+               effective_date=body.effective_date, expiration_date=body.expiration_date,
+               business_process_id=body.business_process_id, org_entity_id=body.org_entity_id)
     if body.status:
         p.status = PolicyStatus(body.status)
     db.add(p); await db.flush()
@@ -122,7 +152,10 @@ async def get_policy(pid: str, db: AsyncSession = Depends(get_db), _: User = Dep
 async def update_policy(pid: str, body: PolicyUpdate, db: AsyncSession = Depends(get_db), _: User = Depends(get_current_user), tenant_id: str = Depends(get_tenant_id)):
     p = await _policy(db, pid, tenant_id)
     await assert_user_in_tenant(db, body.owner_id, tenant_id, field_name="owner_id")
-    for f in ["title","description","category","owner_id","linked_controls","review_frequency_months","next_review_date"]:
+    await _assert_process_in_tenant(db, body.business_process_id, tenant_id)
+    await _assert_entity_in_tenant(db, body.org_entity_id, tenant_id)
+    for f in ["title","description","category","owner_id","linked_controls","review_frequency_months","next_review_date",
+              "effective_date","expiration_date","business_process_id","org_entity_id"]:
         v = getattr(body, f, None)
         if v is not None: setattr(p, f, v)
     if body.status: p.status = PolicyStatus(body.status)

@@ -74,6 +74,14 @@ class Audit(Base):
     report_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
     executive_summary: Mapped[str | None] = mapped_column(Text, nullable=True)
 
+    # Report validation workflow (RFP gap: "validation du document de rapport avant
+    # diffusion" — distinct from the audit engagement's own status). A simple
+    # approval stamp: who signed off on the generated report, and when.
+    report_approved_by_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("users.id"), nullable=True
+    )
+    report_approved_at: Mapped[str | None] = mapped_column(String(30), nullable=True)
+
     # Relationships
     tenant: Mapped["Tenant"] = relationship("Tenant", back_populates="audits")
     findings: Mapped[list["AuditFinding"]] = relationship(

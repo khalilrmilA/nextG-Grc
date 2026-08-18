@@ -14,7 +14,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
-from app.models.user import User
+from app.models.user import User, UserRole
 from app.models.governance import RaciAssignment, GovernanceDocument, GovernanceDocumentVersion
 from app.models.notification import NotificationType
 from app.api.v1.dependencies.auth import get_current_user, get_tenant_id
@@ -25,6 +25,10 @@ router = APIRouter()
 
 _VALID_RACI = {"R", "A", "C", "I"}
 _VALID_ACCESS = {"read", "edit", "validate"}
+# Roles that may modify a document regardless of its access_level (mirrors the
+# require_roles() convention used elsewhere: tenant_admin/super_admin always have
+# full access; CISO is the elevated governance role for this module).
+_DOCUMENT_ELEVATED_ROLES = {UserRole.SUPER_ADMIN, UserRole.TENANT_ADMIN, UserRole.CISO}
 
 
 # ---------------------------------------------------------------------------
@@ -316,6 +320,27 @@ async def update_document(
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
     doc = await _get_doc(db, doc_id, tenant_id)
+
+    # Per-document access enforcement (RFP gap): a document flagged access_level="read"
+    # is read-only — reject the update unless the caller is the document's
+    # creator/owner or holds an elevated governance role (tenant admin/CISO).
+    #
+    # LIMITATION (documented, not built): access_level is a single tenant-wide field
+    # on GovernanceDocument, not a per-user ACL — the schema has no table recording
+    # "user X has edit rights on document Y". So this enforces "read-only for
+    # everyone except the owner/elevated roles", which is the most faithful
+    # approximation of "per-document per-user access" the current schema supports.
+    # True per-user grants (e.g. "read" for user A, "edit" for user B on the same
+    # document) would need a new document_access_grants(document_id, user_id, level)
+    # table — deliberately not added here, flagged for a future iteration.
+    is_owner = doc.created_by_id is not None and doc.created_by_id == current_user.id
+    is_elevated = current_user.role in _DOCUMENT_ELEVATED_ROLES
+    if doc.access_level == "read" and not is_owner and not is_elevated:
+        raise HTTPException(
+            status_code=403,
+            detail="This document is read-only; only its owner or a CISO/tenant admin can modify it",
+        )
+
     if body.access_level is not None and body.access_level not in _VALID_ACCESS:
         raise HTTPException(status_code=422, detail="access_level must be read, edit, or validate")
 

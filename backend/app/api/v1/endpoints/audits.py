@@ -1,18 +1,25 @@
 """Audit Management — full audit lifecycle with findings and evidence."""
+import uuid
 from datetime import datetime
+from pathlib import Path
+
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import settings
 from app.core.database import get_db
 from app.core.security_utils import assert_user_in_tenant
-from app.api.v1.dependencies.auth import get_current_user, get_tenant_id
-from app.models.user import User
+from app.api.v1.dependencies.auth import get_current_user, get_tenant_id, require_roles
+from app.models.user import User, UserRole
 from app.models.audit import (
     Audit, AuditFinding, AuditEvidence,
     AuditType, AuditStatus, FindingSeverity, FindingStatus,
 )
+from app.models.tenant import Tenant
+from app.services.report_generator import generate_single_audit_report
 from app.workers.tasks.notifications import notify_audit_assigned
 
 router = APIRouter()
@@ -50,6 +57,9 @@ class AuditOut(BaseModel):
     framework_id: str | None; planned_start: str | None; planned_end: str | None
     actual_start: str | None; actual_end: str | None; scope: str | None
     executive_summary: str | None; in_scope_systems: list
+    report_url: str | None = None
+    report_approved_by_id: str | None = None
+    report_approved_at: str | None = None
     finding_count: int = 0
     created_at: datetime; updated_at: datetime
     model_config = {"from_attributes": True}
@@ -141,6 +151,66 @@ async def delete_audit(audit_id: str, db: AsyncSession = Depends(get_db), _: Use
     a = await _audit(db, audit_id, tenant_id); await db.delete(a); await db.commit()
 
 
+# ── Report generation + approval workflow ───────────────────────────────
+# RFP gap: audit statuses (review/reporting) describe the engagement, not the
+# report document itself, and report_url was never populated by any generation
+# flow. These three endpoints close both: generation persists the PDF and
+# writes back report_url; approval stamps who signed off before distribution.
+
+@router.post("/{audit_id}/report/generate", response_model=AuditOut)
+async def generate_audit_report_file(audit_id: str, db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user), tenant_id: str = Depends(get_tenant_id)):
+    """Generate this audit's report PDF, persist it to disk, and write its path
+    back onto Audit.report_url (previously never populated). Regenerating a
+    report clears any prior approval — a changed report needs re-approval
+    before it can be distributed again."""
+    a = await _audit(db, audit_id, tenant_id)
+    tenant = (await db.execute(select(Tenant).where(Tenant.id == tenant_id))).scalar_one_or_none()
+    org_name = tenant.name if tenant else "Organization"
+    pdf_bytes = await generate_single_audit_report(db, a, org_name)
+
+    uploads_dir = Path(settings.UPLOADS_DIR)
+    (uploads_dir / "audit-reports").mkdir(parents=True, exist_ok=True)
+    rel_path = f"audit-reports/{uuid.uuid4()}.pdf"
+    (uploads_dir / rel_path).write_bytes(pdf_bytes)
+
+    a.report_url = rel_path
+    a.report_approved_by_id = None
+    a.report_approved_at = None
+    await db.commit(); await db.refresh(a)
+    return await _with_count(db, a)
+
+
+@router.get("/{audit_id}/report/download")
+async def download_audit_report(audit_id: str, db: AsyncSession = Depends(get_db), _: User = Depends(get_current_user), tenant_id: str = Depends(get_tenant_id)):
+    a = await _audit(db, audit_id, tenant_id)
+    if not a.report_url:
+        raise HTTPException(404, "No report has been generated for this audit yet")
+    full = Path(settings.UPLOADS_DIR) / a.report_url
+    if not full.exists():
+        raise HTTPException(404, "Report file not found on disk")
+    safe_name = "".join(c if c.isalnum() or c in (" ", "_", "-") else "_" for c in a.title)
+    return FileResponse(path=str(full), filename=f"{safe_name}_report.pdf", media_type="application/pdf")
+
+
+@router.post("/{audit_id}/approve-report", response_model=AuditOut)
+async def approve_audit_report(
+    audit_id: str,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_roles(UserRole.CISO, UserRole.AUDITOR)),
+    tenant_id: str = Depends(get_tenant_id),
+):
+    """Validation-before-distribution stamp for the report document itself
+    (as opposed to Audit.status, which tracks the engagement). Restricted to
+    CISO/auditor roles (tenant_admin/super_admin always pass via require_roles)."""
+    a = await _audit(db, audit_id, tenant_id)
+    if not a.report_url:
+        raise HTTPException(400, "Generate the report before approving it")
+    a.report_approved_by_id = user.id
+    a.report_approved_at = datetime.utcnow().isoformat()
+    await db.commit(); await db.refresh(a)
+    return await _with_count(db, a)
+
+
 # ── Findings CRUD ────────────────────────────────────────────────────────
 
 @router.get("/{audit_id}/findings", response_model=list[FindingOut])
@@ -165,11 +235,32 @@ async def update_finding(audit_id: str, fid: str, body: FindingUpdate, db: Async
     f = r.scalar_one_or_none()
     if not f: raise HTTPException(404, "Finding not found")
     await assert_user_in_tenant(db, body.remediation_owner_id, tenant_id, field_name="remediation_owner_id")
+
+    # Capture "is this the action that first moves the finding" signals BEFORE
+    # applying the update, so auto-transition below reflects what actually changed.
+    was_open = f.status == FindingStatus.OPEN
+    owner_newly_set = body.remediation_owner_id is not None and not f.remediation_owner_id
+    due_date_newly_set = body.due_date is not None and not f.due_date
+    notes_provided = bool(body.remediation_notes)
+
     for fld in ["title","description","remediation_owner_id","due_date","recommendation","management_response","remediation_notes"]:
         v = getattr(body, fld, None)
         if v is not None: setattr(f, fld, v)
     if body.severity: f.severity = FindingSeverity(body.severity)
-    if body.status: f.status = FindingStatus(body.status)
+
+    if body.status:
+        # Explicit status change always wins — the caller's direct signal.
+        # This is the only way a finding reaches REMEDIATED/ACCEPTED/CLOSED;
+        # we never auto-close a finding behind the user's back.
+        f.status = FindingStatus(body.status)
+    elif was_open and (owner_newly_set or due_date_newly_set or notes_provided):
+        # RFP gap: "status isn't updated automatically based on actions taken
+        # (only manual PATCH)". Narrow, one-way auto-transition: an OPEN finding
+        # that just received its first remediation owner/due date, or had
+        # remediation notes logged, is no longer untouched — reflect that
+        # automatically instead of requiring a separate manual status PATCH.
+        f.status = FindingStatus.IN_REMEDIATION
+
     await db.commit(); await db.refresh(f)
     return FindingOut.model_validate(f)
 
