@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Plus, Search, X, Loader2, Filter, Bug, ShieldCheck, Wrench, BarChart3, Upload, Download, Plug, RefreshCw, Trash2, ChevronRight, Check } from "lucide-react";
+import { Plus, Search, X, Loader2, Filter, Bug, ShieldCheck, Wrench, BarChart3, Upload, Download, Plug, RefreshCw, Trash2, ChevronRight, Check, Gauge } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { vulnerabilitiesApi, vulnImportApi, scannerConnectorsApi } from "@/api/endpoints";
 
@@ -24,6 +24,7 @@ const STATUS_BADGE: Record<string, string> = {
 const SEVERITY_OPTIONS = ["critical", "high", "medium", "low"];
 const STATUS_OPTIONS = ["pending_validation", "validated", "open", "in_remediation", "mitigated", "accepted", "closed", "false_positive"];
 const SOURCE_OPTIONS = ["pen_test", "scan", "manual", "bug_bounty"];
+const OPERATIONAL_CONTEXTS = ["internet_facing", "dmz", "production", "internal", "isolated", "test", "development"];
 
 export default function VulnerabilitiesPage() {
   const { t } = useTranslation();
@@ -42,6 +43,14 @@ export default function VulnerabilitiesPage() {
   const [detailForm, setDetailForm] = useState<any>({});
   const [detailBusy, setDetailBusy] = useState("");
   const [detailErr, setDetailErr] = useState("");
+
+  // Impact scoring (RFP mod 3.4)
+  const [impactContext, setImpactContext] = useState("");
+  const [impactOverrideMode, setImpactOverrideMode] = useState(false);
+  const [impactOverrideValue, setImpactOverrideValue] = useState("");
+  const [impactJustification, setImpactJustification] = useState("");
+  const [impactBusy, setImpactBusy] = useState(false);
+  const [impactErr, setImpactErr] = useState("");
 
   // Scanner import
   const [showImport, setShowImport] = useState(false);
@@ -191,6 +200,7 @@ Weak SSH ciphers,Low,3.7,,Backup Storage Array,Restrict to strong ciphers`;
   function openDetail(item: any) {
     setDetail(item);
     setDetailErr("");
+    setImpactContext(""); setImpactOverrideMode(false); setImpactOverrideValue(""); setImpactJustification(""); setImpactErr("");
     setDetailForm({
       title: item.title ?? "",
       severity: item.severity ?? "medium",
@@ -222,6 +232,26 @@ Weak SSH ciphers,Low,3.7,,Backup Storage Array,Restrict to strong ciphers`;
       setDetail(null); refreshAll();
     } catch (e: any) { setDetailErr(e?.response?.data?.detail || t("common.error", "Something went wrong.")); }
     finally { setDetailBusy(""); }
+  }
+  async function recalcImpact() {
+    if (!detail) return;
+    setImpactBusy(true); setImpactErr("");
+    try {
+      const updated = await vulnerabilitiesApi.scoreImpact(detail.id, { operational_context: impactContext || null });
+      setDetail(updated);
+    } catch (e: any) { setImpactErr(e?.response?.data?.detail || t("common.error", "Something went wrong.")); }
+    finally { setImpactBusy(false); }
+  }
+  async function overrideImpact() {
+    if (!detail) return;
+    if (!impactJustification.trim()) { setImpactErr(t("vulnerabilities.impact_justification_required", "A justification is required to override the score")); return; }
+    setImpactBusy(true); setImpactErr("");
+    try {
+      const updated = await vulnerabilitiesApi.scoreImpact(detail.id, { override: parseFloat(impactOverrideValue), justification: impactJustification });
+      setDetail(updated);
+      setImpactOverrideMode(false);
+    } catch (e: any) { setImpactErr(e?.response?.data?.detail || t("common.error", "Something went wrong.")); }
+    finally { setImpactBusy(false); }
   }
   async function deleteDetail() {
     if (!detail) return;
@@ -411,6 +441,58 @@ Weak SSH ciphers,Low,3.7,,Backup Storage Array,Restrict to strong ciphers`;
               <div>
                 <label className="text-xs font-medium text-gray-500">{t("common.description", "Description")}</label>
                 <textarea rows={3} value={detailForm.description} onChange={(e) => setDetailForm({ ...detailForm, description: e.target.value })} className="w-full mt-1 border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              </div>
+
+              {/* Impact scoring (RFP mod 3.4) */}
+              <div className="border-t border-gray-100 pt-4">
+                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2 flex items-center gap-1.5">
+                  <Gauge className="w-3.5 h-3.5" /> {t("vulnerabilities.impact_title", "Impact Score")}
+                </p>
+                {impactErr && <div className="mb-2 p-2 bg-red-50 text-red-700 rounded-lg text-xs">{impactErr}</div>}
+                <div className="flex items-center gap-3 mb-3">
+                  <span className={`text-2xl font-bold ${detail.impact_score == null ? "text-gray-300" : detail.impact_score >= 70 ? "text-red-600" : detail.impact_score >= 40 ? "text-orange-600" : "text-green-600"}`}>
+                    {detail.impact_score != null ? Math.round(detail.impact_score) : "—"}
+                  </span>
+                  <span className="text-xs text-gray-400">/ 100</span>
+                  {detail.impact_override != null && (
+                    <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-purple-100 text-purple-700 border border-purple-200">{t("vulnerabilities.impact_manual", "Manual override")}</span>
+                  )}
+                </div>
+                {detail.impact_justification && (
+                  <p className="text-xs text-gray-500 mb-3 italic">"{detail.impact_justification}"</p>
+                )}
+
+                {impactOverrideMode ? (
+                  <div className="space-y-2 bg-gray-50 rounded-xl p-3">
+                    <div>
+                      <label className="text-xs font-medium text-gray-600">{t("vulnerabilities.impact_override_value", "Override value (0-100)")}</label>
+                      <input type="number" min={0} max={100} step={0.1} value={impactOverrideValue} onChange={(e) => setImpactOverrideValue(e.target.value)} className="w-full mt-1 border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                    </div>
+                    <div>
+                      <label className="text-xs font-medium text-gray-600">{t("vulnerabilities.impact_justification", "Justification")} *</label>
+                      <textarea rows={2} value={impactJustification} onChange={(e) => setImpactJustification(e.target.value)} className="w-full mt-1 border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                    </div>
+                    <div className="flex justify-end gap-2">
+                      <button onClick={() => setImpactOverrideMode(false)} className="px-3 py-1.5 text-xs text-gray-600 hover:text-gray-800">{t("common.cancel", "Cancel")}</button>
+                      <button onClick={overrideImpact} disabled={impactBusy} className="inline-flex items-center gap-1.5 bg-purple-600 text-white px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-purple-700 disabled:opacity-50">
+                        {impactBusy && <Loader2 className="w-3.5 h-3.5 animate-spin" />} {t("common.save", "Save")}
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <select value={impactContext} onChange={(e) => setImpactContext(e.target.value)} className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500">
+                      <option value="">{t("vulnerabilities.impact_context_default", "Default context")}</option>
+                      {OPERATIONAL_CONTEXTS.map((c) => <option key={c} value={c}>{c.replace(/_/g, " ")}</option>)}
+                    </select>
+                    <button onClick={recalcImpact} disabled={impactBusy} className="inline-flex items-center gap-1.5 bg-white border border-gray-200 text-gray-700 px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-gray-50 disabled:opacity-50">
+                      {impactBusy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />} {t("vulnerabilities.impact_recalculate", "Recalculate")}
+                    </button>
+                    <button onClick={() => { setImpactOverrideMode(true); setImpactOverrideValue(detail.impact_score != null ? String(detail.impact_score) : ""); }} className="text-xs font-medium text-blue-600 hover:text-blue-800">
+                      {t("vulnerabilities.impact_override_btn", "Override manually")}
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
 

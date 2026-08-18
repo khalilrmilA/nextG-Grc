@@ -1,4 +1,5 @@
 """Dashboard and analytics endpoints."""
+from datetime import datetime
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, case
@@ -116,6 +117,76 @@ async def get_dashboard_summary(
             "attestation_rate_percent": attestation_rate,
             "total_attestations": total_attestations,
         },
+    }
+
+
+@router.get("/risk-trend")
+async def get_risk_trend(
+    tenant_id: Annotated[str, Depends(get_tenant_id)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+    _: Annotated[User, Depends(get_current_user)],
+    months: int = 6,
+):
+    """
+    Real risk-trend series for the central dashboard's trend chart.
+
+    RFP gap: the chart was fed by a hardcoded frontend constant (RISK_TREND in
+    DashboardPage.tsx) with fabricated numbers, because nothing in the schema
+    historizes risk severity (no snapshot/history table capturing what a
+    risk's severity *was* on a past date — that would need a periodic
+    snapshot job writing to a new table, which doesn't exist yet). Until that
+    exists, this computes a real, honest signal from real data instead of a
+    fake series: for each of the last `months` calendar months, the count of
+    risks *newly logged* that month (Risk.created_at), broken out by
+    critical/high severity. That's a genuine intake trend ("is new risk
+    volume rising or falling"), not the historical open-risk backlog — a
+    related but different metric that would require the history table above.
+    """
+    months = max(1, min(months, 24))
+    now = datetime.utcnow()
+
+    # Build the ordered list of the last `months` (year, month) buckets, oldest first.
+    buckets: list[tuple[int, int]] = []
+    y, m = now.year, now.month
+    for _ in range(months):
+        buckets.append((y, m))
+        m -= 1
+        if m == 0:
+            m, y = 12, y - 1
+    buckets.reverse()
+
+    month_key = func.strftime("%Y-%m", Risk.created_at)
+    result = await db.execute(
+        select(month_key, Risk.severity, func.count())
+        .where(Risk.tenant_id == tenant_id)
+        .group_by(month_key, Risk.severity)
+    )
+    counts: dict[str, dict[str, int]] = {}
+    for key, severity, n in result.all():
+        if not key:
+            continue
+        sev = severity.value if hasattr(severity, "value") else str(severity)
+        counts.setdefault(key, {})[sev] = int(n)
+
+    series = []
+    for (yy, mm) in buckets:
+        key = f"{yy:04d}-{mm:02d}"
+        month_counts = counts.get(key, {})
+        series.append({
+            "month": datetime(yy, mm, 1).strftime("%b"),
+            "period": key,
+            "critical": month_counts.get("critical", 0),
+            "high": month_counts.get("high", 0),
+        })
+
+    return {
+        "series": series,
+        "source": "risk_created_at_monthly",
+        "note": (
+            "New risks logged per month, by severity. No point-in-time severity "
+            "history table exists yet, so this reflects intake volume, not the "
+            "historical open-risk backlog."
+        ),
     }
 
 

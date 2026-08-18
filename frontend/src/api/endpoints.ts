@@ -1064,6 +1064,7 @@ export const vulnerabilitiesApi = {
   create: (data: Record<string, unknown>) => apiClient.post("/vulnerabilities", data).then((r) => r.data),
   update: (id: string, data: Record<string, unknown>) => apiClient.patch(`/vulnerabilities/${id}`, data).then((r) => r.data),
   validate: (id: string) => apiClient.post(`/vulnerabilities/${id}/validate`).then((r) => r.data),
+  scoreImpact: (id: string, data: Record<string, unknown>) => apiClient.post(`/vulnerabilities/${id}/impact`, data).then((r) => r.data),
   delete: (id: string) => apiClient.delete(`/vulnerabilities/${id}`),
 };
 

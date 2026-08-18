@@ -27,7 +27,14 @@ export const gapEn = {
     empty_page: "— no text on this page —", err_pdf: "Could not generate the PDF. Please try again.",
   },
   settings: { no_sessions: "No active sessions." },
-  vulnerabilities: { validate: "Validate", confirm_delete: "Delete this vulnerability?" },
+  vulnerabilities: {
+    validate: "Validate", confirm_delete: "Delete this vulnerability?",
+    impact_title: "Impact Score", impact_manual: "Manual override",
+    impact_recalculate: "Recalculate", impact_override_btn: "Override manually",
+    impact_override_value: "Override value (0-100)", impact_justification: "Justification",
+    impact_justification_required: "A justification is required to override the score",
+    impact_context_default: "Default context",
+  },
   dashboard: {
     overview: "Overview", no_frameworks: "No frameworks", start_assessment: "Start Assessment",
     create_assessment_desc: "Create an assessment to start tracking your compliance with this framework.",
@@ -52,7 +59,14 @@ export const gapFr = {
     empty_page: "— aucun texte sur cette page —", err_pdf: "Impossible de générer le PDF. Veuillez réessayer.",
   },
   settings: { no_sessions: "Aucune session active." },
-  vulnerabilities: { validate: "Valider", confirm_delete: "Supprimer cette vulnérabilité ?" },
+  vulnerabilities: {
+    validate: "Valider", confirm_delete: "Supprimer cette vulnérabilité ?",
+    impact_title: "Score d'impact", impact_manual: "Ajustement manuel",
+    impact_recalculate: "Recalculer", impact_override_btn: "Ajuster manuellement",
+    impact_override_value: "Valeur ajustée (0-100)", impact_justification: "Justification",
+    impact_justification_required: "Une justification est requise pour ajuster le score",
+    impact_context_default: "Contexte par défaut",
+  },
   dashboard: {
     overview: "Vue d'ensemble", no_frameworks: "Aucun référentiel", start_assessment: "Démarrer l'évaluation",
     create_assessment_desc: "Créez une évaluation pour commencer à suivre votre conformité à ce référentiel.",
@@ -77,7 +91,14 @@ export const gapAr = {
     empty_page: "— لا يوجد نص في هذه الصفحة —", err_pdf: "تعذّر إنشاء ملف PDF. يُرجى المحاولة مرة أخرى.",
   },
   settings: { no_sessions: "لا توجد جلسات نشطة." },
-  vulnerabilities: { validate: "تحقّق", confirm_delete: "حذف هذه الثغرة؟" },
+  vulnerabilities: {
+    validate: "تحقّق", confirm_delete: "حذف هذه الثغرة؟",
+    impact_title: "درجة التأثير", impact_manual: "تعديل يدوي",
+    impact_recalculate: "إعادة الحساب", impact_override_btn: "تعديل يدويًا",
+    impact_override_value: "القيمة المعدَّلة (0-100)", impact_justification: "التبرير",
+    impact_justification_required: "التبرير مطلوب لتعديل الدرجة",
+    impact_context_default: "السياق الافتراضي",
+  },
   dashboard: {
     overview: "نظرة عامة", no_frameworks: "لا توجد أطر عمل", start_assessment: "بدء التقييم",
     create_assessment_desc: "أنشئ تقييمًا لبدء تتبّع امتثالك لهذا الإطار.",

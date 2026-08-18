@@ -28,12 +28,6 @@ const DEMO_DATA: DashboardSummary = {
   policy: { attestation_rate_percent: 84.2, total_attestations: 142 },
 };
 
-const RISK_TREND = [
-  { month: "Aug", critical: 5, high: 12 }, { month: "Sep", critical: 4, high: 10 },
-  { month: "Oct", critical: 4, high: 11 }, { month: "Nov", critical: 3, high: 9 },
-  { month: "Dec", critical: 3, high: 8 },  { month: "Jan", critical: 3, high: 8 },
-];
-
 // ── Shared helpers ─────────────────────────────────────────────────────────────
 
 function KpiCard({ title, value, subtitle, icon: Icon, iconBg, change, changePositive }: {
@@ -456,6 +450,15 @@ function FrameworkDashboard({ data }: { data: any }) {
 
 function GenericDashboard({ d, isDemo }: { d: DashboardSummary; isDemo: boolean }) {
   const { t } = useTranslation();
+  // Real risk-trend series (new risks logged per month, by severity) — replaces
+  // the old hardcoded RISK_TREND constant. See dashboard.py:get_risk_trend for
+  // why this is intake volume rather than a historical open-risk backlog.
+  const { data: trendData } = useQuery({
+    queryKey: ["dashboard", "risk-trend"],
+    queryFn: () => dashboardApi.getRiskTrend(6),
+    retry: false,
+  });
+  const riskTrend = trendData?.series ?? [];
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -488,7 +491,7 @@ function GenericDashboard({ d, isDemo }: { d: DashboardSummary; isDemo: boolean 
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
           <h3 className="font-semibold text-gray-900 mb-4">{t("dashboard.risk_trend")}</h3>
           <ResponsiveContainer width="100%" height={180}>
-            <BarChart data={RISK_TREND} barSize={20}>
+            <BarChart data={riskTrend} barSize={20}>
               <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" vertical={false} />
               <XAxis dataKey="month" tick={{ fontSize: 11, fill: "#9ca3af" }} axisLine={false} tickLine={false} />
               <YAxis tick={{ fontSize: 11, fill: "#9ca3af" }} axisLine={false} tickLine={false} />

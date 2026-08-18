@@ -1382,6 +1382,7 @@ async def get_document_checklist(
 class RecommendationRequest(BaseModel):
     action: str  # "accept" | "reject"
     owner_id: str | None = None
+    start_date: str | None = None
     due_date: str | None = None
     notes: str | None = None
 
@@ -1390,6 +1391,7 @@ class BulkRecommendationRequest(BaseModel):
     gap_ids: list[str]
     action: str  # "accept" | "reject"
     owner_id: str | None = None
+    start_date: str | None = None
     due_date: str | None = None
 
 
@@ -1449,6 +1451,7 @@ async def act_on_gap_recommendation(
             title=f"Remediate: {ctrl_title}",
             description=gap.gap_description,
             owner_id=body.owner_id or current_user.id,  # tenant-checked above
+            start_date=body.start_date,
             due_date=body.due_date,
             priority=priority,
             status=ActionItemStatus.OPEN,
@@ -1513,6 +1516,7 @@ async def bulk_act_on_gaps(
                 title=f"Remediate: {ctrl_title}",
                 description=gap.gap_description,
                 owner_id=body.owner_id or current_user.id,  # tenant-checked above
+                start_date=body.start_date,
                 due_date=body.due_date,
                 priority=priority,
                 status=ActionItemStatus.OPEN,
@@ -2210,6 +2214,7 @@ class ActionPlanItem(BaseModel):
     description: str | None
     priority: str
     status: str
+    start_date: str | None
     due_date: str | None
     notes: str | None
     ai_generated: bool
@@ -2232,6 +2237,7 @@ class ActionPlanItem(BaseModel):
 
 class ActionPlanUpdateBody(BaseModel):
     status: str | None = None          # open / in_progress / completed / cancelled
+    start_date: str | None = None
     due_date: str | None = None
     owner_id: str | None = None
     notes: str | None = None
@@ -2374,6 +2380,7 @@ async def list_action_plan(
             description=r.description,
             priority=r.priority.value if r.priority else "medium",
             status=r.status.value if r.status else "open",
+            start_date=r.start_date,
             due_date=r.due_date,
             notes=r.notes,
             ai_generated=r.ai_generated,
@@ -2420,6 +2427,8 @@ async def update_action_plan_item(
             item.priority = ActionItemPriority(body.priority)
         except ValueError:
             raise HTTPException(422, f"Invalid priority: {body.priority}")
+    if body.start_date is not None:
+        item.start_date = body.start_date or None
     if body.due_date is not None:
         item.due_date = body.due_date or None
     if body.notes is not None:

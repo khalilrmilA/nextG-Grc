@@ -42,6 +42,7 @@ class ActionItem(Base):
     owner_id: Mapped[str | None] = mapped_column(
         String(36), ForeignKey("users.id"), nullable=True
     )
+    start_date: Mapped[str | None] = mapped_column(String(20), nullable=True)
     due_date: Mapped[str | None] = mapped_column(String(20), nullable=True)
 
     priority: Mapped[ActionItemPriority] = mapped_column(

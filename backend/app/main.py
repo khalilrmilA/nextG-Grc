@@ -16,6 +16,7 @@ from app.core.seed_mandatory_docs import seed_mandatory_documents
 from app.services.threat_scheduler import start_threat_scheduler
 from app.services.report_scheduler import start_report_scheduler
 from app.services.nvd_sync import start_cve_auto_sync
+from app.services.vuln_scanner_scheduler import start_vuln_scanner_scheduler
 from app.core.activity_middleware import ActivityLogMiddleware
 from app.core.license_middleware import LicenseEnforcementMiddleware
 from app.core.security_middleware import SecurityHeadersMiddleware
@@ -46,10 +47,12 @@ async def lifespan(application: FastAPI):
             traces_sample_rate=0.1 if settings.ENVIRONMENT == "production" else 1.0,
         )
 
-    # Start background schedulers (threat feed 24h; scheduled reports 5m; CVE sync daily)
+    # Start background schedulers (threat feed 24h; scheduled reports 5m; CVE sync daily;
+    # scanner-connector auto-sync hourly poll / per-connector interval_hours cadence)
     _scheduler_task = asyncio.create_task(start_threat_scheduler())
     _report_task = asyncio.create_task(start_report_scheduler())
     _cve_task = asyncio.create_task(start_cve_auto_sync())
+    _vuln_scanner_task = asyncio.create_task(start_vuln_scanner_scheduler())
 
     yield
 
@@ -57,7 +60,8 @@ async def lifespan(application: FastAPI):
     _scheduler_task.cancel()
     _report_task.cancel()
     _cve_task.cancel()
-    for _task in (_scheduler_task, _report_task, _cve_task):
+    _vuln_scanner_task.cancel()
+    for _task in (_scheduler_task, _report_task, _cve_task, _vuln_scanner_task):
         try:
             await _task
         except asyncio.CancelledError:
