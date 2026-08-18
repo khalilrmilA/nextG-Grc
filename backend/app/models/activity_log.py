@@ -26,6 +26,13 @@ class ActivityLog(Base):
     entity_name: Mapped[str | None] = mapped_column(String(500), nullable=True)
     details: Mapped[dict | None] = mapped_column(JSON, nullable=True)  # Changed fields, old/new values
     ip_address: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    # Where this entry came from: "api" (a real HTTP request — the only writer
+    # today, set by ActivityLogMiddleware) vs. future "batch"/"manual" for
+    # scheduler/background-job writers, once one of those actually logs here.
+    # Deliberately NOT part of compute_entry_hash's payload (see activity_chain.py)
+    # so backfilling/adding this column can never retroactively break the hash
+    # chain of entries written before it existed.
+    origin: Mapped[str | None] = mapped_column(String(20), nullable=True, default="api")
 
     # Tamper-evidence chain (per tenant).
     seq: Mapped[int | None] = mapped_column(Integer, nullable=True)

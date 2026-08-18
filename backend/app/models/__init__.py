@@ -52,6 +52,7 @@ from app.models.scanner_connector import ScannerConnector
 from app.models.report_schedule import ReportSchedule, ReportFrequency
 from app.models.login_event import LoginEvent
 from app.models.user_session import UserSession
+from app.models.risk_snapshot import RiskSnapshot
 
 __all__ = [
     "Tenant", "User", "UserRole",
@@ -87,4 +88,5 @@ __all__ = [
     "ReportSchedule", "ReportFrequency",
     "LoginEvent",
     "UserSession",
+    "RiskSnapshot",
 ]

@@ -17,6 +17,9 @@ from app.services.threat_scheduler import start_threat_scheduler
 from app.services.report_scheduler import start_report_scheduler
 from app.services.nvd_sync import start_cve_auto_sync
 from app.services.vuln_scanner_scheduler import start_vuln_scanner_scheduler
+from app.services.audit_recurrence_scheduler import start_audit_recurrence_scheduler
+from app.services.archiving_engine import start_archiving_scheduler
+from app.services.risk_snapshot_scheduler import start_risk_snapshot_scheduler
 from app.core.activity_middleware import ActivityLogMiddleware
 from app.core.license_middleware import LicenseEnforcementMiddleware
 from app.core.security_middleware import SecurityHeadersMiddleware
@@ -48,11 +51,18 @@ async def lifespan(application: FastAPI):
         )
 
     # Start background schedulers (threat feed 24h; scheduled reports 5m; CVE sync daily;
-    # scanner-connector auto-sync hourly poll / per-connector interval_hours cadence)
+    # scanner-connector auto-sync hourly poll / per-connector interval_hours cadence;
+    # audit recurrence hourly poll — spawns the next cycle of a closed recurring audit;
+    # archiving rules 5m poll — auto-archives records matching an enabled ArchivingRule;
+    # risk snapshot hourly poll — writes at most one open-risk-by-severity row per
+    # tenant per UTC day, feeding GET /dashboard/risk-trend's real history series)
     _scheduler_task = asyncio.create_task(start_threat_scheduler())
     _report_task = asyncio.create_task(start_report_scheduler())
     _cve_task = asyncio.create_task(start_cve_auto_sync())
     _vuln_scanner_task = asyncio.create_task(start_vuln_scanner_scheduler())
+    _audit_recurrence_task = asyncio.create_task(start_audit_recurrence_scheduler())
+    _archiving_task = asyncio.create_task(start_archiving_scheduler())
+    _risk_snapshot_task = asyncio.create_task(start_risk_snapshot_scheduler())
 
     yield
 
@@ -61,7 +71,10 @@ async def lifespan(application: FastAPI):
     _report_task.cancel()
     _cve_task.cancel()
     _vuln_scanner_task.cancel()
-    for _task in (_scheduler_task, _report_task, _cve_task, _vuln_scanner_task):
+    _audit_recurrence_task.cancel()
+    _archiving_task.cancel()
+    _risk_snapshot_task.cancel()
+    for _task in (_scheduler_task, _report_task, _cve_task, _vuln_scanner_task, _audit_recurrence_task, _archiving_task, _risk_snapshot_task):
         try:
             await _task
         except asyncio.CancelledError:

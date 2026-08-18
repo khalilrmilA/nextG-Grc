@@ -26,6 +26,7 @@ class LogEntry(BaseModel):
     entity_name: str | None
     details: dict | None
     ip_address: str | None
+    origin: str | None = None
     seq: int | None = None
     entry_hash: str | None = None
     created_at: datetime

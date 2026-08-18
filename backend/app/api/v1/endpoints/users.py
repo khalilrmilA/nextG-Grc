@@ -25,6 +25,8 @@ from app.models.tenant import Tenant
 from app.models.password_reset import PasswordResetToken
 from app.models.compliance import ComplianceAssessment
 from app.models.auditor_assignment import AuditorAssignment
+from app.models.activity_log import ActivityLog
+from app.services.activity_chain import chain_and_add
 from app.api.v1.dependencies import get_tenant_id
 from app.api.v1.dependencies.auth import get_current_user, require_roles
 
@@ -242,9 +244,13 @@ async def update_user(
     if user.role == UserRole.SUPER_ADMIN:
         raise HTTPException(403, "Cannot modify super admin accounts")
 
+    old_role = user.role.value if hasattr(user.role, "value") else user.role
+    old_roles = list(user.roles or [])
+
     if body.is_active is not None:
         user.is_active = body.is_active
 
+    role_changed = False
     if body.roles is not None:
         if not body.roles:
             raise HTTPException(400, "At least one role is required")
@@ -259,8 +265,40 @@ async def update_user(
             validated.append(role_enum)
         user.role = validated[0]
         user.roles = [r.value for r in validated]
+        new_role = user.role.value if hasattr(user.role, "value") else user.role
+        role_changed = new_role != old_role or user.roles != old_roles
 
     await db.commit()
+
+    # The generic ActivityLogMiddleware only records {method, path} for every
+    # mutating request — it can't see the request body, so old_role -> new_role
+    # (the RFP's literal audit-trail example) wouldn't otherwise be captured
+    # anywhere. Write an explicit entry to the same hash-chained log, reusing the
+    # existing activity_chain service (mirrors the delete-reason entry added for
+    # applied_controls.py). Best-effort: a logging failure must never roll back
+    # the role change that already committed above.
+    if role_changed:
+        try:
+            await chain_and_add(db, ActivityLog(
+                tenant_id=tenant_id,
+                user_id=current_user.id,
+                user_email=current_user.email,
+                action="role_change",
+                entity_type="user",
+                entity_id=user.id,
+                entity_name=f"{user.first_name} {user.last_name}".strip(),
+                details={
+                    "old_role": old_role,
+                    "new_role": new_role,
+                    "old_roles": old_roles,
+                    "new_roles": user.roles,
+                    "changed_by": current_user.email,
+                },
+                origin="api",
+            ))
+        except Exception:
+            pass
+
     return UserResponse(
         id=user.id, email=user.email, first_name=user.first_name, last_name=user.last_name,
         role=user.role.value if hasattr(user.role, "value") else user.role,

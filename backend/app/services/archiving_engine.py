@@ -1,0 +1,302 @@
+"""Auto-archiving rules engine (Elite Pack) — RFP module 17 gap-fix.
+
+The manual flow (``POST /archiving``) lets a user snapshot one record on demand.
+This engine adds the missing scheduled half: a tenant defines an ``ArchivingRule``
+("status=closed AND age_days>365" against e.g. "incident"), and a background loop
+periodically evaluates every enabled rule, auto-archiving any matching row that
+hasn't already been archived — via the exact same snapshot-creation path the
+manual endpoint uses (``create_archive_record``), so there is only one way an
+ArchiveRecord ever gets built.
+
+Concurrency, mirrors app.services.report_scheduler: ``run_due_rules`` claims each
+due rule with an optimistic UPDATE conditioned on its current ``next_run_at``, so
+even with 2 uvicorn workers exactly one runner evaluates a given tick — no
+duplicate archiving. As defense in depth, evaluation also skips any entity_id that
+already has an ArchiveRecord for that tenant/entity_type, so even a lost claim
+race can never double-archive the same row.
+"""
+import asyncio
+import logging
+import os
+import re
+from datetime import datetime, timedelta, timezone
+
+from sqlalchemy import select, update
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.core.database import AsyncSessionLocal
+from app.models.archive import ArchiveRecord, ArchivingRule
+from app.models.risk import Risk
+from app.models.incident import Incident
+from app.models.audit import Audit
+from app.models.vulnerability import Vulnerability
+from app.models.security_exception import SecurityException
+from app.models.applied_control import AppliedControl
+from app.models.policy import Policy
+from app.models.vendor import Vendor
+
+logger = logging.getLogger(__name__)
+
+RULE_POLL_SECONDS = 300     # in-process loop cadence (matches report_scheduler)
+RULE_INTERVAL_SECONDS = 3600  # how often a due rule is re-scheduled after it runs
+
+# entity_type (as used elsewhere in the app, e.g. activity_middleware.PATH_TO_ENTITY)
+# -> the model queried for candidate rows + the attribute used as its display name
+# in the archive payload/reason. Every entry has tenant_id/status/created_at via
+# their normal columns / Base, so age_days and "status=" criteria work uniformly.
+ARCHIVABLE_ENTITIES: dict[str, dict] = {
+    "risk":                {"model": Risk,              "name_attr": "title"},
+    "incident":            {"model": Incident,           "name_attr": "title"},
+    "audit":               {"model": Audit,              "name_attr": "title"},
+    "vulnerability":       {"model": Vulnerability,       "name_attr": "title"},
+    "security_exception":  {"model": SecurityException,   "name_attr": "title"},
+    "applied_control":     {"model": AppliedControl,      "name_attr": "name"},
+    "policy":              {"model": Policy,              "name_attr": "title"},
+    "vendor":              {"model": Vendor,              "name_attr": "name"},
+}
+
+
+def _utcnow() -> datetime:
+    return datetime.now(timezone.utc).replace(tzinfo=None)
+
+
+# ── Criteria DSL ─────────────────────────────────────────────────────────────
+# "status=closed AND age_days>365" -> [("status", "=", "closed"), ("age_days", ">", "365")]
+
+_CLAUSE_RE = re.compile(r"^\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*(>=|<=|!=|=|>|<)\s*(.+?)\s*$")
+
+
+def parse_criteria(criteria: str) -> list[tuple[str, str, str]]:
+    """Parse a small 'field OP value AND field OP value ...' DSL into clauses.
+
+    Raises ValueError on malformed input so callers (endpoint + engine) can both
+    reject bad rules early with a clear message.
+    """
+    if not criteria or not criteria.strip():
+        raise ValueError("criteria must not be empty")
+    clauses: list[tuple[str, str, str]] = []
+    for part in re.split(r"\s+AND\s+", criteria.strip(), flags=re.IGNORECASE):
+        if not part.strip():
+            continue
+        m = _CLAUSE_RE.match(part)
+        if not m:
+            raise ValueError(f"invalid criteria clause: {part!r}")
+        field, op, value = m.groups()
+        clauses.append((field, op, value.strip().strip("'\"")))
+    if not clauses:
+        raise ValueError("criteria must have at least one clause")
+    return clauses
+
+
+def _compare(actual, op: str, target) -> bool:
+    if op == "=":
+        return actual == target
+    if op == "!=":
+        return actual != target
+    if op == ">":
+        return actual > target
+    if op == "<":
+        return actual < target
+    if op == ">=":
+        return actual >= target
+    if op == "<=":
+        return actual <= target
+    return False
+
+
+def record_matches(record, clauses: list[tuple[str, str, str]], now: datetime) -> bool:
+    """True if `record` satisfies every clause (AND semantics)."""
+    for field, op, value in clauses:
+        if field == "age_days":
+            created = getattr(record, "created_at", None)
+            if created is None:
+                return False
+            if created.tzinfo is not None:
+                created = created.astimezone(timezone.utc).replace(tzinfo=None)
+            try:
+                target = float(value)
+            except ValueError:
+                return False
+            if not _compare(float((now - created).days), op, target):
+                return False
+            continue
+
+        raw = getattr(record, field, None)
+        if raw is None:
+            return False
+        raw = getattr(raw, "value", raw)  # unwrap str-Enum columns
+        try:
+            actual, target = float(raw), float(value)
+        except (TypeError, ValueError):
+            actual, target = str(raw).strip().lower(), str(value).strip().lower()
+        if not _compare(actual, op, target):
+            return False
+    return True
+
+
+def serialize_record(record) -> dict:
+    """JSON-safe dict of every mapped column — becomes the ArchiveRecord.payload."""
+    payload: dict = {}
+    for col in record.__table__.columns:
+        val = getattr(record, col.name, None)
+        if isinstance(val, datetime):
+            val = val.isoformat()
+        else:
+            val = getattr(val, "value", val)  # unwrap str-Enum columns
+        payload[col.name] = val
+    return payload
+
+
+# ── Shared archive-creation path (also used by the manual POST /archiving) ──
+
+async def create_archive_record(
+    db: AsyncSession,
+    tenant_id: str,
+    entity_type: str,
+    entity_id: str | None,
+    payload: dict,
+    reason: str | None,
+    retention_days: int | None,
+    archived_by_id: str | None,
+) -> ArchiveRecord:
+    """Snapshot one record. The single place an ArchiveRecord is ever constructed —
+    called by the manual archiving endpoint and by evaluate_rule() alike."""
+    now = _utcnow()
+    retention_until = None
+    if retention_days is not None:
+        if retention_days < 0:
+            raise ValueError("retention_days must be >= 0")
+        retention_until = now + timedelta(days=retention_days)
+    record = ArchiveRecord(
+        tenant_id=tenant_id, entity_type=entity_type, entity_id=entity_id,
+        payload=payload or {}, reason=reason, archived_at=now,
+        retention_until=retention_until, archived_by_id=archived_by_id,
+    )
+    db.add(record)
+    await db.commit()
+    await db.refresh(record)
+    return record
+
+
+# ── Rule evaluation ──────────────────────────────────────────────────────────
+
+async def evaluate_rule(db: AsyncSession, rule: ArchivingRule) -> int:
+    """Archive every not-yet-archived row of `rule.entity_type` matching its
+    criteria. Returns how many new ArchiveRecords were created."""
+    spec = ARCHIVABLE_ENTITIES.get(rule.entity_type)
+    if not spec:
+        logger.warning("archiving rule %s: unsupported entity_type %r", rule.id, rule.entity_type)
+        return 0
+    try:
+        clauses = parse_criteria(rule.criteria)
+    except ValueError as exc:
+        logger.warning("archiving rule %s: invalid criteria (%s)", rule.id, exc)
+        return 0
+
+    model = spec["model"]
+    name_attr = spec["name_attr"]
+    now = _utcnow()
+
+    candidates = list((await db.execute(
+        select(model).where(model.tenant_id == rule.tenant_id)
+    )).scalars().all())
+
+    already_archived = set((await db.execute(
+        select(ArchiveRecord.entity_id).where(
+            ArchiveRecord.tenant_id == rule.tenant_id,
+            ArchiveRecord.entity_type == rule.entity_type,
+        )
+    )).scalars().all())
+
+    archived_count = 0
+    for record in candidates:
+        if record.id in already_archived:
+            continue
+        if not record_matches(record, clauses, now):
+            continue
+        name = getattr(record, name_attr, None) or record.id
+        await create_archive_record(
+            db,
+            tenant_id=rule.tenant_id,
+            entity_type=rule.entity_type,
+            entity_id=record.id,
+            payload=serialize_record(record),
+            reason=f"Auto-archived by rule {rule.id} ({rule.criteria}) — {name}"[:300],
+            retention_days=rule.retention_days,
+            archived_by_id=None,  # system-initiated, no human actor
+        )
+        already_archived.add(record.id)
+        archived_count += 1
+    return archived_count
+
+
+# ── Claim-based scheduler (exactly-once across N uvicorn workers) ──────────
+
+async def run_due_rules(db: AsyncSession) -> dict:
+    """Evaluate every enabled rule whose next_run_at has passed, claiming each
+    atomically so concurrent workers never double-evaluate the same tick."""
+    now = _utcnow()
+    rows = (await db.execute(
+        select(ArchivingRule).where(
+            ArchivingRule.enabled == True,  # noqa: E712
+            ArchivingRule.next_run_at.isnot(None),
+            ArchivingRule.next_run_at <= now,
+        )
+    )).scalars().all()
+
+    evaluated = 0
+    total_archived = 0
+    for rule in rows:
+        prev_next = rule.next_run_at
+        new_next = now + timedelta(seconds=RULE_INTERVAL_SECONDS)
+        # Optimistic claim: only the runner whose UPDATE still matches the old
+        # next_run_at wins; everyone else gets rowcount 0 and skips (same pattern
+        # as report_scheduler.run_due_schedules).
+        claim = await db.execute(
+            update(ArchivingRule)
+            .where(ArchivingRule.id == rule.id, ArchivingRule.next_run_at == prev_next)
+            .values(next_run_at=new_next)
+        )
+        await db.commit()
+        if claim.rowcount != 1:
+            continue
+        await db.refresh(rule)
+        try:
+            count = await evaluate_rule(db, rule)
+            result = f"archived {count} at {now.isoformat(timespec='seconds')}"
+        except Exception as exc:  # noqa: BLE001 — one bad rule must not kill the loop
+            logger.error("archiving rule %s evaluation failed: %s", rule.id, exc)
+            count, result = 0, f"error: {exc}"[:200]
+        rule.last_run_at = now
+        rule.last_result = result
+        await db.commit()
+        evaluated += 1
+        total_archived += count
+
+    return {
+        "due": len(rows), "evaluated": evaluated, "archived": total_archived,
+        "checked_at": now.isoformat(timespec="seconds"),
+    }
+
+
+async def start_archiving_scheduler() -> None:
+    """In-process loop: every RULE_POLL_SECONDS, evaluate any due archiving rules.
+
+    Disabled with ENABLE_ARCHIVING_SCHEDULER=0. Safe under multiple workers because
+    run_due_rules claims each occurrence atomically.
+    """
+    if os.getenv("ENABLE_ARCHIVING_SCHEDULER", "1") == "0":
+        logger.info("Archiving rule scheduler disabled via ENABLE_ARCHIVING_SCHEDULER=0")
+        return
+    logger.info("Archiving rule scheduler started (poll every %ss)", RULE_POLL_SECONDS)
+    while True:
+        try:
+            async with AsyncSessionLocal() as db:
+                result = await run_due_rules(db)
+            if result["evaluated"]:
+                logger.info("Archiving rules evaluated: %s", result)
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:  # noqa: BLE001 — never let the loop die
+            logger.error("Archiving scheduler tick failed: %s", exc)
+        await asyncio.sleep(RULE_POLL_SECONDS)

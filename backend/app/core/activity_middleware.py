@@ -154,6 +154,7 @@ class ActivityLogMiddleware(BaseHTTPMiddleware):
                     entity_name=None,
                     details={"method": request.method, "path": path},
                     ip_address=ip,
+                    origin="api",
                 ))
         except Exception as exc:
             logger.warning("ActivityLog write failed: %s", exc)
