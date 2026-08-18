@@ -18,6 +18,7 @@ from app.models.asset import Asset, AssetType, AssetCriticality
 from app.models.audit import Audit
 from app.models.policy import Policy
 from app.models.compliance import ComplianceAssessment
+from app.models.threat import Threat
 
 router = APIRouter()
 
@@ -139,6 +140,28 @@ async def export_compliance(db: AsyncSession = Depends(get_db), _: User = Depend
         "created_at": a.created_at.isoformat() if a.created_at else "",
     } for a in assessments]
     return _csv_response(rows, f"compliance_export_{datetime.utcnow().strftime('%Y%m%d')}.csv")
+
+@router.get("/export/threats")
+async def export_threats(db: AsyncSession = Depends(get_db), _: User = Depends(get_current_user), tenant_id: str = Depends(get_tenant_id)):
+    """RFP gap: threats were absent from CSV exports (and from the Report
+    Builder datasets — see report_builder.py's DATASETS['threats']). Scope
+    matches threats.py's own visibility rule: builtin/global catalog entries
+    (tenant_id is null) plus this tenant's own custom threats."""
+    threats = list((await db.execute(
+        select(Threat).where((Threat.is_builtin == True) | (Threat.tenant_id == tenant_id))  # noqa: E712
+    )).scalars().all())
+    rows = [{
+        "id": t.id, "ref_id": t.ref_id, "name": t.name, "description": t.description or "",
+        "category": t.category.value if hasattr(t.category, "value") else str(t.category),
+        "typical_threat_actors": "; ".join(t.typical_threat_actors or []),
+        "typical_attack_vectors": "; ".join(t.typical_attack_vectors or []),
+        "mitre_ids": "; ".join(t.mitre_ids or []),
+        "is_builtin": t.is_builtin,
+        "probability_level": t.probability_level or "",
+        "severity_level": t.severity_level or "",
+        "created_at": t.created_at.isoformat() if t.created_at else "",
+    } for t in threats]
+    return _csv_response(rows, f"threats_export_{datetime.utcnow().strftime('%Y%m%d')}.csv")
 
 
 # ── IMPORTS ──────────────────────────────────────────────────────────────

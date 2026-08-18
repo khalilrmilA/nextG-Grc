@@ -20,6 +20,7 @@ class NotificationType(str, enum.Enum):
     AUDIT_ASSIGNED = "audit_assigned"
     AUDIT_DUE = "audit_due"
     AUDIT_FINDING_NEW = "audit_finding_new"
+    AUDIT_FINDING_DEADLINE = "audit_finding_deadline"
     # Policy events
     POLICY_REVIEW_DUE = "policy_review_due"
     POLICY_PUBLISHED = "policy_published"

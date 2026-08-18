@@ -14,6 +14,7 @@ from app.models.policy import Policy, PolicyAttestation, AttestationStatus
 from app.models.framework import Framework, FrameworkControl
 from app.models.mandatory_document import MandatoryDocument
 from app.models.tenant import Tenant
+from app.models.risk_snapshot import RiskSnapshot
 from app.api.v1.dependencies import get_current_user, get_tenant_id
 from app.models.user import User
 
@@ -130,17 +131,21 @@ async def get_risk_trend(
     """
     Real risk-trend series for the central dashboard's trend chart.
 
-    RFP gap: the chart was fed by a hardcoded frontend constant (RISK_TREND in
-    DashboardPage.tsx) with fabricated numbers, because nothing in the schema
-    historizes risk severity (no snapshot/history table capturing what a
-    risk's severity *was* on a past date — that would need a periodic
-    snapshot job writing to a new table, which doesn't exist yet). Until that
-    exists, this computes a real, honest signal from real data instead of a
-    fake series: for each of the last `months` calendar months, the count of
-    risks *newly logged* that month (Risk.created_at), broken out by
-    critical/high severity. That's a genuine intake trend ("is new risk
-    volume rising or falling"), not the historical open-risk backlog — a
-    related but different metric that would require the history table above.
+    RFP gap (part 1, closed earlier): the chart was fed by a hardcoded
+    frontend constant (RISK_TREND in DashboardPage.tsx) with fabricated
+    numbers. That was fixed by computing new-risk intake volume from
+    Risk.created_at — real data, but only a proxy for "is new risk volume
+    rising or falling", not the true point-in-time open-risk backlog.
+
+    RFP gap (part 2, closed here): "il s'agit d'un volume d'entrée réel
+    plutôt qu'un historique complet du solde de risques (aucune table
+    d'historisation)." app.services.risk_snapshot_scheduler now writes one
+    RiskSnapshot row per tenant per UTC day with the then-current open-risk
+    counts by severity. Once any snapshots exist for this tenant, this
+    endpoint switches to that real point-in-time series (last snapshot on or
+    before each month's end); until then — a fresh deploy with no snapshots
+    accumulated yet — it falls back to the original intake-volume proxy below
+    so behavior never regresses.
     """
     months = max(1, min(months, 24))
     now = datetime.utcnow()
@@ -155,6 +160,44 @@ async def get_risk_trend(
             m, y = 12, y - 1
     buckets.reverse()
 
+    has_snapshots = (await db.execute(
+        select(func.count(RiskSnapshot.id)).where(RiskSnapshot.tenant_id == tenant_id)
+    )).scalar() or 0
+
+    if has_snapshots:
+        earliest_key = f"{buckets[0][0]:04d}-{buckets[0][1]:02d}-01"
+        snaps = list((await db.execute(
+            select(RiskSnapshot)
+            .where(RiskSnapshot.tenant_id == tenant_id, RiskSnapshot.snapshot_date >= earliest_key)
+            .order_by(RiskSnapshot.snapshot_date.asc())
+        )).scalars().all())
+
+        import calendar
+        series = []
+        last_seen: RiskSnapshot | None = None
+        idx = 0
+        for (yy, mm) in buckets:
+            month_end = f"{yy:04d}-{mm:02d}-{calendar.monthrange(yy, mm)[1]:02d}"
+            while idx < len(snaps) and snaps[idx].snapshot_date <= month_end:
+                last_seen = snaps[idx]
+                idx += 1
+            series.append({
+                "month": datetime(yy, mm, 1).strftime("%b"),
+                "period": f"{yy:04d}-{mm:02d}",
+                "critical": last_seen.critical if last_seen else 0,
+                "high": last_seen.high if last_seen else 0,
+            })
+
+        return {
+            "series": series,
+            "source": "risk_snapshot_daily",
+            "note": (
+                "Point-in-time open-risk counts by severity, as of the latest "
+                "daily snapshot on or before each month's end."
+            ),
+        }
+
+    # Fallback: no snapshots accumulated yet — original intake-volume proxy.
     month_key = func.strftime("%Y-%m", Risk.created_at)
     result = await db.execute(
         select(month_key, Risk.severity, func.count())
@@ -183,9 +226,9 @@ async def get_risk_trend(
         "series": series,
         "source": "risk_created_at_monthly",
         "note": (
-            "New risks logged per month, by severity. No point-in-time severity "
-            "history table exists yet, so this reflects intake volume, not the "
-            "historical open-risk backlog."
+            "New risks logged per month, by severity. No point-in-time snapshot "
+            "history has accumulated for this tenant yet, so this reflects "
+            "intake volume, not the historical open-risk backlog."
         ),
     }
 

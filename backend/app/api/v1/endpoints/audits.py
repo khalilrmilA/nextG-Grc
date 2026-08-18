@@ -27,6 +27,10 @@ router = APIRouter()
 
 # ── Schemas ──────────────────────────────────────────────────────────────
 
+# Recurring-campaign cadence values (RFP: "planification annuelle, semestrielle,
+# ponctuelle"). "none"/None = one-off (ponctuelle), never auto-spawns a next cycle.
+AUDIT_RECURRENCES = {"annual", "semi_annual", "none"}
+
 class AuditCreate(BaseModel):
     title: str
     description: str | None = None
@@ -37,6 +41,7 @@ class AuditCreate(BaseModel):
     planned_end: str | None = None
     scope: str | None = None
     in_scope_systems: list[str] = []
+    recurrence: str | None = None
 
 class AuditUpdate(BaseModel):
     title: str | None = None
@@ -50,6 +55,7 @@ class AuditUpdate(BaseModel):
     scope: str | None = None
     executive_summary: str | None = None
     in_scope_systems: list[str] | None = None
+    recurrence: str | None = None
 
 class AuditOut(BaseModel):
     id: str; tenant_id: str; title: str; description: str | None
@@ -60,9 +66,15 @@ class AuditOut(BaseModel):
     report_url: str | None = None
     report_approved_by_id: str | None = None
     report_approved_at: str | None = None
+    recurrence: str | None = None
     finding_count: int = 0
     created_at: datetime; updated_at: datetime
     model_config = {"from_attributes": True}
+
+
+def _validate_recurrence(recurrence: str | None) -> None:
+    if recurrence is not None and recurrence not in AUDIT_RECURRENCES:
+        raise HTTPException(400, f"recurrence must be one of {sorted(AUDIT_RECURRENCES)}")
 
 class FindingCreate(BaseModel):
     title: str; description: str; severity: str = "medium"
@@ -111,10 +123,12 @@ async def list_audits(status_filter: str | None = None, db: AsyncSession = Depen
 @router.post("", response_model=AuditOut, status_code=201)
 async def create_audit(body: AuditCreate, db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user), tenant_id: str = Depends(get_tenant_id)):
     await assert_user_in_tenant(db, body.lead_auditor_id, tenant_id, field_name="lead_auditor_id")
+    _validate_recurrence(body.recurrence)
     a = Audit(tenant_id=tenant_id, title=body.title, description=body.description,
               audit_type=AuditType(body.audit_type), lead_auditor_id=body.lead_auditor_id or user.id,
               framework_id=body.framework_id, planned_start=body.planned_start,
-              planned_end=body.planned_end, scope=body.scope, in_scope_systems=body.in_scope_systems)
+              planned_end=body.planned_end, scope=body.scope, in_scope_systems=body.in_scope_systems,
+              recurrence=body.recurrence)
     db.add(a); await db.flush(); await db.commit(); await db.refresh(a)
     if a.lead_auditor_id:
         # Best-effort notification — broker may be unavailable in dev (no Redis).
@@ -132,8 +146,9 @@ async def get_audit(audit_id: str, db: AsyncSession = Depends(get_db), _: User =
 async def update_audit(audit_id: str, body: AuditUpdate, db: AsyncSession = Depends(get_db), _: User = Depends(get_current_user), tenant_id: str = Depends(get_tenant_id)):
     a = await _audit(db, audit_id, tenant_id)
     await assert_user_in_tenant(db, body.lead_auditor_id, tenant_id, field_name="lead_auditor_id")
+    _validate_recurrence(body.recurrence)
     prev_lead_auditor_id = a.lead_auditor_id
-    for f in ["title","description","lead_auditor_id","planned_start","planned_end","actual_start","actual_end","scope","executive_summary","in_scope_systems"]:
+    for f in ["title","description","lead_auditor_id","planned_start","planned_end","actual_start","actual_end","scope","executive_summary","in_scope_systems","recurrence"]:
         v = getattr(body, f, None)
         if v is not None: setattr(a, f, v)
     if body.status: a.status = AuditStatus(body.status)

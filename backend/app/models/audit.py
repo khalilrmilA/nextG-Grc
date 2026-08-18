@@ -82,6 +82,18 @@ class Audit(Base):
     )
     report_approved_at: Mapped[str | None] = mapped_column(String(30), nullable=True)
 
+    # Recurring campaigns (RFP gap: "planification annuelle, semestrielle,
+    # ponctuelle" — audits could only be scheduled with free-form dates, with
+    # no periodic auto-generation of the next cycle). One of "annual" |
+    # "semi_annual" | "none" | None; "none"/None means a one-off (ponctuelle)
+    # audit that never auto-repeats. See app.services.audit_recurrence_scheduler.
+    recurrence: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    # Set (to an ISO timestamp string) once the recurrence scheduler has
+    # auto-created this audit's successor cycle, so it's never spawned twice —
+    # the claim token for the background scheduler under 2 uvicorn workers,
+    # mirroring ReportSchedule.next_run_at's role in report_scheduler.py.
+    recurrence_spawned_at: Mapped[str | None] = mapped_column(String(30), nullable=True)
+
     # Relationships
     tenant: Mapped["Tenant"] = relationship("Tenant", back_populates="audits")
     findings: Mapped[list["AuditFinding"]] = relationship(
