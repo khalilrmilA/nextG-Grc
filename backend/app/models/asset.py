@@ -83,6 +83,11 @@ class Asset(Base):
     acquired_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     end_of_life_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
+    # Periodic review scheduling (RFP gap fix): mirrors Risk.next_review_date so
+    # assets get the same mandatory-review + reminder mechanism as risks. ISO date
+    # string ("YYYY-MM-DD"), same format/column type as Risk.next_review_date.
+    next_review_date: Mapped[str | None] = mapped_column(String(20), nullable=True)
+
     # Tags
     tags: Mapped[list] = mapped_column(JSON, default=list)
 

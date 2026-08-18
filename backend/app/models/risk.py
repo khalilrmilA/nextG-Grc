@@ -177,6 +177,19 @@ class RiskTreatment(Base):
     estimated_cost: Mapped[float | None] = mapped_column(Float, nullable=True)
     start_date: Mapped[str | None] = mapped_column(String(20), nullable=True)
 
+    # Actual cost incurred so far (Elite Pack, RFP gap fix): compared against
+    # estimated_cost to detect budget overruns. Distinct from estimated_cost above —
+    # left null until someone actually records spend.
+    actual_cost: Mapped[float | None] = mapped_column(Float, nullable=True)
+
+    # Auto-derived priority (RFP gap fix): critical/high/medium/low, mirroring
+    # ActionItemPriority's tiering (see compliance.py's gap.remediation_priority ->
+    # ActionItemPriority mapping). Derived from the linked risk's severity/score at
+    # treatment create/update time — see risk_treatment.py's _derive_treatment_priority.
+    # Plain string (not an enum) per the RFP gap spec; nullable so pre-existing rows
+    # from before this migration don't need a backfill to stay valid.
+    priority: Mapped[str | None] = mapped_column(String(20), nullable=True)
+
     # If "transfer" — name of insurer or third party
     transfer_to: Mapped[str | None] = mapped_column(String(255), nullable=True)
 

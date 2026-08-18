@@ -75,3 +75,10 @@ class RiskScenario(Base):
     # Owner
     owner_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("users.id"), nullable=True)
     tags: Mapped[list] = mapped_column(JSON, default=list)
+
+    # Per-scenario risk appetite (RFP gap fix, Elite Pack): mirrors Risk.appetite_threshold
+    # but lets a scenario carry its own threshold independent of its linked Risk's —
+    # e.g. a scenario the register hasn't caught up with yet, or one that warrants a
+    # tighter bar than the consolidated risk. Gated behind the same "risk_appetite"
+    # feature flag as the risk-register version (see risk_scenarios.py).
+    appetite_threshold: Mapped[float | None] = mapped_column(Float, nullable=True)

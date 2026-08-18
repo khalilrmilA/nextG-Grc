@@ -51,6 +51,7 @@ class AssetCreate(BaseModel):
     rpo_seconds: int | None = None
     mtd_seconds: int | None = None
     security_objectives: dict | None = None
+    next_review_date: str | None = None
     tags: list[str] = []
 
 
@@ -78,6 +79,7 @@ class AssetUpdate(BaseModel):
     rto_seconds: int | None = None
     rpo_seconds: int | None = None
     mtd_seconds: int | None = None
+    next_review_date: str | None = None
     tags: list[str] | None = None
 
 
@@ -98,6 +100,7 @@ class AssetOut(BaseModel):
     rpo_seconds: int | None = None
     mtd_seconds: int | None = None
     security_objectives: dict | None = None
+    next_review_date: str | None = None
     created_at: datetime; updated_at: datetime
     model_config = {"from_attributes": True}
 
@@ -232,7 +235,7 @@ async def create_asset(body: AssetCreate, db: AsyncSession = Depends(get_db), _:
         lifecycle_state=body.lifecycle_state, acquired_at=body.acquired_at,
         end_of_life_at=body.end_of_life_at, business_value=body.business_value,
         rto_seconds=body.rto_seconds, rpo_seconds=body.rpo_seconds, mtd_seconds=body.mtd_seconds,
-        security_objectives=body.security_objectives,
+        security_objectives=body.security_objectives, next_review_date=body.next_review_date,
     )
     db.add(a); await db.flush(); await db.commit(); await db.refresh(a)
     return AssetOut.model_validate(a)
@@ -250,7 +253,7 @@ async def update_asset(aid: str, body: AssetUpdate, db: AsyncSession = Depends(g
               "data_classification", "contains_pii", "contains_phi", "contains_pci", "tags",
               "asset_class", "serves_asset_ids", "business_process_id", "org_entity_id",
               "lifecycle_state", "acquired_at", "end_of_life_at", "business_value",
-              "rto_seconds", "rpo_seconds", "mtd_seconds"]:
+              "rto_seconds", "rpo_seconds", "mtd_seconds", "next_review_date"]:
         v = getattr(body, f, None)
         if v is not None:
             setattr(a, f, v)

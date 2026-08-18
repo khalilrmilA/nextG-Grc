@@ -11,6 +11,10 @@ Handles:
 - Compliance ActionItem deadlines within 7 days (remediation tasks from gap recommendations)
 - Asset end-of-life warnings (within 90 days, mirrors GET /assets/lifecycle/eol-soon)
 - Applied control expiration warnings (within 30 days)
+- Risk treatment plan overdue (due_date passed, not yet complete)
+- Risk treatment plan budget overrun (actual_cost > estimated_cost)
+- Asset periodic review deadlines (14/7/0 day window + overdue, mirrors
+  check_risk_review_deadlines)
 """
 import json
 from datetime import datetime, timedelta
@@ -19,7 +23,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.notification import Notification, NotificationType, NotificationStatus
 from app.models.user import User, UserRole
-from app.models.risk import Risk
+from app.models.risk import Risk, RiskTreatment
 from app.models.vendor import Vendor, VendorContract, ContractValidationStatus
 from app.models.compliance import ComplianceGap
 from app.models.contract_collaboration import ContractCollaboration
@@ -259,6 +263,123 @@ async def check_risk_appetite_breaches(db: AsyncSession) -> int:
                     severity="critical",
                 )
                 created += 1
+    return created
+
+
+async def check_treatment_overdue(db: AsyncSession) -> int:
+    """RFP gap fix: alert when a risk treatment plan's due_date has passed and it
+    isn't complete yet (progress_percentage < 100). RiskTreatment has no tenant_id
+    column of its own, so join through its Risk to scope recipients/links."""
+    created = 0
+    today = datetime.utcnow().date()
+
+    result = await db.execute(
+        select(RiskTreatment, Risk)
+        .join(Risk, Risk.id == RiskTreatment.risk_id)
+        .where(RiskTreatment.due_date.isnot(None))
+    )
+
+    for treatment, risk in result.all():
+        if (treatment.progress_percentage or 0) >= 100:
+            continue
+        try:
+            due = datetime.fromisoformat(treatment.due_date).date()
+        except (ValueError, TypeError):
+            continue
+
+        days_overdue = (today - due).days
+        if days_overdue <= 0:
+            continue  # not overdue yet
+
+        title = f"Treatment plan OVERDUE: {risk.title[:50]}"
+        message = (
+            f"The {treatment.treatment_option.value} treatment plan for risk '{risk.title}' "
+            f"was due {days_overdue} day(s) ago and is only "
+            f"{treatment.progress_percentage or 0}% complete."
+        )
+
+        recipients: dict[str, User] = {}
+        if treatment.owner_id:
+            owner_result = await db.execute(
+                select(User).where(User.id == treatment.owner_id, User.is_active == True)  # noqa: E712
+            )
+            owner = owner_result.scalar_one_or_none()
+            if owner:
+                recipients[owner.id] = owner
+        for user in await get_recipients_for_tenant(db, risk.tenant_id):
+            recipients[user.id] = user
+
+        for user in recipients.values():
+            if not await notification_exists(db, user.id, NotificationType.TREATMENT_OVERDUE, treatment.id, within_days=3):
+                await create_notification(
+                    db,
+                    user=user,
+                    notif_type=NotificationType.TREATMENT_OVERDUE,
+                    title=title,
+                    message=message,
+                    entity_id=treatment.id,
+                    entity_type="risk_treatment",
+                    link=f"/risks?highlight={risk.id}",
+                    severity="critical",
+                )
+                created += 1
+
+    return created
+
+
+async def check_treatment_budget_overrun(db: AsyncSession) -> int:
+    """RFP gap fix: alert when a risk treatment plan's actual_cost exceeds its
+    estimated_cost. Only fires once actual_cost has actually been recorded — an
+    unset actual_cost means spend simply isn't tracked yet, not that it's zero."""
+    created = 0
+
+    result = await db.execute(
+        select(RiskTreatment, Risk)
+        .join(Risk, Risk.id == RiskTreatment.risk_id)
+        .where(
+            RiskTreatment.actual_cost.isnot(None),
+            RiskTreatment.estimated_cost.isnot(None),
+        )
+    )
+
+    for treatment, risk in result.all():
+        if treatment.actual_cost <= treatment.estimated_cost:
+            continue
+
+        overrun = treatment.actual_cost - treatment.estimated_cost
+        title = f"Treatment plan over budget: {risk.title[:50]}"
+        message = (
+            f"The {treatment.treatment_option.value} treatment plan for risk '{risk.title}' "
+            f"has an actual cost of {treatment.actual_cost} against an estimated cost of "
+            f"{treatment.estimated_cost} (overrun of {overrun})."
+        )
+
+        recipients: dict[str, User] = {}
+        if treatment.owner_id:
+            owner_result = await db.execute(
+                select(User).where(User.id == treatment.owner_id, User.is_active == True)  # noqa: E712
+            )
+            owner = owner_result.scalar_one_or_none()
+            if owner:
+                recipients[owner.id] = owner
+        for user in await get_recipients_for_tenant(db, risk.tenant_id):
+            recipients[user.id] = user
+
+        for user in recipients.values():
+            if not await notification_exists(db, user.id, NotificationType.TREATMENT_BUDGET_OVERRUN, treatment.id, within_days=7):
+                await create_notification(
+                    db,
+                    user=user,
+                    notif_type=NotificationType.TREATMENT_BUDGET_OVERRUN,
+                    title=title,
+                    message=message,
+                    entity_id=treatment.id,
+                    entity_type="risk_treatment",
+                    link=f"/risks?highlight={risk.id}",
+                    severity="high",
+                )
+                created += 1
+
     return created
 
 
@@ -563,6 +684,78 @@ async def check_asset_eol(db: AsyncSession) -> int:
     return created
 
 
+async def check_asset_review_deadlines(db: AsyncSession) -> int:
+    """RFP gap fix: mandatory periodic asset review reminders. Mirrors
+    check_risk_review_deadlines's day-window logic exactly (14/7/0 days, capped at
+    30 days overdue) applied to Asset.next_review_date instead of Risk.next_review_date."""
+    created = 0
+    today = datetime.utcnow().date()
+
+    result = await db.execute(
+        select(Asset).where(Asset.next_review_date.isnot(None))
+    )
+    assets = result.scalars().all()
+
+    for asset in assets:
+        if not asset.next_review_date:
+            continue
+        try:
+            review_date = datetime.fromisoformat(asset.next_review_date).date()
+        except (ValueError, TypeError):
+            continue
+
+        days_remaining = (review_date - today).days
+
+        # Trigger at 14, 7, 0 days, and if overdue (cap at 30 days overdue)
+        if days_remaining > 14 or days_remaining < -30:
+            continue
+
+        if days_remaining < 0:
+            severity = "critical"
+            title = f"Asset review OVERDUE: {asset.name[:50]}"
+            message = f"Asset '{asset.name}' review is overdue by {abs(days_remaining)} days."
+        elif days_remaining == 0:
+            severity = "high"
+            title = f"Asset review due TODAY: {asset.name[:50]}"
+            message = f"Asset '{asset.name}' needs to be reviewed today."
+        elif days_remaining <= 7:
+            severity = "medium"
+            title = f"Asset review due in {days_remaining} days"
+            message = f"Asset '{asset.name}' needs review within {days_remaining} days."
+        else:
+            severity = "info"
+            title = f"Upcoming asset review in {days_remaining} days"
+            message = f"Asset '{asset.name}' scheduled for review in {days_remaining} days."
+
+        recipients: dict[str, User] = {}
+        if asset.owner_id:
+            owner_result = await db.execute(
+                select(User).where(User.id == asset.owner_id, User.is_active == True)  # noqa: E712
+            )
+            owner = owner_result.scalar_one_or_none()
+            if owner:
+                recipients[owner.id] = owner
+        for user in await get_recipients_for_tenant(db, asset.tenant_id):
+            recipients[user.id] = user
+
+        for user in recipients.values():
+            if not await notification_exists(db, user.id, NotificationType.ASSET_REVIEW_DUE, asset.id, within_days=3):
+                await create_notification(
+                    db,
+                    user=user,
+                    notif_type=NotificationType.ASSET_REVIEW_DUE,
+                    title=title,
+                    message=message,
+                    entity_id=asset.id,
+                    entity_type="asset",
+                    link=f"/assets?highlight={asset.id}",
+                    severity=severity,
+                )
+                created += 1
+
+    return created
+
+
 async def check_control_expiration(db: AsyncSession) -> int:
     """Notify the control owner + CISO/admins about AppliedControl rows nearing or past
     their expiration date (30-day warning window, matching the vendor/risk check style).
@@ -728,6 +921,9 @@ async def run_all_checks(db: AsyncSession) -> dict:
         "compliance_action_deadlines": 0,
         "asset_eol": 0,
         "control_expiration": 0,
+        "treatment_overdue": 0,
+        "treatment_budget_overrun": 0,
+        "asset_review_deadlines": 0,
     }
 
     try:
@@ -774,6 +970,21 @@ async def run_all_checks(db: AsyncSession) -> dict:
         results["control_expiration"] = await check_control_expiration(db)
     except Exception as e:
         print(f"Control expiration check failed: {e}")
+
+    try:
+        results["treatment_overdue"] = await check_treatment_overdue(db)
+    except Exception as e:
+        print(f"Treatment overdue check failed: {e}")
+
+    try:
+        results["treatment_budget_overrun"] = await check_treatment_budget_overrun(db)
+    except Exception as e:
+        print(f"Treatment budget overrun check failed: {e}")
+
+    try:
+        results["asset_review_deadlines"] = await check_asset_review_deadlines(db)
+    except Exception as e:
+        print(f"Asset review deadline check failed: {e}")
 
     await db.commit()
     results["total"] = sum(results.values())

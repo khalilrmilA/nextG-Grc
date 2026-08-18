@@ -13,6 +13,9 @@ class NotificationType(str, enum.Enum):
     RISK_STATUS_CHANGED = "risk_status_changed"
     RISK_OVER_APPETITE = "risk_over_appetite"
     RISK_TARGET_OVER_APPETITE = "risk_target_over_appetite"
+    SCENARIO_OVER_APPETITE = "scenario_over_appetite"
+    TREATMENT_OVERDUE = "treatment_overdue"
+    TREATMENT_BUDGET_OVERRUN = "treatment_budget_overrun"
     # Audit events
     AUDIT_ASSIGNED = "audit_assigned"
     AUDIT_DUE = "audit_due"
@@ -43,6 +46,7 @@ class NotificationType(str, enum.Enum):
     THREAT_CRITICAL = "threat_critical"
     # Asset events
     ASSET_EOL = "asset_eol"
+    ASSET_REVIEW_DUE = "asset_review_due"
     # Applied control events
     CONTROL_EXPIRED = "control_expired"
     # Auth / security events

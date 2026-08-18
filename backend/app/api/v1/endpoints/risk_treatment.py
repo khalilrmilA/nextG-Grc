@@ -34,6 +34,7 @@ class TreatmentIn(BaseModel):
     owner_id: str | None = None
     progress_percentage: int = 0
     estimated_cost: float | None = None
+    actual_cost: float | None = None
     transfer_to: str | None = None
     acceptance_justification: str | None = None
 
@@ -46,6 +47,7 @@ class TreatmentPatch(BaseModel):
     owner_id: str | None = None
     progress_percentage: int | None = None
     estimated_cost: float | None = None
+    actual_cost: float | None = None
     transfer_to: str | None = None
     acceptance_justification: str | None = None
 
@@ -60,6 +62,8 @@ class TreatmentOut(BaseModel):
     owner_id: str | None = None
     progress_percentage: int
     estimated_cost: float | None = None
+    actual_cost: float | None = None
+    priority: str | None = None
     transfer_to: str | None = None
     acceptance_justification: str | None = None
     model_config = {"from_attributes": True}
@@ -94,6 +98,40 @@ def _require_justification(option: RiskTreatmentOption, justification: str | Non
         )
 
 
+_SEVERITY_TO_PRIORITY = {
+    "critical": "critical", "high": "high", "medium": "medium", "low": "low", "info": "low",
+}
+
+
+def _derive_treatment_priority(risk: Risk) -> str:
+    """RFP gap fix: auto-derive the treatment plan's priority from its linked risk,
+    reusing the same critical/high/medium/low tiering compliance.py's ActionItem
+    remediation already uses (there: gap.remediation_priority -> ActionItemPriority;
+    here: risk.severity -> priority).
+
+    Simplified from the RFP's "criticité x complexité" formula to severity alone —
+    this codebase has no existing notion of treatment "complexity" to multiply
+    against, and inventing one would be a materially bigger feature than this gap
+    fix warrants. Falls back to the raw likelihood x impact score when severity
+    hasn't been computed yet (bands mirror the register's qualitative 1-5 scale:
+    >=20 critical, >=12 high, >=6 medium, else low).
+    """
+    severity = risk.severity
+    if severity is not None:
+        sev = severity.value if hasattr(severity, "value") else str(severity)
+        return _SEVERITY_TO_PRIORITY.get(sev, "medium")
+    score = risk.residual_risk_score if risk.residual_risk_score is not None else risk.inherent_risk_score
+    if score is None:
+        return "medium"
+    if score >= 20:
+        return "critical"
+    if score >= 12:
+        return "high"
+    if score >= 6:
+        return "medium"
+    return "low"
+
+
 @router.post("", response_model=TreatmentOut, status_code=status.HTTP_201_CREATED)
 async def upsert_treatment(
     body: TreatmentIn,
@@ -102,7 +140,7 @@ async def upsert_treatment(
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
     """Create or replace the treatment plan for a risk (one per risk)."""
-    await _risk_in_tenant(body.risk_id, tenant_id, db)
+    risk = await _risk_in_tenant(body.risk_id, tenant_id, db)
     _require_justification(body.treatment_option, body.acceptance_justification)
 
     existing = (await db.execute(
@@ -110,12 +148,14 @@ async def upsert_treatment(
     )).scalar_one_or_none()
 
     data = body.model_dump()
+    priority = _derive_treatment_priority(risk)
     if existing is None:
-        treatment = RiskTreatment(**data)
+        treatment = RiskTreatment(**data, priority=priority)
         db.add(treatment)
     else:
         for k, v in data.items():
             setattr(existing, k, v)
+        existing.priority = priority
         treatment = existing
     await db.commit()
     await db.refresh(treatment)
@@ -187,6 +227,10 @@ async def patch_treatment(
     _require_justification(option, justification)
     for k, v in updates.items():
         setattr(treatment, k, v)
+    # Re-derive priority from the linked risk on every update — its severity may
+    # have changed since the treatment plan was created.
+    risk = await _risk_in_tenant(treatment.risk_id, tenant_id, db)
+    treatment.priority = _derive_treatment_priority(risk)
     await db.commit()
     await db.refresh(treatment)
     return treatment
