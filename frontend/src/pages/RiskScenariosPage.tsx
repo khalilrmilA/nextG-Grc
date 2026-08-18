@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
-import { Plus, Search, X, Loader2, Filter } from "lucide-react";
+import { Plus, Search, X, Loader2, Filter, ChevronDown, Check } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { riskScenariosApi } from "@/api/endpoints";
+import { riskScenariosApi, assetsApi, vulnerabilitiesApi, threatsApi, appliedControlsApi } from "@/api/endpoints";
 
 const TREATMENT_BADGE: Record<string, string> = {
   mitigate: "bg-blue-100 text-blue-700 border-blue-200",
@@ -29,6 +29,115 @@ function riskLevel(prob: number, impact: number): string {
   return "low";
 }
 
+interface Option {
+  id: string;
+  label: string;
+}
+
+/** Inline checkbox-dropdown multi-select — no external UI-library dependency. */
+function MultiSelect({
+  options,
+  selected,
+  onChange,
+  placeholder,
+  emptyLabel,
+}: {
+  options: Option[];
+  selected: string[];
+  onChange: (ids: string[]) => void;
+  placeholder: string;
+  emptyLabel: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+
+  const filtered = options.filter((o) => o.label.toLowerCase().includes(query.toLowerCase()));
+
+  function toggle(id: string) {
+    onChange(selected.includes(id) ? selected.filter((x) => x !== id) : [...selected, id]);
+  }
+
+  const summary =
+    selected.length === 0
+      ? placeholder
+      : options
+          .filter((o) => selected.includes(o.id))
+          .map((o) => o.label)
+          .join(", ");
+
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="w-full flex items-center justify-between gap-2 border border-gray-200 rounded-xl px-3 py-2 text-sm text-left focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+      >
+        <span className={`truncate ${selected.length === 0 ? "text-gray-400" : "text-gray-800"}`}>{summary}</span>
+        <ChevronDown className="w-4 h-4 text-gray-400 shrink-0" />
+      </button>
+      {open && (
+        <>
+          <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
+          <div className="absolute z-20 mt-1 w-full bg-white border border-gray-200 rounded-xl shadow-lg max-h-64 overflow-hidden flex flex-col">
+            <div className="p-2 border-b border-gray-100">
+              <input
+                autoFocus
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="..."
+                className="w-full px-2 py-1.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+            <div className="overflow-y-auto">
+              {filtered.length === 0 ? (
+                <div className="px-3 py-4 text-sm text-gray-400 text-center">{emptyLabel}</div>
+              ) : (
+                filtered.map((o) => {
+                  const checked = selected.includes(o.id);
+                  return (
+                    <button
+                      type="button"
+                      key={o.id}
+                      onClick={() => toggle(o.id)}
+                      className="w-full flex items-center gap-2 px-3 py-2 text-sm text-left hover:bg-gray-50"
+                    >
+                      <span
+                        className={`w-4 h-4 rounded border shrink-0 flex items-center justify-center ${
+                          checked ? "bg-blue-600 border-blue-600" : "border-gray-300"
+                        }`}
+                      >
+                        {checked && <Check className="w-3 h-3 text-white" />}
+                      </span>
+                      <span className="truncate text-gray-700">{o.label}</span>
+                    </button>
+                  );
+                })
+              )}
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+const EMPTY_FORM = {
+  name: "",
+  description: "",
+  treatment: "untreated",
+  current_probability: 3,
+  current_impact: 3,
+  target_probability: 1,
+  target_impact: 1,
+  threat_actor: "",
+  strength_of_knowledge: "medium",
+  justification: "",
+  asset_ids: [] as string[],
+  vulnerability_ids: [] as string[],
+  threat_ids: [] as string[],
+  applied_control_ids: [] as string[],
+};
+
 export default function RiskScenariosPage() {
   const { t } = useTranslation();
   const [items, setItems] = useState<any[]>([]);
@@ -39,17 +148,12 @@ export default function RiskScenariosPage() {
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
-  const [form, setForm] = useState({
-    name: "",
-    description: "",
-    treatment: "untreated",
-    current_probability: 3,
-    current_impact: 3,
-    target_probability: 1,
-    target_impact: 1,
-    threat_actor: "",
-    strength_of_knowledge: "medium",
-  });
+  const [assetOptions, setAssetOptions] = useState<Option[]>([]);
+  const [vulnOptions, setVulnOptions] = useState<Option[]>([]);
+  const [threatOptions, setThreatOptions] = useState<Option[]>([]);
+  const [controlOptions, setControlOptions] = useState<Option[]>([]);
+
+  const [form, setForm] = useState(EMPTY_FORM);
 
   async function load() {
     try {
@@ -64,9 +168,34 @@ export default function RiskScenariosPage() {
     }
   }
 
+  async function loadOptions() {
+    const results = await Promise.allSettled([
+      assetsApi.list({ page_size: 500 }),
+      vulnerabilitiesApi.list(),
+      threatsApi.list(),
+      appliedControlsApi.list(),
+    ]);
+    const [assetsRes, vulnsRes, threatsRes, controlsRes] = results;
+
+    const unwrap = (r: PromiseSettledResult<any>): any[] => {
+      if (r.status !== "fulfilled") return [];
+      const d = r.value;
+      return Array.isArray(d) ? d : d.items || [];
+    };
+
+    setAssetOptions(unwrap(assetsRes).map((a: any) => ({ id: a.id, label: a.name })));
+    setVulnOptions(unwrap(vulnsRes).map((v: any) => ({ id: v.id, label: v.title })));
+    setThreatOptions(unwrap(threatsRes).map((th: any) => ({ id: th.id, label: th.name })));
+    setControlOptions(unwrap(controlsRes).map((c: any) => ({ id: c.id, label: c.name })));
+  }
+
   useEffect(() => {
     load();
   }, [treatmentFilter]);
+
+  useEffect(() => {
+    loadOptions();
+  }, []);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -76,7 +205,7 @@ export default function RiskScenariosPage() {
     try {
       await riskScenariosApi.create(form);
       setShowModal(false);
-      setForm({ name: "", description: "", treatment: "untreated", current_probability: 3, current_impact: 3, target_probability: 1, target_impact: 1, threat_actor: "", strength_of_knowledge: "medium" });
+      setForm(EMPTY_FORM);
       setLoading(true);
       load();
     } catch (err: any) {
@@ -89,6 +218,15 @@ export default function RiskScenariosPage() {
   const filtered = items.filter((i) =>
     i.name?.toLowerCase().includes(search.toLowerCase())
   );
+
+  function linkedCount(item: any): number {
+    return (
+      (item.asset_ids?.length || 0) +
+      (item.vulnerability_ids?.length || 0) +
+      (item.threat_ids?.length || 0) +
+      (item.applied_control_ids?.length || 0)
+    );
+  }
 
   return (
     <div className="p-8 max-w-7xl space-y-6">
@@ -121,7 +259,7 @@ export default function RiskScenariosPage() {
           <Filter className="w-4 h-4 text-gray-400" />
           <select value={treatmentFilter} onChange={(e) => setTreatmentFilter(e.target.value)} className="border border-gray-200 rounded-xl text-sm px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500">
             <option value="">{t("risk_scenarios.all_treatments")}</option>
-            {TREATMENT_OPTIONS.map((t) => <option key={t} value={t}>{t.charAt(0).toUpperCase() + t.slice(1)}</option>)}
+            {TREATMENT_OPTIONS.map((tr) => <option key={tr} value={tr}>{tr.charAt(0).toUpperCase() + tr.slice(1)}</option>)}
           </select>
         </div>
       </div>
@@ -146,12 +284,14 @@ export default function RiskScenariosPage() {
                 <th className="text-center px-6 py-3 font-medium text-gray-500">{t("risk_scenarios.table_target_risk")}</th>
                 <th className="text-left px-6 py-3 font-medium text-gray-500">{t("risk_scenarios.table_threat_actor")}</th>
                 <th className="text-left px-6 py-3 font-medium text-gray-500">{t("risk_scenarios.col_knowledge")}</th>
+                <th className="text-left px-6 py-3 font-medium text-gray-500">{t("risk_scenarios.col_linked")}</th>
               </tr>
             </thead>
             <tbody>
               {filtered.map((item: any) => {
                 const curLevel = item.current_risk_level || riskLevel(item.current_probability || 1, item.current_impact || 1);
                 const tgtLevel = item.target_risk_level || riskLevel(item.target_probability || 1, item.target_impact || 1);
+                const linked = linkedCount(item);
                 return (
                   <tr key={item.id} className="border-b border-gray-50 hover:bg-gray-50/50 transition-colors">
                     <td className="px-6 py-4 font-medium text-gray-900">{item.name}</td>
@@ -174,6 +314,9 @@ export default function RiskScenariosPage() {
                     </td>
                     <td className="px-6 py-4 text-gray-600">{item.threat_actor || "-"}</td>
                     <td className="px-6 py-4 text-gray-600">{item.strength_of_knowledge?.replace(/_/g, " ") || "-"}</td>
+                    <td className="px-6 py-4 text-gray-500">
+                      {linked > 0 ? t("risk_scenarios.linked_count", { count: linked }) : "-"}
+                    </td>
                   </tr>
                 );
               })}
@@ -186,7 +329,7 @@ export default function RiskScenariosPage() {
       {showModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
           <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setShowModal(false)} />
-          <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-lg mx-4 p-6 max-h-[90vh] overflow-y-auto">
+          <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-xl mx-4 p-6 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-lg font-semibold text-gray-900">{t("risk_scenarios.new_scenario")}</h2>
               <button onClick={() => setShowModal(false)} className="text-gray-400 hover:text-gray-600"><X className="w-5 h-5" /></button>
@@ -201,6 +344,51 @@ export default function RiskScenariosPage() {
                 <label className="block text-sm font-medium text-gray-700 mb-1">{t("common.description")}</label>
                 <textarea value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} rows={3} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
               </div>
+
+              {/* Threat → Vulnerability → Asset → Control chain selectors */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">{t("risk_scenarios.form_threats_label")}</label>
+                  <MultiSelect
+                    options={threatOptions}
+                    selected={form.threat_ids}
+                    onChange={(ids) => setForm({ ...form, threat_ids: ids })}
+                    placeholder={t("risk_scenarios.select_placeholder")}
+                    emptyLabel={t("risk_scenarios.no_options")}
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">{t("risk_scenarios.form_vulnerabilities_label")}</label>
+                  <MultiSelect
+                    options={vulnOptions}
+                    selected={form.vulnerability_ids}
+                    onChange={(ids) => setForm({ ...form, vulnerability_ids: ids })}
+                    placeholder={t("risk_scenarios.select_placeholder")}
+                    emptyLabel={t("risk_scenarios.no_options")}
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">{t("risk_scenarios.form_assets_label")}</label>
+                  <MultiSelect
+                    options={assetOptions}
+                    selected={form.asset_ids}
+                    onChange={(ids) => setForm({ ...form, asset_ids: ids })}
+                    placeholder={t("risk_scenarios.select_placeholder")}
+                    emptyLabel={t("risk_scenarios.no_options")}
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">{t("risk_scenarios.form_controls_label")}</label>
+                  <MultiSelect
+                    options={controlOptions}
+                    selected={form.applied_control_ids}
+                    onChange={(ids) => setForm({ ...form, applied_control_ids: ids })}
+                    placeholder={t("risk_scenarios.select_placeholder")}
+                    emptyLabel={t("risk_scenarios.no_options")}
+                  />
+                </div>
+              </div>
+
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">{t("risk_scenarios.form_treatment_label")}</label>
@@ -238,6 +426,16 @@ export default function RiskScenariosPage() {
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">{t("risk_scenarios.form_threat_actor_label")}</label>
                 <input value={form.threat_actor} onChange={(e) => setForm({ ...form, threat_actor: e.target.value })} placeholder={t("risk_scenarios.form_threat_actor_placeholder")} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">{t("risk_scenarios.form_justification_label")}</label>
+                <textarea
+                  value={form.justification}
+                  onChange={(e) => setForm({ ...form, justification: e.target.value })}
+                  rows={2}
+                  placeholder={t("risk_scenarios.form_justification_placeholder")}
+                  className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
               </div>
               <div className="flex justify-end gap-3 pt-2">
                 <button type="button" onClick={() => setShowModal(false)} className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800">{t("risk_scenarios.btn_cancel")}</button>
