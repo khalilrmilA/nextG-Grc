@@ -1,11 +1,12 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { AlertTriangle, Plus, Search, X, ChevronRight, Download, Target, Pencil, Loader2 } from "lucide-react";
+import { AlertTriangle, Plus, Search, X, ChevronRight, Download, Target, Pencil, Loader2, ShieldCheck } from "lucide-react";
 import { risksApi } from "../api/endpoints";
 import type { Risk, RiskSeverity } from "../types";
 import RiskAIPanel from "../components/ai/RiskAIPanel";
 import { exportRisksCSV } from "../utils/exportUtils";
+import { useAuthStore, hasAnyRole } from "../store/auth";
 
 const SEV_BADGE: Record<RiskSeverity, string> = {
   critical: "bg-red-100 text-red-700 border-red-200",
@@ -276,6 +277,17 @@ function RiskDetailModal({ risk, onClose, onUpdated }: { readonly risk: Risk; re
   const [appetiteError, setAppetiteError] = useState("");
   const [savingAppetite, setSavingAppetite] = useState(false);
 
+  // Task C: Validate Target (RFP mod 8 — final validation gate for the treatment plan)
+  const user = useAuthStore((u) => u);
+  const canValidateRole = hasAnyRole(user, ["ciso", "risk_manager"]);
+  const hasTargetScore = risk.target_likelihood != null && risk.target_impact != null;
+  const canValidateTarget = risk.appetite_threshold != null && hasTargetScore;
+  const targetBlockedByAppetite = !!risk.target_over_appetite;
+  const [showValidateForm, setShowValidateForm] = useState(false);
+  const [validateNotes, setValidateNotes] = useState(risk.target_calculation_notes ?? "");
+  const [validateError, setValidateError] = useState("");
+  const [savingValidate, setSavingValidate] = useState(false);
+
   async function saveAppetite() {
     setSavingAppetite(true);
     setAppetiteError("");
@@ -291,6 +303,21 @@ function RiskDetailModal({ risk, onClose, onUpdated }: { readonly risk: Risk; re
       setAppetiteError(t("risks.error_appetite_save_failed"));
     } finally {
       setSavingAppetite(false);
+    }
+  }
+
+  async function handleValidateTarget() {
+    setSavingValidate(true);
+    setValidateError("");
+    try {
+      const updated = await risksApi.validateTarget(risk.id, validateNotes.trim() || undefined);
+      onUpdated(updated);
+      setShowValidateForm(false);
+    } catch (err: unknown) {
+      const e = err as { response?: { data?: { detail?: string } } };
+      setValidateError(e.response?.data?.detail ?? t("risks.error_validate_target_failed"));
+    } finally {
+      setSavingValidate(false);
     }
   }
 
@@ -421,6 +448,62 @@ function RiskDetailModal({ risk, onClose, onUpdated }: { readonly risk: Risk; re
               </div>
             ) : (
               <p className="text-sm text-gray-400">{t("risks.appetite_not_set")}</p>
+            )}
+
+            {!editingAppetite && (
+              <div className="mt-3">
+                {risk.target_validated_at && (
+                  <div className="flex items-start gap-2 bg-emerald-50 border border-emerald-100 rounded-xl p-3">
+                    <ShieldCheck className="w-4 h-4 text-emerald-600 mt-0.5 flex-shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-semibold text-emerald-700">
+                        {t("risks.target_validated")} — {new Date(risk.target_validated_at).toLocaleString()}
+                      </p>
+                      {risk.target_calculation_notes && (
+                        <p className="text-xs text-emerald-700/80 mt-1 leading-relaxed">{risk.target_calculation_notes}</p>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {canValidateRole && canValidateTarget && !targetBlockedByAppetite && (
+                  <div className="mt-2">
+                    {!showValidateForm ? (
+                      <button
+                        onClick={() => { setShowValidateForm(true); setValidateError(""); }}
+                        className="inline-flex items-center gap-1.5 text-xs font-medium text-emerald-700 border border-emerald-200 bg-emerald-50 hover:bg-emerald-100 px-3 py-1.5 rounded-lg transition-colors"
+                      >
+                        <ShieldCheck className="w-3.5 h-3.5" />
+                        {risk.target_validated_at ? t("risks.revalidate_target") : t("risks.validate_target")}
+                      </button>
+                    ) : (
+                      <div className="space-y-2 bg-gray-50 rounded-xl p-3">
+                        {validateError && <div className="p-2 bg-red-50 text-red-700 rounded-lg text-xs">{validateError}</div>}
+                        <div>
+                          <label className="block text-xs text-gray-600 mb-1">{t("risks.calculation_notes")}</label>
+                          <textarea
+                            value={validateNotes}
+                            onChange={(e) => setValidateNotes(e.target.value)}
+                            rows={2}
+                            placeholder={t("risks.calculation_notes_placeholder")}
+                            className="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          />
+                        </div>
+                        <div className="flex justify-end gap-2">
+                          <button onClick={() => setShowValidateForm(false)} className="px-3 py-1.5 text-xs text-gray-600 hover:text-gray-800">{t("common.cancel")}</button>
+                          <button onClick={handleValidateTarget} disabled={savingValidate} className="inline-flex items-center gap-1.5 bg-emerald-600 text-white px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-emerald-700 disabled:opacity-50">
+                            {savingValidate && <Loader2 className="w-3.5 h-3.5 animate-spin" />} {t("common.save")}
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {canValidateRole && canValidateTarget && targetBlockedByAppetite && (
+                  <p className="text-xs text-orange-600 mt-2">{t("risks.validate_blocked_over_appetite")}</p>
+                )}
+              </div>
             )}
           </div>
 

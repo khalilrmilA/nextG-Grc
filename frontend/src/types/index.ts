@@ -133,6 +133,8 @@ export interface Risk extends BaseEntity {
   target_likelihood?: number | null;
   target_impact?: number | null;
   target_over_appetite?: boolean | null;
+  target_validated_at?: string | null;
+  target_calculation_notes?: string | null;
   reopen_reason?: string | null;
 }
 

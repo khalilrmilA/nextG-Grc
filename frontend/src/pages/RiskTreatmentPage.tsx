@@ -1,7 +1,8 @@
-import { useState, useEffect } from "react";
-import { Plus, X, Loader2, Crown, ShieldCheck, AlertTriangle, Clock } from "lucide-react";
+import { useState, useEffect, useMemo } from "react";
+import { Plus, X, Loader2, Crown, ShieldCheck, AlertTriangle, Clock, ChevronDown, ChevronRight, Users, List } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { riskTreatmentApi } from "@/api/endpoints";
+import { riskTreatmentApi, riskScenariosApi, usersApi } from "@/api/endpoints";
+import { MultiSelect } from "@/components/common/MultiSelect";
 
 const OPTIONS = ["mitigate", "accept", "transfer", "avoid"];
 
@@ -13,16 +14,32 @@ const OPTION_BADGE: Record<string, string> = {
 };
 
 type RiskLite = { id: string; title: string };
+type ScenarioLite = { id: string; name: string; linked_risk_id?: string | null; current_risk_level?: string | null };
+type UserLite = { id: string; first_name: string; last_name: string; email: string };
+type TrackingRow = {
+  id: string; risk_id: string; treatment_option: string; owner_id: string | null;
+  progress_percentage: number; due_date: string | null; estimated_cost: number | null;
+  actual_cost: number | null; overdue: boolean; at_risk: boolean; over_budget: boolean;
+};
+type ResponsibleGroup = {
+  owner_id: string | null; total: number; overdue: number; at_risk: number; over_budget: number;
+  avg_progress: number; treatments: TrackingRow[];
+};
 
 export default function RiskTreatmentPage() {
   const { t } = useTranslation();
   const [treatments, setTreatments] = useState<any[]>([]);
   const [tracking, setTracking] = useState<any[]>([]);
+  const [byResponsible, setByResponsible] = useState<ResponsibleGroup[]>([]);
   const [risks, setRisks] = useState<RiskLite[]>([]);
+  const [scenarios, setScenarios] = useState<ScenarioLite[]>([]);
+  const [users, setUsers] = useState<UserLite[]>([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [viewMode, setViewMode] = useState<"all" | "by_responsible">("all");
+  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
 
   const emptyForm = {
     risk_id: "",
@@ -33,16 +50,22 @@ export default function RiskTreatmentPage() {
     estimated_cost: "",
     transfer_to: "",
     acceptance_justification: "",
+    linked_scenario_ids: [] as string[],
   };
   const [form, setForm] = useState({ ...emptyForm });
 
   async function load() {
     try {
-      const [tl, tr] = await Promise.all([riskTreatmentApi.list(), riskTreatmentApi.tracking()]);
+      const [tl, tr, br] = await Promise.all([
+        riskTreatmentApi.list(),
+        riskTreatmentApi.tracking(),
+        riskTreatmentApi.trackingByResponsible(),
+      ]);
       setTreatments(Array.isArray(tl) ? tl : []);
       setTracking(Array.isArray(tr) ? tr : []);
+      setByResponsible(Array.isArray(br) ? br : []);
     } catch {
-      setTreatments([]); setTracking([]);
+      setTreatments([]); setTracking([]); setByResponsible([]);
     } finally {
       setLoading(false);
     }
@@ -53,11 +76,37 @@ export default function RiskTreatmentPage() {
     riskTreatmentApi.risks()
       .then((d: any) => setRisks((d.items || d || []).map((r: any) => ({ id: r.id, title: r.title }))))
       .catch(() => setRisks([]));
+    riskScenariosApi.list()
+      .then((d: any) => setScenarios(Array.isArray(d) ? d : (d?.items || [])))
+      .catch(() => setScenarios([]));
+    usersApi.list()
+      .then((d: any) => setUsers(Array.isArray(d) ? d : []))
+      .catch(() => setUsers([]));
   }, []);
 
   const riskTitle = (id: string) => risks.find((r) => r.id === id)?.title || id.slice(0, 8);
+  const scenarioLabel = (s: ScenarioLite) => s.current_risk_level ? `${s.name} (${s.current_risk_level})` : s.name;
+  const scenarioName = (id: string) => {
+    const s = scenarios.find((sc) => sc.id === id);
+    return s ? scenarioLabel(s) : id.slice(0, 8);
+  };
+  const ownerName = (id: string | null) => {
+    if (!id) return t("treatment.unassigned", "Unassigned");
+    const u = users.find((x) => x.id === id);
+    if (!u) return id.slice(0, 8);
+    const name = `${u.first_name || ""} ${u.last_name || ""}`.trim();
+    return name || u.email;
+  };
   const overdueCount = tracking.filter((t) => t.overdue).length;
   const atRiskCount = tracking.filter((t) => t.at_risk).length;
+
+  // Task A: scenario options scoped to the risk currently selected in the form.
+  const scenarioOptions = useMemo(() => {
+    const pool = form.risk_id
+      ? scenarios.filter((s) => s.linked_risk_id === form.risk_id)
+      : scenarios;
+    return pool.map((s) => ({ id: s.id, label: scenarioLabel(s) }));
+  }, [scenarios, form.risk_id]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -76,6 +125,7 @@ export default function RiskTreatmentPage() {
         estimated_cost: form.estimated_cost ? Number(form.estimated_cost) : null,
         transfer_to: form.transfer_to || null,
         acceptance_justification: form.acceptance_justification || null,
+        linked_scenario_ids: form.linked_scenario_ids,
       });
       setShowModal(false);
       setForm({ ...emptyForm });
@@ -121,44 +171,146 @@ export default function RiskTreatmentPage() {
         ))}
       </div>
 
-      {/* Table */}
-      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-        {loading ? (
-          <div className="flex items-center justify-center py-16"><Loader2 className="w-6 h-6 animate-spin text-blue-500" /></div>
-        ) : treatments.length === 0 ? (
-          <div className="text-center py-16 text-gray-400">{t("treatment.empty", "No treatment plans yet. Add one to start tracking mitigation.")}</div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-gray-100 bg-gray-50/50">
-                  <th className="text-left px-6 py-3 font-medium text-gray-500">{t("treatment.col_risk", "Risk")}</th>
-                  <th className="text-left px-6 py-3 font-medium text-gray-500">{t("treatment.col_option", "Option")}</th>
-                  <th className="text-left px-6 py-3 font-medium text-gray-500">{t("treatment.col_progress", "Progress")}</th>
-                  <th className="text-left px-6 py-3 font-medium text-gray-500">{t("treatment.col_due", "Due")}</th>
-                  <th className="text-left px-6 py-3 font-medium text-gray-500">{t("treatment.col_cost", "Est. cost")}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {treatments.map((tr: any) => (
-                  <tr key={tr.id} className="border-b border-gray-50 hover:bg-gray-50/50 transition-colors">
-                    <td className="px-6 py-4 font-medium text-gray-900">{riskTitle(tr.risk_id)}</td>
-                    <td className="px-6 py-4"><span className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold border ${OPTION_BADGE[tr.treatment_option] || "bg-gray-100 text-gray-600"}`}>{tr.treatment_option}</span></td>
-                    <td className="px-6 py-4">
-                      <div className="flex items-center gap-2">
-                        <div className="w-24 h-2 bg-gray-100 rounded-full overflow-hidden"><div className="h-full bg-blue-500 rounded-full" style={{ width: `${tr.progress_percentage || 0}%` }} /></div>
-                        <span className="text-xs text-gray-600 tabular-nums">{tr.progress_percentage || 0}%</span>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 text-gray-600">{tr.due_date || "—"}</td>
-                    <td className="px-6 py-4 text-gray-600 tabular-nums">{tr.estimated_cost != null ? `$${tr.estimated_cost}` : "—"}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
+      {/* View toggle (Task B: All vs By responsible) */}
+      <div className="inline-flex items-center gap-1 bg-gray-100 rounded-xl p-1">
+        <button
+          onClick={() => setViewMode("all")}
+          className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${viewMode === "all" ? "bg-white text-gray-900 shadow-sm" : "text-gray-500 hover:text-gray-700"}`}
+        >
+          <List className="w-3.5 h-3.5" /> {t("treatment.view_all", "All")}
+        </button>
+        <button
+          onClick={() => setViewMode("by_responsible")}
+          className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${viewMode === "by_responsible" ? "bg-white text-gray-900 shadow-sm" : "text-gray-500 hover:text-gray-700"}`}
+        >
+          <Users className="w-3.5 h-3.5" /> {t("treatment.view_by_responsible", "By responsible")}
+        </button>
       </div>
+
+      {/* Table */}
+      {viewMode === "all" ? (
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+          {loading ? (
+            <div className="flex items-center justify-center py-16"><Loader2 className="w-6 h-6 animate-spin text-blue-500" /></div>
+          ) : treatments.length === 0 ? (
+            <div className="text-center py-16 text-gray-400">{t("treatment.empty", "No treatment plans yet. Add one to start tracking mitigation.")}</div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-gray-100 bg-gray-50/50">
+                    <th className="text-left px-6 py-3 font-medium text-gray-500">{t("treatment.col_risk", "Risk")}</th>
+                    <th className="text-left px-6 py-3 font-medium text-gray-500">{t("treatment.col_option", "Option")}</th>
+                    <th className="text-left px-6 py-3 font-medium text-gray-500">{t("treatment.col_progress", "Progress")}</th>
+                    <th className="text-left px-6 py-3 font-medium text-gray-500">{t("treatment.col_due", "Due")}</th>
+                    <th className="text-left px-6 py-3 font-medium text-gray-500">{t("treatment.col_cost", "Est. cost")}</th>
+                    <th className="text-left px-6 py-3 font-medium text-gray-500">{t("treatment.col_scenarios", "Linked scenarios")}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {treatments.map((tr: any) => (
+                    <tr key={tr.id} className="border-b border-gray-50 hover:bg-gray-50/50 transition-colors">
+                      <td className="px-6 py-4 font-medium text-gray-900">{riskTitle(tr.risk_id)}</td>
+                      <td className="px-6 py-4"><span className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold border ${OPTION_BADGE[tr.treatment_option] || "bg-gray-100 text-gray-600"}`}>{tr.treatment_option}</span></td>
+                      <td className="px-6 py-4">
+                        <div className="flex items-center gap-2">
+                          <div className="w-24 h-2 bg-gray-100 rounded-full overflow-hidden"><div className="h-full bg-blue-500 rounded-full" style={{ width: `${tr.progress_percentage || 0}%` }} /></div>
+                          <span className="text-xs text-gray-600 tabular-nums">{tr.progress_percentage || 0}%</span>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 text-gray-600">{tr.due_date || "—"}</td>
+                      <td className="px-6 py-4 text-gray-600 tabular-nums">{tr.estimated_cost != null ? `$${tr.estimated_cost}` : "—"}</td>
+                      <td className="px-6 py-4">
+                        {tr.linked_scenario_ids?.length ? (
+                          <div className="flex flex-wrap gap-1 max-w-xs">
+                            {tr.linked_scenario_ids.map((sid: string) => (
+                              <span key={sid} className="px-2 py-0.5 bg-indigo-50 text-indigo-700 text-xs rounded-md font-medium">{scenarioName(sid)}</span>
+                            ))}
+                          </div>
+                        ) : <span className="text-gray-300">—</span>}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {loading ? (
+            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm flex items-center justify-center py-16"><Loader2 className="w-6 h-6 animate-spin text-blue-500" /></div>
+          ) : byResponsible.length === 0 ? (
+            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm text-center py-16 text-gray-400">{t("treatment.empty", "No treatment plans yet. Add one to start tracking mitigation.")}</div>
+          ) : (
+            byResponsible.map((group) => {
+              const key = group.owner_id ?? "unassigned";
+              const open = openGroups[key] ?? true;
+              return (
+                <div key={key} className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+                  <button
+                    type="button"
+                    onClick={() => setOpenGroups((g) => ({ ...g, [key]: !open }))}
+                    className="w-full flex items-center justify-between px-6 py-4 hover:bg-gray-50/50 transition-colors"
+                  >
+                    <div className="flex items-center gap-2">
+                      {open ? <ChevronDown className="w-4 h-4 text-gray-400" /> : <ChevronRight className="w-4 h-4 text-gray-400" />}
+                      <span className="font-semibold text-gray-900">{ownerName(group.owner_id)}</span>
+                    </div>
+                    <div className="flex items-center gap-4 text-xs text-gray-500">
+                      <span>{t("treatment.group_total", "Total")}: <b className="text-gray-800">{group.total}</b></span>
+                      <span className="text-red-600">{t("treatment.stat_overdue", "Overdue")}: <b>{group.overdue}</b></span>
+                      <span className="text-amber-600">{t("treatment.stat_at_risk", "Due today / at risk")}: <b>{group.at_risk}</b></span>
+                      <span className="text-orange-600">{t("treatment.group_over_budget", "Over budget")}: <b>{group.over_budget}</b></span>
+                      <span>{t("treatment.group_avg_progress", "Avg. progress")}: <b className="text-gray-800">{group.avg_progress}%</b></span>
+                    </div>
+                  </button>
+                  {open && (
+                    <div className="overflow-x-auto border-t border-gray-100">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="border-b border-gray-100 bg-gray-50/50">
+                            <th className="text-left px-6 py-2.5 font-medium text-gray-500">{t("treatment.col_risk", "Risk")}</th>
+                            <th className="text-left px-6 py-2.5 font-medium text-gray-500">{t("treatment.col_option", "Option")}</th>
+                            <th className="text-left px-6 py-2.5 font-medium text-gray-500">{t("treatment.col_progress", "Progress")}</th>
+                            <th className="text-left px-6 py-2.5 font-medium text-gray-500">{t("treatment.col_due", "Due")}</th>
+                            <th className="text-left px-6 py-2.5 font-medium text-gray-500">{t("treatment.col_cost", "Est. cost")}</th>
+                            <th className="text-left px-6 py-2.5 font-medium text-gray-500">{t("treatment.col_flags", "Flags")}</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {group.treatments.map((tr) => (
+                            <tr key={tr.id} className="border-b border-gray-50 hover:bg-gray-50/50 transition-colors">
+                              <td className="px-6 py-3 font-medium text-gray-900">{riskTitle(tr.risk_id)}</td>
+                              <td className="px-6 py-3"><span className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold border ${OPTION_BADGE[tr.treatment_option] || "bg-gray-100 text-gray-600"}`}>{tr.treatment_option}</span></td>
+                              <td className="px-6 py-3">
+                                <div className="flex items-center gap-2">
+                                  <div className="w-24 h-2 bg-gray-100 rounded-full overflow-hidden"><div className="h-full bg-blue-500 rounded-full" style={{ width: `${tr.progress_percentage || 0}%` }} /></div>
+                                  <span className="text-xs text-gray-600 tabular-nums">{tr.progress_percentage || 0}%</span>
+                                </div>
+                              </td>
+                              <td className="px-6 py-3 text-gray-600">{tr.due_date || "—"}</td>
+                              <td className="px-6 py-3 text-gray-600 tabular-nums">{tr.estimated_cost != null ? `$${tr.estimated_cost}` : "—"}</td>
+                              <td className="px-6 py-3">
+                                <div className="flex flex-wrap gap-1">
+                                  {tr.overdue && <span className="px-2 py-0.5 bg-red-100 text-red-700 text-xs rounded-full font-medium">{t("treatment.stat_overdue", "Overdue")}</span>}
+                                  {tr.at_risk && <span className="px-2 py-0.5 bg-amber-100 text-amber-700 text-xs rounded-full font-medium">{t("treatment.flag_at_risk", "At risk")}</span>}
+                                  {tr.over_budget && <span className="px-2 py-0.5 bg-orange-100 text-orange-700 text-xs rounded-full font-medium">{t("treatment.flag_over_budget", "Over budget")}</span>}
+                                  {!tr.overdue && !tr.at_risk && !tr.over_budget && <span className="text-gray-300">—</span>}
+                                </div>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              );
+            })
+          )}
+        </div>
+      )}
 
       {/* Create Modal */}
       {showModal && (
@@ -173,10 +325,20 @@ export default function RiskTreatmentPage() {
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">{t("treatment.col_risk", "Risk")} *</label>
-                <select value={form.risk_id} onChange={(e) => setForm({ ...form, risk_id: e.target.value })} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                <select value={form.risk_id} onChange={(e) => setForm({ ...form, risk_id: e.target.value, linked_scenario_ids: [] })} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
                   <option value="">{t("treatment.select_risk", "Select a risk…")}</option>
                   {risks.map((r) => <option key={r.id} value={r.id}>{r.title}</option>)}
                 </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">{t("treatment.linked_scenarios", "Linked risk scenarios")}</label>
+                <MultiSelect
+                  options={scenarioOptions}
+                  selected={form.linked_scenario_ids}
+                  onChange={(ids) => setForm({ ...form, linked_scenario_ids: ids })}
+                  placeholder={t("treatment.select_scenarios", "Select scenario(s)…")}
+                  emptyLabel={t("treatment.no_scenarios", "No scenarios for this risk")}
+                />
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
