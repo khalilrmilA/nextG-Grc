@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Plus, Search, X, Loader2, Filter, Boxes, ShieldCheck, Layers, Crown } from "lucide-react";
+import { Plus, Search, X, Loader2, Filter, Boxes, ShieldCheck, Layers, Crown, AlertTriangle } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { assetsApi, usersApi, authApi } from "@/api/endpoints";
 
@@ -42,6 +42,12 @@ export default function AssetsPage() {
   const [classFilter, setClassFilter] = useState("");
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [eolAssets, setEolAssets] = useState<any[]>([]);
+  const [eolDismissed, setEolDismissed] = useState(false);
+
+  useEffect(() => {
+    assetsApi.eolSoon().then((d: any) => setEolAssets(Array.isArray(d) ? d : [])).catch(() => setEolAssets([]));
+  }, []);
 
   const emptyForm = {
     name: "",
@@ -155,6 +161,24 @@ export default function AssetsPage() {
           <Plus className="w-4 h-4" /> {t("assets.new_asset", "New Asset")}
         </button>
       </div>
+
+      {/* End-of-life banner (RFP mod 2.4) */}
+      {!eolDismissed && eolAssets.length > 0 && (
+        <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 flex items-start gap-3">
+          <AlertTriangle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-semibold text-amber-900">
+              {t("assets.eol_banner_title", "{{count}} asset(s) approaching or past end-of-life", { count: eolAssets.length })}
+            </p>
+            <p className="text-xs text-amber-700 mt-1 truncate">
+              {eolAssets.slice(0, 5).map((a: any) => a.name).join(", ")}{eolAssets.length > 5 ? "…" : ""}
+            </p>
+          </div>
+          <button onClick={() => setEolDismissed(true)} className="text-amber-500 hover:text-amber-700 flex-shrink-0">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
 
       {/* Stats */}
       <div className="grid grid-cols-3 gap-4">

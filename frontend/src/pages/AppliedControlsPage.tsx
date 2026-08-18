@@ -1,7 +1,8 @@
 import { useState, useEffect } from "react";
 import { Plus, Search, X, Loader2, Filter } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { appliedControlsApi } from "@/api/endpoints";
+import { appliedControlsApi, riskScenariosApi } from "@/api/endpoints";
+import { MultiSelect, type MultiSelectOption } from "@/components/common/MultiSelect";
 
 const STATUS_BADGE: Record<string, string> = {
   planned: "bg-gray-100 text-gray-600 border-gray-200",
@@ -44,7 +45,16 @@ export default function AppliedControlsPage() {
     cost: 0,
     recurring_cost: 0,
     eta: "",
+    risk_scenario_ids: [] as string[],
   });
+  const [scenarioOptions, setScenarioOptions] = useState<MultiSelectOption[]>([]);
+
+  useEffect(() => {
+    riskScenariosApi.list().then((d: any) => {
+      const list = Array.isArray(d) ? d : d.items || [];
+      setScenarioOptions(list.map((s: any) => ({ id: s.id, label: s.name })));
+    }).catch(() => setScenarioOptions([]));
+  }, []);
 
   async function load() {
     try {
@@ -73,7 +83,7 @@ export default function AppliedControlsPage() {
       if (!payload.eta) delete payload.eta;
       await appliedControlsApi.create(payload);
       setShowModal(false);
-      setForm({ ref_id: "", name: "", description: "", category: "", csf_function: "protect", status: "planned", effort: "medium", cost: 0, recurring_cost: 0, eta: "" });
+      setForm({ ref_id: "", name: "", description: "", category: "", csf_function: "protect", status: "planned", effort: "medium", cost: 0, recurring_cost: 0, eta: "", risk_scenario_ids: [] });
       setLoading(true);
       load();
     } catch (err: any) {
@@ -86,6 +96,11 @@ export default function AppliedControlsPage() {
   const filtered = items.filter((i) =>
     i.name?.toLowerCase().includes(search.toLowerCase()) || i.ref_id?.toLowerCase().includes(search.toLowerCase())
   );
+
+  const kpiTotal = items.length;
+  const kpiImplemented = items.filter((i) => i.status === "implemented").length;
+  const kpiInProgress = items.filter((i) => i.status === "in_progress").length;
+  const kpiTotalCost = items.reduce((sum, i) => sum + (Number(i.cost) || 0), 0);
 
   return (
     <div className="p-8 max-w-7xl space-y-6">
@@ -102,6 +117,28 @@ export default function AppliedControlsPage() {
           <Plus className="w-4 h-4" /> {t("applied_controls.new_control")}
         </button>
       </div>
+
+      {/* KPI tiles (RFP mod 14.5) */}
+      {!loading && items.length > 0 && (
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+          <div className="bg-white rounded-2xl border border-gray-100 p-4 text-center">
+            <p className="text-2xl font-bold text-gray-900">{kpiTotal}</p>
+            <p className="text-xs text-gray-400 mt-0.5">{t("applied_controls.kpi_total", "Total Controls")}</p>
+          </div>
+          <div className="bg-white rounded-2xl border border-gray-100 p-4 text-center">
+            <p className="text-2xl font-bold text-green-600">{kpiImplemented}</p>
+            <p className="text-xs text-gray-400 mt-0.5">{t("applied_controls.kpi_implemented", "Implemented")}</p>
+          </div>
+          <div className="bg-white rounded-2xl border border-gray-100 p-4 text-center">
+            <p className="text-2xl font-bold text-blue-600">{kpiInProgress}</p>
+            <p className="text-xs text-gray-400 mt-0.5">{t("applied_controls.kpi_in_progress", "In Progress")}</p>
+          </div>
+          <div className="bg-white rounded-2xl border border-gray-100 p-4 text-center">
+            <p className="text-2xl font-bold text-gray-900">${kpiTotalCost.toLocaleString()}</p>
+            <p className="text-xs text-gray-400 mt-0.5">{t("applied_controls.kpi_total_cost", "Total Cost")}</p>
+          </div>
+        </div>
+      )}
 
       {/* Filters */}
       <div className="flex items-center gap-3">
@@ -250,6 +287,16 @@ export default function AppliedControlsPage() {
                   <label className="block text-sm font-medium text-gray-700 mb-1">{t("applied_controls.form_eta")}</label>
                   <input type="date" value={form.eta} onChange={(e) => setForm({ ...form, eta: e.target.value })} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
                 </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">{t("applied_controls.linked_scenarios", "Linked Risk Scenarios")}</label>
+                <MultiSelect
+                  options={scenarioOptions}
+                  selected={form.risk_scenario_ids}
+                  onChange={(ids) => setForm({ ...form, risk_scenario_ids: ids })}
+                  placeholder={t("risk_scenarios.select_placeholder", "Select...")}
+                  emptyLabel={t("risk_scenarios.no_options", "No matches")}
+                />
               </div>
               <div className="flex justify-end gap-3 pt-2">
                 <button type="button" onClick={() => setShowModal(false)} className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800">{t("common.cancel")}</button>

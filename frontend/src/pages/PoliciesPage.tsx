@@ -6,7 +6,7 @@ import {
   ChevronRight, Wand2, Trash2, Search, Download, Send, History,
   Edit3, AlertTriangle, Users, Sparkles, StopCircle,
 } from "lucide-react";
-import { policiesApi, usersApi, aiApi, type PolicyVersion, type PolicyAttestation } from "../api/endpoints";
+import { policiesApi, usersApi, aiApi, assetGraphApi, type PolicyVersion, type PolicyAttestation } from "../api/endpoints";
 import type { Policy } from "../types";
 import i18n from "../i18n";
 
@@ -39,9 +39,21 @@ function isOverdue(dateStr?: string): boolean {
 
 function NewPolicyModal({ onClose, onSaved }: { readonly onClose: () => void; readonly onSaved: (p: Policy) => void }) {
   const { t } = useTranslation();
-  const [form, setForm] = useState({ title: "", category: "Security", status: "draft", review_months: 12, description: "" });
+  const [form, setForm] = useState({
+    title: "", category: "Security", status: "draft", review_months: 12, description: "",
+    effective_date: "", expiration_date: "", business_process_id: "", org_entity_id: "",
+  });
   const [error, setError]   = useState("");
   const [saving, setSaving] = useState(false);
+  const [entities, setEntities] = useState<any[]>([]);
+  const [processes, setProcesses] = useState<any[]>([]);
+
+  useEffect(() => {
+    Promise.allSettled([assetGraphApi.listEntities(), assetGraphApi.listProcesses()]).then(([e, p]) => {
+      setEntities(e.status === "fulfilled" ? e.value : []);
+      setProcesses(p.status === "fulfilled" ? p.value : []);
+    });
+  }, []);
 
   const STATUS_MAP: Record<string, { label: string }> = {
     draft:     { label: t("policies.draft")     },
@@ -60,6 +72,8 @@ function NewPolicyModal({ onClose, onSaved }: { readonly onClose: () => void; re
         title: form.title.trim(), category: form.category,
         status: form.status as Policy["status"], description: form.description.trim() || undefined,
         review_frequency_months: form.review_months,
+        effective_date: form.effective_date || null, expiration_date: form.expiration_date || null,
+        business_process_id: form.business_process_id || null, org_entity_id: form.org_entity_id || null,
       });
       onSaved(created); onClose();
     } catch (err: unknown) {
@@ -111,6 +125,36 @@ function NewPolicyModal({ onClose, onSaved }: { readonly onClose: () => void; re
             <textarea id="pol-desc" rows={3} className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
               placeholder={t("policies.description_placeholder")}
               value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label htmlFor="pol-effective" className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">{t("policies.effective_date_label", "Effective Date")}</label>
+              <input id="pol-effective" type="date" className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                value={form.effective_date} onChange={e => setForm(f => ({ ...f, effective_date: e.target.value }))} />
+            </div>
+            <div>
+              <label htmlFor="pol-expiration" className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">{t("policies.expiration_date_label", "Expiration Date")}</label>
+              <input id="pol-expiration" type="date" className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                value={form.expiration_date} onChange={e => setForm(f => ({ ...f, expiration_date: e.target.value }))} />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label htmlFor="pol-process" className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">{t("policies.business_process_label", "Business Process")}</label>
+              <select id="pol-process" className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                value={form.business_process_id} onChange={e => setForm(f => ({ ...f, business_process_id: e.target.value }))}>
+                <option value="">{t("policies.no_process", "None")}</option>
+                {processes.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+              </select>
+            </div>
+            <div>
+              <label htmlFor="pol-entity" className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">{t("policies.org_entity_label", "Org Entity")}</label>
+              <select id="pol-entity" className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                value={form.org_entity_id} onChange={e => setForm(f => ({ ...f, org_entity_id: e.target.value }))}>
+                <option value="">{t("policies.no_entity", "None")}</option>
+                {entities.map((en) => <option key={en.id} value={en.id}>{en.name}</option>)}
+              </select>
+            </div>
           </div>
           <div className="flex gap-3 pt-2">
             <button type="button" onClick={onClose}
@@ -380,6 +424,14 @@ function PolicyDetailModal({ policy, onClose, onStatusChange, onDelete, users }:
                 <div>
                   <p className="text-xs text-gray-400 flex items-center gap-1"><Link2 className="w-3 h-3" />{t("policies.review_cycle")}</p>
                   <p className="text-sm font-medium text-gray-700 mt-0.5">{policy.review_frequency_months} months</p>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-400 flex items-center gap-1"><Calendar className="w-3 h-3" />{t("policies.effective_date_label", "Effective Date")}</p>
+                  <p className="text-sm font-medium text-gray-700 mt-0.5">{policy.effective_date ?? "—"}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-400 flex items-center gap-1"><Calendar className="w-3 h-3" />{t("policies.expiration_date_label", "Expiration Date")}</p>
+                  <p className="text-sm font-medium text-gray-700 mt-0.5">{policy.expiration_date ?? "—"}</p>
                 </div>
               </div>
 

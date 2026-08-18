@@ -43,6 +43,18 @@ export const gapEn = {
     confirm_delete_process: "Delete this business process?",
     filter_all_entities: "All entities", filter_all_asset_types: "All asset types", clear_filters: "Clear filters",
   },
+  policies: {
+    effective_date_label: "Effective Date", expiration_date_label: "Expiration Date",
+    business_process_label: "Business Process", org_entity_label: "Org Entity",
+    no_process: "None", no_entity: "None",
+  },
+  applied_controls: {
+    linked_scenarios: "Linked Risk Scenarios",
+    kpi_total: "Total Controls", kpi_implemented: "Implemented", kpi_in_progress: "In Progress", kpi_total_cost: "Total Cost",
+  },
+  assets: {
+    eol_banner_title: "{{count}} asset(s) approaching or past end-of-life",
+  },
   ocr: {
     page: "Page", chars_short: "{{n}} chars", download_pdf: "Download PDF",
     empty_page: "— no text on this page —", err_pdf: "Could not generate the PDF. Please try again.",
@@ -96,6 +108,18 @@ export const gapFr = {
     confirm_delete_process: "Supprimer ce processus métier ?",
     filter_all_entities: "Toutes les entités", filter_all_asset_types: "Tous les types d'actifs", clear_filters: "Effacer les filtres",
   },
+  policies: {
+    effective_date_label: "Date de mise en vigueur", expiration_date_label: "Date d'expiration",
+    business_process_label: "Processus métier", org_entity_label: "Entité organisationnelle",
+    no_process: "Aucun", no_entity: "Aucune",
+  },
+  applied_controls: {
+    linked_scenarios: "Scénarios de risque liés",
+    kpi_total: "Total des contrôles", kpi_implemented: "Implémentés", kpi_in_progress: "En cours", kpi_total_cost: "Coût total",
+  },
+  assets: {
+    eol_banner_title: "{{count}} actif(s) en fin de vie ou proches de la fin de vie",
+  },
   ocr: {
     page: "Page", chars_short: "{{n}} caractères", download_pdf: "Télécharger le PDF",
     empty_page: "— aucun texte sur cette page —", err_pdf: "Impossible de générer le PDF. Veuillez réessayer.",
@@ -148,6 +172,18 @@ export const gapAr = {
     confirm_delete_entity: "حذف هذا الكيان؟ سيتم فصل الكيانات والعمليات الفرعية، دون حذفها.",
     confirm_delete_process: "حذف هذه العملية التجارية؟",
     filter_all_entities: "جميع الكيانات", filter_all_asset_types: "جميع أنواع الأصول", clear_filters: "مسح الفلاتر",
+  },
+  policies: {
+    effective_date_label: "تاريخ السريان", expiration_date_label: "تاريخ الانتهاء",
+    business_process_label: "العملية التجارية", org_entity_label: "الكيان التنظيمي",
+    no_process: "بدون", no_entity: "بدون",
+  },
+  applied_controls: {
+    linked_scenarios: "سيناريوهات المخاطر المرتبطة",
+    kpi_total: "إجمالي الضوابط", kpi_implemented: "منفَّذة", kpi_in_progress: "قيد التنفيذ", kpi_total_cost: "التكلفة الإجمالية",
+  },
+  assets: {
+    eol_banner_title: "{{count}} أصل يقترب من أو تجاوز نهاية العمر الافتراضي",
   },
   ocr: {
     page: "صفحة", chars_short: "{{n}} حرف", download_pdf: "تنزيل PDF",

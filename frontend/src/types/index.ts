@@ -284,6 +284,10 @@ export interface Policy extends BaseEntity {
   next_review_date?: string;
   policy_type?: string;
   version?: number | string;
+  effective_date?: string | null;
+  expiration_date?: string | null;
+  business_process_id?: string | null;
+  org_entity_id?: string | null;
 }
 
 // ─── Vendor ──────────────────────────────────
