@@ -128,6 +128,12 @@ export interface Risk extends BaseEntity {
   tags: string[];
   linked_controls: string[];
   linked_assets: string[];
+  appetite_threshold?: number | null;
+  over_appetite?: boolean | null;
+  target_likelihood?: number | null;
+  target_impact?: number | null;
+  target_over_appetite?: boolean | null;
+  reopen_reason?: string | null;
 }
 
 export interface RiskHeatmapData {

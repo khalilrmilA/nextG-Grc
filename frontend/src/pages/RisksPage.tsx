@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { AlertTriangle, Plus, Search, X, ChevronRight, Download } from "lucide-react";
+import { AlertTriangle, Plus, Search, X, ChevronRight, Download, Target, Pencil, Loader2 } from "lucide-react";
 import { risksApi } from "../api/endpoints";
 import type { Risk, RiskSeverity } from "../types";
 import RiskAIPanel from "../components/ai/RiskAIPanel";
@@ -265,8 +265,35 @@ function AddRiskModal({ onClose, onSaved }: { readonly onClose: () => void; read
 }
 
 // ── Risk Detail Modal ─────────────────────────────────────────────────────────
-function RiskDetailModal({ risk, onClose }: { readonly risk: Risk; readonly onClose: () => void }) {
+function RiskDetailModal({ risk, onClose, onUpdated }: { readonly risk: Risk; readonly onClose: () => void; readonly onUpdated: (updated: Risk) => void }) {
   const { t } = useTranslation();
+  const [editingAppetite, setEditingAppetite] = useState(false);
+  const [appetiteForm, setAppetiteForm] = useState({
+    appetite_threshold: risk.appetite_threshold ?? "",
+    target_likelihood: risk.target_likelihood ?? "",
+    target_impact: risk.target_impact ?? "",
+  });
+  const [appetiteError, setAppetiteError] = useState("");
+  const [savingAppetite, setSavingAppetite] = useState(false);
+
+  async function saveAppetite() {
+    setSavingAppetite(true);
+    setAppetiteError("");
+    try {
+      const updated = await risksApi.setAppetite(risk.id, {
+        appetite_threshold: appetiteForm.appetite_threshold === "" ? null : Number(appetiteForm.appetite_threshold),
+        target_likelihood: appetiteForm.target_likelihood === "" ? null : Number(appetiteForm.target_likelihood),
+        target_impact: appetiteForm.target_impact === "" ? null : Number(appetiteForm.target_impact),
+      });
+      onUpdated(updated);
+      setEditingAppetite(false);
+    } catch {
+      setAppetiteError(t("risks.error_appetite_save_failed"));
+    } finally {
+      setSavingAppetite(false);
+    }
+  }
+
   const score = (risk.likelihood ?? 0) * (risk.impact ?? 0);
   const sev = risk.severity ?? "low";
   const sevBg = sev === "critical" ? "bg-red-50 border-red-200" : sev === "high" ? "bg-orange-50 border-orange-200" : sev === "medium" ? "bg-yellow-50 border-yellow-200" : "bg-green-50 border-green-200";
@@ -326,6 +353,75 @@ function RiskDetailModal({ risk, onClose }: { readonly risk: Risk; readonly onCl
               </p>
               <p className="text-xs text-gray-400 mt-0.5">{t("risks.residual_risk_score")}</p>
             </div>
+          </div>
+
+          {/* Risk appetite (RFP mod 7.3) */}
+          <div className="border-t border-gray-50 pt-4">
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide flex items-center gap-1.5">
+                <Target className="w-3.5 h-3.5" /> {t("risks.appetite_title")}
+              </p>
+              {!editingAppetite && (
+                <button onClick={() => setEditingAppetite(true)} className="inline-flex items-center gap-1 text-xs font-medium text-blue-600 hover:text-blue-800">
+                  <Pencil className="w-3 h-3" /> {t("common.edit")}
+                </button>
+              )}
+            </div>
+
+            {appetiteError && <div className="mb-2 p-2 bg-red-50 text-red-700 rounded-lg text-xs">{appetiteError}</div>}
+
+            {editingAppetite ? (
+              <div className="space-y-3 bg-gray-50 rounded-xl p-3">
+                <div>
+                  <label className="block text-xs text-gray-600 mb-1">{t("risks.appetite_threshold")}</label>
+                  <input type="number" min={1} max={25} value={appetiteForm.appetite_threshold}
+                    onChange={(e) => setAppetiteForm({ ...appetiteForm, appetite_threshold: e.target.value })}
+                    placeholder={t("risks.appetite_threshold_placeholder")}
+                    className="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs text-gray-600 mb-1">{t("risks.target_likelihood")}</label>
+                    <input type="number" min={1} max={5} value={appetiteForm.target_likelihood}
+                      onChange={(e) => setAppetiteForm({ ...appetiteForm, target_likelihood: e.target.value })}
+                      className="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-gray-600 mb-1">{t("risks.target_impact")}</label>
+                    <input type="number" min={1} max={5} value={appetiteForm.target_impact}
+                      onChange={(e) => setAppetiteForm({ ...appetiteForm, target_impact: e.target.value })}
+                      className="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                  </div>
+                </div>
+                <div className="flex justify-end gap-2">
+                  <button onClick={() => setEditingAppetite(false)} className="px-3 py-1.5 text-xs text-gray-600 hover:text-gray-800">{t("common.cancel")}</button>
+                  <button onClick={saveAppetite} disabled={savingAppetite} className="inline-flex items-center gap-1.5 bg-blue-600 text-white px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-blue-700 disabled:opacity-50">
+                    {savingAppetite && <Loader2 className="w-3.5 h-3.5 animate-spin" />} {t("common.save")}
+                  </button>
+                </div>
+              </div>
+            ) : risk.appetite_threshold != null ? (
+              <div className="flex items-center gap-3 flex-wrap">
+                <span className="text-sm text-gray-700">{t("risks.appetite_threshold")}: <b>{risk.appetite_threshold}</b></span>
+                {risk.over_appetite && (
+                  <span className="inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full bg-red-100 text-red-700 border border-red-200">
+                    {t("risks.over_appetite")}
+                  </span>
+                )}
+                {risk.target_over_appetite && (
+                  <span className="inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full bg-orange-100 text-orange-700 border border-orange-200">
+                    {t("risks.target_over_appetite")}
+                  </span>
+                )}
+                {(risk.target_likelihood != null || risk.target_impact != null) && (
+                  <span className="text-xs text-gray-500">
+                    {t("risks.target_tier")}: {risk.target_likelihood ?? "—"} × {risk.target_impact ?? "—"}
+                  </span>
+                )}
+              </div>
+            ) : (
+              <p className="text-sm text-gray-400">{t("risks.appetite_not_set")}</p>
+            )}
           </div>
 
           {risk.description && (
@@ -552,7 +648,16 @@ export default function RisksPage() {
           onSaved={() => queryClient.invalidateQueries({ queryKey: ["risks"] })}
         />
       )}
-      {selectedRisk && <RiskDetailModal risk={selectedRisk} onClose={() => setSelectedRisk(null)} />}
+      {selectedRisk && (
+        <RiskDetailModal
+          risk={selectedRisk}
+          onClose={() => setSelectedRisk(null)}
+          onUpdated={(updated) => {
+            setSelectedRisk(updated);
+            queryClient.invalidateQueries({ queryKey: ["risks"] });
+          }}
+        />
+      )}
     </div>
   );
 }

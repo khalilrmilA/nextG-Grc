@@ -43,6 +43,7 @@ export interface ActionPlanItem {
   description?: string | null;
   priority: "critical" | "high" | "medium" | "low";
   status: "open" | "in_progress" | "completed" | "cancelled";
+  start_date?: string | null;
   due_date?: string | null;
   notes?: string | null;
   ai_generated: boolean;
@@ -208,6 +209,9 @@ export const risksApi = {
   delete: (id: string) => apiClient.delete(`/risks/${id}`),
 
   getHeatmap: () => apiClient.get<RiskHeatmapData>("/risks/heatmap/data").then((r) => r.data),
+
+  setAppetite: (id: string, data: { appetite_threshold?: number | null; target_likelihood?: number | null; target_impact?: number | null }) =>
+    apiClient.put<Risk>(`/risks/${id}/appetite`, data).then((r) => r.data),
 };
 
 // ─── Risk Cartography ────────────────────────
@@ -386,7 +390,7 @@ export const complianceApi = {
       params: assessmentId ? { assessment_id: assessmentId } : undefined,
     }).then(r => r.data),
 
-  updateActionPlanItem: (id: string, data: Partial<{ status: string; due_date: string | null; owner_id: string | null; notes: string; priority: string }>) =>
+  updateActionPlanItem: (id: string, data: Partial<{ status: string; start_date: string | null; due_date: string | null; owner_id: string | null; notes: string; priority: string }>) =>
     apiClient.patch<ActionPlanItem>(`/compliance/action-plan/${id}`, data).then(r => r.data),
 };
 
@@ -683,11 +687,22 @@ export const vendorsApi = {
 
 // ─── Dashboard ───────────────────────────────
 
+export interface RiskTrendPoint {
+  month: string;
+  period: string;
+  critical: number;
+  high: number;
+}
+
 export const dashboardApi = {
   getSummary: () => apiClient.get<DashboardSummary>("/dashboard/summary").then((r) => r.data),
   getFrameworksOverview: () => apiClient.get("/dashboard/frameworks-overview").then((r) => r.data),
   getFrameworkSummary: (frameworkId?: string) =>
     apiClient.get("/dashboard/framework-summary", { params: frameworkId ? { framework_id: frameworkId } : {} }).then((r) => r.data),
+  getRiskTrend: (months?: number) =>
+    apiClient.get<{ series: RiskTrendPoint[]; source: string; note: string }>("/dashboard/risk-trend", {
+      params: months ? { months } : {},
+    }).then((r) => r.data),
 };
 
 // ─── Subscriptions ───────────────────────────
