@@ -1210,7 +1210,7 @@ const TAB_MIN_PLAN: Partial<Record<Tab, PlanTier>> = {
   notifications: "starter",
 };
 
-const PLAN_ORDER: PlanTier[] = ["free_trial", "starter", "professional", "enterprise"];
+const PLAN_ORDER: PlanTier[] = ["free_trial", "starter", "professional", "enterprise", "elite"];
 
 function planAllows(userPlan: PlanTier, required: PlanTier): boolean {
   return PLAN_ORDER.indexOf(userPlan) >= PLAN_ORDER.indexOf(required);
