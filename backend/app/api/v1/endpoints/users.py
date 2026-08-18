@@ -1,7 +1,9 @@
 """User management endpoints — tenant_admin manages all users with multi-role support."""
+import hashlib
+import logging
 import secrets
 import string
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Annotated
 from uuid import uuid4
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -16,15 +18,63 @@ def _generate_password() -> str:
     return "".join(secrets.choice(alphabet) for _ in range(16))
 
 
-from app.core.database import get_db
+from app.core.database import get_db, AsyncSessionLocal
 from app.core.security import hash_password
 from app.models.user import User, UserRole
+from app.models.tenant import Tenant
+from app.models.password_reset import PasswordResetToken
 from app.models.compliance import ComplianceAssessment
 from app.models.auditor_assignment import AuditorAssignment
 from app.api.v1.dependencies import get_tenant_id
 from app.api.v1.dependencies.auth import get_current_user, require_roles
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
+
+
+async def _send_welcome_email(user: User) -> None:
+    """Email a first-login 'set your password' link to an admin-created user.
+
+    Reuses the exact same mechanism as /auth/forgot-password: a single-use,
+    SHA-256-hashed, 1-hour-expiring PasswordResetToken emailed as a link (never the
+    temp password itself). Best-effort — wrapped so a broken/unconfigured SMTP relay
+    (dev has none) never fails account creation, matching the resilience pattern
+    already used by forgot_password's own send_email() call and the login journal.
+    """
+    try:
+        from app.core.config import settings as app_settings
+        from app.services.email_service import send_email
+
+        raw_token = secrets.token_urlsafe(32)
+        token_hash = hashlib.sha256(raw_token.encode()).hexdigest()
+        async with AsyncSessionLocal() as db:
+            db.add(PasswordResetToken(
+                user_id=user.id,
+                token_hash=token_hash,
+                expires_at=datetime.utcnow() + timedelta(hours=1),
+            ))
+            await db.commit()
+
+        base = (getattr(app_settings, "FRONTEND_BASE_URL", "") or "https://grceye.com/app").rstrip("/")
+        set_password_link = f"{base}/reset-password?token={raw_token}"
+
+        await send_email(
+            to_email=user.email,
+            subject="Welcome to GRCEye — set your password",
+            template_name="notification.html",
+            context={
+                "title": f"Welcome, {user.first_name}",
+                "message": (
+                    "An administrator created a GRCEye account for you. Click below to "
+                    "set your own password and sign in (link valid for 1 hour). If you "
+                    "weren't expecting this, contact your administrator."
+                ),
+                "action_url": set_password_link,
+                "action_label": "Set my password",
+            },
+        )
+    except Exception:  # noqa: BLE001 — must never fail account creation
+        logger.warning("welcome email failed to send for new user %s", user.id)
 
 # All roles tenant_admin can assign to team members
 _ASSIGNABLE_ROLES = {
@@ -98,20 +148,37 @@ async def list_users(
 # ── Create user ───────────────────────────────────────────────────────────────
 
 @router.post("/create", response_model=CreateUserResponse, status_code=201,
-             responses={400: {"description": "Email already registered or invalid role"}})
+             responses={400: {"description": "Email already registered or invalid role"},
+                        422: {"description": "Email domain does not match the tenant's configured domain"}})
 async def create_user(
     body: CreateUserRequest,
     db: Annotated[AsyncSession, Depends(get_db)],
     _: Annotated[User, Depends(require_roles(UserRole.TENANT_ADMIN))],
     tenant_id: Annotated[str, Depends(get_tenant_id)],
 ):
-    """Create a user with one or more assignable roles. Server generates a temporary password."""
-    existing = (await db.execute(select(User).where(User.email == body.email.strip().lower()))).scalar_one_or_none()
+    """Create a user with one or more assignable roles. Server generates a temporary
+    password, forces a password change on first login, and emails the new user a
+    first-login link (see _send_welcome_email)."""
+    normalized_email = body.email.strip().lower()
+    existing = (await db.execute(select(User).where(User.email == normalized_email))).scalar_one_or_none()
     if existing:
         raise HTTPException(400, "Email already registered")
 
     if not body.roles:
         raise HTTPException(400, "At least one role is required")
+
+    # Soft domain check: only enforced when the tenant has an explicit professional
+    # domain configured (Tenant.domain). Demo/gmail-based tenants with no fixed domain
+    # are left untouched — we don't invent new required config that could break them.
+    tenant = (await db.execute(select(Tenant).where(Tenant.id == tenant_id))).scalar_one_or_none()
+    if tenant and tenant.domain:
+        expected_domain = tenant.domain.strip().lower().lstrip("@")
+        new_domain = normalized_email.rsplit("@", 1)[-1]
+        if new_domain != expected_domain:
+            raise HTTPException(
+                status.HTTP_422_UNPROCESSABLE_ENTITY,
+                f"Email domain must match your organization's domain (@{expected_domain})",
+            )
 
     validated_roles: list[UserRole] = []
     for r in body.roles:
@@ -127,7 +194,7 @@ async def create_user(
     temp_password = _generate_password()
     new_user = User(
         tenant_id=tenant_id,
-        email=body.email.strip().lower(),
+        email=normalized_email,
         hashed_password=hash_password(temp_password),
         first_name=body.first_name,
         last_name=body.last_name,
@@ -135,9 +202,14 @@ async def create_user(
         roles=[r.value for r in validated_roles],
         is_verified=True,
         expires_at=body.expires_at,
+        # Admin-set temp password → always force a change on first login.
+        must_change_password=True,
     )
     db.add(new_user)
     await db.commit()
+
+    await _send_welcome_email(new_user)
+
     return CreateUserResponse(
         id=new_user.id, email=new_user.email,
         first_name=new_user.first_name, last_name=new_user.last_name,

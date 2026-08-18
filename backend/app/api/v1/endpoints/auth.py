@@ -32,8 +32,31 @@ router = APIRouter()
 logger = logging.getLogger(__name__)
 
 # Brute-force lockout: after this many consecutive failures, lock for the window.
+# These are the platform-wide defaults — a tenant can override both via
+# PATCH /tenants/current/security (stored under Tenant.settings["security"]) to meet
+# "paramétrable" lockout requirements. See resolve_security_settings() below, which
+# mirrors the Tenant.settings["ldap"] overlay pattern in directory_auth.resolve_ldap_config().
 MAX_FAILED_LOGINS = 5
 LOCKOUT_MINUTES = 15
+
+_SECURITY_DEFAULTS = {
+    "max_failed_logins": MAX_FAILED_LOGINS,
+    "lockout_minutes": LOCKOUT_MINUTES,
+}
+
+
+def resolve_security_settings(tenant_settings: dict | None) -> dict:
+    """Overlay a tenant's ``settings['security']`` block on top of the hardcoded
+    lockout defaults. Same shape/pattern as directory_auth.resolve_ldap_config()."""
+    cfg = dict(_SECURITY_DEFAULTS)
+    if tenant_settings:
+        override = tenant_settings.get("security") if isinstance(tenant_settings, dict) else None
+        if isinstance(override, dict):
+            for key in _SECURITY_DEFAULTS:
+                value = override.get(key)
+                if isinstance(value, (int, float)) and not isinstance(value, bool) and value >= 1:
+                    cfg[key] = int(value)
+    return cfg
 
 
 def _utcnow() -> datetime:
@@ -236,9 +259,13 @@ async def login(request: Request, body: LoginRequest, db: AsyncSession = Depends
             raise HTTPException(status.HTTP_401_UNAUTHORIZED, _GENERIC_LOGIN_FAILURE)
         if not verify_password(body.password, user.hashed_password):
             # Count the failure and lock the account once the threshold is crossed.
+            # Threshold/window are tenant-configurable (falls back to the platform
+            # defaults when the tenant hasn't overridden them).
+            tenant_row = await db.execute(select(Tenant.settings).where(Tenant.id == user.tenant_id))
+            security_cfg = resolve_security_settings(tenant_row.scalar_one_or_none())
             user.failed_login_count = (user.failed_login_count or 0) + 1
-            if user.failed_login_count >= MAX_FAILED_LOGINS:
-                user.locked_until = _utcnow() + timedelta(minutes=LOCKOUT_MINUTES)
+            if user.failed_login_count >= security_cfg["max_failed_logins"]:
+                user.locked_until = _utcnow() + timedelta(minutes=security_cfg["lockout_minutes"])
                 user.failed_login_count = 0
                 logger.info("login.lock email_hash=%s", email_hash)
             await db.commit()
@@ -262,6 +289,19 @@ async def login(request: Request, body: LoginRequest, db: AsyncSession = Depends
             token_data["sid"] = session.id
         except Exception:  # noqa: BLE001 — a session-tracking hiccup must not block login
             logger.warning("session create failed")
+
+        # New-device login alert — must run BEFORE this login is journaled below, so
+        # the history lookup doesn't match against the very event it's checking.
+        # Isolated session + broad except, matching _journal_login's resilience pattern.
+        try:
+            ua_raw = request.headers.get("user-agent") or ""
+            async with AsyncSessionLocal() as ndb:
+                from app.services.notification_generator import check_new_device_login
+                await check_new_device_login(ndb, user, _client_ip(request), ua_raw, _device_label(ua_raw))
+                await ndb.commit()
+        except Exception:  # noqa: BLE001 — must never block login
+            logger.warning("new-device login check failed")
+
         logger.info("login.ok email_hash=%s", email_hash)
         await _journal_login(request, normalized_email, True, "ok", user)
         return TokenResponse(
