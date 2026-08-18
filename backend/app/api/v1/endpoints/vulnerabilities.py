@@ -12,11 +12,12 @@ from datetime import datetime, timezone
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, field_validator, model_validator
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
+from app.core.security_utils import assert_assets_in_tenant
 from app.api.v1.dependencies.auth import get_current_user, get_tenant_id, require_roles
 from app.api.v1.dependencies.features import require_feature
 from app.models.user import User, UserRole
@@ -75,6 +76,26 @@ class VulnCreate(BaseModel):
     @classmethod
     def _coerce_lists(cls, v):
         return _to_str_list(v)
+
+    @model_validator(mode="after")
+    def _require_asset_link(self):
+        # RFP gap: a new manual vulnerability must be linked to at least one
+        # real asset — no longer optional. Each id is further resolved against
+        # this tenant's Asset table in create_vuln() below (needs DB access,
+        # so can't happen in a pure pydantic validator). Existing rows created
+        # before this rule (including free-text values) are untouched — this
+        # only gates new creates.
+        #
+        # A model_validator (not a plain field_validator) is required here:
+        # pydantic v2 skips field-level validators for fields left at their
+        # default (e.g. affected_assets simply omitted from the request body),
+        # which would otherwise let an omitted field slip past an empty-list
+        # check. model_validator(mode="after") always runs on the fully
+        # constructed model, so an omitted field is caught the same as an
+        # explicit `affected_assets: []`.
+        if not self.affected_assets:
+            raise ValueError("At least one affected asset is required (affected_assets must not be empty)")
+        return self
 
 
 class VulnUpdate(BaseModel):
@@ -141,6 +162,10 @@ async def get_stats(db: AsyncSession = Depends(get_db), _: User = Depends(get_cu
 
 @router.post("", response_model=VulnOut, status_code=201)
 async def create_vuln(body: VulnCreate, db: AsyncSession = Depends(get_db), _: User = Depends(get_current_user), tenant_id: str = Depends(get_tenant_id)):
+    # Each affected-asset id must resolve to a real Asset owned by this tenant
+    # (422 listing whichever ids don't). affected_assets is required non-empty
+    # by VulnCreate's model_validator above.
+    await assert_assets_in_tenant(db, body.affected_assets, tenant_id, field_name="affected_assets")
     # New manual vulnerabilities enter the validation queue before risk analysis.
     v = Vulnerability(tenant_id=tenant_id, ref_id=body.ref_id, title=body.title, description=body.description,
                       severity=body.severity, status=VulnStatus.PENDING_VALIDATION.value,
@@ -159,7 +184,17 @@ async def get_vuln(vid: str, db: AsyncSession = Depends(get_db), _: User = Depen
     return VulnOut.model_validate(v)
 
 @router.patch("/{vid}", response_model=VulnOut)
-async def update_vuln(vid: str, body: VulnUpdate, db: AsyncSession = Depends(get_db), _: User = Depends(get_current_user), tenant_id: str = Depends(get_tenant_id)):
+async def update_vuln(
+    vid: str,
+    body: VulnUpdate,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    # Modifying a security finding is restricted to the security-referent role
+    # set (same tuple used for risk mutations in risks.py). super_admin and
+    # tenant_admin always auto-pass inside require_roles(); read access (GET
+    # /list) stays open to any authenticated tenant user.
+    current_user: Annotated[User, Depends(require_roles(UserRole.CISO, UserRole.RISK_MANAGER))],
+    tenant_id: Annotated[str, Depends(get_tenant_id)],
+):
     r = await db.execute(select(Vulnerability).where(Vulnerability.id == vid, Vulnerability.tenant_id == tenant_id))
     v = r.scalar_one_or_none()
     if not v: raise HTTPException(404, "Vulnerability not found")

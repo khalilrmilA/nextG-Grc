@@ -1,9 +1,18 @@
 """Applied Controls — actionable controls with cost, effort, progress, and tracking.
 Inspired by CISO Assistant: controls that are actually implemented, not just references.
+
+Elite Pack (RFP module 3) addition:
+- Security-referent validation workflow: a control's implementation *status*
+  (planned/in_progress/...) is independent from whether a security referent
+  has formally reviewed/approved it. ``validation_status`` tracks that
+  approval gate (pending -> validated | rejected) with a
+  ``validated_by_id`` / ``validated_at`` audit trail, mirroring the
+  Vulnerability validation workflow in app/models/vulnerability.py.
 """
 import enum
+from datetime import datetime
 from sqlalchemy.orm import Mapped, mapped_column
-from sqlalchemy import String, Text, ForeignKey, JSON, Float, Integer
+from sqlalchemy import String, Text, ForeignKey, JSON, Float, Integer, DateTime
 from app.core.database import Base
 
 
@@ -13,6 +22,13 @@ class ControlStatus(str, enum.Enum):
     IMPLEMENTED = "implemented"
     NOT_APPLICABLE = "not_applicable"
     DEPRECATED = "deprecated"
+
+
+class ControlValidationStatus(str, enum.Enum):
+    """Security-referent approval workflow — separate from ControlStatus."""
+    PENDING = "pending"      # awaiting security-referent review
+    VALIDATED = "validated"  # referent approved the control
+    REJECTED = "rejected"    # referent sent it back for rework
 
 class ControlEffort(str, enum.Enum):
     VERY_LOW = "very_low"    # < 1 day
@@ -65,3 +81,9 @@ class AppliedControl(Base):
     owner_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("users.id"), nullable=True)
     link: Mapped[str | None] = mapped_column(String(500), nullable=True)  # URL to external tool/doc
     tags: Mapped[list] = mapped_column(JSON, default=list)
+
+    # --- Security-referent validation workflow (Elite Pack) ---
+    validation_status: Mapped[str] = mapped_column(String(20), default=ControlValidationStatus.PENDING.value)
+    validated_by_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("users.id"), nullable=True)
+    validated_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    validation_notes: Mapped[str | None] = mapped_column(Text, nullable=True)

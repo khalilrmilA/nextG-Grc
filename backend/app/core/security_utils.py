@@ -186,3 +186,24 @@ async def assert_user_in_tenant(db, user_id, tenant_id, *, field_name: str = "us
     )
     if result.scalar_one_or_none() is None:
         raise HTTPException(400, f"Invalid {field_name}: not in this tenant")
+
+
+async def assert_assets_in_tenant(db, asset_ids, tenant_id, *, field_name: str = "affected_assets"):
+    """Raise HTTPException(422) if any id in `asset_ids` is not a real Asset in `tenant_id`.
+
+    Closes cross-tenant IDOR / typo'd-id via attacker- or client-supplied asset ids,
+    mirroring `assert_user_in_tenant` above but for a *list* of foreign-key ids.
+    Pass-through if asset_ids is falsy (empty list / None).
+    """
+    if not asset_ids:
+        return
+    from sqlalchemy import select
+    from app.models.asset import Asset
+    ids = list(dict.fromkeys(asset_ids))  # de-dupe, preserve order
+    result = await db.execute(
+        select(Asset.id).where(Asset.id.in_(ids), Asset.tenant_id == tenant_id)
+    )
+    found = {row[0] for row in result.all()}
+    missing = [i for i in ids if i not in found]
+    if missing:
+        raise HTTPException(422, f"Invalid {field_name}: unknown asset id(s) {missing}")

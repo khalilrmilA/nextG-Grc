@@ -1,18 +1,30 @@
-"""Applied Controls — actionable controls with cost, effort, progress tracking."""
-from datetime import datetime
+"""Applied Controls — actionable controls with cost, effort, progress tracking.
+
+Elite Pack (RFP module 3) addition:
+- Security-referent validation workflow: POST /{id}/validate and
+  POST /{id}/reject let a security referent formally approve/reject a
+  control, independent of its planned/in_progress/implemented lifecycle
+  status. Mirrors the Vulnerability validation workflow in vulnerabilities.py.
+"""
+from datetime import datetime, timezone
+from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
-from app.api.v1.dependencies.auth import get_current_user, get_tenant_id
-from app.models.user import User
-from app.models.applied_control import AppliedControl
+from app.api.v1.dependencies.auth import get_current_user, get_tenant_id, require_roles
+from app.models.user import User, UserRole
+from app.models.applied_control import AppliedControl, ControlValidationStatus
 from app.models.activity_log import ActivityLog
 from app.services.activity_chain import chain_and_add
 
 router = APIRouter()
+
+
+def _utcnow() -> datetime:
+    return datetime.now(timezone.utc).replace(tzinfo=None)
 
 class ACCreate(BaseModel):
     ref_id: str | None = None; name: str; description: str | None = None
@@ -39,8 +51,15 @@ class ACOut(BaseModel):
     cost: float | None; recurring_cost: float | None
     framework_control_ids: list; evidence_ids: list; risk_scenario_ids: list
     vulnerability_ids: list; owner_id: str | None; link: str | None; tags: list
+    validation_status: str; validated_by_id: str | None; validated_at: datetime | None
+    validation_notes: str | None
     created_at: datetime; updated_at: datetime
     model_config = {"from_attributes": True}
+
+
+class ControlValidationRequest(BaseModel):
+    """Body for POST /{id}/validate and POST /{id}/reject — optional referent notes."""
+    notes: str | None = None
 
 @router.get("", response_model=list[ACOut])
 async def list_controls(status: str | None = None, db: AsyncSession = Depends(get_db), _: User = Depends(get_current_user), tenant_id: str = Depends(get_tenant_id)):
@@ -110,3 +129,57 @@ async def delete_control(
         ))
     except Exception:
         pass
+
+
+# ── Security-referent validation workflow (Elite Pack) ─────────────────────
+# A control's implementation status (planned/in_progress/...) says nothing
+# about whether a security referent has actually reviewed and signed off on
+# it. These two endpoints add that formal approval gate — restricted to the
+# same security-referent role tuple used for vulnerability mutations
+# (CISO / risk_manager; tenant_admin and super_admin auto-pass via
+# require_roles()). Mirrors the shape of the Vulnerability validation
+# workflow (POST /vulnerabilities/{id}/validate) and the VendorContract CISO
+# approve/reject workflow.
+
+@router.post("/{cid}/validate", response_model=ACOut)
+async def validate_control(
+    cid: str,
+    body: ControlValidationRequest,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: Annotated[User, Depends(require_roles(UserRole.CISO, UserRole.RISK_MANAGER))],
+    tenant_id: Annotated[str, Depends(get_tenant_id)],
+):
+    """Security-referent approval — marks the control as formally validated."""
+    r = await db.execute(select(AppliedControl).where(AppliedControl.id == cid, AppliedControl.tenant_id == tenant_id))
+    c = r.scalar_one_or_none()
+    if not c:
+        raise HTTPException(404, "Control not found")
+    c.validation_status = ControlValidationStatus.VALIDATED.value
+    c.validated_by_id = current_user.id
+    c.validated_at = _utcnow()
+    if body.notes is not None:
+        c.validation_notes = body.notes
+    await db.commit(); await db.refresh(c)
+    return ACOut.model_validate(c)
+
+
+@router.post("/{cid}/reject", response_model=ACOut)
+async def reject_control(
+    cid: str,
+    body: ControlValidationRequest,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: Annotated[User, Depends(require_roles(UserRole.CISO, UserRole.RISK_MANAGER))],
+    tenant_id: Annotated[str, Depends(get_tenant_id)],
+):
+    """Security-referent rejection — sends the control back for rework."""
+    r = await db.execute(select(AppliedControl).where(AppliedControl.id == cid, AppliedControl.tenant_id == tenant_id))
+    c = r.scalar_one_or_none()
+    if not c:
+        raise HTTPException(404, "Control not found")
+    c.validation_status = ControlValidationStatus.REJECTED.value
+    c.validated_by_id = current_user.id
+    c.validated_at = _utcnow()
+    if body.notes is not None:
+        c.validation_notes = body.notes
+    await db.commit(); await db.refresh(c)
+    return ACOut.model_validate(c)
