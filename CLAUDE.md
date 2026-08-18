@@ -50,7 +50,7 @@ This working copy **is the live production server for grceye.com** (real client 
 - **Frontend**: React 18 + TypeScript + Tailwind CSS + shadcn/ui
 - **AI**: Ollama (local, `http://localhost:11434`, model `gpt-oss:120b-cloud`) — NOT Anthropic API
 - **i18n**: react-i18next (en, fr, ar with full RTL support)
-- **Auth**: JWT + role-based access control
+- **Auth**: JWT + role-based access control. MFA (TOTP) is enforced as a real second login step for enrolled accounts (added 2026-08-18) — `POST /auth/login` returns `{mfa_required, mfa_challenge_token}` (5-min single-use JWT, distinct `type` claim rejected by `get_current_user`) instead of real tokens; `POST /auth/mfa-login` redeems the challenge + TOTP code for the actual access/refresh pair. Before this, MFA enrollment existed but was never checked at login.
 - **Reports**: ReportLab PDF generation
 
 ---
@@ -59,12 +59,14 @@ This working copy **is the live production server for grceye.com** (real client 
 
 | Metric | Count |
 |--------|-------|
-| **Frontend Pages** | 38 |
-| **Backend API Routes** | 190 |
-| **Backend Modules** | 29 |
-| **Data Models** | 28+ |
-| **Frameworks** | 76 built-in (each can be forked into a tenant-owned editable copy) |
+| **Frontend Pages** | 59 |
+| **Backend API Routes** | 377 |
+| **Backend Modules** | 53 |
+| **Data Models** | 45+ |
+| **Frameworks** | 94 built-in (each can be forked into a tenant-owned editable copy) |
 | **Languages** | 3 (EN, FR, AR) |
+
+*(Counts above are exact as of 2026-08-18. This table had drifted well behind actual growth — treat any static count in this doc as approximate and re-verify with `ls`/`grep` before relying on it for anything precise.)*
 
 ---
 
@@ -166,11 +168,14 @@ frontend/src/
   context/          # FrameworkContext
 ```
 
-### All Pages (38) with Routes
+### All Pages (partial — 59 page files exist; this table predates the Elite Pack build and was never fully backfilled, see Platform Stats above)
 
 | Page | Route | Sidebar Group |
 |------|-------|---------------|
 | DashboardPage | `/dashboard` | Core |
+| AssetsPage | `/assets` | Core |
+| AssetGraphPage | `/asset-graph` | Core (Asset Cartography — interactive org-entity/process/asset graph, added 2026-08-18) |
+| AnalyticsPage | `/analytics` | Core |
 | RisksPage | `/risks` | Core |
 | RiskScenariosPage | `/risk-scenarios` | Core |
 | CompliancePage | `/compliance` | Core |
@@ -212,11 +217,14 @@ frontend/src/
 ### Sidebar Navigation (4 groups)
 
 ```
-CORE:       Dashboard, Risk Register, Risk Scenarios, Compliance, Frameworks
-SECURITY:   Incidents, Vulnerabilities, Threat Library, Applied Controls, Exceptions & Waivers
-OPERATIONS: Audits, Policies, Doc Generator, 3rd Parties (TPRM), Reports
-GOVERNANCE: Regulatory Updates, Trust Center, Risk Quantification, Activity Log, Webhooks
+CORE:       Dashboard, Assets, Asset Cartography, Analytics, Risk Treatment, Control Effectiveness,
+            Risk Cartography, Risk Register, Risk Scenarios, Compliance, Action Plan, Frameworks
+SECURITY:   Incidents, Vulnerabilities, CVE Knowledge Base, Threat Library, Applied Controls, Exceptions & Waivers
+OPERATIONS: Audits, Policies, Doc Generator, Document Capture (OCR), 3rd Parties (TPRM), Reports, Support
+GOVERNANCE: Governance (RACI + doc repository), Archiving, System Check, Regulatory Updates, Trust Center,
+            Risk Quantification, Activity Log, Webhooks
 ```
+*(Elite Pack additions — everything past the original 5/5/5/5 split above — are role-gated per nav item, not just plan-gated; see `Layout.tsx`'s per-item `roles` array and `App.tsx`'s `ROUTE_ROLES` map, which must be kept in sync with each other.)*
 
 ---
 
