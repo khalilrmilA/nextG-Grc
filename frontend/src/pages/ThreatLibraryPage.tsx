@@ -2,10 +2,14 @@ import { useState, useEffect } from "react";
 import {
   Plus, Search, X, Loader2, Filter, Shield, Trash2, Tag,
   Sparkles, Download, ThumbsUp, ThumbsDown, Clock, CheckCircle2, RefreshCw,
-  AlertTriangle, ExternalLink, CheckCheck, ChevronRight,
+  AlertTriangle, ExternalLink, CheckCheck, ChevronRight, Pencil, Lock,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { threatsApi } from "@/api/endpoints";
+import { threatsApi, assetsApi, vulnerabilitiesApi } from "@/api/endpoints";
+import { MultiSelect, type MultiSelectOption } from "@/components/common/MultiSelect";
+
+const PROBABILITY_LEVELS = ["rare", "peu_probable", "possible", "probable", "quasiment_certain"];
+const SEVERITY_LEVELS = ["mineur", "notable", "fort", "tres_fort", "critique"];
 
 const CATEGORY_OPTIONS = [
   "cyber_attack", "social_engineering", "insider_threat", "supply_chain",
@@ -37,8 +41,77 @@ function fmt(s: string) {
 
 // ── Detail modal ──────────────────────────────────────────────────────────────
 
-function ThreatDetailModal({ threat, onClose }: { threat: any; onClose: () => void }) {
+const EMPTY_PROFILE_FORM = {
+  origin: "",
+  objectives: "",
+  aggravating_factors: "",
+  occurrence_conditions: "",
+  estimated_frequency: "",
+  mode_operatoire: "",
+  probability_level: "",
+  severity_level: "",
+  linked_asset_ids: [] as string[],
+  linked_vulnerability_ids: [] as string[],
+};
+
+function ThreatDetailModal({ threat, onClose, onUpdated }: { threat: any; onClose: () => void; onUpdated: (updated: any) => void }) {
   const { t } = useTranslation();
+  const [editingProfile, setEditingProfile] = useState(false);
+  const [profileForm, setProfileForm] = useState(EMPTY_PROFILE_FORM);
+  const [profileError, setProfileError] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [assetOptions, setAssetOptions] = useState<MultiSelectOption[]>([]);
+  const [vulnOptions, setVulnOptions] = useState<MultiSelectOption[]>([]);
+
+  const hasProfile = !!(
+    threat.origin || threat.objectives || threat.aggravating_factors || threat.occurrence_conditions ||
+    threat.estimated_frequency || threat.mode_operatoire || threat.probability_level || threat.severity_level ||
+    threat.linked_asset_ids?.length || threat.linked_vulnerability_ids?.length
+  );
+
+  useEffect(() => {
+    Promise.allSettled([assetsApi.list({ page_size: 500 }), vulnerabilitiesApi.list()]).then(([a, v]) => {
+      const unwrap = (r: PromiseSettledResult<any>): any[] => {
+        if (r.status !== "fulfilled") return [];
+        const d = r.value;
+        return Array.isArray(d) ? d : d.items || [];
+      };
+      setAssetOptions(unwrap(a).map((x: any) => ({ id: x.id, label: x.name })));
+      setVulnOptions(unwrap(v).map((x: any) => ({ id: x.id, label: x.title })));
+    });
+  }, []);
+
+  function startEditingProfile() {
+    setProfileForm({
+      origin: threat.origin || "",
+      objectives: threat.objectives || "",
+      aggravating_factors: threat.aggravating_factors || "",
+      occurrence_conditions: threat.occurrence_conditions || "",
+      estimated_frequency: threat.estimated_frequency || "",
+      mode_operatoire: threat.mode_operatoire || "",
+      probability_level: threat.probability_level || "",
+      severity_level: threat.severity_level || "",
+      linked_asset_ids: threat.linked_asset_ids || [],
+      linked_vulnerability_ids: threat.linked_vulnerability_ids || [],
+    });
+    setProfileError("");
+    setEditingProfile(true);
+  }
+
+  async function saveProfile() {
+    setSaving(true);
+    setProfileError("");
+    try {
+      const updated = await threatsApi.updateProfile(threat.id, profileForm);
+      onUpdated(updated);
+      setEditingProfile(false);
+    } catch (err: any) {
+      setProfileError(err?.response?.data?.detail || t("threats.error_profile_save_failed"));
+    } finally {
+      setSaving(false);
+    }
+  }
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
@@ -161,6 +234,148 @@ function ThreatDetailModal({ threat, onClose }: { threat: any; onClose: () => vo
               </div>
             </div>
           )}
+
+          {/* Threat profile (RFP mod 4.2) */}
+          <div className="border-t border-gray-100 pt-5">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider">{t("threats.profile_section_title")}</h3>
+              {!threat.is_builtin && !editingProfile && (
+                <button
+                  onClick={startEditingProfile}
+                  className="inline-flex items-center gap-1.5 text-xs font-medium text-blue-600 hover:text-blue-800"
+                >
+                  <Pencil className="w-3.5 h-3.5" /> {hasProfile ? t("threats.btn_edit_profile") : t("threats.btn_add_profile")}
+                </button>
+              )}
+            </div>
+
+            {threat.is_builtin && (
+              <div className="flex items-start gap-2 mb-4 text-xs text-gray-500 bg-gray-50 rounded-lg px-3 py-2">
+                <Lock className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                <span>{t("threats.profile_builtin_readonly")}</span>
+              </div>
+            )}
+
+            {profileError && <div className="mb-3 p-2.5 bg-red-50 text-red-700 rounded-lg text-xs">{profileError}</div>}
+
+            {editingProfile ? (
+              <div className="space-y-3">
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">{t("threats.profile_origin")}</label>
+                  <textarea value={profileForm.origin} onChange={(e) => setProfileForm({ ...profileForm, origin: e.target.value })} rows={2} className="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">{t("threats.profile_objectives")}</label>
+                  <textarea value={profileForm.objectives} onChange={(e) => setProfileForm({ ...profileForm, objectives: e.target.value })} rows={2} className="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">{t("threats.profile_mode_operatoire")}</label>
+                  <textarea value={profileForm.mode_operatoire} onChange={(e) => setProfileForm({ ...profileForm, mode_operatoire: e.target.value })} rows={2} className="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">{t("threats.profile_occurrence_conditions")}</label>
+                  <textarea value={profileForm.occurrence_conditions} onChange={(e) => setProfileForm({ ...profileForm, occurrence_conditions: e.target.value })} rows={2} className="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">{t("threats.profile_aggravating_factors")}</label>
+                  <textarea value={profileForm.aggravating_factors} onChange={(e) => setProfileForm({ ...profileForm, aggravating_factors: e.target.value })} rows={2} className="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">{t("threats.profile_estimated_frequency")}</label>
+                  <input value={profileForm.estimated_frequency} onChange={(e) => setProfileForm({ ...profileForm, estimated_frequency: e.target.value })} className="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">{t("threats.profile_probability_level")}</label>
+                    <select value={profileForm.probability_level} onChange={(e) => setProfileForm({ ...profileForm, probability_level: e.target.value })} className="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                      <option value="">-</option>
+                      {PROBABILITY_LEVELS.map((p) => <option key={p} value={p}>{t(`threats.probability_${p}` as never)}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">{t("threats.profile_severity_level")}</label>
+                    <select value={profileForm.severity_level} onChange={(e) => setProfileForm({ ...profileForm, severity_level: e.target.value })} className="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                      <option value="">-</option>
+                      {SEVERITY_LEVELS.map((s) => <option key={s} value={s}>{t(`threats.severity_${s}` as never)}</option>)}
+                    </select>
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">{t("threats.profile_linked_assets")}</label>
+                  <MultiSelect options={assetOptions} selected={profileForm.linked_asset_ids} onChange={(ids) => setProfileForm({ ...profileForm, linked_asset_ids: ids })} placeholder={t("risk_scenarios.select_placeholder")} emptyLabel={t("risk_scenarios.no_options")} />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">{t("threats.profile_linked_vulnerabilities")}</label>
+                  <MultiSelect options={vulnOptions} selected={profileForm.linked_vulnerability_ids} onChange={(ids) => setProfileForm({ ...profileForm, linked_vulnerability_ids: ids })} placeholder={t("risk_scenarios.select_placeholder")} emptyLabel={t("risk_scenarios.no_options")} />
+                </div>
+                <div className="flex justify-end gap-2 pt-1">
+                  <button type="button" onClick={() => setEditingProfile(false)} className="px-3 py-1.5 text-xs text-gray-600 hover:text-gray-800">{t("threats.btn_cancel")}</button>
+                  <button type="button" onClick={saveProfile} disabled={saving} className="inline-flex items-center gap-1.5 bg-blue-600 text-white px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-blue-700 disabled:opacity-50">
+                    {saving && <Loader2 className="w-3.5 h-3.5 animate-spin" />} {t("common.save")}
+                  </button>
+                </div>
+              </div>
+            ) : hasProfile ? (
+              <dl className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
+                {threat.probability_level && (
+                  <div>
+                    <dt className="text-xs text-gray-400">{t("threats.profile_probability_level")}</dt>
+                    <dd className="text-gray-800 font-medium">{t(`threats.probability_${threat.probability_level}` as never)}</dd>
+                  </div>
+                )}
+                {threat.severity_level && (
+                  <div>
+                    <dt className="text-xs text-gray-400">{t("threats.profile_severity_level")}</dt>
+                    <dd className="text-gray-800 font-medium">{t(`threats.severity_${threat.severity_level}` as never)}</dd>
+                  </div>
+                )}
+                {threat.origin && (
+                  <div className="col-span-2">
+                    <dt className="text-xs text-gray-400">{t("threats.profile_origin")}</dt>
+                    <dd className="text-gray-700 whitespace-pre-line">{threat.origin}</dd>
+                  </div>
+                )}
+                {threat.objectives && (
+                  <div className="col-span-2">
+                    <dt className="text-xs text-gray-400">{t("threats.profile_objectives")}</dt>
+                    <dd className="text-gray-700 whitespace-pre-line">{threat.objectives}</dd>
+                  </div>
+                )}
+                {threat.mode_operatoire && (
+                  <div className="col-span-2">
+                    <dt className="text-xs text-gray-400">{t("threats.profile_mode_operatoire")}</dt>
+                    <dd className="text-gray-700 whitespace-pre-line">{threat.mode_operatoire}</dd>
+                  </div>
+                )}
+                {threat.occurrence_conditions && (
+                  <div className="col-span-2">
+                    <dt className="text-xs text-gray-400">{t("threats.profile_occurrence_conditions")}</dt>
+                    <dd className="text-gray-700 whitespace-pre-line">{threat.occurrence_conditions}</dd>
+                  </div>
+                )}
+                {threat.aggravating_factors && (
+                  <div className="col-span-2">
+                    <dt className="text-xs text-gray-400">{t("threats.profile_aggravating_factors")}</dt>
+                    <dd className="text-gray-700 whitespace-pre-line">{threat.aggravating_factors}</dd>
+                  </div>
+                )}
+                {threat.estimated_frequency && (
+                  <div>
+                    <dt className="text-xs text-gray-400">{t("threats.profile_estimated_frequency")}</dt>
+                    <dd className="text-gray-700">{threat.estimated_frequency}</dd>
+                  </div>
+                )}
+                {threat.last_reviewed_at && (
+                  <div>
+                    <dt className="text-xs text-gray-400">{t("threats.profile_last_reviewed")}</dt>
+                    <dd className="text-gray-700">{threat.last_reviewed_at.slice(0, 10)}</dd>
+                  </div>
+                )}
+              </dl>
+            ) : (
+              <p className="text-sm text-gray-400">{t("threats.profile_empty")}</p>
+            )}
+          </div>
         </div>
 
         {/* Footer */}
@@ -574,7 +789,16 @@ export default function ThreatLibraryPage() {
       )}
 
       {/* Detail modal */}
-      {detail && <ThreatDetailModal threat={detail} onClose={() => setDetail(null)} />}
+      {detail && (
+        <ThreatDetailModal
+          threat={detail}
+          onClose={() => setDetail(null)}
+          onUpdated={(updated) => {
+            setDetail(updated);
+            setItems((prev) => prev.map((x) => (x.id === updated.id ? updated : x)));
+          }}
+        />
+      )}
 
       {/* Manual create modal */}
       {showModal && (

@@ -1063,6 +1063,7 @@ export const threatsApi = {
     apiClient.get("/threats/pending").then((r) => r.data),
   approve: (id: string) => apiClient.post(`/threats/${id}/approve`).then((r) => r.data),
   reject: (id: string) => apiClient.delete(`/threats/${id}/reject`),
+  updateProfile: (id: string, data: Record<string, unknown>) => apiClient.put(`/threats/${id}/profile`, data).then((r) => r.data),
 };
 
 // ─── Risk Scenarios ─────────────────────────
