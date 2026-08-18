@@ -77,6 +77,7 @@ export default {
     policy_generator: "Doc Generator",
     risk_scenarios: "Risk Scenarios",
     risk_cartography: "Risk Cartography",
+    asset_graph: "Asset Cartography",
     action_plan: "Action Plan",
     team_management: "Team Management",
     platform_owner: "Platform Owner",

@@ -77,6 +77,7 @@ export default {
     policy_generator: "مولد المستندات",
     risk_scenarios: "سيناريوهات المخاطر",
     risk_cartography: "خرائط المخاطر",
+    asset_graph: "خارطة الأصول",
     action_plan: "خطة العمل",
     team_management: "إدارة الفريق",
     platform_owner: "مالك المنصة",
