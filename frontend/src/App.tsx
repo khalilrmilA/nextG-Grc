@@ -5,6 +5,7 @@ import Layout from "./components/layout/Layout";
 import AuditorLayout from "./components/layout/AuditorLayout";
 import EliteUpsellListener from "./components/EliteUpsellListener";
 import AssetsPage from "./pages/AssetsPage";
+import AssetGraphPage from "./pages/AssetGraphPage";
 import AnalyticsPage from "./pages/AnalyticsPage";
 import RiskTreatmentPage from "./pages/RiskTreatmentPage";
 import ControlEffectivenessPage from "./pages/ControlEffectivenessPage";
@@ -116,6 +117,7 @@ const ROUTE_ROLES: Record<string, string[]> = {
   "/analytics":           [...CISO_AND_ADMIN, "risk_manager", "compliance_manager", "control_owner", "viewer"],
   "/risks":               [...CISO_AND_ADMIN, "risk_manager", "compliance_manager", "control_owner", "viewer"],
   "/risk-cartography":    [...CISO_AND_ADMIN, "risk_manager", "compliance_manager", "control_owner", "viewer"],
+  "/asset-graph":         [...CISO_AND_ADMIN, "risk_manager", "compliance_manager", "control_owner", "viewer"],
   "/action-plan":         [...CISO_AND_ADMIN, "risk_manager", "compliance_manager", "control_owner", "viewer"],
   "/risk-scenarios":      [...CISO_AND_ADMIN, "risk_manager", "compliance_manager", "control_owner", "viewer"],
   "/risk-quantification": [...CISO_AND_ADMIN, "risk_manager", "viewer"],
@@ -208,6 +210,7 @@ export default function App() {
         <Route path="documentation" element={<DocumentationPage />} />
         <Route path="risks" element={<RoleRoute path="/risks"><PrivateRoute requiredModule="risks"><RisksPage /></PrivateRoute></RoleRoute>} />
         <Route path="risk-cartography" element={<RoleRoute path="/risk-cartography"><PrivateRoute requiredModule="risks"><RiskCartographyPage /></PrivateRoute></RoleRoute>} />
+        <Route path="asset-graph" element={<RoleRoute path="/asset-graph"><PrivateRoute requiredModule="asset-graph"><AssetGraphPage /></PrivateRoute></RoleRoute>} />
         <Route path="action-plan" element={<RoleRoute path="/action-plan"><PrivateRoute requiredModule="compliance"><ActionPlanPage /></PrivateRoute></RoleRoute>} />
         <Route path="compliance" element={<RoleRoute path="/compliance"><PrivateRoute requiredModule="compliance"><CompliancePage /></PrivateRoute></RoleRoute>} />
         <Route path="compliance/:assessmentId" element={<RoleRoute path="/compliance"><PrivateRoute requiredModule="compliance"><AssessmentDetailPage /></PrivateRoute></RoleRoute>} />

@@ -17,7 +17,7 @@ import {
   ChevronRight, Bell, Settings, HelpCircle, Lock,
   Crown, X, Trash2, Wand2, Menu,
   AlertCircle, Info, ShieldAlert, ClipboardCheck, RefreshCw,
-  Eye, Users, Headphones, Map, ListTodo, Boxes, BarChart3, Gauge, Bug, Radar, Scale, Archive, Database, ScanLine,
+  Eye, Users, Headphones, Map, ListTodo, Boxes, BarChart3, Gauge, Bug, Radar, Scale, Archive, Database, ScanLine, Network,
 } from "lucide-react";
 
 // roles: null = visible to all authenticated non-auditor users
@@ -28,6 +28,7 @@ const NAV_GROUPS = [
     items: [
       { to: "/dashboard",  icon: LayoutDashboard, label: "Dashboard",     module: "dashboard",  roles: null },
       { to: "/assets",     icon: Boxes,           label: "Assets",        module: "assets",     roles: null },
+      { to: "/asset-graph", icon: Network,     label: "Asset Cartography", module: "asset-graph", roles: ["tenant_admin","ciso","risk_manager","compliance_manager","control_owner","viewer"] },
       { to: "/analytics",  icon: BarChart3,       label: "Analytics",     module: "analytics",  roles: ["tenant_admin","ciso","risk_manager","compliance_manager","control_owner","viewer"] },
       { to: "/risk-treatment", icon: ShieldAlert, label: "Risk Treatment", module: "risk-treatment", roles: ["tenant_admin","ciso","risk_manager","control_owner","viewer"] },
       { to: "/control-effectiveness", icon: Gauge, label: "Control Effectiveness", module: "control-effectiveness", roles: ["tenant_admin","ciso","risk_manager","control_owner","viewer"] },

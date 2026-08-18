@@ -4,6 +4,7 @@ Snapshot a scenario's state, browse the change timeline, and diff any two
 versions. Snapshots capture a fixed field set via defensive getattr, so schema
 drift never breaks the endpoint. Gated behind ``scenario_versioning``.
 """
+from datetime import datetime
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -25,7 +26,7 @@ _SNAPSHOT_FIELDS = [
     "name", "description", "justification",
     "current_probability", "current_impact", "current_risk_level",
     "target_probability", "target_impact", "target_risk_level",
-    "treatment_option", "threat_ids", "vulnerability_ids", "asset_ids",
+    "treatment", "threat_ids", "vulnerability_ids", "asset_ids",
     "applied_control_ids",
 ]
 
@@ -63,6 +64,7 @@ class VersionOut(BaseModel):
     snapshot: dict
     change_reason: str | None
     author_id: str | None
+    created_at: datetime
     model_config = {"from_attributes": True}
 
 

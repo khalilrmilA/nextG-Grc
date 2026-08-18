@@ -1095,6 +1095,14 @@ export const riskScenariosApi = {
   delete: (id: string) => apiClient.delete(`/risk-scenarios/${id}`),
 };
 
+export const scenarioVersionsApi = {
+  list: (scenarioId: string) => apiClient.get(`/scenario-versions/${scenarioId}`).then((r) => r.data),
+  snapshot: (scenarioId: string, change_reason?: string) =>
+    apiClient.post(`/scenario-versions/${scenarioId}/snapshot`, { change_reason }).then((r) => r.data),
+  diff: (scenarioId: string, from_version: number, to_version: number) =>
+    apiClient.get(`/scenario-versions/${scenarioId}/diff`, { params: { from_version, to_version } }).then((r) => r.data),
+};
+
 // ─── Applied Controls ───────────────────────
 export const appliedControlsApi = {
   list: (params?: { status?: string }) =>
@@ -1377,6 +1385,20 @@ export const assetsApi = {
   cia: (id: string) => apiClient.get(`/assets/${id}/cia`).then((r) => r.data),
   setCia: (id: string, data: Record<string, unknown>) => apiClient.put(`/assets/${id}/cia`, data).then((r) => r.data),
   eolSoon: () => apiClient.get("/assets/lifecycle/eol-soon").then((r) => r.data),
+};
+
+// ─── Asset Cartography (Elite Pack) ──────────────────────────
+export const assetGraphApi = {
+  cartography: (params?: { entity?: string; asset_type?: string }) =>
+    apiClient.get("/asset-graph/cartography", { params }).then((r) => r.data),
+  listEntities: () => apiClient.get("/asset-graph/org-entities").then((r) => r.data),
+  createEntity: (data: Record<string, unknown>) => apiClient.post("/asset-graph/org-entities", data).then((r) => r.data),
+  updateEntity: (id: string, data: Record<string, unknown>) => apiClient.patch(`/asset-graph/org-entities/${id}`, data).then((r) => r.data),
+  deleteEntity: (id: string) => apiClient.delete(`/asset-graph/org-entities/${id}`),
+  listProcesses: (entityId?: string) => apiClient.get("/asset-graph/business-processes", { params: entityId ? { entity_id: entityId } : {} }).then((r) => r.data),
+  createProcess: (data: Record<string, unknown>) => apiClient.post("/asset-graph/business-processes", data).then((r) => r.data),
+  updateProcess: (id: string, data: Record<string, unknown>) => apiClient.patch(`/asset-graph/business-processes/${id}`, data).then((r) => r.data),
+  deleteProcess: (id: string) => apiClient.delete(`/asset-graph/business-processes/${id}`),
 };
 
 // ── Module dashboards (Elite Pack) ───────────────────────────────────────────

@@ -3,9 +3,30 @@ import { useParams, useNavigate } from "react-router-dom";
 import {
   ArrowLeft, Loader2, FileText, Eye,
   ChevronDown, ChevronUp, CheckCircle2, AlertCircle, Clock, MinusCircle,
+  ShieldCheck, ShieldAlert, MessageSquareWarning, ShieldOff,
 } from "lucide-react";
 import { auditorPortalApi, complianceApi, type AuditChecklistControl, type AuditChecklistDocument, type AuditChecklistLinkedDoc } from "@/api/endpoints";
 import DocumentViewerModal, { type ViewableDoc } from "@/components/features/compliance/DocumentViewerModal";
+
+// ─── Auditor verdict parsing (mirrors backend _AUDITOR_NOTE_RE) ────────────────
+
+type Verdict = "verified" | "finding" | "observation" | "na";
+
+const VERDICT_CFG: Record<Verdict, { label: string; cls: string; icon: typeof ShieldCheck }> = {
+  verified:    { label: "Verified",    cls: "text-green-700 bg-green-50 border-green-200 ring-green-500",   icon: ShieldCheck },
+  finding:     { label: "Finding",     cls: "text-red-700 bg-red-50 border-red-200 ring-red-500",           icon: ShieldAlert },
+  observation: { label: "Observation", cls: "text-amber-700 bg-amber-50 border-amber-200 ring-amber-500",   icon: MessageSquareWarning },
+  na:          { label: "N/A",         cls: "text-gray-500 bg-gray-50 border-gray-200 ring-gray-400",       icon: ShieldOff },
+};
+const VERDICT_ORDER: Verdict[] = ["verified", "finding", "observation", "na"];
+
+function parseAuditorNote(raw: string | undefined | null): { verdict: Verdict | null; notes: string } {
+  if (!raw) return { verdict: null, notes: "" };
+  const m = /^\[AUDITOR:(\w+)\] ?([\s\S]*)/.exec(raw);
+  if (!m) return { verdict: null, notes: raw };
+  const v = m[1] as Verdict;
+  return { verdict: (VERDICT_ORDER as string[]).includes(v) ? v : null, notes: m[2] ?? "" };
+}
 
 // ─── Status badge config ───────────────────────────────────────────────────────
 
@@ -56,16 +77,50 @@ export default function AuditChecklistPage() {
   const [expanded, setExpanded]     = useState<Set<string>>(new Set());
   const [viewingDoc, setViewingDoc] = useState<ViewableDoc | null>(null);
 
+  // Auditor verdicts (RFP mod 13.2 — was read-only)
+  const [draftVerdict, setDraftVerdict] = useState<Record<string, Verdict | null>>({});
+  const [draftNotes, setDraftNotes]     = useState<Record<string, string>>({});
+  const [savingVerdict, setSavingVerdict] = useState<string | null>(null);
+  const [verdictError, setVerdictError]   = useState<Record<string, string>>({});
+
   useEffect(() => {
     if (!assessmentId) return;
     auditorPortalApi.getChecklist(assessmentId)
       .then((data) => {
         setControls(data.controls);
         setDocuments(data.documents ?? []);
+        const verdicts: Record<string, Verdict | null> = {};
+        const notes: Record<string, string> = {};
+        for (const c of data.controls) {
+          const parsed = parseAuditorNote(c.auditor_notes);
+          verdicts[c.control_assessment_id] = parsed.verdict;
+          notes[c.control_assessment_id] = parsed.notes;
+        }
+        setDraftVerdict(verdicts);
+        setDraftNotes(notes);
       })
       .catch(() => setError("Failed to load checklist. Check your assignment status."))
       .finally(() => setLoading(false));
   }, [assessmentId]);
+
+  async function saveVerdict(controlAssessmentId: string) {
+    const verdict = draftVerdict[controlAssessmentId];
+    if (!verdict) return;
+    setSavingVerdict(controlAssessmentId);
+    setVerdictError((prev) => ({ ...prev, [controlAssessmentId]: "" }));
+    try {
+      await auditorPortalApi.recordVerdict(controlAssessmentId, verdict, draftNotes[controlAssessmentId] || "");
+      setControls((prev) => prev.map((c) =>
+        c.control_assessment_id === controlAssessmentId
+          ? { ...c, auditor_notes: `[AUDITOR:${verdict}] ${draftNotes[controlAssessmentId] || ""}` }
+          : c
+      ));
+    } catch {
+      setVerdictError((prev) => ({ ...prev, [controlAssessmentId]: "Failed to save verdict. Please try again." }));
+    } finally {
+      setSavingVerdict(null);
+    }
+  }
 
   const closeViewer = useCallback(() => setViewingDoc(null), []);
 
@@ -86,6 +141,7 @@ export default function AuditChecklistPage() {
   }
 
   const implemented = controls.filter((c) => c.status === "implemented").length;
+  const reviewedCount = controls.filter((c) => !!draftVerdict[c.control_assessment_id]).length;
 
   return (
     <>
@@ -102,7 +158,7 @@ export default function AuditChecklistPage() {
             Back to my assignments
           </button>
           <h1 className="text-2xl font-bold text-gray-900">Audit Checklist</h1>
-          <p className="text-sm text-gray-500 mt-1">Review controls and supporting evidence provided by the company</p>
+          <p className="text-sm text-gray-500 mt-1">Review evidence and record your verdict for each control</p>
         </div>
 
         {error && (
@@ -110,11 +166,12 @@ export default function AuditChecklistPage() {
         )}
 
         {/* Stats strip */}
-        <div className="grid grid-cols-3 gap-4">
+        <div className="grid grid-cols-4 gap-4">
           {[
             { value: controls.length,  label: "Total Controls",  color: "text-gray-800"  },
             { value: implemented,      label: "Implemented",     color: "text-green-600" },
             { value: documents.length, label: "Evidence Files",  color: "text-blue-600"  },
+            { value: `${reviewedCount}/${controls.length}`, label: "Auditor Reviewed", color: "text-slate-700" },
           ].map(({ value, label, color }) => (
             <div key={label} className="bg-white rounded-2xl border border-gray-100 p-4 text-center">
               <p className={`text-2xl font-bold ${color}`}>{value}</p>
@@ -161,7 +218,7 @@ export default function AuditChecklistPage() {
           </div>
         )}
 
-        {/* Controls list — read-only evidence view */}
+        {/* Controls list — evidence + auditor verdict */}
         <div className="bg-white rounded-2xl border border-gray-100 divide-y divide-gray-50">
           {controls.length === 0 && (
             <div className="py-12 text-center text-sm text-gray-400">No controls found.</div>
@@ -198,6 +255,18 @@ export default function AuditChecklistPage() {
                           Evidence
                         </span>
                       )}
+                      {(() => {
+                        const v = draftVerdict[ctrl.control_assessment_id];
+                        if (!v) return null;
+                        const vc = VERDICT_CFG[v];
+                        const VIcon = vc.icon;
+                        return (
+                          <span className={`inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full border ${vc.cls}`}>
+                            <VIcon className="w-3 h-3" />
+                            {vc.label}
+                          </span>
+                        );
+                      })()}
                     </div>
                     <p className="text-sm font-medium text-gray-800 group-hover:text-gray-900">
                       {ctrl.control_title}
@@ -268,6 +337,54 @@ export default function AuditChecklistPage() {
                         <p className="text-xs text-gray-400 italic">No evidence provided for this control.</p>
                       </div>
                     )}
+
+                    {/* Auditor verdict (RFP mod 13.2) */}
+                    <div className="bg-slate-50 border border-slate-200 rounded-xl p-4">
+                      <p className="text-xs font-semibold text-slate-600 uppercase tracking-wide mb-2.5">
+                        Auditor Verdict
+                      </p>
+                      <div className="flex flex-wrap gap-2 mb-3">
+                        {VERDICT_ORDER.map((v) => {
+                          const vc = VERDICT_CFG[v];
+                          const VIcon = vc.icon;
+                          const active = draftVerdict[ctrl.control_assessment_id] === v;
+                          return (
+                            <button
+                              key={v}
+                              type="button"
+                              onClick={() => setDraftVerdict((prev) => ({ ...prev, [ctrl.control_assessment_id]: v }))}
+                              className={`inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg border transition-colors ${
+                                active ? `${vc.cls} ring-2 ring-offset-1` : "text-gray-500 bg-white border-gray-200 hover:bg-gray-50"
+                              }`}
+                            >
+                              <VIcon className="w-3.5 h-3.5" />
+                              {vc.label}
+                            </button>
+                          );
+                        })}
+                      </div>
+                      <textarea
+                        value={draftNotes[ctrl.control_assessment_id] ?? ""}
+                        onChange={(e) => setDraftNotes((prev) => ({ ...prev, [ctrl.control_assessment_id]: e.target.value }))}
+                        rows={2}
+                        placeholder="Auditor notes for this control (findings, rationale, follow-up)..."
+                        className="w-full border border-gray-200 rounded-lg px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500 mb-2.5"
+                      />
+                      {verdictError[ctrl.control_assessment_id] && (
+                        <p className="text-xs text-red-600 mb-2">{verdictError[ctrl.control_assessment_id]}</p>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => saveVerdict(ctrl.control_assessment_id)}
+                        disabled={!draftVerdict[ctrl.control_assessment_id] || savingVerdict === ctrl.control_assessment_id}
+                        className="inline-flex items-center gap-1.5 bg-slate-800 text-white px-3.5 py-1.5 rounded-lg text-xs font-medium hover:bg-slate-900 disabled:opacity-50"
+                      >
+                        {savingVerdict === ctrl.control_assessment_id
+                          ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          : <CheckCircle2 className="w-3.5 h-3.5" />}
+                        Save Verdict
+                      </button>
+                    </div>
                   </div>
                 )}
               </div>

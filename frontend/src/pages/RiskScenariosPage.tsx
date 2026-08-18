@@ -1,8 +1,169 @@
 import { useState, useEffect } from "react";
-import { Plus, Search, X, Loader2, Filter } from "lucide-react";
+import { Plus, Search, X, Loader2, Filter, History, GitCommitHorizontal } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { riskScenariosApi, assetsApi, vulnerabilitiesApi, threatsApi, appliedControlsApi } from "@/api/endpoints";
+import { riskScenariosApi, scenarioVersionsApi, assetsApi, vulnerabilitiesApi, threatsApi, appliedControlsApi } from "@/api/endpoints";
 import { MultiSelect, type MultiSelectOption as Option } from "@/components/common/MultiSelect";
+
+// ─── Version timeline modal (RFP mod 5.2) ──────────────────────────────────────
+
+const FIELD_LABELS: Record<string, string> = {
+  name: "Name", description: "Description", justification: "Justification",
+  current_probability: "Current Probability", current_impact: "Current Impact", current_risk_level: "Current Risk Level",
+  target_probability: "Target Probability", target_impact: "Target Impact", target_risk_level: "Target Risk Level",
+  treatment: "Treatment", threat_ids: "Threats", vulnerability_ids: "Vulnerabilities",
+  asset_ids: "Assets", applied_control_ids: "Applied Controls",
+};
+
+function fmtVal(v: unknown): string {
+  if (v === null || v === undefined || v === "") return "—";
+  if (Array.isArray(v)) return v.length ? `${v.length} linked` : "none";
+  return String(v);
+}
+
+function VersionTimelineModal({ scenarioId, scenarioName, onClose }: { scenarioId: string; scenarioName: string; onClose: () => void }) {
+  const { t } = useTranslation();
+  const [versions, setVersions] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [snapReason, setSnapReason] = useState("");
+  const [snapping, setSnapping] = useState(false);
+  const [diffFrom, setDiffFrom] = useState<number | null>(null);
+  const [diffTo, setDiffTo] = useState<number | null>(null);
+  const [diff, setDiff] = useState<any[] | null>(null);
+  const [diffing, setDiffing] = useState(false);
+
+  function load() {
+    setLoading(true);
+    scenarioVersionsApi.list(scenarioId)
+      .then((data) => setVersions(Array.isArray(data) ? data : []))
+      .catch(() => setVersions([]))
+      .finally(() => setLoading(false));
+  }
+  useEffect(load, [scenarioId]);
+
+  async function snapshot() {
+    setSnapping(true);
+    try {
+      await scenarioVersionsApi.snapshot(scenarioId, snapReason || undefined);
+      setSnapReason("");
+      load();
+    } catch { /* keep modal open, list refresh will show nothing new */ }
+    finally { setSnapping(false); }
+  }
+
+  async function runDiff() {
+    if (diffFrom == null || diffTo == null) return;
+    setDiffing(true);
+    setDiff(null);
+    try {
+      const d = await scenarioVersionsApi.diff(scenarioId, diffFrom, diffTo);
+      setDiff(Array.isArray(d) ? d : []);
+    } catch { setDiff([]); }
+    finally { setDiffing(false); }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-2xl max-h-[85vh] overflow-y-auto">
+        <div className="flex items-center justify-between px-6 pt-6 pb-4 border-b border-gray-100">
+          <div>
+            <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+              <History className="w-5 h-5 text-gray-400" /> {t("risk_scenarios.version_history", "Version History")}
+            </h2>
+            <p className="text-xs text-gray-500 mt-0.5">{scenarioName}</p>
+          </div>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600"><X className="w-5 h-5" /></button>
+        </div>
+
+        <div className="px-6 py-4 space-y-5">
+          {/* Manual snapshot */}
+          <div className="flex items-center gap-2">
+            <input
+              value={snapReason}
+              onChange={(e) => setSnapReason(e.target.value)}
+              placeholder={t("risk_scenarios.snapshot_reason_placeholder", "Reason for this snapshot (optional)")}
+              className="flex-1 border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+            <button
+              onClick={snapshot}
+              disabled={snapping}
+              className="inline-flex items-center gap-1.5 bg-gray-800 text-white px-3.5 py-2 rounded-xl text-sm font-medium hover:bg-gray-900 disabled:opacity-50 whitespace-nowrap"
+            >
+              {snapping ? <Loader2 className="w-4 h-4 animate-spin" /> : <GitCommitHorizontal className="w-4 h-4" />}
+              {t("risk_scenarios.take_snapshot", "Snapshot now")}
+            </button>
+          </div>
+
+          {/* Diff selector */}
+          {versions.length >= 2 && (
+            <div className="bg-gray-50 rounded-xl p-3">
+              <div className="flex items-center gap-2 flex-wrap">
+                <select value={diffFrom ?? ""} onChange={(e) => setDiffFrom(e.target.value ? parseInt(e.target.value) : null)} className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-xs">
+                  <option value="">{t("risk_scenarios.diff_from", "From version…")}</option>
+                  {versions.map((v) => <option key={v.id} value={v.version_number}>v{v.version_number}</option>)}
+                </select>
+                <span className="text-xs text-gray-400">→</span>
+                <select value={diffTo ?? ""} onChange={(e) => setDiffTo(e.target.value ? parseInt(e.target.value) : null)} className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-xs">
+                  <option value="">{t("risk_scenarios.diff_to", "To version…")}</option>
+                  {versions.map((v) => <option key={v.id} value={v.version_number}>v{v.version_number}</option>)}
+                </select>
+                <button
+                  onClick={runDiff}
+                  disabled={diffFrom == null || diffTo == null || diffing}
+                  className="inline-flex items-center gap-1.5 bg-white border border-gray-200 text-gray-700 px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-gray-100 disabled:opacity-50"
+                >
+                  {diffing && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                  {t("risk_scenarios.compare", "Compare")}
+                </button>
+              </div>
+              {diff && (
+                diff.length === 0 ? (
+                  <p className="text-xs text-gray-400 mt-2.5">{t("risk_scenarios.no_diff", "No differences between these versions.")}</p>
+                ) : (
+                  <div className="mt-2.5 space-y-1.5">
+                    {diff.map((d: any) => (
+                      <div key={d.field} className="text-xs bg-white rounded-lg px-3 py-2 border border-gray-100">
+                        <span className="font-medium text-gray-700">{FIELD_LABELS[d.field] || d.field}</span>{": "}
+                        <span className="text-red-500 line-through">{fmtVal(d.from_value)}</span>
+                        {" → "}
+                        <span className="text-green-600 font-medium">{fmtVal(d.to_value)}</span>
+                      </div>
+                    ))}
+                  </div>
+                )
+              )}
+            </div>
+          )}
+
+          {/* Timeline */}
+          {loading ? (
+            <div className="flex items-center justify-center py-10"><Loader2 className="w-6 h-6 animate-spin text-blue-500" /></div>
+          ) : versions.length === 0 ? (
+            <p className="text-sm text-gray-400 text-center py-6">{t("risk_scenarios.no_versions", "No snapshots yet.")}</p>
+          ) : (
+            <div className="space-y-0">
+              {versions.map((v, i) => (
+                <div key={v.id} className="flex gap-3">
+                  <div className="flex flex-col items-center">
+                    <div className="w-2.5 h-2.5 rounded-full bg-blue-500 mt-1.5 flex-shrink-0" />
+                    {i < versions.length - 1 && <div className="w-px flex-1 bg-gray-200 my-1" />}
+                  </div>
+                  <div className="pb-4 flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-sm font-semibold text-gray-800">v{v.version_number}</span>
+                      <span className="text-xs text-gray-400">{v.created_at ? new Date(v.created_at).toLocaleString() : ""}</span>
+                    </div>
+                    {v.change_reason && <p className="text-xs text-gray-600 mt-0.5">{v.change_reason}</p>}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
 
 const TREATMENT_BADGE: Record<string, string> = {
   mitigate: "bg-blue-100 text-blue-700 border-blue-200",
@@ -62,6 +223,7 @@ export default function RiskScenariosPage() {
   const [vulnOptions, setVulnOptions] = useState<Option[]>([]);
   const [threatOptions, setThreatOptions] = useState<Option[]>([]);
   const [controlOptions, setControlOptions] = useState<Option[]>([]);
+  const [historyFor, setHistoryFor] = useState<{ id: string; name: string } | null>(null);
 
   const [form, setForm] = useState(EMPTY_FORM);
 
@@ -195,6 +357,7 @@ export default function RiskScenariosPage() {
                 <th className="text-left px-6 py-3 font-medium text-gray-500">{t("risk_scenarios.table_threat_actor")}</th>
                 <th className="text-left px-6 py-3 font-medium text-gray-500">{t("risk_scenarios.col_knowledge")}</th>
                 <th className="text-left px-6 py-3 font-medium text-gray-500">{t("risk_scenarios.col_linked")}</th>
+                <th className="text-center px-6 py-3 font-medium text-gray-500">{t("risk_scenarios.version_history", "History")}</th>
               </tr>
             </thead>
             <tbody>
@@ -226,6 +389,15 @@ export default function RiskScenariosPage() {
                     <td className="px-6 py-4 text-gray-600">{item.strength_of_knowledge?.replace(/_/g, " ") || "-"}</td>
                     <td className="px-6 py-4 text-gray-500">
                       {linked > 0 ? t("risk_scenarios.linked_count", { count: linked }) : "-"}
+                    </td>
+                    <td className="px-6 py-4 text-center">
+                      <button
+                        onClick={() => setHistoryFor({ id: item.id, name: item.name })}
+                        title={t("risk_scenarios.version_history", "History")}
+                        className="inline-flex items-center justify-center w-7 h-7 rounded-lg text-gray-400 hover:bg-gray-100 hover:text-gray-600"
+                      >
+                        <History className="w-4 h-4" />
+                      </button>
                     </td>
                   </tr>
                 );
@@ -356,6 +528,14 @@ export default function RiskScenariosPage() {
             </form>
           </div>
         </div>
+      )}
+
+      {historyFor && (
+        <VersionTimelineModal
+          scenarioId={historyFor.id}
+          scenarioName={historyFor.name}
+          onClose={() => setHistoryFor(null)}
+        />
       )}
     </div>
   );
