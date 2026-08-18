@@ -31,7 +31,7 @@ function NewAuditModal({ onClose, onSaved }: { readonly onClose: () => void; rea
   const { t } = useTranslation();
   const [form, setForm] = useState({
     title: "", audit_type: "internal", status: "planning",
-    planned_start: "", planned_end: "", scope: "", lead_auditor: "",
+    planned_start: "", planned_end: "", scope: "", lead_auditor: "", recurrence: "none",
   });
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
@@ -49,6 +49,7 @@ function NewAuditModal({ onClose, onSaved }: { readonly onClose: () => void; rea
         planned_start: form.planned_start,
         planned_end: form.planned_end,
         scope: form.scope.trim() || undefined,
+        recurrence: form.recurrence as "annual" | "semi_annual" | "none",
       });
       onSaved();
       onClose();
@@ -111,6 +112,18 @@ function NewAuditModal({ onClose, onSaved }: { readonly onClose: () => void; rea
               <input type="date" className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
                 value={form.planned_end} onChange={e => setForm(f => ({ ...f, planned_end: e.target.value }))} />
             </div>
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">{t("audits.form_recurrence")}</label>
+            <select
+              className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+              value={form.recurrence} onChange={e => setForm(f => ({ ...f, recurrence: e.target.value }))}>
+              <option value="none">{t("audits.recurrence_none")}</option>
+              <option value="annual">{t("audits.recurrence_annual")}</option>
+              <option value="semi_annual">{t("audits.recurrence_semi_annual")}</option>
+            </select>
+            <p className="text-xs text-gray-400 mt-1">{t("audits.form_recurrence_hint")}</p>
           </div>
 
           <div>
@@ -480,6 +493,12 @@ export default function AuditsPage() {
                             {audit.finding_count > 0 && (
                               <span className="flex items-center gap-1 text-xs text-orange-600 font-medium">
                                 <AlertTriangle className="w-3 h-3" />{audit.finding_count} {t("audits.findings").toLowerCase()}
+                              </span>
+                            )}
+                            {audit.recurrence && audit.recurrence !== "none" && (
+                              <span className="flex items-center gap-1 text-xs text-indigo-600 font-medium">
+                                <RefreshCw className="w-3 h-3" />
+                                {String(t(`audits.recurrence_${audit.recurrence}` as never, audit.recurrence))}
                               </span>
                             )}
                           </div>

@@ -257,6 +257,8 @@ export interface Audit extends BaseEntity {
   planned_start?: string;
   planned_end?: string;
   scope?: string;
+  recurrence?: "annual" | "semi_annual" | "none" | null;
+  recurrence_spawned_at?: string | null;
 }
 
 export interface AuditFinding extends BaseEntity {

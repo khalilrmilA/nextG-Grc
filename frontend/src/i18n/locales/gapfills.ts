@@ -104,6 +104,10 @@ export const gapEn = {
       enabled_label: "Start enabled", retention_hint: "Leave blank for default",
     },
   },
+  audits: {
+    form_recurrence: "Recurrence", form_recurrence_hint: "Automatically plan the next cycle when this audit closes.",
+    recurrence_none: "One-time (no recurrence)", recurrence_annual: "Annual", recurrence_semi_annual: "Semi-annual",
+  },
 };
 
 export const gapFr = {
@@ -201,6 +205,10 @@ export const gapFr = {
       enabled_label: "Activer dès la création", retention_hint: "Laisser vide pour la valeur par défaut",
     },
   },
+  audits: {
+    form_recurrence: "Récurrence", form_recurrence_hint: "Planifie automatiquement le prochain cycle à la clôture de cet audit.",
+    recurrence_none: "Ponctuel (sans récurrence)", recurrence_annual: "Annuelle", recurrence_semi_annual: "Semestrielle",
+  },
 };
 
 export const gapAr = {
@@ -297,5 +305,9 @@ export const gapAr = {
       advanced_placeholder: "مثال status=closed AND age_days>365",
       enabled_label: "التفعيل عند الإنشاء", retention_hint: "اتركه فارغًا لاستخدام القيمة الافتراضية",
     },
+  },
+  audits: {
+    form_recurrence: "التكرار", form_recurrence_hint: "خطط تلقائيًا للدورة القادمة عند إغلاق هذا التدقيق.",
+    recurrence_none: "لمرة واحدة (بدون تكرار)", recurrence_annual: "سنوي", recurrence_semi_annual: "نصف سنوي",
   },
 };

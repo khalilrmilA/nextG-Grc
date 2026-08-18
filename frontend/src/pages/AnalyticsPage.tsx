@@ -53,6 +53,7 @@ const EXPORT_DATASETS = [
   { name: "assets", label: "Asset Inventory" },
   { name: "applied_controls", label: "Applied Controls" },
   { name: "audits", label: "Audits" },
+  { name: "threats", label: "Threat Library" },
 ];
 
 export default function AnalyticsPage() {
