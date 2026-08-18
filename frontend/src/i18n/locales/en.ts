@@ -1969,6 +1969,12 @@ export default {
       err_invalid_request: "Invalid request. Please check your input.",
       err_generic: "Unable to sign in. Please try again.",
       err_reset_generic: "Something went wrong. Please try again.",
+      mfa_title: "Two-factor verification",
+      mfa_subtitle: "Enter the 6-digit code from your authenticator app.",
+      mfa_code_label: "Verification code",
+      mfa_verify: "Verify",
+      mfa_back: "Back to sign in",
+      err_mfa_invalid: "Invalid or expired code. Please try again.",
     },
     blog: {
       seo_title: "GRC Automation Blog — AI Compliance, Risk & Vendor Automation | GRCEye",

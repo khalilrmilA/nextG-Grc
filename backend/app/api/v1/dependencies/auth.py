@@ -39,6 +39,15 @@ async def get_current_user(
 ) -> User:
     """Extract and validate the current user from JWT token."""
     payload = decode_token(credentials.credentials)
+
+    # mfa_challenge tokens prove "password verified, MFA still owed" — they must
+    # never work as an access token, only at POST /auth/mfa-login.
+    if payload.get("type") == "mfa_challenge":
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid token type",
+        )
+
     user_id: str | None = payload.get("sub")
 
     if not user_id:

@@ -1968,6 +1968,12 @@ export default {
       err_invalid_request: "Requête invalide. Vérifiez vos informations.",
       err_generic: "Connexion impossible. Veuillez réessayer.",
       err_reset_generic: "Une erreur est survenue. Veuillez réessayer.",
+      mfa_title: "Vérification à deux facteurs",
+      mfa_subtitle: "Saisissez le code à 6 chiffres de votre application d'authentification.",
+      mfa_code_label: "Code de vérification",
+      mfa_verify: "Vérifier",
+      mfa_back: "Retour à la connexion",
+      err_mfa_invalid: "Code invalide ou expiré. Veuillez réessayer.",
     },
     blog: {
       seo_title: "Blog Automatisation GRC — Conformité IA, Risques & Tiers | GRCEye",

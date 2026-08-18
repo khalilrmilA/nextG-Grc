@@ -11,6 +11,7 @@ from app.core.database import get_db, AsyncSessionLocal
 from app.core.rate_limit import limiter
 from app.core.security import (
     create_access_token,
+    create_mfa_challenge_token,
     create_refresh_token,
     decode_token,
     hash_password,
@@ -20,6 +21,7 @@ from app.core.security import (
 from app.models.user import User, UserRole
 from app.models.tenant import Tenant
 from app.models.login_event import LoginEvent
+from app.models.mfa_device import MfaDevice
 from app.models.subscription import Subscription, SubscriptionTier, SubscriptionStatus
 from app.models.password_reset import PasswordResetToken
 from app.core.config import settings
@@ -184,14 +186,21 @@ class UserProfileResponse(BaseModel):
 
 
 class TokenResponse(BaseModel):
-    access_token: str
-    refresh_token: str
+    access_token: str = ""
+    refresh_token: str = ""
     token_type: str = "bearer"
     must_change_password: bool = False
+    mfa_required: bool = False
+    mfa_challenge_token: str | None = None
 
 
 class RefreshRequest(BaseModel):
     refresh_token: str
+
+
+class MfaLoginRequest(BaseModel):
+    challenge_token: str
+    code: str
 
 
 _GENERIC_LOGIN_FAILURE = "Invalid email or password"
@@ -283,6 +292,20 @@ async def login(request: Request, body: LoginRequest, db: AsyncSession = Depends
             user.locked_until = None
             await db.commit()
 
+        # MFA challenge: password verified, but an enrolled+confirmed device means
+        # login isn't complete yet. Issue a short-lived challenge token instead of
+        # real tokens — the client exchanges it at POST /auth/mfa-login. Nothing is
+        # journaled as a completed login yet (mfa-login journals it on success).
+        mfa_device = (await db.execute(
+            select(MfaDevice).where(MfaDevice.user_id == user.id, MfaDevice.confirmed == True)  # noqa: E712
+        )).scalar_one_or_none()
+        if mfa_device is not None:
+            logger.info("login.mfa_required email_hash=%s", email_hash)
+            return TokenResponse(
+                mfa_required=True,
+                mfa_challenge_token=create_mfa_challenge_token({"sub": user.id}),
+            )
+
         token_data = {"sub": user.id, "tenant_id": user.tenant_id, "role": user.role}
         try:
             session = await _create_session(request, user, db)
@@ -318,6 +341,73 @@ async def login(request: Request, body: LoginRequest, db: AsyncSession = Depends
             status.HTTP_500_INTERNAL_SERVER_ERROR,
             "Internal server error",
         )
+
+
+_INVALID_MFA_CHALLENGE = "Invalid or expired MFA challenge — please log in again"
+
+
+@router.post("/mfa-login", response_model=TokenResponse)
+@limiter.limit("10/minute")
+async def mfa_login(request: Request, body: MfaLoginRequest, db: AsyncSession = Depends(get_db)):
+    """Second step of login for MFA-enrolled accounts: redeem the challenge
+    token from POST /login plus a TOTP code for real access/refresh tokens."""
+    try:
+        payload = decode_token(body.challenge_token)
+    except HTTPException:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, _INVALID_MFA_CHALLENGE)
+    if payload.get("type") != "mfa_challenge":
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, _INVALID_MFA_CHALLENGE)
+
+    user_id = payload.get("sub")
+    result = await db.execute(select(User).where(User.id == user_id))
+    user = result.scalar_one_or_none()
+    if not user or not user.is_active:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, _INVALID_MFA_CHALLENGE)
+
+    email_hash = _hash_email_for_log(user.email)
+    device = (await db.execute(
+        select(MfaDevice).where(MfaDevice.user_id == user.id, MfaDevice.confirmed == True)  # noqa: E712
+    )).scalar_one_or_none()
+    if device is None:
+        # MFA was disabled between /login and /mfa-login — treat as invalid, not a crash.
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, _INVALID_MFA_CHALLENGE)
+
+    try:
+        import pyotp
+    except ModuleNotFoundError:
+        raise HTTPException(status.HTTP_501_NOT_IMPLEMENTED, "MFA support is not installed on this server.")
+    if not pyotp.totp.TOTP(device.secret).verify(body.code.strip(), valid_window=1):
+        logger.info("login.mfa_fail email_hash=%s", email_hash)
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid MFA code")
+    device.last_used_at = datetime.now(timezone.utc).replace(tzinfo=None)
+    revoke_jti(payload.get("jti"))  # single-use: this challenge can't be redeemed twice
+
+    token_data = {"sub": user.id, "tenant_id": user.tenant_id, "role": user.role}
+    try:
+        session = await _create_session(request, user, db)
+        token_data["sid"] = session.id
+    except Exception:  # noqa: BLE001 — a session-tracking hiccup must not block login
+        logger.warning("session create failed")
+
+    # New-device login alert — same placement/reasoning as the password-only path
+    # in login(): must run before this login is journaled.
+    try:
+        ua_raw = request.headers.get("user-agent") or ""
+        async with AsyncSessionLocal() as ndb:
+            from app.services.notification_generator import check_new_device_login
+            await check_new_device_login(ndb, user, _client_ip(request), ua_raw, _device_label(ua_raw))
+            await ndb.commit()
+    except Exception:  # noqa: BLE001 — must never block login
+        logger.warning("new-device login check failed")
+
+    await db.commit()
+    logger.info("login.mfa_ok email_hash=%s", email_hash)
+    await _journal_login(request, user.email, True, "ok", user)
+    return TokenResponse(
+        access_token=create_access_token(token_data),
+        refresh_token=create_refresh_token(token_data),
+        must_change_password=bool(user.must_change_password),
+    )
 
 
 class SessionOut(BaseModel):

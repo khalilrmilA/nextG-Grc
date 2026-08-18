@@ -62,6 +62,19 @@ def create_refresh_token(data: dict[str, Any]) -> str:
     return jwt.encode(payload, settings.SECRET_KEY, algorithm=settings.JWT_ALGORITHM)
 
 
+def create_mfa_challenge_token(data: dict[str, Any]) -> str:
+    """Short-lived token proving 'password already verified, MFA still owed'.
+
+    Deliberately NOT usable as an access token: get_current_user rejects any
+    token whose type isn't 'access', so this can only be redeemed at
+    POST /auth/mfa-login.
+    """
+    payload = data.copy()
+    expire = datetime.now(timezone.utc) + timedelta(minutes=5)
+    payload.update({"exp": expire, "type": "mfa_challenge", "jti": uuid.uuid4().hex})
+    return jwt.encode(payload, settings.SECRET_KEY, algorithm=settings.JWT_ALGORITHM)
+
+
 def decode_token(token: str) -> dict[str, Any]:
     try:
         payload = jwt.decode(

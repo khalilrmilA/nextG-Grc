@@ -45,6 +45,9 @@ export interface AuthTokens {
   access_token: string;
   refresh_token: string;
   token_type: string;
+  must_change_password?: boolean;
+  mfa_required?: boolean;
+  mfa_challenge_token?: string | null;
 }
 
 // ─── Tenant ─────────────────────────────────

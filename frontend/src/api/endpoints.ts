@@ -83,6 +83,9 @@ export const authApi = {
   login: (email: string, password: string) =>
     apiClient.post<AuthTokens>("/auth/login", { email, password }).then((r) => r.data),
 
+  mfaLogin: (challenge_token: string, code: string) =>
+    apiClient.post<AuthTokens>("/auth/mfa-login", { challenge_token, code }).then((r) => r.data),
+
   register: (data: {
     email: string;
     password: string;

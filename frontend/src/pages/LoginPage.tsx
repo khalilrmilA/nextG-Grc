@@ -23,6 +23,12 @@ export default function LoginPage() {
   const [loading, setLoading]   = useState(false);
   const navigate = useNavigate();
 
+  // MFA challenge step (shown instead of the password form once /login returns mfa_required)
+  const [mfaChallengeToken, setMfaChallengeToken] = useState<string | null>(null);
+  const [mfaCode, setMfaCode]           = useState("");
+  const [mfaSubmitting, setMfaSubmitting] = useState(false);
+  const [mfaError, setMfaError]         = useState("");
+
   // AD/LDAP SSO (only shown when a directory is configured on the server)
   const [ssoEnabled, setSsoEnabled] = useState(false);
   const [ssoUser, setSsoUser] = useState("");
@@ -42,11 +48,13 @@ export default function LoginPage() {
       const profile = await api.getProfile();
       const current = authSession.getUser();
       if (current) {
+        const daysRemaining = calculateDaysRemaining();
         authSession.login({
           ...current,
           role: (profile.role as UserRole), roles: profile.roles ?? [],
           org: profile.tenant_name || current.org,
           name: [profile.first_name, profile.last_name].filter(Boolean).join(" ") || current.name,
+          daysRemaining: current.plan === "free_trial" ? daysRemaining : undefined,
           tenant_id: profile.tenant_id, primary_framework_id: profile.primary_framework_id,
           selected_framework_ids: profile.selected_framework_ids, org_size: profile.org_size,
           primary_assessment_id: profile.primary_assessment_id, accessible_modules: profile.accessible_modules,
@@ -110,6 +118,25 @@ export default function LoginPage() {
     else                             navigate("/dashboard");
   }
 
+  function completeLogin(tokenData: { access_token: string; refresh_token: string }) {
+    const demoUser = DEMO_USERS[email.trim().toLowerCase()];
+    const user = demoUser ?? {
+      email: email.trim().toLowerCase(),
+      name: email.split("@")[0],
+      role: "ciso" as UserRole,
+      plan: "enterprise" as PlanTier,
+      org: "My Organization",
+    };
+
+    authSession.login({
+      ...user,
+      accessToken: tokenData.access_token,
+      refreshToken: tokenData.refresh_token,
+    });
+
+    return enrichAndRedirect();
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setLoading(true);
@@ -119,45 +146,13 @@ export default function LoginPage() {
       const { authApi } = await import("../api/endpoints");
       const tokenData = await authApi.login(email.trim().toLowerCase(), password);
 
-      const demoUser = DEMO_USERS[email.trim().toLowerCase()];
-      const user = demoUser ?? {
-        email: email.trim().toLowerCase(),
-        name: email.split("@")[0],
-        role: "ciso" as UserRole,
-        plan: "enterprise" as PlanTier,
-        org: "My Organization",
-      };
+      if (tokenData.mfa_required && tokenData.mfa_challenge_token) {
+        setMfaChallengeToken(tokenData.mfa_challenge_token);
+        setLoading(false);
+        return;
+      }
 
-      authSession.login({
-        ...user,
-        accessToken: tokenData.access_token,
-        refreshToken: tokenData.refresh_token,
-      });
-
-      try {
-        const { authApi: api } = await import("../api/endpoints");
-        const profile = await api.getProfile();
-        const current = authSession.getUser();
-        if (current) {
-          const daysRemaining = calculateDaysRemaining();
-          authSession.login({
-            ...current,
-            role: (profile.role as UserRole),
-            roles: profile.roles ?? [],
-            org: profile.tenant_name || current.org,
-            name: [profile.first_name, profile.last_name].filter(Boolean).join(" ") || current.name,
-            daysRemaining: current.plan === "free_trial" ? daysRemaining : undefined,
-            tenant_id: profile.tenant_id,
-            primary_framework_id: profile.primary_framework_id,
-            selected_framework_ids: profile.selected_framework_ids,
-            org_size: profile.org_size,
-            primary_assessment_id: profile.primary_assessment_id,
-            accessible_modules: profile.accessible_modules,
-          });
-        }
-      } catch {/* best-effort profile enrichment — token already valid */}
-
-      redirectAfterLogin(authSession.getUser()?.role);
+      await completeLogin(tokenData);
     } catch (err: unknown) {
       authSession.logout();
       const status = (err as { response?: { status?: number } })?.response?.status;
@@ -171,6 +166,30 @@ export default function LoginPage() {
     } finally {
       setLoading(false);
     }
+  }
+
+  async function handleMfaSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!mfaChallengeToken) return;
+    setMfaSubmitting(true);
+    setMfaError("");
+    try {
+      const { authApi } = await import("../api/endpoints");
+      const tokenData = await authApi.mfaLogin(mfaChallengeToken, mfaCode.trim());
+      await completeLogin(tokenData);
+    } catch (err: unknown) {
+      const status = (err as { response?: { status?: number } })?.response?.status;
+      setMfaError(status === 401 ? t("public.login.err_mfa_invalid") : t("public.login.err_generic"));
+    } finally {
+      setMfaSubmitting(false);
+    }
+  }
+
+  function cancelMfa() {
+    setMfaChallengeToken(null);
+    setMfaCode("");
+    setMfaError("");
+    setPassword("");
   }
 
   return (
@@ -187,6 +206,51 @@ export default function LoginPage() {
 
         {/* Card */}
         <div className="bg-white rounded-2xl shadow-2xl p-8">
+          {mfaChallengeToken ? (
+            <>
+              <h2 className="text-lg font-semibold text-gray-900 mb-1">{t("public.login.mfa_title")}</h2>
+              <p className="text-sm text-gray-400 mb-6">{t("public.login.mfa_subtitle")}</p>
+
+              {mfaError && (
+                <div className="mb-4 px-4 py-3 bg-red-50 border border-red-200 rounded-xl text-red-700 text-sm">
+                  {mfaError}
+                </div>
+              )}
+
+              <form onSubmit={handleMfaSubmit} className="space-y-4">
+                <div>
+                  <label htmlFor="mfa-code" className="block text-xs font-medium text-gray-700 mb-1.5">
+                    {t("public.login.mfa_code_label")}
+                  </label>
+                  <input
+                    id="mfa-code"
+                    type="text"
+                    inputMode="numeric"
+                    autoComplete="one-time-code"
+                    value={mfaCode}
+                    onChange={(e) => setMfaCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                    required
+                    autoFocus
+                    placeholder="123456"
+                    className="w-full px-3.5 py-2.5 border border-gray-200 rounded-xl text-sm text-center tracking-[0.5em] font-mono focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                  />
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={mfaSubmitting || mfaCode.length !== 6}
+                  className="w-full bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white font-medium py-2.5 px-4 rounded-xl text-sm transition-colors flex items-center justify-center gap-2 mt-2"
+                >
+                  {mfaSubmitting ? <><Loader2 className="w-4 h-4 animate-spin" /> {t("public.login.submitting")}</> : t("public.login.mfa_verify")}
+                </button>
+
+                <button type="button" onClick={cancelMfa} className="w-full text-xs text-gray-500 hover:text-gray-700 text-center">
+                  {t("public.login.mfa_back")}
+                </button>
+              </form>
+            </>
+          ) : (
+          <>
           <h2 className="text-lg font-semibold text-gray-900 mb-1">{t("public.login.welcome_back")}</h2>
           <p className="text-sm text-gray-400 mb-6">{t("public.login.subtitle")}</p>
 
@@ -282,6 +346,8 @@ export default function LoginPage() {
           >
             {t("public.login.create_account")}
           </Link>
+          </>
+          )}
         </div>
 
         <div className="mt-6 space-y-2">
