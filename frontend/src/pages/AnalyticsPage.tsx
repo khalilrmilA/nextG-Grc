@@ -35,11 +35,31 @@ type ModuleDef = {
   load: () => Promise<any>;
   total: (d: any) => number | undefined;
   breaks: [string, string][];
+  extra?: (d: any) => React.ReactNode;
 };
+
+function CveSummary({ cve }: { cve?: { pertinent_count?: number; top?: { cve_id: string; cvss_score: number | null; cvss_vector: string | null }[] } }) {
+  if (!cve || !cve.pertinent_count) return null;
+  return (
+    <div>
+      <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
+        {`Pertinent CVEs (${cve.pertinent_count})`}
+      </p>
+      <div className="space-y-1">
+        {(cve.top || []).map((e) => (
+          <div key={e.cve_id} className="flex items-center justify-between text-xs">
+            <span className="font-mono text-gray-700 truncate">{e.cve_id}</span>
+            <span className="font-semibold text-rose-600 tabular-nums">{e.cvss_score != null ? e.cvss_score.toFixed(1) : "—"}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 const MODULES: ModuleDef[] = [
   { key: "assets", label: "Assets", icon: Boxes, color: "text-blue-600 bg-blue-50", load: () => eliteDashboardsApi.assets(), total: (d) => d.total, breaks: [["By type", "by_type"], ["By criticality", "by_criticality"], ["By class", "by_class"], ["By lifecycle", "by_lifecycle"]] },
-  { key: "vulnerabilities", label: "Vulnerabilities", icon: Bug, color: "text-rose-600 bg-rose-50", load: () => eliteDashboardsApi.vulnerabilities(), total: (d) => d.total, breaks: [["By severity", "by_severity"], ["By status", "by_status"]] },
+  { key: "vulnerabilities", label: "Vulnerabilities", icon: Bug, color: "text-rose-600 bg-rose-50", load: () => eliteDashboardsApi.vulnerabilities(), total: (d) => d.total, breaks: [["By severity", "by_severity"], ["By status", "by_status"]], extra: (d) => <CveSummary cve={d.cve} /> },
   { key: "threats", label: "Threats", icon: Radar, color: "text-orange-600 bg-orange-50", load: () => eliteDashboardsApi.threats(), total: (d) => d.total, breaks: [["By category", "by_category"], ["Pending", "pending"]] },
   { key: "risks", label: "Risks", icon: AlertTriangle, color: "text-amber-600 bg-amber-50", load: () => eliteDashboardsApi.risks(), total: (d) => d.total, breaks: [["By severity", "by_severity"], ["By status", "by_status"]] },
   { key: "controls", label: "Controls", icon: ShieldCheck, color: "text-emerald-600 bg-emerald-50", load: () => eliteDashboardsApi.controls(), total: (d) => d.total, breaks: [["By status", "by_status"]] },
@@ -157,6 +177,7 @@ export default function AnalyticsPage() {
                 {d ? (
                   <div className="space-y-3">
                     {m.breaks.map(([label, key]) => <Breakdown key={key} title={label} data={d[key]} />)}
+                    {m.extra?.(d)}
                   </div>
                 ) : (
                   <p className="text-xs text-gray-400">{t("analytics.unavailable", "No data")}</p>
