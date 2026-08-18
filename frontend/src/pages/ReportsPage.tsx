@@ -3,9 +3,9 @@
  * Shows available report types with descriptions and download buttons.
  */
 import { useState, useEffect } from "react";
-import { FileText, Download, LayoutDashboard, AlertTriangle, CheckSquare, Building2, ClipboardList, Loader2, Calendar, RefreshCw, Eye } from "lucide-react";
+import { FileText, Download, LayoutDashboard, AlertTriangle, CheckSquare, Building2, ClipboardList, Loader2, Calendar, RefreshCw, Eye, Plus, Play, Trash2, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { reportsApi } from "@/api/endpoints";
+import { reportsApi, reportSchedulesApi } from "@/api/endpoints";
 
 interface ReportType {
   id: string;
@@ -30,6 +30,29 @@ const COLOR_MAP: Record<string, { bg: string; icon: string; border: string }> = 
   audit: { bg: "bg-amber-50", icon: "text-amber-600", border: "border-amber-100" },
 };
 
+const FREQUENCIES = ["daily", "weekly", "monthly"];
+const WEEKDAYS = [0, 1, 2, 3, 4, 5, 6]; // Monday=0 .. Sunday=6 (matches datetime.weekday())
+
+const EMPTY_SCHEDULE_FORM = {
+  name: "",
+  report_type: "executive",
+  frequency: "weekly",
+  hour: 7,
+  day_of_week: 0,
+  day_of_month: 1,
+  recipients: "",
+  enabled: true,
+};
+
+function fmtDateTime(iso: string | null | undefined): string {
+  if (!iso) return "-";
+  try {
+    return new Date(iso).toLocaleString();
+  } catch {
+    return iso;
+  }
+}
+
 
 export default function ReportsPage() {
   const { t } = useTranslation();
@@ -38,6 +61,15 @@ export default function ReportsPage() {
   const [downloading, setDownloading] = useState<string | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [apiError, setApiError] = useState(false);
+
+  const [schedules, setSchedules] = useState<any[]>([]);
+  const [schedulesLoading, setSchedulesLoading] = useState(true);
+  const [schedulesLocked, setSchedulesLocked] = useState(false);
+  const [showScheduleModal, setShowScheduleModal] = useState(false);
+  const [scheduleForm, setScheduleForm] = useState(EMPTY_SCHEDULE_FORM);
+  const [scheduleError, setScheduleError] = useState("");
+  const [scheduleSubmitting, setScheduleSubmitting] = useState(false);
+  const [runningId, setRunningId] = useState<string | null>(null);
 
   function getDefaultReportTypes(): ReportType[] {
     return [
@@ -71,7 +103,84 @@ export default function ReportsPage() {
 
   useEffect(() => {
     loadReportTypes();
+    loadSchedules();
   }, []);
+
+  async function loadSchedules() {
+    try {
+      setSchedulesLoading(true);
+      const data = await reportSchedulesApi.list();
+      setSchedules(Array.isArray(data) ? data : []);
+      setSchedulesLocked(false);
+    } catch (err: any) {
+      // 402 = feature not in the tenant's plan (Elite Pack) — show the upsell state, not an error.
+      setSchedulesLocked(err?.response?.status === 402);
+      setSchedules([]);
+    } finally {
+      setSchedulesLoading(false);
+    }
+  }
+
+  async function handleCreateSchedule(e: React.FormEvent) {
+    e.preventDefault();
+    if (!scheduleForm.name.trim()) { setScheduleError(t("reports.error_schedule_name_required")); return; }
+    setScheduleSubmitting(true);
+    setScheduleError("");
+    try {
+      const recipients = scheduleForm.recipients
+        .split(/[,;\s]+/)
+        .map((r) => r.trim())
+        .filter(Boolean);
+      await reportSchedulesApi.create({
+        name: scheduleForm.name,
+        report_type: scheduleForm.report_type,
+        frequency: scheduleForm.frequency,
+        hour: scheduleForm.hour,
+        day_of_week: scheduleForm.day_of_week,
+        day_of_month: scheduleForm.day_of_month,
+        recipients,
+        enabled: scheduleForm.enabled,
+      });
+      setShowScheduleModal(false);
+      setScheduleForm(EMPTY_SCHEDULE_FORM);
+      loadSchedules();
+    } catch (err: any) {
+      setScheduleError(err?.response?.data?.detail || t("reports.error_schedule_create_failed"));
+    } finally {
+      setScheduleSubmitting(false);
+    }
+  }
+
+  async function handleToggleSchedule(schedule: any) {
+    setSchedules((prev) => prev.map((s) => (s.id === schedule.id ? { ...s, enabled: !s.enabled } : s)));
+    try {
+      await reportSchedulesApi.update(schedule.id, { enabled: !schedule.enabled });
+    } catch {
+      loadSchedules(); // revert to server truth on failure
+    }
+  }
+
+  async function handleRunNow(id: string) {
+    setRunningId(id);
+    try {
+      await reportSchedulesApi.runNow(id);
+      loadSchedules();
+    } catch {
+      alert(t("reports.error_run_failed"));
+    } finally {
+      setRunningId(null);
+    }
+  }
+
+  async function handleDeleteSchedule(id: string) {
+    if (!window.confirm(t("reports.confirm_delete_schedule"))) return;
+    try {
+      await reportSchedulesApi.delete(id);
+      setSchedules((prev) => prev.filter((s) => s.id !== id));
+    } catch {
+      alert(t("reports.error_delete_failed"));
+    }
+  }
 
   async function handleDownload(reportType: string) {
     try {
@@ -203,28 +312,166 @@ export default function ReportsPage() {
         })}
       </div>
 
-      {/* Schedule info */}
+      {/* Scheduled reports */}
       <div className="bg-white border border-gray-100 rounded-2xl p-5">
-        <div className="flex items-center gap-2 mb-3">
-          <RefreshCw className="w-4 h-4 text-gray-500" />
-          <h3 className="text-sm font-semibold text-gray-900">{t("reports.automated_title")}</h3>
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-2">
+            <RefreshCw className="w-4 h-4 text-gray-500" />
+            <h3 className="text-sm font-semibold text-gray-900">{t("reports.automated_title")}</h3>
+          </div>
+          {!schedulesLocked && (
+            <button
+              onClick={() => setShowScheduleModal(true)}
+              className="inline-flex items-center gap-1.5 bg-blue-600 text-white px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-blue-700 transition-colors"
+            >
+              <Plus className="w-3.5 h-3.5" /> {t("reports.btn_new_schedule")}
+            </button>
+          )}
         </div>
-        <p className="text-xs text-gray-500 mb-3">{t("reports.automated_text")}</p>
-        <div className="grid grid-cols-3 gap-3 text-center">
-          <div className="bg-gray-50 rounded-lg p-3">
-            <p className="text-2xl font-bold text-gray-900">5</p>
-            <p className="text-xs text-gray-500">{t("reports.report_types")}</p>
+        <p className="text-xs text-gray-500 mb-4">{t("reports.automated_text")}</p>
+
+        {schedulesLocked ? (
+          <div className="text-center py-8 text-sm text-gray-400">{t("reports.schedules_locked")}</div>
+        ) : schedulesLoading ? (
+          <div className="flex items-center justify-center py-8">
+            <Loader2 className="w-5 h-5 animate-spin text-blue-500" />
           </div>
-          <div className="bg-gray-50 rounded-lg p-3">
-            <p className="text-2xl font-bold text-gray-900">7</p>
-            <p className="text-xs text-gray-500">{t("reports.days_coverage")}</p>
+        ) : schedules.length === 0 ? (
+          <div className="text-center py-8 text-sm text-gray-400">{t("reports.no_schedules")}</div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-gray-100">
+                  <th className="text-left py-2 pr-3 font-medium text-gray-500">{t("reports.col_name")}</th>
+                  <th className="text-left py-2 pr-3 font-medium text-gray-500">{t("reports.col_type")}</th>
+                  <th className="text-left py-2 pr-3 font-medium text-gray-500">{t("reports.col_frequency")}</th>
+                  <th className="text-left py-2 pr-3 font-medium text-gray-500">{t("reports.col_next_run")}</th>
+                  <th className="text-left py-2 pr-3 font-medium text-gray-500">{t("reports.col_last_status")}</th>
+                  <th className="text-center py-2 pr-3 font-medium text-gray-500">{t("reports.col_enabled")}</th>
+                  <th className="text-right py-2 font-medium text-gray-500">{t("reports.col_actions")}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {schedules.map((s) => (
+                  <tr key={s.id} className="border-b border-gray-50">
+                    <td className="py-2.5 pr-3 font-medium text-gray-900">{s.name}</td>
+                    <td className="py-2.5 pr-3 text-gray-600">{String(t(`reports.${s.report_type}_name` as never, s.report_type))}</td>
+                    <td className="py-2.5 pr-3 text-gray-600">{t(`reports.frequency_${s.frequency}` as never)}</td>
+                    <td className="py-2.5 pr-3 text-gray-500">{fmtDateTime(s.next_run_at)}</td>
+                    <td className="py-2.5 pr-3">
+                      {s.last_status ? (
+                        <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${s.last_status === "sent" || s.last_status === "ok" ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"}`}>
+                          {s.last_status}
+                        </span>
+                      ) : (
+                        <span className="text-gray-400 text-xs">{t("reports.status_never_run")}</span>
+                      )}
+                    </td>
+                    <td className="py-2.5 pr-3 text-center">
+                      <button
+                        role="switch"
+                        aria-checked={s.enabled}
+                        onClick={() => handleToggleSchedule(s)}
+                        className={`w-9 h-5 rounded-full transition-colors relative ${s.enabled ? "bg-blue-600" : "bg-gray-200"}`}
+                      >
+                        <span className={`absolute top-0.5 w-4 h-4 bg-white rounded-full transition-transform ${s.enabled ? "translate-x-4" : "translate-x-0.5"}`} />
+                      </button>
+                    </td>
+                    <td className="py-2.5 text-right">
+                      <div className="flex items-center justify-end gap-1">
+                        <button
+                          onClick={() => handleRunNow(s.id)}
+                          disabled={runningId === s.id}
+                          title={t("reports.btn_run_now")}
+                          className="p-1.5 rounded-lg text-gray-500 hover:bg-gray-100 hover:text-blue-600 disabled:opacity-50"
+                        >
+                          {runningId === s.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Play className="w-3.5 h-3.5" />}
+                        </button>
+                        <button
+                          onClick={() => handleDeleteSchedule(s.id)}
+                          title={t("common.delete")}
+                          className="p-1.5 rounded-lg text-gray-500 hover:bg-gray-100 hover:text-red-600"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
-          <div className="bg-gray-50 rounded-lg p-3">
-            <p className="text-2xl font-bold text-gray-900">PDF</p>
-            <p className="text-xs text-gray-500">{t("reports.format")}</p>
-          </div>
-        </div>
+        )}
       </div>
+
+      {/* New Schedule Modal */}
+      {showScheduleModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setShowScheduleModal(false)} />
+          <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-md mx-4 p-6 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-lg font-semibold text-gray-900">{t("reports.btn_new_schedule")}</h2>
+              <button onClick={() => setShowScheduleModal(false)} className="text-gray-400 hover:text-gray-600"><X className="w-5 h-5" /></button>
+            </div>
+            {scheduleError && <div className="mb-4 p-3 bg-red-50 text-red-700 rounded-xl text-sm">{scheduleError}</div>}
+            <form onSubmit={handleCreateSchedule} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">{t("reports.form_schedule_name")} *</label>
+                <input value={scheduleForm.name} onChange={(e) => setScheduleForm({ ...scheduleForm, name: e.target.value })} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">{t("reports.form_report_type")}</label>
+                <select value={scheduleForm.report_type} onChange={(e) => setScheduleForm({ ...scheduleForm, report_type: e.target.value })} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                  {reportTypes.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
+                </select>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">{t("reports.form_frequency")}</label>
+                  <select value={scheduleForm.frequency} onChange={(e) => setScheduleForm({ ...scheduleForm, frequency: e.target.value })} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    {FREQUENCIES.map((f) => <option key={f} value={f}>{t(`reports.frequency_${f}` as never)}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">{t("reports.form_hour")}</label>
+                  <select value={scheduleForm.hour} onChange={(e) => setScheduleForm({ ...scheduleForm, hour: parseInt(e.target.value) })} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    {Array.from({ length: 24 }, (_, h) => <option key={h} value={h}>{String(h).padStart(2, "0")}:00 UTC</option>)}
+                  </select>
+                </div>
+              </div>
+              {scheduleForm.frequency === "weekly" && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">{t("reports.form_day_of_week")}</label>
+                  <select value={scheduleForm.day_of_week} onChange={(e) => setScheduleForm({ ...scheduleForm, day_of_week: parseInt(e.target.value) })} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    {WEEKDAYS.map((d) => <option key={d} value={d}>{t(`reports.weekday_${d}` as never)}</option>)}
+                  </select>
+                </div>
+              )}
+              {scheduleForm.frequency === "monthly" && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">{t("reports.form_day_of_month")}</label>
+                  <input type="number" min={1} max={28} value={scheduleForm.day_of_month} onChange={(e) => setScheduleForm({ ...scheduleForm, day_of_month: parseInt(e.target.value) || 1 })} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                </div>
+              )}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">{t("reports.form_recipients")}</label>
+                <input value={scheduleForm.recipients} onChange={(e) => setScheduleForm({ ...scheduleForm, recipients: e.target.value })} placeholder={t("reports.form_recipients_placeholder")} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              </div>
+              <label className="flex items-center gap-2 text-sm text-gray-700">
+                <input type="checkbox" checked={scheduleForm.enabled} onChange={(e) => setScheduleForm({ ...scheduleForm, enabled: e.target.checked })} className="rounded border-gray-300" />
+                {t("reports.form_enabled")}
+              </label>
+              <div className="flex justify-end gap-3 pt-2">
+                <button type="button" onClick={() => setShowScheduleModal(false)} className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800">{t("common.cancel")}</button>
+                <button type="submit" disabled={scheduleSubmitting} className="inline-flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-xl text-sm font-medium hover:bg-blue-700 disabled:opacity-50">
+                  {scheduleSubmitting && <Loader2 className="w-4 h-4 animate-spin" />} {t("common.save")}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* PDF Preview Modal */}
       {previewUrl && (

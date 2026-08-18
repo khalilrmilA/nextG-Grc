@@ -759,6 +759,15 @@ export const reportsApi = {
   },
 };
 
+// ─── Scheduled Reports (Elite Pack) ───────────────────────────
+export const reportSchedulesApi = {
+  list: () => apiClient.get("/report-schedules").then((r) => r.data),
+  create: (data: Record<string, unknown>) => apiClient.post("/report-schedules", data).then((r) => r.data),
+  update: (id: string, data: Record<string, unknown>) => apiClient.patch(`/report-schedules/${id}`, data).then((r) => r.data),
+  delete: (id: string) => apiClient.delete(`/report-schedules/${id}`),
+  runNow: (id: string) => apiClient.post(`/report-schedules/${id}/run`).then((r) => r.data),
+};
+
 // ─── Auditor Portal ───────────────────────────
 
 export interface AuditorAssignment {
