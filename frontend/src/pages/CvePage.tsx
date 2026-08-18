@@ -1,7 +1,8 @@
 import { useState, useEffect } from "react";
-import { Search, Loader2, Crown, RefreshCw, Database, ChevronDown } from "lucide-react";
+import { Search, Loader2, Crown, RefreshCw, Database, ChevronDown, StickyNote, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { cveApi } from "@/api/endpoints";
+import { cveApi, assetsApi } from "@/api/endpoints";
+import { MultiSelect, type MultiSelectOption } from "@/components/common/MultiSelect";
 
 const CVSS_BADGE = (score?: number | null) => {
   if (score == null) return "bg-gray-100 text-gray-600 border-gray-200";
@@ -17,6 +18,81 @@ const REL_BADGE: Record<string, string> = {
 };
 const RELEVANCE = ["pertinent", "to_watch", "non_pertinent"];
 
+function AnnotationModal({
+  cve,
+  assetOptions,
+  onClose,
+  onSaved,
+}: {
+  cve: any;
+  assetOptions: MultiSelectOption[];
+  onClose: () => void;
+  onSaved: (updated: any) => void;
+}) {
+  const { t } = useTranslation();
+  const [relevance, setRelevance] = useState(cve.relevance || "to_watch");
+  const [notes, setNotes] = useState(cve.notes || "");
+  const [linkedAssetIds, setLinkedAssetIds] = useState<string[]>(cve.linked_asset_ids || []);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+
+  async function save() {
+    setSaving(true);
+    setError("");
+    try {
+      const updated = await cveApi.annotate(cve.cve_id, { relevance, notes, linked_asset_ids: linkedAssetIds });
+      onSaved({ ...cve, ...updated });
+      onClose();
+    } catch {
+      setError(t("cve.error_save_failed", "Failed to save"));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-lg p-6 max-h-[85vh] overflow-y-auto">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-lg font-semibold text-gray-900 font-mono">{cve.cve_id}</h2>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600"><X className="w-5 h-5" /></button>
+        </div>
+        <p className="text-sm text-gray-600 mb-4 line-clamp-3">{cve.description}</p>
+        {error && <div className="mb-3 p-2.5 bg-red-50 text-red-700 rounded-lg text-sm">{error}</div>}
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">{t("cve.col_rel", "Relevance")}</label>
+            <select value={relevance} onChange={(e) => setRelevance(e.target.value)} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+              {RELEVANCE.map((r) => <option key={r} value={r}>{r.replace(/_/g, " ")}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">{t("cve.notes_label", "Internal notes")}</label>
+            <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={3} placeholder={t("cve.notes_placeholder", "Why this CVE matters (or doesn't) for our environment...")} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">{t("cve.linked_assets_label", "Linked assets")}</label>
+            <MultiSelect
+              options={assetOptions}
+              selected={linkedAssetIds}
+              onChange={setLinkedAssetIds}
+              placeholder={t("risk_scenarios.select_placeholder")}
+              emptyLabel={t("risk_scenarios.no_options")}
+            />
+          </div>
+          <div className="flex justify-end gap-3 pt-2">
+            <button onClick={onClose} className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800">{t("common.cancel")}</button>
+            <button onClick={save} disabled={saving} className="inline-flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-xl text-sm font-medium hover:bg-blue-700 disabled:opacity-50">
+              {saving && <Loader2 className="w-4 h-4 animate-spin" />} {t("common.save")}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function CvePage() {
   const { t } = useTranslation();
   const [items, setItems] = useState<any[]>([]);
@@ -30,6 +106,8 @@ export default function CvePage() {
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
+  const [annotating, setAnnotating] = useState<any | null>(null);
+  const [assetOptions, setAssetOptions] = useState<MultiSelectOption[]>([]);
 
   const PAGE_SIZE = 200;  // backend caps page_size at 200; "Load more" appends the rest
 
@@ -63,6 +141,13 @@ export default function CvePage() {
   }
   useEffect(() => { load(); /* eslint-disable-next-line */ }, [relFilter, minCvss]);
 
+  useEffect(() => {
+    assetsApi.list({ page_size: 500 }).then((d: any) => {
+      const list = Array.isArray(d) ? d : d.items || [];
+      setAssetOptions(list.map((a: any) => ({ id: a.id, label: a.name })));
+    }).catch(() => setAssetOptions([]));
+  }, []);
+
   async function sync() {
     setSyncing(true); setSyncMsg("");
     try {
@@ -73,11 +158,13 @@ export default function CvePage() {
     finally { setSyncing(false); }
   }
 
-  async function setRelevance(cveId: string, relevance: string) {
-    setBusy(cveId);
+  async function setRelevance(cve: any, relevance: string) {
+    setBusy(cve.cve_id);
     try {
-      await cveApi.annotate(cveId, { relevance, linked_asset_ids: [] });
-      setItems((prev) => prev.map((c) => (c.cve_id === cveId ? { ...c, relevance } : c)));
+      // Preserve existing notes/linked_asset_ids — the API requires the full
+      // annotation payload, so a relevance-only change must not wipe them.
+      await cveApi.annotate(cve.cve_id, { relevance, notes: cve.notes || null, linked_asset_ids: cve.linked_asset_ids || [] });
+      setItems((prev) => prev.map((c) => (c.cve_id === cve.cve_id ? { ...c, relevance } : c)));
     } catch {} finally { setBusy(""); }
   }
 
@@ -136,26 +223,39 @@ export default function CvePage() {
                 <th className="text-left px-6 py-3 font-medium text-gray-500">{t("cve.col_cvss", "CVSS")}</th>
                 <th className="text-left px-6 py-3 font-medium text-gray-500">{t("cve.col_desc", "Description")}</th>
                 <th className="text-left px-6 py-3 font-medium text-gray-500">{t("cve.col_rel", "Relevance")}</th>
+                <th className="text-center px-6 py-3 font-medium text-gray-500">{t("cve.col_notes", "Notes")}</th>
               </tr></thead>
               <tbody>
-                {items.map((c) => (
-                  <tr key={c.id} className="border-b border-gray-50 hover:bg-gray-50/50">
-                    <td className="px-6 py-4 font-mono text-xs text-blue-700 whitespace-nowrap">{c.cve_id}</td>
-                    <td className="px-6 py-4"><span className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold border ${CVSS_BADGE(c.cvss_score)}`}>{c.cvss_score ?? "—"}</span></td>
-                    <td className="px-6 py-4 text-gray-600 max-w-xl"><span className="line-clamp-2">{c.description || "—"}</span></td>
-                    <td className="px-6 py-4">
-                      <select
-                        value={c.relevance || ""}
-                        disabled={busy === c.cve_id}
-                        onChange={(e) => setRelevance(c.cve_id, e.target.value)}
-                        className={`text-xs rounded-full px-2.5 py-1 border font-semibold focus:outline-none ${c.relevance ? REL_BADGE[c.relevance] : "bg-white text-gray-500 border-gray-200"}`}
-                      >
-                        <option value="">{t("cve.triage", "Triage…")}</option>
-                        {RELEVANCE.map((r) => <option key={r} value={r}>{r.replace(/_/g, " ")}</option>)}
-                      </select>
-                    </td>
-                  </tr>
-                ))}
+                {items.map((c) => {
+                  const hasAnnotation = !!(c.notes || c.linked_asset_ids?.length);
+                  return (
+                    <tr key={c.id} className="border-b border-gray-50 hover:bg-gray-50/50">
+                      <td className="px-6 py-4 font-mono text-xs text-blue-700 whitespace-nowrap">{c.cve_id}</td>
+                      <td className="px-6 py-4"><span className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold border ${CVSS_BADGE(c.cvss_score)}`}>{c.cvss_score ?? "—"}</span></td>
+                      <td className="px-6 py-4 text-gray-600 max-w-xl"><span className="line-clamp-2">{c.description || "—"}</span></td>
+                      <td className="px-6 py-4">
+                        <select
+                          value={c.relevance || ""}
+                          disabled={busy === c.cve_id}
+                          onChange={(e) => setRelevance(c, e.target.value)}
+                          className={`text-xs rounded-full px-2.5 py-1 border font-semibold focus:outline-none ${c.relevance ? REL_BADGE[c.relevance] : "bg-white text-gray-500 border-gray-200"}`}
+                        >
+                          <option value="">{t("cve.triage", "Triage…")}</option>
+                          {RELEVANCE.map((r) => <option key={r} value={r}>{r.replace(/_/g, " ")}</option>)}
+                        </select>
+                      </td>
+                      <td className="px-6 py-4 text-center">
+                        <button
+                          onClick={() => setAnnotating(c)}
+                          title={t("cve.notes_label", "Internal notes")}
+                          className={`inline-flex items-center justify-center w-7 h-7 rounded-lg ${hasAnnotation ? "bg-blue-50 text-blue-600" : "text-gray-300 hover:bg-gray-100 hover:text-gray-500"}`}
+                        >
+                          <StickyNote className="w-4 h-4" />
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -176,6 +276,15 @@ export default function CvePage() {
             </button>
           )}
         </div>
+      )}
+
+      {annotating && (
+        <AnnotationModal
+          cve={annotating}
+          assetOptions={assetOptions}
+          onClose={() => setAnnotating(null)}
+          onSaved={(updated) => setItems((prev) => prev.map((c) => (c.cve_id === updated.cve_id ? updated : c)))}
+        />
       )}
     </div>
   );

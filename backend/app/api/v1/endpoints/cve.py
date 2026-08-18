@@ -33,6 +33,8 @@ class CveOut(BaseModel):
     published_at: datetime | None = None
     last_modified: datetime | None = None
     relevance: str | None = None
+    notes: str | None = None
+    linked_asset_ids: list = []
     model_config = {"from_attributes": True}
 
 
@@ -82,15 +84,18 @@ async def search_cve(
                 CveAnnotation.cve_id.in_(ids),
             )
         )).scalars().all()
-        ann_map = {a.cve_id: a.relevance for a in anns}
+        ann_map = {a.cve_id: a for a in anns}
 
     out = []
     for e in entries:
-        rel = ann_map.get(e.cve_id)
+        ann = ann_map.get(e.cve_id)
+        rel = ann.relevance if ann else None
         if relevance and rel != relevance:
             continue
         item = CveOut.model_validate(e)
         item.relevance = rel
+        item.notes = ann.notes if ann else None
+        item.linked_asset_ids = (ann.linked_asset_ids or []) if ann else []
         out.append(item)
     return out
 
@@ -134,4 +139,6 @@ async def set_annotation(
 
     item = CveOut.model_validate(entry)
     item.relevance = body.relevance
+    item.notes = body.notes
+    item.linked_asset_ids = body.linked_asset_ids
     return item

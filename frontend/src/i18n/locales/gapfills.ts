@@ -16,7 +16,12 @@ export const gapEn = {
     doc_history_title: "Upload History", doc_history_empty: "No documents uploaded yet.",
     doc_history_hidden: "Hidden from auditor", doc_history_latest: "LATEST", doc_history_preview: "Preview",
   },
-  cve: { count_label: "CVEs", load_more: "Load more", showing: "Showing" },
+  cve: {
+    count_label: "CVEs", load_more: "Load more", showing: "Showing",
+    col_notes: "Notes", notes_label: "Internal notes",
+    notes_placeholder: "Why this CVE matters (or doesn't) for our environment...",
+    linked_assets_label: "Linked assets", error_save_failed: "Failed to save",
+  },
   ocr: {
     page: "Page", chars_short: "{{n}} chars", download_pdf: "Download PDF",
     empty_page: "— no text on this page —", err_pdf: "Could not generate the PDF. Please try again.",
@@ -36,7 +41,12 @@ export const gapFr = {
     doc_history_title: "Historique des imports", doc_history_empty: "Aucun document importé pour le moment.",
     doc_history_hidden: "Masqué pour l'auditeur", doc_history_latest: "DERNIER", doc_history_preview: "Aperçu",
   },
-  cve: { count_label: "CVE", load_more: "Charger plus", showing: "Affichage" },
+  cve: {
+    count_label: "CVE", load_more: "Charger plus", showing: "Affichage",
+    col_notes: "Notes", notes_label: "Notes internes",
+    notes_placeholder: "Pourquoi ce CVE compte (ou pas) pour notre environnement...",
+    linked_assets_label: "Actifs liés", error_save_failed: "Échec de l'enregistrement",
+  },
   ocr: {
     page: "Page", chars_short: "{{n}} caractères", download_pdf: "Télécharger le PDF",
     empty_page: "— aucun texte sur cette page —", err_pdf: "Impossible de générer le PDF. Veuillez réessayer.",
@@ -56,7 +66,12 @@ export const gapAr = {
     doc_history_title: "سجل الرفع", doc_history_empty: "لم تُرفع أي وثائق بعد.",
     doc_history_hidden: "مخفي عن المدقق", doc_history_latest: "الأحدث", doc_history_preview: "معاينة",
   },
-  cve: { count_label: "ثغرات CVE", load_more: "تحميل المزيد", showing: "عرض" },
+  cve: {
+    count_label: "ثغرات CVE", load_more: "تحميل المزيد", showing: "عرض",
+    col_notes: "ملاحظات", notes_label: "ملاحظات داخلية",
+    notes_placeholder: "لماذا تهم (أو لا تهم) هذه الثغرة بيئتنا...",
+    linked_assets_label: "الأصول المرتبطة", error_save_failed: "فشل الحفظ",
+  },
   ocr: {
     page: "صفحة", chars_short: "{{n}} حرف", download_pdf: "تنزيل PDF",
     empty_page: "— لا يوجد نص في هذه الصفحة —", err_pdf: "تعذّر إنشاء ملف PDF. يُرجى المحاولة مرة أخرى.",
