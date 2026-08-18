@@ -37,14 +37,19 @@ def _label(key) -> str:
     return str(getattr(key, "value", key))
 
 
-async def _count_by(db: AsyncSession, model, column, tenant_id: str) -> dict:
-    """Grouped counts {value: n}; empty dict if the column/query fails."""
+async def _count_by(db: AsyncSession, model, column, tenant_id: str, *, join_model=None, join_on=None) -> dict:
+    """Grouped counts {value: n}; empty dict if the query fails.
+
+    ``model`` may not carry ``tenant_id`` itself (e.g. AuditFinding, PolicyAttestation) —
+    pass ``join_model``/``join_on`` to scope through the owning tenant-scoped table instead.
+    """
     try:
-        result = await db.execute(
-            select(column, func.count())
-            .where(model.tenant_id == tenant_id)
-            .group_by(column)
-        )
+        scope_model = join_model or model
+        q = select(column, func.count()).group_by(column)
+        if join_model is not None:
+            q = q.join(join_model, join_on)
+        q = q.where(scope_model.tenant_id == tenant_id)
+        result = await db.execute(q)
         return {_label(k): int(v) for k, v in result.all()}
     except Exception:
         return {}
@@ -159,7 +164,10 @@ async def governance_dashboard(
     return {
         "policies_total": await _total(db, Policy, tenant_id),
         "policies_by_status": await _count_by(db, Policy, Policy.status, tenant_id),
-        "attestations_by_status": await _count_by(db, PolicyAttestation, getattr(PolicyAttestation, "status", PolicyAttestation.id), tenant_id),
+        "attestations_by_status": await _count_by(
+            db, PolicyAttestation, getattr(PolicyAttestation, "status", PolicyAttestation.id), tenant_id,
+            join_model=Policy, join_on=PolicyAttestation.policy_id == Policy.id,
+        ),
     }
 
 
@@ -172,6 +180,12 @@ async def audit_dashboard(
     return {
         "audits_total": await _total(db, Audit, tenant_id),
         "audits_by_status": await _count_by(db, Audit, Audit.status, tenant_id),
-        "findings_by_severity": await _count_by(db, AuditFinding, getattr(AuditFinding, "severity", AuditFinding.id), tenant_id),
-        "findings_by_status": await _count_by(db, AuditFinding, getattr(AuditFinding, "status", AuditFinding.id), tenant_id),
+        "findings_by_severity": await _count_by(
+            db, AuditFinding, getattr(AuditFinding, "severity", AuditFinding.id), tenant_id,
+            join_model=Audit, join_on=AuditFinding.audit_id == Audit.id,
+        ),
+        "findings_by_status": await _count_by(
+            db, AuditFinding, getattr(AuditFinding, "status", AuditFinding.id), tenant_id,
+            join_model=Audit, join_on=AuditFinding.audit_id == Audit.id,
+        ),
     }
