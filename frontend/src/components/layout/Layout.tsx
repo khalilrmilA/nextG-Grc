@@ -18,6 +18,7 @@ import {
   Crown, X, Trash2, Wand2, Menu,
   AlertCircle, Info, ShieldAlert, ClipboardCheck, RefreshCw,
   Eye, Users, Headphones, Map, ListTodo, Boxes, BarChart3, Gauge, Bug, Radar, Scale, Archive, Database, ScanLine, Network,
+  Target, Workflow, Siren, ShieldCheck, ShieldOff, Landmark, BadgeCheck, Calculator, Webhook,
 } from "lucide-react";
 
 // roles: null = visible to all authenticated non-auditor users
@@ -33,6 +34,8 @@ const NAV_GROUPS = [
       { to: "/risk-treatment", icon: ShieldAlert, label: "Risk Treatment", module: "risk-treatment", roles: ["tenant_admin","ciso","risk_manager","control_owner","viewer"] },
       { to: "/control-effectiveness", icon: Gauge, label: "Control Effectiveness", module: "control-effectiveness", roles: ["tenant_admin","ciso","risk_manager","control_owner","viewer"] },
       { to: "/risk-cartography", icon: Map,           label: "Risk Cartography", module: "risk-cartography", roles: ["tenant_admin","ciso","risk_manager","compliance_manager","control_owner","viewer"] },
+      { to: "/risks",          icon: Target,          label: "Risk Register",  module: "risks",          roles: ["tenant_admin","ciso","risk_manager","compliance_manager","control_owner","viewer"] },
+      { to: "/risk-scenarios", icon: Workflow,        label: "Risk Scenarios", module: "risk-scenarios", roles: ["tenant_admin","ciso","risk_manager","compliance_manager","control_owner","viewer"] },
       { to: "/compliance", icon: CheckSquare,     label: "Compliance",    module: "compliance", roles: ["tenant_admin","ciso","risk_manager","compliance_manager","policy_manager","control_owner","viewer"] },
       { to: "/action-plan", icon: ListTodo,       label: "Action Plan",   module: "action-plan", roles: ["tenant_admin","ciso","risk_manager","compliance_manager","control_owner","viewer"] },
       { to: "/framework",  icon: BookOpen,        label: "Frameworks",    module: "frameworks", roles: ["tenant_admin","ciso","compliance_manager","policy_manager","viewer"] },
@@ -41,9 +44,12 @@ const NAV_GROUPS = [
   {
     label: "Security",
     items: [
+      { to: "/incidents",       icon: Siren,     label: "Incidents",          module: "incidents",         roles: ["tenant_admin","ciso","risk_manager","compliance_manager","control_owner","viewer"] },
       { to: "/vulnerabilities", icon: Bug,      label: "Vulnerabilities",   module: "vulnerabilities", roles: null },
       { to: "/cve",             icon: Database,  label: "CVE Knowledge Base", module: "cve",            roles: null },
       { to: "/threats",         icon: Radar,    label: "Threat Library",    module: "threats",         roles: ["tenant_admin","ciso","risk_manager","compliance_manager","control_owner","viewer"] },
+      { to: "/applied-controls",    icon: ShieldCheck, label: "Applied Controls",     module: "applied-controls",    roles: ["tenant_admin","ciso","risk_manager","compliance_manager","control_owner","viewer"] },
+      { to: "/security-exceptions", icon: ShieldOff,   label: "Exceptions & Waivers", module: "security-exceptions", roles: ["tenant_admin","ciso","risk_manager","compliance_manager","control_owner","viewer"] },
     ],
   },
   {
@@ -64,6 +70,10 @@ const NAV_GROUPS = [
       { to: "/governance", icon: Scale,   label: "Governance", module: "governance", roles: ["tenant_admin","ciso","compliance_manager","policy_manager","viewer"] },
       { to: "/archiving",  icon: Archive, label: "Archiving",  module: "archiving",  roles: ["tenant_admin","ciso","compliance_manager","viewer"] },
       { to: "/system-check", icon: ClipboardCheck, label: "System Check", module: "system-check", roles: ["tenant_admin","ciso"] },
+      { to: "/regulatory",          icon: Landmark,   label: "Regulatory Updates",  module: "regulatory",          roles: ["tenant_admin","ciso","compliance_manager","policy_manager","viewer"] },
+      { to: "/trust-center",        icon: BadgeCheck, label: "Trust Center",        module: "trust-center",        roles: ["tenant_admin","ciso","compliance_manager","viewer"] },
+      { to: "/risk-quantification", icon: Calculator, label: "Risk Quantification", module: "risk-quantification", roles: ["tenant_admin","ciso","risk_manager","viewer"] },
+      { to: "/webhooks",            icon: Webhook,     label: "Webhooks",            module: "webhooks",            roles: ["tenant_admin"] },
     ],
   },
 ];

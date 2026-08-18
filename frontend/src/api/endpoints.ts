@@ -212,6 +212,9 @@ export const risksApi = {
 
   setAppetite: (id: string, data: { appetite_threshold?: number | null; target_likelihood?: number | null; target_impact?: number | null }) =>
     apiClient.put<Risk>(`/risks/${id}/appetite`, data).then((r) => r.data),
+
+  validateTarget: (id: string, calculation_notes?: string | null) =>
+    apiClient.post<Risk>(`/risks/${id}/validate-target`, { calculation_notes }).then((r) => r.data),
 };
 
 // ─── Risk Cartography ────────────────────────
@@ -1065,6 +1068,7 @@ export const vulnerabilitiesApi = {
   update: (id: string, data: Record<string, unknown>) => apiClient.patch(`/vulnerabilities/${id}`, data).then((r) => r.data),
   validate: (id: string) => apiClient.post(`/vulnerabilities/${id}/validate`).then((r) => r.data),
   scoreImpact: (id: string, data: Record<string, unknown>) => apiClient.post(`/vulnerabilities/${id}/impact`, data).then((r) => r.data),
+  impactHistory: (id: string) => apiClient.get(`/vulnerabilities/${id}/impact-history`).then((r) => r.data),
   delete: (id: string) => apiClient.delete(`/vulnerabilities/${id}`),
 };
 
@@ -1423,6 +1427,7 @@ export const reportBuilderApi = {
 export const riskTreatmentApi = {
   list: (riskId?: string) => apiClient.get("/risk-treatment", { params: riskId ? { risk_id: riskId } : undefined }).then((r) => r.data),
   tracking: () => apiClient.get("/risk-treatment/tracking").then((r) => r.data),
+  trackingByResponsible: () => apiClient.get("/risk-treatment/tracking/by-responsible").then((r) => r.data),
   upsert: (data: Record<string, unknown>) => apiClient.post("/risk-treatment", data).then((r) => r.data),
   risks: () => apiClient.get("/risks", { params: { page_size: 200 } }).then((r) => r.data),
 };
@@ -1470,7 +1475,11 @@ export const archivingApi = {
   list: () => apiClient.get("/archiving").then((r) => r.data),
   create: (data: Record<string, unknown>) => apiClient.post("/archiving", data).then((r) => r.data),
   purgeExpired: () => apiClient.post("/archiving/purge-expired").then((r) => r.data),
-  exportFile: (format: "xlsx" | "csv") => apiClient.get("/archiving/export/download", { params: { format }, responseType: "blob" }).then((r) => r.data),
+  exportFile: (format: "xlsx" | "csv" | "pdf") => apiClient.get("/archiving/export/download", { params: { format }, responseType: "blob" }).then((r) => r.data),
+  listRules: () => apiClient.get("/archiving/rules").then((r) => r.data),
+  createRule: (data: { entity_type: string; criteria: string; enabled?: boolean; retention_days?: number | null }) =>
+    apiClient.post("/archiving/rules", data).then((r) => r.data),
+  deleteRule: (id: string) => apiClient.delete(`/archiving/rules/${id}`),
 };
 
 // ── CVE knowledge base (Elite Pack) ──────────────────────────────────────────

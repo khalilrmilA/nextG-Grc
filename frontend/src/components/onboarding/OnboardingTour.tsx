@@ -5,6 +5,10 @@ import {
   X, ChevronRight, ChevronLeft, SkipForward,
   LayoutDashboard, AlertTriangle, CheckSquare, BookOpen,
   ClipboardList, FileText, Building2, Sparkles, Shield,
+  Boxes, Network, BarChart3, ShieldAlert, Gauge, Map, Workflow, ListTodo,
+  Siren, Bug, Database, Radar, ShieldCheck, ShieldOff,
+  Wand2, ScanLine, ClipboardCheck, Headphones,
+  Scale, Archive, Landmark, BadgeCheck, Calculator, Webhook, Settings,
 } from "lucide-react";
 import { useAuthStore } from "@/store/auth";
 
@@ -43,14 +47,45 @@ interface TourStep extends TourStepMeta {
 
 const TOUR_STEP_META: TourStepMeta[] = [
   { id: "welcome",    target: "",                        icon: Shield,        iconColor: "from-blue-500 to-indigo-600",   placement: "center" },
+  // ── Core ──
   { id: "dashboard",  target: 'a[href="/dashboard"]',    icon: LayoutDashboard, iconColor: "from-blue-500 to-blue-600",  placement: "right",  route: "/dashboard" },
+  { id: "assets",     target: 'a[href="/assets"]',       icon: Boxes,         iconColor: "from-blue-500 to-cyan-600",    placement: "right",  route: "/assets" },
+  { id: "asset_graph", target: 'a[href="/asset-graph"]', icon: Network,       iconColor: "from-cyan-500 to-blue-600",    placement: "right",  route: "/asset-graph" },
+  { id: "analytics",  target: 'a[href="/analytics"]',    icon: BarChart3,     iconColor: "from-indigo-500 to-blue-600",  placement: "right",  route: "/analytics" },
+  { id: "risk_treatment", target: 'a[href="/risk-treatment"]', icon: ShieldAlert, iconColor: "from-orange-500 to-amber-600", placement: "right", route: "/risk-treatment" },
+  { id: "control_effectiveness", target: 'a[href="/control-effectiveness"]', icon: Gauge, iconColor: "from-teal-500 to-emerald-600", placement: "right", route: "/control-effectiveness" },
+  { id: "risk_cartography", target: 'a[href="/risk-cartography"]', icon: Map, iconColor: "from-red-500 to-orange-600", placement: "right", route: "/risk-cartography" },
   { id: "risks",      target: 'a[href="/risks"]',        icon: AlertTriangle, iconColor: "from-orange-500 to-red-500",   placement: "right",  route: "/risks" },
+  { id: "risk_scenarios", target: 'a[href="/risk-scenarios"]', icon: Workflow, iconColor: "from-rose-500 to-red-600",   placement: "right",  route: "/risk-scenarios" },
   { id: "compliance", target: 'a[href="/compliance"]',   icon: CheckSquare,   iconColor: "from-green-500 to-emerald-600", placement: "right", route: "/compliance" },
+  { id: "action_plan", target: 'a[href="/action-plan"]', icon: ListTodo,      iconColor: "from-emerald-500 to-teal-600", placement: "right",  route: "/action-plan" },
   { id: "frameworks", target: 'a[href="/framework"]',    icon: BookOpen,      iconColor: "from-purple-500 to-violet-600", placement: "right", route: "/framework" },
+  // ── Security ──
+  { id: "incidents",  target: 'a[href="/incidents"]',    icon: Siren,         iconColor: "from-red-500 to-rose-600",     placement: "right",  route: "/incidents" },
+  { id: "vulnerabilities", target: 'a[href="/vulnerabilities"]', icon: Bug,   iconColor: "from-red-500 to-orange-600",   placement: "right",  route: "/vulnerabilities" },
+  { id: "cve",        target: 'a[href="/cve"]',          icon: Database,      iconColor: "from-orange-500 to-red-600",   placement: "right",  route: "/cve" },
+  { id: "threats",    target: 'a[href="/threats"]',      icon: Radar,         iconColor: "from-rose-500 to-pink-600",    placement: "right",  route: "/threats" },
+  { id: "applied_controls", target: 'a[href="/applied-controls"]', icon: ShieldCheck, iconColor: "from-emerald-500 to-green-600", placement: "right", route: "/applied-controls" },
+  { id: "security_exceptions", target: 'a[href="/security-exceptions"]', icon: ShieldOff, iconColor: "from-slate-500 to-gray-600", placement: "right", route: "/security-exceptions" },
+  // ── Operations ──
   { id: "audits",     target: 'a[href="/audits"]',       icon: ClipboardList, iconColor: "from-sky-500 to-cyan-600",     placement: "right",  route: "/audits" },
   { id: "policies",   target: 'a[href="/policies"]',     icon: FileText,      iconColor: "from-amber-500 to-yellow-600", placement: "right",  route: "/policies" },
+  { id: "policy_generator", target: 'a[href="/policy-generator"]', icon: Wand2, iconColor: "from-violet-500 to-fuchsia-600", placement: "right", route: "/policy-generator" },
+  { id: "ocr",        target: 'a[href="/ocr"]',          icon: ScanLine,      iconColor: "from-cyan-500 to-teal-600",    placement: "right",  route: "/ocr" },
   { id: "vendors",    target: 'a[href="/vendors"]',      icon: Building2,     iconColor: "from-pink-500 to-rose-600",    placement: "right",  route: "/vendors" },
+  { id: "reports",    target: 'a[href="/reports"]',      icon: ClipboardCheck, iconColor: "from-blue-500 to-indigo-600", placement: "right",  route: "/reports" },
+  { id: "support",    target: 'a[href="/support"]',      icon: Headphones,    iconColor: "from-sky-500 to-blue-600",     placement: "right",  route: "/support" },
+  // ── Governance ──
+  { id: "governance", target: 'a[href="/governance"]',   icon: Scale,         iconColor: "from-purple-500 to-indigo-600", placement: "right", route: "/governance" },
+  { id: "archiving",  target: 'a[href="/archiving"]',    icon: Archive,       iconColor: "from-amber-600 to-orange-700", placement: "right",  route: "/archiving" },
+  { id: "system_check", target: 'a[href="/system-check"]', icon: ClipboardCheck, iconColor: "from-teal-500 to-cyan-600", placement: "right", route: "/system-check" },
+  { id: "regulatory", target: 'a[href="/regulatory"]',   icon: Landmark,      iconColor: "from-indigo-500 to-purple-600", placement: "right", route: "/regulatory" },
+  { id: "trust_center", target: 'a[href="/trust-center"]', icon: BadgeCheck,  iconColor: "from-emerald-500 to-teal-600", placement: "right",  route: "/trust-center" },
+  { id: "risk_quantification", target: 'a[href="/risk-quantification"]', icon: Calculator, iconColor: "from-violet-500 to-purple-600", placement: "right", route: "/risk-quantification" },
+  { id: "webhooks",   target: 'a[href="/webhooks"]',     icon: Webhook,       iconColor: "from-slate-500 to-zinc-600",   placement: "right",  route: "/webhooks" },
+  // ── Wrap-up ──
   { id: "ai",         target: ".ai-assistant-button",    icon: Sparkles,      iconColor: "from-violet-500 to-purple-600", placement: "top",   route: "/dashboard" },
+  { id: "settings",   target: 'a[href="/settings"]',     icon: Settings,      iconColor: "from-gray-500 to-slate-600",   placement: "right",  route: "/dashboard" },
   { id: "done",       target: "",                        icon: Shield,        iconColor: "from-green-500 to-emerald-600", placement: "center", route: "/dashboard" },
 ];
 

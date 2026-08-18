@@ -75,6 +75,35 @@ export const gapEn = {
     overview: "Overview", no_frameworks: "No frameworks", start_assessment: "Start Assessment",
     create_assessment_desc: "Create an assessment to start tracking your compliance with this framework.",
   },
+  treatment: {
+    linked_scenarios: "Linked risk scenarios", select_scenarios: "Select scenario(s)…", no_scenarios: "No scenarios for this risk",
+    col_scenarios: "Linked scenarios", view_all: "All", view_by_responsible: "By responsible", unassigned: "Unassigned",
+    group_total: "Total", group_over_budget: "Over budget", group_avg_progress: "Avg. progress",
+    col_flags: "Flags", flag_at_risk: "At risk", flag_over_budget: "Over budget",
+  },
+  risks: {
+    target_validated: "Target validated", validate_target: "Validate target", revalidate_target: "Re-validate target",
+    calculation_notes: "Calculation notes (optional)", calculation_notes_placeholder: "Assumptions, methodology, evidence…",
+    validate_blocked_over_appetite: "Target still exceeds the appetite threshold — strengthen the treatment plan before validating.",
+    error_validate_target_failed: "Could not validate target.",
+  },
+  archiving: {
+    export_csv: "CSV", export_pdf: "PDF",
+    rules: {
+      title: "Archiving rules", subtitle: "Automatically archive matching records on a recurring schedule",
+      new: "New rule", empty: "No archiving rules yet.", criteria: "Criteria", status: "Status",
+      enabled: "Enabled", disabled: "Disabled", next_run: "Next run", last_run: "Last run", last_result: "Last result",
+      never: "Never", delete: "Delete rule", confirm_delete: "Delete this archiving rule? This cannot be undone.",
+      error_create_failed: "Could not create rule", error_criteria_required: "Add at least one condition",
+      builder_mode: "Use condition builder", advanced_mode: "Edit as raw text",
+      add_condition: "Add condition", remove_condition: "Remove condition",
+      field_placeholder: "field, e.g. status", value_placeholder: "value, e.g. closed",
+      hint: "Combine conditions with AND. Operators: = != > < >= <=. Numeric fields (e.g. age_days) compare as numbers; other fields compare as case-insensitive text.",
+      criteria_preview_empty: "Add a condition to see the generated criteria",
+      advanced_placeholder: "e.g. status=closed AND age_days>365",
+      enabled_label: "Start enabled", retention_hint: "Leave blank for default",
+    },
+  },
 };
 
 export const gapFr = {
@@ -143,6 +172,35 @@ export const gapFr = {
     overview: "Vue d'ensemble", no_frameworks: "Aucun référentiel", start_assessment: "Démarrer l'évaluation",
     create_assessment_desc: "Créez une évaluation pour commencer à suivre votre conformité à ce référentiel.",
   },
+  treatment: {
+    linked_scenarios: "Scénarios de risque liés", select_scenarios: "Sélectionner un ou plusieurs scénarios…", no_scenarios: "Aucun scénario pour ce risque",
+    col_scenarios: "Scénarios liés", view_all: "Tous", view_by_responsible: "Par responsable", unassigned: "Non assigné",
+    group_total: "Total", group_over_budget: "Dépassement budget", group_avg_progress: "Progression moy.",
+    col_flags: "Alertes", flag_at_risk: "À risque", flag_over_budget: "Dépassement budget",
+  },
+  risks: {
+    target_validated: "Cible validée", validate_target: "Valider la cible", revalidate_target: "Revalider la cible",
+    calculation_notes: "Notes de calcul (optionnel)", calculation_notes_placeholder: "Hypothèses, méthodologie, preuves…",
+    validate_blocked_over_appetite: "La cible dépasse encore le seuil d'appétence — renforcez le plan de traitement avant de valider.",
+    error_validate_target_failed: "Impossible de valider la cible.",
+  },
+  archiving: {
+    export_csv: "CSV", export_pdf: "PDF",
+    rules: {
+      title: "Règles d'archivage", subtitle: "Archive automatiquement les enregistrements correspondants selon un calendrier récurrent",
+      new: "Nouvelle règle", empty: "Aucune règle d'archivage pour le moment.", criteria: "Critères", status: "Statut",
+      enabled: "Activée", disabled: "Désactivée", next_run: "Prochaine exécution", last_run: "Dernière exécution", last_result: "Dernier résultat",
+      never: "Jamais", delete: "Supprimer la règle", confirm_delete: "Supprimer cette règle d'archivage ? Cette action est irréversible.",
+      error_create_failed: "Impossible de créer la règle", error_criteria_required: "Ajoutez au moins une condition",
+      builder_mode: "Utiliser le générateur de conditions", advanced_mode: "Modifier en texte brut",
+      add_condition: "Ajouter une condition", remove_condition: "Supprimer la condition",
+      field_placeholder: "champ, ex. status", value_placeholder: "valeur, ex. closed",
+      hint: "Combinez les conditions avec ET. Opérateurs : = != > < >= <=. Les champs numériques (ex. age_days) sont comparés comme des nombres ; les autres champs sont comparés comme du texte insensible à la casse.",
+      criteria_preview_empty: "Ajoutez une condition pour voir les critères générés",
+      advanced_placeholder: "ex. status=closed AND age_days>365",
+      enabled_label: "Activer dès la création", retention_hint: "Laisser vide pour la valeur par défaut",
+    },
+  },
 };
 
 export const gapAr = {
@@ -210,5 +268,34 @@ export const gapAr = {
   dashboard: {
     overview: "نظرة عامة", no_frameworks: "لا توجد أطر عمل", start_assessment: "بدء التقييم",
     create_assessment_desc: "أنشئ تقييمًا لبدء تتبّع امتثالك لهذا الإطار.",
+  },
+  treatment: {
+    linked_scenarios: "سيناريوهات المخاطر المرتبطة", select_scenarios: "اختر سيناريو واحد أو أكثر…", no_scenarios: "لا توجد سيناريوهات لهذا الخطر",
+    col_scenarios: "السيناريوهات المرتبطة", view_all: "الكل", view_by_responsible: "حسب المسؤول", unassigned: "غير مسند",
+    group_total: "الإجمالي", group_over_budget: "تجاوز الميزانية", group_avg_progress: "متوسط التقدم",
+    col_flags: "المؤشرات", flag_at_risk: "معرض للخطر", flag_over_budget: "تجاوز الميزانية",
+  },
+  risks: {
+    target_validated: "تم التحقق من الهدف", validate_target: "التحقق من الهدف", revalidate_target: "إعادة التحقق من الهدف",
+    calculation_notes: "ملاحظات الحساب (اختياري)", calculation_notes_placeholder: "الافتراضات، المنهجية، الأدلة…",
+    validate_blocked_over_appetite: "لا تزال القيمة المستهدفة تتجاوز عتبة قابلية تحمل المخاطر — يجب تعزيز خطة المعالجة قبل التحقق.",
+    error_validate_target_failed: "تعذر التحقق من الهدف.",
+  },
+  archiving: {
+    export_csv: "CSV", export_pdf: "PDF",
+    rules: {
+      title: "قواعد الأرشفة", subtitle: "أرشفة السجلات المطابقة تلقائيًا وفق جدول زمني متكرر",
+      new: "قاعدة جديدة", empty: "لا توجد قواعد أرشفة بعد.", criteria: "المعايير", status: "الحالة",
+      enabled: "مفعّلة", disabled: "معطّلة", next_run: "التشغيل القادم", last_run: "آخر تشغيل", last_result: "آخر نتيجة",
+      never: "أبدًا", delete: "حذف القاعدة", confirm_delete: "هل تريد حذف قاعدة الأرشفة هذه؟ لا يمكن التراجع عن هذا الإجراء.",
+      error_create_failed: "تعذّر إنشاء القاعدة", error_criteria_required: "أضف شرطًا واحدًا على الأقل",
+      builder_mode: "استخدام أداة إنشاء الشروط", advanced_mode: "التحرير كنص خام",
+      add_condition: "إضافة شرط", remove_condition: "إزالة الشرط",
+      field_placeholder: "الحقل، مثال status", value_placeholder: "القيمة، مثال closed",
+      hint: "اجمع الشروط باستخدام AND. العوامل: = != > < >= <=. تُقارَن الحقول الرقمية (مثل age_days) كأرقام؛ وتُقارَن الحقول الأخرى كنص غير حساس لحالة الأحرف.",
+      criteria_preview_empty: "أضف شرطًا لعرض المعايير المُولَّدة",
+      advanced_placeholder: "مثال status=closed AND age_days>365",
+      enabled_label: "التفعيل عند الإنشاء", retention_hint: "اتركه فارغًا لاستخدام القيمة الافتراضية",
+    },
   },
 };
