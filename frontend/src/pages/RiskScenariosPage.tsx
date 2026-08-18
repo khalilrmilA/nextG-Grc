@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Plus, Search, X, Loader2, Filter, History, GitCommitHorizontal } from "lucide-react";
+import { Plus, Search, X, Loader2, Filter, History, GitCommitHorizontal, AlertTriangle } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { riskScenariosApi, scenarioVersionsApi, assetsApi, vulnerabilitiesApi, threatsApi, appliedControlsApi } from "@/api/endpoints";
 import { MultiSelect, type MultiSelectOption as Option } from "@/components/common/MultiSelect";
@@ -191,6 +191,15 @@ function riskLevel(prob: number, impact: number): string {
   return "low";
 }
 
+function isOverdue(dateStr?: string | null): boolean {
+  if (!dateStr) return false;
+  const d = new Date(dateStr);
+  if (Number.isNaN(d.getTime())) return false;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return d < today;
+}
+
 
 const EMPTY_FORM = {
   name: "",
@@ -203,6 +212,7 @@ const EMPTY_FORM = {
   threat_actor: "",
   strength_of_knowledge: "medium",
   justification: "",
+  next_review_date: "",
   asset_ids: [] as string[],
   vulnerability_ids: [] as string[],
   threat_ids: [] as string[],
@@ -275,7 +285,8 @@ export default function RiskScenariosPage() {
     setSubmitting(true);
     setError("");
     try {
-      await riskScenariosApi.create(form);
+      const payload = { ...form, next_review_date: form.next_review_date || null };
+      await riskScenariosApi.create(payload);
       setShowModal(false);
       setForm(EMPTY_FORM);
       setLoading(true);
@@ -357,6 +368,7 @@ export default function RiskScenariosPage() {
                 <th className="text-left px-6 py-3 font-medium text-gray-500">{t("risk_scenarios.table_threat_actor")}</th>
                 <th className="text-left px-6 py-3 font-medium text-gray-500">{t("risk_scenarios.col_knowledge")}</th>
                 <th className="text-left px-6 py-3 font-medium text-gray-500">{t("risk_scenarios.col_linked")}</th>
+                <th className="text-left px-6 py-3 font-medium text-gray-500">{t("risk_scenarios.next_review_date_label", "Next review")}</th>
                 <th className="text-center px-6 py-3 font-medium text-gray-500">{t("risk_scenarios.version_history", "History")}</th>
               </tr>
             </thead>
@@ -389,6 +401,21 @@ export default function RiskScenariosPage() {
                     <td className="px-6 py-4 text-gray-600">{item.strength_of_knowledge?.replace(/_/g, " ") || "-"}</td>
                     <td className="px-6 py-4 text-gray-500">
                       {linked > 0 ? t("risk_scenarios.linked_count", { count: linked }) : "-"}
+                    </td>
+                    <td className="px-6 py-4 text-gray-600">
+                      {item.next_review_date ? (
+                        <span className="inline-flex items-center gap-1.5 whitespace-nowrap">
+                          {new Date(item.next_review_date).toLocaleDateString()}
+                          {isOverdue(item.next_review_date) && (
+                            <span
+                              title={t("risk_scenarios.overdue", "Overdue")}
+                              className="inline-flex items-center gap-1 rounded-full bg-amber-100 text-amber-700 border border-amber-200 px-1.5 py-0.5 text-[10px] font-semibold"
+                            >
+                              <AlertTriangle className="w-3 h-3" /> {t("risk_scenarios.overdue", "Overdue")}
+                            </span>
+                          )}
+                        </span>
+                      ) : "-"}
                     </td>
                     <td className="px-6 py-4 text-center">
                       <button
@@ -505,9 +532,15 @@ export default function RiskScenariosPage() {
                   <input type="number" min={1} max={5} value={form.target_impact} onChange={(e) => setForm({ ...form, target_impact: parseInt(e.target.value) || 1 })} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
                 </div>
               </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">{t("risk_scenarios.form_threat_actor_label")}</label>
-                <input value={form.threat_actor} onChange={(e) => setForm({ ...form, threat_actor: e.target.value })} placeholder={t("risk_scenarios.form_threat_actor_placeholder")} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">{t("risk_scenarios.form_threat_actor_label")}</label>
+                  <input value={form.threat_actor} onChange={(e) => setForm({ ...form, threat_actor: e.target.value })} placeholder={t("risk_scenarios.form_threat_actor_placeholder")} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">{t("risk_scenarios.next_review_date_label", "Next review date")}</label>
+                  <input type="date" value={form.next_review_date} onChange={(e) => setForm({ ...form, next_review_date: e.target.value })} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                </div>
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">{t("risk_scenarios.form_justification_label")}</label>

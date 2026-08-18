@@ -21,12 +21,14 @@ export const gapEn = {
     col_notes: "Notes", notes_label: "Internal notes",
     notes_placeholder: "Why this CVE matters (or doesn't) for our environment...",
     linked_assets_label: "Linked assets", error_save_failed: "Failed to save",
+    vector_filter_placeholder: "CVSS vector, e.g. AV:N/AC:L/...",
   },
   risk_scenarios: {
     version_history: "History", snapshot_reason_placeholder: "Reason for this snapshot (optional)",
     take_snapshot: "Snapshot now", diff_from: "From version…", diff_to: "To version…",
     compare: "Compare", no_diff: "No differences between these versions.",
     no_versions: "No snapshots yet.",
+    next_review_date_label: "Next review date", overdue: "Overdue",
   },
   asset_graph: {
     title: "Asset Cartography", subtitle: "Interactive map of org entities, business processes, and the assets that support them",
@@ -67,6 +69,7 @@ export const gapEn = {
     impact_override_value: "Override value (0-100)", impact_justification: "Justification",
     impact_justification_required: "A justification is required to override the score",
     impact_context_default: "Default context",
+    impact_history_title: "History", impact_history_empty: "No history yet",
   },
   dashboard: {
     overview: "Overview", no_frameworks: "No frameworks", start_assessment: "Start Assessment",
@@ -86,12 +89,14 @@ export const gapFr = {
     col_notes: "Notes", notes_label: "Notes internes",
     notes_placeholder: "Pourquoi ce CVE compte (ou pas) pour notre environnement...",
     linked_assets_label: "Actifs liés", error_save_failed: "Échec de l'enregistrement",
+    vector_filter_placeholder: "Vecteur CVSS, ex. AV:N/AC:L/...",
   },
   risk_scenarios: {
     version_history: "Historique", snapshot_reason_placeholder: "Motif de cet instantané (facultatif)",
     take_snapshot: "Créer un instantané", diff_from: "Depuis la version…", diff_to: "Vers la version…",
     compare: "Comparer", no_diff: "Aucune différence entre ces versions.",
     no_versions: "Aucun instantané pour l'instant.",
+    next_review_date_label: "Date de prochaine révision", overdue: "En retard",
   },
   asset_graph: {
     title: "Cartographie des actifs", subtitle: "Carte interactive des entités organisationnelles, processus métiers et actifs qui les soutiennent",
@@ -132,6 +137,7 @@ export const gapFr = {
     impact_override_value: "Valeur ajustée (0-100)", impact_justification: "Justification",
     impact_justification_required: "Une justification est requise pour ajuster le score",
     impact_context_default: "Contexte par défaut",
+    impact_history_title: "Historique", impact_history_empty: "Aucun historique pour l'instant",
   },
   dashboard: {
     overview: "Vue d'ensemble", no_frameworks: "Aucun référentiel", start_assessment: "Démarrer l'évaluation",
@@ -151,12 +157,14 @@ export const gapAr = {
     col_notes: "ملاحظات", notes_label: "ملاحظات داخلية",
     notes_placeholder: "لماذا تهم (أو لا تهم) هذه الثغرة بيئتنا...",
     linked_assets_label: "الأصول المرتبطة", error_save_failed: "فشل الحفظ",
+    vector_filter_placeholder: "متجه CVSS، مثال AV:N/AC:L/...",
   },
   risk_scenarios: {
     version_history: "السجل", snapshot_reason_placeholder: "سبب هذا اللقطة (اختياري)",
     take_snapshot: "أخذ لقطة الآن", diff_from: "من الإصدار…", diff_to: "إلى الإصدار…",
     compare: "مقارنة", no_diff: "لا توجد فروقات بين هذين الإصدارين.",
     no_versions: "لا توجد لقطات بعد.",
+    next_review_date_label: "تاريخ المراجعة القادمة", overdue: "متأخرة",
   },
   asset_graph: {
     title: "خارطة الأصول", subtitle: "خريطة تفاعلية للكيانات التنظيمية والعمليات التجارية والأصول التي تدعمها",
@@ -197,6 +205,7 @@ export const gapAr = {
     impact_override_value: "القيمة المعدَّلة (0-100)", impact_justification: "التبرير",
     impact_justification_required: "التبرير مطلوب لتعديل الدرجة",
     impact_context_default: "السياق الافتراضي",
+    impact_history_title: "السجل", impact_history_empty: "لا يوجد سجل بعد",
   },
   dashboard: {
     overview: "نظرة عامة", no_frameworks: "لا توجد أطر عمل", start_assessment: "بدء التقييم",

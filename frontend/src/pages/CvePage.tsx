@@ -98,6 +98,7 @@ export default function CvePage() {
   const [items, setItems] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [q, setQ] = useState("");
+  const [vector, setVector] = useState("");
   const [minCvss, setMinCvss] = useState("");
   const [relFilter, setRelFilter] = useState("");
   const [syncing, setSyncing] = useState(false);
@@ -114,6 +115,7 @@ export default function CvePage() {
   async function fetchPage(p: number) {
     const params: any = { page_size: PAGE_SIZE, page: p };
     if (q) params.q = q;
+    if (vector) params.vector = vector;
     if (minCvss) params.min_cvss = parseFloat(minCvss);
     if (relFilter) params.relevance = relFilter;
     const d = await cveApi.search(params);
@@ -192,6 +194,13 @@ export default function CvePage() {
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
           <input value={q} onChange={(e) => setQ(e.target.value)} placeholder={t("cve.search", "Search CVE id or description…")} className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
         </form>
+        <input
+          value={vector}
+          onChange={(e) => setVector(e.target.value)}
+          onKeyDown={(e) => { if (e.key === "Enter") load(); }}
+          placeholder={t("cve.vector_filter_placeholder", "CVSS vector, e.g. AV:N/AC:L/...")}
+          className="border border-gray-200 rounded-xl text-sm px-3 py-2 font-mono focus:outline-none focus:ring-2 focus:ring-blue-500"
+        />
         <select value={minCvss} onChange={(e) => { setMinCvss(e.target.value); }} className="border border-gray-200 rounded-xl text-sm px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500">
           <option value="">{t("cve.any_cvss", "Any CVSS")}</option>
           <option value="9">≥ 9.0 (critical)</option>

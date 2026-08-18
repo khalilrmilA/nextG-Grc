@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Plus, Search, X, Loader2, Filter, Bug, ShieldCheck, Wrench, BarChart3, Upload, Download, Plug, RefreshCw, Trash2, ChevronRight, Check, Gauge } from "lucide-react";
+import { Plus, Search, X, Loader2, Filter, Bug, ShieldCheck, Wrench, BarChart3, Upload, Download, Plug, RefreshCw, Trash2, ChevronRight, ChevronDown, Check, Gauge } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { vulnerabilitiesApi, vulnImportApi, scannerConnectorsApi } from "@/api/endpoints";
 
@@ -51,6 +51,9 @@ export default function VulnerabilitiesPage() {
   const [impactJustification, setImpactJustification] = useState("");
   const [impactBusy, setImpactBusy] = useState(false);
   const [impactErr, setImpactErr] = useState("");
+  const [showImpactHistory, setShowImpactHistory] = useState(false);
+  const [impactHistory, setImpactHistory] = useState<any[] | null>(null);
+  const [impactHistoryLoading, setImpactHistoryLoading] = useState(false);
 
   // Scanner import
   const [showImport, setShowImport] = useState(false);
@@ -201,6 +204,7 @@ Weak SSH ciphers,Low,3.7,,Backup Storage Array,Restrict to strong ciphers`;
     setDetail(item);
     setDetailErr("");
     setImpactContext(""); setImpactOverrideMode(false); setImpactOverrideValue(""); setImpactJustification(""); setImpactErr("");
+    setShowImpactHistory(false); setImpactHistory(null); setImpactHistoryLoading(false);
     setDetailForm({
       title: item.title ?? "",
       severity: item.severity ?? "medium",
@@ -233,12 +237,28 @@ Weak SSH ciphers,Low,3.7,,Backup Storage Array,Restrict to strong ciphers`;
     } catch (e: any) { setDetailErr(e?.response?.data?.detail || t("common.error", "Something went wrong.")); }
     finally { setDetailBusy(""); }
   }
+  async function loadImpactHistory() {
+    if (!detail) return;
+    setImpactHistoryLoading(true);
+    try {
+      const h = await vulnerabilitiesApi.impactHistory(detail.id);
+      setImpactHistory(Array.isArray(h) ? h : []);
+    } catch { setImpactHistory([]); }
+    finally { setImpactHistoryLoading(false); }
+  }
+  function toggleImpactHistory() {
+    const next = !showImpactHistory;
+    setShowImpactHistory(next);
+    if (next && impactHistory === null) loadImpactHistory();
+  }
   async function recalcImpact() {
     if (!detail) return;
     setImpactBusy(true); setImpactErr("");
     try {
       const updated = await vulnerabilitiesApi.scoreImpact(detail.id, { operational_context: impactContext || null });
       setDetail(updated);
+      setImpactHistory(null);
+      if (showImpactHistory) loadImpactHistory();
     } catch (e: any) { setImpactErr(e?.response?.data?.detail || t("common.error", "Something went wrong.")); }
     finally { setImpactBusy(false); }
   }
@@ -250,6 +270,8 @@ Weak SSH ciphers,Low,3.7,,Backup Storage Array,Restrict to strong ciphers`;
       const updated = await vulnerabilitiesApi.scoreImpact(detail.id, { override: parseFloat(impactOverrideValue), justification: impactJustification });
       setDetail(updated);
       setImpactOverrideMode(false);
+      setImpactHistory(null);
+      if (showImpactHistory) loadImpactHistory();
     } catch (e: any) { setImpactErr(e?.response?.data?.detail || t("common.error", "Something went wrong.")); }
     finally { setImpactBusy(false); }
   }
@@ -493,6 +515,42 @@ Weak SSH ciphers,Low,3.7,,Backup Storage Array,Restrict to strong ciphers`;
                     </button>
                   </div>
                 )}
+
+                {/* Impact score history */}
+                <div className="mt-3 pt-3 border-t border-gray-100">
+                  <button
+                    type="button"
+                    onClick={toggleImpactHistory}
+                    className="inline-flex items-center gap-1.5 text-xs font-medium text-gray-500 hover:text-gray-700"
+                  >
+                    {showImpactHistory ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
+                    {t("vulnerabilities.impact_history_title", "History")}
+                  </button>
+                  {showImpactHistory && (
+                    <div className="mt-2 space-y-1.5">
+                      {impactHistoryLoading ? (
+                        <div className="flex items-center justify-center py-3"><Loader2 className="w-4 h-4 animate-spin text-blue-400" /></div>
+                      ) : !impactHistory || impactHistory.length === 0 ? (
+                        <p className="text-xs text-gray-400 italic">{t("vulnerabilities.impact_history_empty", "No history yet")}</p>
+                      ) : (
+                        impactHistory.map((h: any) => (
+                          <div key={h.id} className="flex items-start gap-2 bg-gray-50 rounded-lg px-3 py-2">
+                            <span className="text-sm font-semibold text-gray-800">{h.score != null ? Math.round(h.score) : "—"}</span>
+                            {h.override && (
+                              <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-purple-100 text-purple-700 border border-purple-200 whitespace-nowrap">
+                                {t("vulnerabilities.impact_manual", "Manual override")}
+                              </span>
+                            )}
+                            <div className="flex-1 min-w-0">
+                              {h.justification && <p className="text-xs text-gray-500 italic truncate" title={h.justification}>"{h.justification}"</p>}
+                            </div>
+                            <span className="text-[11px] text-gray-400 whitespace-nowrap">{h.created_at ? new Date(h.created_at).toLocaleString() : ""}</span>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
 
