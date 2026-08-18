@@ -8,6 +8,9 @@ Handles:
 - Compliance gaps and control issues
 - Contract pending CISO review
 - Action plan item deadlines within 10 days (collaboration)
+- Compliance ActionItem deadlines within 7 days (remediation tasks from gap recommendations)
+- Asset end-of-life warnings (within 90 days, mirrors GET /assets/lifecycle/eol-soon)
+- Applied control expiration warnings (within 30 days)
 """
 import json
 from datetime import datetime, timedelta
@@ -20,6 +23,10 @@ from app.models.risk import Risk
 from app.models.vendor import Vendor, VendorContract, ContractValidationStatus
 from app.models.compliance import ComplianceGap
 from app.models.contract_collaboration import ContractCollaboration
+from app.models.action_item import ActionItem, ActionItemStatus
+from app.models.asset import Asset
+from app.models.applied_control import AppliedControl
+from app.models.login_event import LoginEvent
 
 
 async def get_recipients_for_tenant(db: AsyncSession, tenant_id: str) -> list[User]:
@@ -427,6 +434,288 @@ async def check_action_plan_deadlines(db: AsyncSession) -> int:
     return created
 
 
+async def check_compliance_action_deadlines(db: AsyncSession) -> int:
+    """Notify the owner + CISO/admins when a compliance ActionItem (remediation task
+    created from a gap recommendation) is within 7 days of its due date or overdue.
+    """
+    created = 0
+    today = datetime.utcnow().date()
+
+    result = await db.execute(
+        select(ActionItem).where(
+            ActionItem.due_date.isnot(None),
+            ActionItem.status.notin_([ActionItemStatus.COMPLETED, ActionItemStatus.CANCELLED]),
+        )
+    )
+    items = result.scalars().all()
+
+    for item in items:
+        try:
+            due = datetime.fromisoformat(item.due_date).date()
+        except (ValueError, TypeError):
+            continue
+
+        days_remaining = (due - today).days
+        # Trigger within 7 days, and if overdue (cap at 30 days overdue like the other checks)
+        if days_remaining > 7 or days_remaining < -30:
+            continue
+
+        if days_remaining < 0:
+            severity = "critical"
+            title = f"Action item OVERDUE: {item.title[:50]}"
+            message = f"Action item '{item.title}' is overdue by {abs(days_remaining)} days."
+        elif days_remaining == 0:
+            severity = "high"
+            title = f"Action item due TODAY: {item.title[:50]}"
+            message = f"Action item '{item.title}' is due today."
+        else:
+            severity = "medium"
+            title = f"Action item due in {days_remaining} days: {item.title[:50]}"
+            message = f"Action item '{item.title}' needs to be completed within {days_remaining} day(s)."
+
+        recipients: dict[str, User] = {}
+        if item.owner_id:
+            owner_result = await db.execute(
+                select(User).where(User.id == item.owner_id, User.is_active == True)  # noqa: E712
+            )
+            owner = owner_result.scalar_one_or_none()
+            if owner:
+                recipients[owner.id] = owner
+        for user in await get_recipients_for_tenant(db, item.tenant_id):
+            recipients[user.id] = user
+
+        for user in recipients.values():
+            if not await notification_exists(db, user.id, NotificationType.COMPLIANCE_ACTION_OVERDUE, item.id, within_days=3):
+                await create_notification(
+                    db,
+                    user=user,
+                    notif_type=NotificationType.COMPLIANCE_ACTION_OVERDUE,
+                    title=title,
+                    message=message,
+                    entity_id=item.id,
+                    entity_type="action_item",
+                    link=f"/compliance/{item.assessment_id}" if item.assessment_id else "/compliance",
+                    severity=severity,
+                )
+                created += 1
+
+    return created
+
+
+async def check_asset_eol(db: AsyncSession) -> int:
+    """Notify the asset owner + CISO/admins about assets reaching end-of-life.
+    Mirrors the criteria used by GET /assets/lifecycle/eol-soon (default within_days=90).
+    """
+    created = 0
+    now = datetime.utcnow()
+    cutoff = now + timedelta(days=90)
+
+    result = await db.execute(
+        select(Asset).where(
+            Asset.end_of_life_at.isnot(None),
+            Asset.end_of_life_at <= cutoff,
+        )
+    )
+    assets = result.scalars().all()
+
+    for asset in assets:
+        days_remaining = (asset.end_of_life_at - now).days
+
+        if days_remaining < 0:
+            severity = "critical"
+            title = f"Asset past end-of-life: {asset.name[:50]}"
+            message = f"Asset '{asset.name}' reached end-of-life {abs(days_remaining)} days ago and should be retired or replaced."
+        elif days_remaining <= 30:
+            severity = "high"
+            title = f"Asset end-of-life in {days_remaining} days: {asset.name[:50]}"
+            message = f"Asset '{asset.name}' reaches end-of-life in {days_remaining} days. Plan replacement/retirement."
+        else:
+            severity = "medium"
+            title = f"Asset end-of-life approaching: {asset.name[:50]}"
+            message = f"Asset '{asset.name}' reaches end-of-life in {days_remaining} days ({asset.end_of_life_at.date().isoformat()})."
+
+        recipients: dict[str, User] = {}
+        if asset.owner_id:
+            owner_result = await db.execute(
+                select(User).where(User.id == asset.owner_id, User.is_active == True)  # noqa: E712
+            )
+            owner = owner_result.scalar_one_or_none()
+            if owner:
+                recipients[owner.id] = owner
+        for user in await get_recipients_for_tenant(db, asset.tenant_id):
+            recipients[user.id] = user
+
+        for user in recipients.values():
+            if not await notification_exists(db, user.id, NotificationType.ASSET_EOL, asset.id, within_days=7):
+                await create_notification(
+                    db,
+                    user=user,
+                    notif_type=NotificationType.ASSET_EOL,
+                    title=title,
+                    message=message,
+                    entity_id=asset.id,
+                    entity_type="asset",
+                    link=f"/assets?highlight={asset.id}",
+                    severity=severity,
+                )
+                created += 1
+
+    return created
+
+
+async def check_control_expiration(db: AsyncSession) -> int:
+    """Notify the control owner + CISO/admins about AppliedControl rows nearing or past
+    their expiration date (30-day warning window, matching the vendor/risk check style).
+    """
+    created = 0
+    today = datetime.utcnow().date()
+
+    result = await db.execute(
+        select(AppliedControl).where(AppliedControl.expiration.isnot(None))
+    )
+    controls = result.scalars().all()
+
+    for control in controls:
+        try:
+            expiry = datetime.fromisoformat(control.expiration).date()
+        except (ValueError, TypeError):
+            continue
+
+        days_remaining = (expiry - today).days
+        if days_remaining > 30:
+            continue
+
+        if days_remaining < 0:
+            severity = "critical"
+            title = f"Control EXPIRED: {control.name[:50]}"
+            message = f"Applied control '{control.name}' expired {abs(days_remaining)} days ago and needs renewal."
+        elif days_remaining == 0:
+            severity = "high"
+            title = f"Control expires TODAY: {control.name[:50]}"
+            message = f"Applied control '{control.name}' expires today."
+        else:
+            severity = "medium"
+            title = f"Control expiring in {days_remaining} days: {control.name[:50]}"
+            message = f"Applied control '{control.name}' expires in {days_remaining} days. Plan renewal."
+
+        recipients: dict[str, User] = {}
+        if control.owner_id:
+            owner_result = await db.execute(
+                select(User).where(User.id == control.owner_id, User.is_active == True)  # noqa: E712
+            )
+            owner = owner_result.scalar_one_or_none()
+            if owner:
+                recipients[owner.id] = owner
+        for user in await get_recipients_for_tenant(db, control.tenant_id):
+            recipients[user.id] = user
+
+        for user in recipients.values():
+            if not await notification_exists(db, user.id, NotificationType.CONTROL_EXPIRED, control.id, within_days=7):
+                await create_notification(
+                    db,
+                    user=user,
+                    notif_type=NotificationType.CONTROL_EXPIRED,
+                    title=title,
+                    message=message,
+                    entity_id=control.id,
+                    entity_type="applied_control",
+                    link=f"/applied-controls?highlight={control.id}",
+                    severity=severity,
+                )
+                created += 1
+
+    return created
+
+
+async def check_new_device_login(
+    db: AsyncSession,
+    user: User,
+    ip_address: str | None,
+    user_agent: str | None,
+    device_label: str | None = None,
+) -> bool:
+    """Alert when a user successfully logs in from a device (User-Agent string)
+    that has never been seen before in their login history.
+
+    Called directly from the login handler right after a successful authentication
+    (see auth.py's /auth/login) — this is a real-time, per-login check driven by the
+    request itself, not a periodic scan, so it is intentionally NOT registered in
+    run_all_checks().
+
+    Dedup / "new" design choice: the match key is the raw User-Agent string alone,
+    NOT the (ip, device) pair. IP addresses rotate too often for legitimate users
+    (mobile networks, dynamic residential IPs, VPNs, corporate NAT) to be a reliable
+    signal on their own — pairing IP with device would re-fire on a large fraction of
+    logins for such users and train people to ignore the alert. A user's first-ever
+    *successful* login establishes their baseline silently (nothing to compare
+    against yet) and never fires this alert; only login #2+ with a genuinely new
+    User-Agent does. Once a device's User-Agent has been recorded via any successful
+    login, it is "seen" permanently and will not re-alert.
+
+    Returns True if a new-device alert was created.
+    """
+    ua = (user_agent or "").strip()
+    if not ua:
+        return False
+
+    prior_agents = (await db.execute(
+        select(LoginEvent.user_agent).where(
+            LoginEvent.user_id == user.id,
+            LoginEvent.success == True,  # noqa: E712
+        )
+    )).scalars().all()
+
+    if not prior_agents:
+        # First successful login ever recorded for this user — no baseline to compare
+        # against, so this can't be judged "new". Establishes the baseline going forward
+        # once this login is journaled by the caller.
+        return False
+
+    if ua in prior_agents:
+        return False
+
+    label = device_label or ua[:80]
+    where = f" from IP {ip_address}" if ip_address else ""
+
+    # Alert the user themselves so they can act if it wasn't them.
+    await create_notification(
+        db,
+        user=user,
+        notif_type=NotificationType.NEW_DEVICE_LOGIN,
+        title="New device sign-in detected",
+        message=(
+            f"Your GRCEye account was just signed in to from a device we haven't seen "
+            f"before ({label}){where}. If this wasn't you, change your password immediately "
+            "and review your active sessions in Settings."
+        ),
+        entity_id=user.id,
+        entity_type="user",
+        link="/settings?tab=security",
+        severity="high",
+    )
+
+    # Alert the tenant's CISO/admin recipients too (excluding the user themselves).
+    for admin in await get_recipients_for_tenant(db, user.tenant_id):
+        if admin.id == user.id:
+            continue
+        await create_notification(
+            db,
+            user=admin,
+            notif_type=NotificationType.NEW_DEVICE_LOGIN,
+            title=f"New device sign-in: {user.full_name}",
+            message=(
+                f"{user.full_name} ({user.email}) signed in from a device not previously "
+                f"seen for this account ({label}){where}."
+            ),
+            entity_id=user.id,
+            entity_type="user",
+            link="/activity-log",
+            severity="medium",
+        )
+
+    return True
+
+
 async def run_all_checks(db: AsyncSession) -> dict:
     """Run all notification checks and return a summary."""
     results = {
@@ -436,6 +725,9 @@ async def run_all_checks(db: AsyncSession) -> dict:
         "ciso_contracts": 0,
         "compliance_gaps": 0,
         "action_plan_deadlines": 0,
+        "compliance_action_deadlines": 0,
+        "asset_eol": 0,
+        "control_expiration": 0,
     }
 
     try:
@@ -467,6 +759,21 @@ async def run_all_checks(db: AsyncSession) -> dict:
         results["action_plan_deadlines"] = await check_action_plan_deadlines(db)
     except Exception as e:
         print(f"Action plan deadline check failed: {e}")
+
+    try:
+        results["compliance_action_deadlines"] = await check_compliance_action_deadlines(db)
+    except Exception as e:
+        print(f"Compliance action deadline check failed: {e}")
+
+    try:
+        results["asset_eol"] = await check_asset_eol(db)
+    except Exception as e:
+        print(f"Asset EOL check failed: {e}")
+
+    try:
+        results["control_expiration"] = await check_control_expiration(db)
+    except Exception as e:
+        print(f"Control expiration check failed: {e}")
 
     await db.commit()
     results["total"] = sum(results.values())

@@ -16,8 +16,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_db
 from app.models.user import User
 from app.models.governance import RaciAssignment, GovernanceDocument, GovernanceDocumentVersion
+from app.models.notification import NotificationType
 from app.api.v1.dependencies.auth import get_current_user, get_tenant_id
 from app.api.v1.dependencies.features import require_feature
+from app.services.notification_generator import create_notification, notification_exists
 
 router = APIRouter()
 
@@ -50,6 +52,17 @@ class RaciOut(BaseModel):
     entity_type: str | None
     entity_id: str | None
     model_config = {"from_attributes": True}
+
+
+class RaciUpdate(BaseModel):
+    activity: str | None = None
+    responsible_type: str | None = None     # role | user
+    role: str | None = None
+    user_id: str | None = None
+    raci: str | None = None                 # R | A | C | I
+    module: str | None = None
+    entity_type: str | None = None
+    entity_id: str | None = None
 
 
 @router.get("/raci", response_model=list[RaciOut])
@@ -92,6 +105,86 @@ async def create_raci(
     db.add(row)
     await db.commit()
     await db.refresh(row)
+    return row
+
+
+@router.patch("/raci/{raci_id}", response_model=RaciOut)
+async def update_raci(
+    raci_id: str,
+    body: RaciUpdate,
+    current_user: Annotated[User, Depends(require_feature("raci_governance"))],
+    tenant_id: Annotated[str, Depends(get_tenant_id)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    result = await db.execute(
+        select(RaciAssignment).where(RaciAssignment.id == raci_id, RaciAssignment.tenant_id == tenant_id)
+    )
+    row = result.scalar_one_or_none()
+    if row is None:
+        raise HTTPException(status_code=404, detail="RACI assignment not found")
+
+    if body.raci is not None:
+        raci = body.raci.strip().upper()
+        if raci not in _VALID_RACI:
+            raise HTTPException(status_code=422, detail="raci must be one of R, A, C, I")
+        body.raci = raci
+    if body.responsible_type is not None and body.responsible_type not in ("role", "user"):
+        raise HTTPException(status_code=422, detail="responsible_type must be 'role' or 'user'")
+
+    old_user_id = row.user_id
+    new_responsible_type = body.responsible_type if body.responsible_type is not None else row.responsible_type
+
+    for f in ["activity", "responsible_type", "role", "user_id", "raci", "module", "entity_type", "entity_id"]:
+        v = getattr(body, f, None)
+        if v is not None:
+            setattr(row, f, v)
+
+    # "Responsible changed" only makes sense when the assignment is user-scoped and the
+    # user_id actually moved to a different person.
+    responsible_changed = (
+        new_responsible_type == "user"
+        and body.user_id is not None
+        and body.user_id != old_user_id
+    )
+
+    await db.commit()
+    await db.refresh(row)
+
+    if responsible_changed:
+        if row.user_id:
+            new_result = await db.execute(select(User).where(User.id == row.user_id, User.tenant_id == tenant_id))
+            new_user = new_result.scalar_one_or_none()
+            if new_user and not await notification_exists(
+                db, new_user.id, NotificationType.RACI_RESPONSIBLE_CHANGED, row.id, within_days=1
+            ):
+                await create_notification(
+                    db,
+                    user=new_user,
+                    notif_type=NotificationType.RACI_RESPONSIBLE_CHANGED,
+                    title=f"You are now responsible for: {row.activity[:60]}",
+                    message=f"You have been assigned as the responsible (R) party for '{row.activity}'.",
+                    entity_id=row.id,
+                    entity_type="raci_assignment",
+                    link="/governance",
+                    severity="info",
+                )
+        if old_user_id and old_user_id != row.user_id:
+            old_result = await db.execute(select(User).where(User.id == old_user_id, User.tenant_id == tenant_id))
+            old_user = old_result.scalar_one_or_none()
+            if old_user:
+                await create_notification(
+                    db,
+                    user=old_user,
+                    notif_type=NotificationType.RACI_RESPONSIBLE_CHANGED,
+                    title=f"Responsibility reassigned: {row.activity[:60]}",
+                    message=f"You are no longer the responsible (R) party for '{row.activity}'.",
+                    entity_id=row.id,
+                    entity_type="raci_assignment",
+                    link="/governance",
+                    severity="info",
+                )
+        await db.commit()
+
     return row
 
 

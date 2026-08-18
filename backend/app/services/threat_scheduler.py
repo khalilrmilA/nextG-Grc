@@ -11,7 +11,9 @@ from sqlalchemy import select
 from app.core.database import AsyncSessionLocal
 from app.models.threat import Threat, ThreatCategory
 from app.models.tenant import Tenant
+from app.models.notification import NotificationType
 from app.services.threat_feeds import fetch_all_threat_feeds
+from app.services.notification_generator import get_recipients_for_tenant, create_notification, notification_exists
 
 logger = logging.getLogger(__name__)
 
@@ -57,9 +59,10 @@ async def _run_once() -> int:
                 and (not it["ref_id"] or it["ref_id"].lower() not in ref_set)
             ]
 
+            critical_threats: list[Threat] = []
             for idx, item in enumerate(new_items):
                 ref = item["ref_id"] or f"AUTO-{item['source'][:4].upper()}-{idx+1}"
-                db.add(Threat(
+                threat = Threat(
                     ref_id=ref,
                     name=item["name"],
                     description=item.get("description") or None,
@@ -71,8 +74,34 @@ async def _run_once() -> int:
                     is_builtin=False,
                     is_pending=True,
                     tenant_id=tenant.id,
-                ))
+                )
+                db.add(threat)
+                if (item.get("severity") or "").lower() == "critical":
+                    critical_threats.append(threat)
             total_created += len(new_items)
+
+            # Fan out critical-threat alerts to this tenant's CISO/admins.
+            if critical_threats:
+                recipients = await get_recipients_for_tenant(db, tenant.id)
+                for threat in critical_threats:
+                    for user in recipients:
+                        if not await notification_exists(
+                            db, user.id, NotificationType.THREAT_CRITICAL, threat.id, within_days=7
+                        ):
+                            await create_notification(
+                                db,
+                                user=user,
+                                notif_type=NotificationType.THREAT_CRITICAL,
+                                title=f"Critical threat detected: {threat.name[:60]}",
+                                message=(
+                                    f"A new critical-severity threat '{threat.name}' was added to the threat "
+                                    f"feed and is pending approval."
+                                ),
+                                entity_id=threat.id,
+                                entity_type="threat",
+                                link=f"/threats?highlight={threat.id}",
+                                severity="critical",
+                            )
 
         await db.commit()
 

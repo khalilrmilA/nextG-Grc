@@ -1,6 +1,6 @@
 """Applied Controls — actionable controls with cost, effort, progress tracking."""
 from datetime import datetime
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -9,6 +9,8 @@ from app.core.database import get_db
 from app.api.v1.dependencies.auth import get_current_user, get_tenant_id
 from app.models.user import User
 from app.models.applied_control import AppliedControl
+from app.models.activity_log import ActivityLog
+from app.services.activity_chain import chain_and_add
 
 router = APIRouter()
 
@@ -78,8 +80,33 @@ async def update_control(cid: str, body: ACUpdate, db: AsyncSession = Depends(ge
     return ACOut.model_validate(c)
 
 @router.delete("/{cid}", status_code=204)
-async def delete_control(cid: str, db: AsyncSession = Depends(get_db), _: User = Depends(get_current_user), tenant_id: str = Depends(get_tenant_id)):
+async def delete_control(
+    cid: str,
+    reason: str = Query(..., min_length=3, description="Required justification for deleting this applied control"),
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+    tenant_id: str = Depends(get_tenant_id),
+):
     r = await db.execute(select(AppliedControl).where(AppliedControl.id == cid, AppliedControl.tenant_id == tenant_id))
     c = r.scalar_one_or_none()
     if not c: raise HTTPException(404, "Control not found")
+    control_name = c.name
     await db.delete(c); await db.commit()
+
+    # The generic ActivityLogMiddleware only records {method, path} for every mutating
+    # request — it can't see query params, so the deletion reason wouldn't otherwise be
+    # captured anywhere. Write an explicit entry to the same hash-chained log with the
+    # reason included, reusing the existing activity_chain service (no new subsystem).
+    try:
+        await chain_and_add(db, ActivityLog(
+            tenant_id=tenant_id,
+            user_id=user.id,
+            user_email=user.email,
+            action="delete",
+            entity_type="applied_control",
+            entity_id=cid,
+            entity_name=control_name,
+            details={"reason": reason},
+        ))
+    except Exception:
+        pass

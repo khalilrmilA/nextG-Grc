@@ -13,6 +13,7 @@ from app.models.audit import (
     Audit, AuditFinding, AuditEvidence,
     AuditType, AuditStatus, FindingSeverity, FindingStatus,
 )
+from app.workers.tasks.notifications import notify_audit_assigned
 
 router = APIRouter()
 
@@ -105,6 +106,12 @@ async def create_audit(body: AuditCreate, db: AsyncSession = Depends(get_db), us
               framework_id=body.framework_id, planned_start=body.planned_start,
               planned_end=body.planned_end, scope=body.scope, in_scope_systems=body.in_scope_systems)
     db.add(a); await db.flush(); await db.commit(); await db.refresh(a)
+    if a.lead_auditor_id:
+        # Best-effort notification — broker may be unavailable in dev (no Redis).
+        try:
+            notify_audit_assigned.delay(a.id, a.lead_auditor_id)
+        except Exception:
+            pass
     o = AuditOut.model_validate(a); o.finding_count = 0; return o
 
 @router.get("/{audit_id}", response_model=AuditOut)
@@ -115,11 +122,18 @@ async def get_audit(audit_id: str, db: AsyncSession = Depends(get_db), _: User =
 async def update_audit(audit_id: str, body: AuditUpdate, db: AsyncSession = Depends(get_db), _: User = Depends(get_current_user), tenant_id: str = Depends(get_tenant_id)):
     a = await _audit(db, audit_id, tenant_id)
     await assert_user_in_tenant(db, body.lead_auditor_id, tenant_id, field_name="lead_auditor_id")
+    prev_lead_auditor_id = a.lead_auditor_id
     for f in ["title","description","lead_auditor_id","planned_start","planned_end","actual_start","actual_end","scope","executive_summary","in_scope_systems"]:
         v = getattr(body, f, None)
         if v is not None: setattr(a, f, v)
     if body.status: a.status = AuditStatus(body.status)
     await db.commit(); await db.refresh(a)
+    if a.lead_auditor_id and a.lead_auditor_id != prev_lead_auditor_id:
+        # Best-effort notification — broker may be unavailable in dev (no Redis).
+        try:
+            notify_audit_assigned.delay(a.id, a.lead_auditor_id)
+        except Exception:
+            pass
     return await _with_count(db, a)
 
 @router.delete("/{audit_id}", status_code=204)

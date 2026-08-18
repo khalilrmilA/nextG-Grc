@@ -167,7 +167,7 @@ def notify_audit_assigned(self, audit_id: str, assignee_user_id: str):
 
             title = f"Audit assigned: {audit.title}"
             message = f"You have been assigned as lead auditor for '{audit.title}'."
-            due = audit.planned_end_date.strftime("%B %d, %Y") if audit.planned_end_date else "TBD"
+            due = audit.planned_end if audit.planned_end else "TBD"
 
             if await _user_wants(db, user.id, NotificationType.AUDIT_ASSIGNED, NotificationChannel.IN_APP):
                 await _create_notification(
