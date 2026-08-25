@@ -6,7 +6,7 @@ import { authApi } from "../api/endpoints";
 import { frameworksApi } from "../api/endpoints";
 import { authSession } from "../store/auth";
 import FrameworkSelectionCard from "../components/features/compliance/FrameworkSelectionCard";
-import LanguageSwitcher from "../components/LanguageSwitcher";
+import AuthLayout from "../components/auth/AuthLayout";
 import SEO from "../components/seo/SEO";
 import type { Framework } from "@/types";
 
@@ -214,15 +214,13 @@ export default function RegisterPage() {
   const primaryFw = frameworks.find((f) => f.id === primaryFwId);
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center p-4">
+    <>
       <SEO title="Get started" description="Create your free GRCEye account — 14-day trial, no credit card required." path="/register" noIndex />
-      <div className="w-full max-w-2xl">
+      <AuthLayout maxWidth="max-w-2xl">
         {/* Header */}
-        <div className="flex flex-col items-center mb-8">
-          <img src="/logo-vertical.png" alt="GRCEye — Governance, Risk & Compliance Platform" className="h-32 w-auto object-contain mb-4 drop-shadow-2xl bg-white/95 rounded-2xl p-3" />
-          <h1 className="text-3xl font-bold text-white">{t("public.register.seo_title")}</h1>
-          <p className="text-slate-400 mt-1 text-sm">{t("public.register.tagline")}</p>
-          <div className="mt-3"><LanguageSwitcher /></div>
+        <div className="mb-7">
+          <h1 className="text-2xl font-bold text-gray-900">{t("public.register.seo_title")}</h1>
+          <p className="text-gray-500 mt-1 text-sm">{t("public.register.tagline")}</p>
         </div>
 
         {/* Step indicator */}
@@ -230,20 +228,20 @@ export default function RegisterPage() {
           {[1, 2, 3].map((s) => (
             <div key={s} className="flex items-center gap-2">
               <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-semibold transition-colors ${
-                step > s ? "bg-blue-500 text-white" :
-                step === s ? "bg-blue-600 text-white ring-4 ring-blue-500/30" :
-                "bg-slate-700 text-slate-400"
+                step > s ? "bg-blue-600 text-white" :
+                step === s ? "bg-blue-600 text-white ring-4 ring-blue-100" :
+                "bg-gray-100 text-gray-400"
               }`}>
                 {step > s ? <Check className="w-4 h-4" /> : s}
               </div>
               {s < 3 && (
-                <div className={`w-16 h-0.5 ${step > s ? "bg-blue-500" : "bg-slate-700"}`} />
+                <div className={`w-16 h-0.5 ${step > s ? "bg-blue-500" : "bg-gray-200"}`} />
               )}
             </div>
           ))}
         </div>
 
-        <div className="bg-white rounded-2xl shadow-2xl p-8">
+        <div>
           {error && (
             <div className="mb-5 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">{error}</div>
           )}
@@ -482,8 +480,8 @@ export default function RegisterPage() {
             <Link to="/login" className="text-blue-600 font-medium hover:underline">{t("auth.sign_in")}</Link>
           </p>
         </div>
-      </div>
-    </div>
+      </AuthLayout>
+    </>
   );
 }
 

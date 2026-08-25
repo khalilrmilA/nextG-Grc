@@ -17,6 +17,7 @@ import OcrCapturePage from "./pages/OcrCapturePage";
 import SystemCheckPage from "./pages/SystemCheckPage";
 import DocumentationPage from "./pages/DocumentationPage";
 import LoginPage from "./pages/LoginPage";
+import ResetPasswordPage from "./pages/ResetPasswordPage";
 import RegisterPage from "./pages/RegisterPage";
 import ServiceDownPage from "./pages/ServiceDownPage";
 import DashboardPage from "./pages/DashboardPage";
@@ -168,6 +169,7 @@ export default function App() {
       <Route path="/upload/:token" element={<EvidenceUploadPage />} />
       <Route path="/vendor-collab/:shareToken" element={<VendorCollaborationPage />} />
       <Route path="/login" element={<PublicOnlyRoute><LoginPage /></PublicOnlyRoute>} />
+      <Route path="/reset-password" element={<PublicOnlyRoute><ResetPasswordPage /></PublicOnlyRoute>} />
       <Route path="/register" element={<PublicOnlyRoute><RegisterPage /></PublicOnlyRoute>} />
       <Route path="/super-admin" element={<SuperAdminRoute><SuperAdminPage /></SuperAdminRoute>} />
       {/* ── Auditor-only routes (dedicated layout) ── */}

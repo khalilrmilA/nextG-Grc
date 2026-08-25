@@ -1,9 +1,9 @@
 import { useState, useEffect } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
-import { Eye, EyeOff, Loader2, X } from "lucide-react";
+import { Eye, EyeOff, Loader2, X, Mail, Lock } from "lucide-react";
 import { authSession, DEMO_USERS, type UserRole, type PlanTier } from "../store/auth";
-import LanguageSwitcher from "../components/LanguageSwitcher";
+import AuthLayout from "../components/auth/AuthLayout";
 import SEO from "../components/seo/SEO";
 
 function calculateDaysRemaining(trialEndsAt?: string): number {
@@ -195,184 +195,176 @@ export default function LoginPage() {
   return (
     <>
     <SEO title={t("public.login.submit")} description="Sign in to GRCEye." path="/login" noIndex />
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center p-4">
-      <div className="w-full max-w-sm">
+    <AuthLayout>
+      {mfaChallengeToken ? (
+        <>
+          <h2 className="text-2xl font-bold text-gray-900 mb-1.5">{t("public.login.mfa_title")}</h2>
+          <p className="text-sm text-gray-500 mb-7">{t("public.login.mfa_subtitle")}</p>
 
-        {/* Logo */}
-        <div className="flex flex-col items-center mb-8">
-          <img src="/logo-vertical.png" alt="GRCEye — Governance, Risk & Compliance Platform" className="h-44 w-auto object-contain mb-4 drop-shadow-2xl bg-white/95 rounded-2xl p-3" />
-          <div className="mt-3"><LanguageSwitcher /></div>
-        </div>
-
-        {/* Card */}
-        <div className="bg-white rounded-2xl shadow-2xl p-8">
-          {mfaChallengeToken ? (
-            <>
-              <h2 className="text-lg font-semibold text-gray-900 mb-1">{t("public.login.mfa_title")}</h2>
-              <p className="text-sm text-gray-400 mb-6">{t("public.login.mfa_subtitle")}</p>
-
-              {mfaError && (
-                <div className="mb-4 px-4 py-3 bg-red-50 border border-red-200 rounded-xl text-red-700 text-sm">
-                  {mfaError}
-                </div>
-              )}
-
-              <form onSubmit={handleMfaSubmit} className="space-y-4">
-                <div>
-                  <label htmlFor="mfa-code" className="block text-xs font-medium text-gray-700 mb-1.5">
-                    {t("public.login.mfa_code_label")}
-                  </label>
-                  <input
-                    id="mfa-code"
-                    type="text"
-                    inputMode="numeric"
-                    autoComplete="one-time-code"
-                    value={mfaCode}
-                    onChange={(e) => setMfaCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
-                    required
-                    autoFocus
-                    placeholder="123456"
-                    className="w-full px-3.5 py-2.5 border border-gray-200 rounded-xl text-sm text-center tracking-[0.5em] font-mono focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
-                  />
-                </div>
-
-                <button
-                  type="submit"
-                  disabled={mfaSubmitting || mfaCode.length !== 6}
-                  className="w-full bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white font-medium py-2.5 px-4 rounded-xl text-sm transition-colors flex items-center justify-center gap-2 mt-2"
-                >
-                  {mfaSubmitting ? <><Loader2 className="w-4 h-4 animate-spin" /> {t("public.login.submitting")}</> : t("public.login.mfa_verify")}
-                </button>
-
-                <button type="button" onClick={cancelMfa} className="w-full text-xs text-gray-500 hover:text-gray-700 text-center">
-                  {t("public.login.mfa_back")}
-                </button>
-              </form>
-            </>
-          ) : (
-          <>
-          <h2 className="text-lg font-semibold text-gray-900 mb-1">{t("public.login.welcome_back")}</h2>
-          <p className="text-sm text-gray-400 mb-6">{t("public.login.subtitle")}</p>
-
-          {error && (
+          {mfaError && (
             <div className="mb-4 px-4 py-3 bg-red-50 border border-red-200 rounded-xl text-red-700 text-sm">
-              {error}
+              {mfaError}
             </div>
           )}
 
-          <form onSubmit={handleSubmit} className="space-y-4">
+          <form onSubmit={handleMfaSubmit} className="space-y-4">
             <div>
-              <label htmlFor="login-email" className="block text-xs font-medium text-gray-700 mb-1.5">
-                {t("public.login.email_label")}
+              <label htmlFor="mfa-code" className="block text-xs font-medium text-gray-700 mb-1.5">
+                {t("public.login.mfa_code_label")}
               </label>
               <input
-                id="login-email"
-                type="email"
-                value={email}
-                onChange={e => setEmail(e.target.value)}
+                id="mfa-code"
+                type="text"
+                inputMode="numeric"
+                autoComplete="one-time-code"
+                value={mfaCode}
+                onChange={(e) => setMfaCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
                 required
                 autoFocus
-                placeholder={t("public.login.email_placeholder")}
-                className="w-full px-3.5 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                placeholder="123456"
+                className="w-full px-3.5 py-3 border border-gray-200 rounded-xl text-sm text-center tracking-[0.5em] font-mono focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
               />
-            </div>
-
-            <div>
-              <div className="flex items-center justify-between mb-1.5">
-                <label htmlFor="login-password" className="block text-xs font-medium text-gray-700">
-                  {t("public.login.password_label")}
-                </label>
-                <button type="button" onClick={() => { setShowForgot(true); setForgotEmail(email); }} className="text-xs text-blue-600 hover:underline">
-                  {t("public.login.forgot")}
-                </button>
-              </div>
-              <div className="relative">
-                <input
-                  id="login-password"
-                  type={showPwd ? "text" : "password"}
-                  value={password}
-                  onChange={e => setPassword(e.target.value)}
-                  required
-                  placeholder={t("public.login.password_placeholder")}
-                  className="w-full px-3.5 py-2.5 pr-10 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPwd(v => !v)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-                >
-                  {showPwd ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                </button>
-              </div>
             </div>
 
             <button
               type="submit"
-              disabled={loading}
-              className="w-full bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white font-medium py-2.5 px-4 rounded-xl text-sm transition-colors flex items-center justify-center gap-2 mt-2"
+              disabled={mfaSubmitting || mfaCode.length !== 6}
+              className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 disabled:opacity-60 text-white font-medium py-3 px-4 rounded-xl text-sm shadow-lg shadow-blue-600/20 transition-all flex items-center justify-center gap-2 mt-2"
             >
-              {loading ? <><Loader2 className="w-4 h-4 animate-spin" /> {t("public.login.submitting")}</> : t("public.login.submit")}
+              {mfaSubmitting ? <><Loader2 className="w-4 h-4 animate-spin" /> {t("public.login.submitting")}</> : t("public.login.mfa_verify")}
+            </button>
+
+            <button type="button" onClick={cancelMfa} className="w-full text-xs text-gray-500 hover:text-gray-700 text-center">
+              {t("public.login.mfa_back")}
             </button>
           </form>
+        </>
+      ) : (
+      <>
+      <h2 className="text-2xl font-bold text-gray-900 mb-1.5">{t("public.login.welcome_back")}</h2>
+      <p className="text-sm text-gray-500 mb-7">{t("public.login.subtitle")}</p>
 
-          {ssoEnabled && (
-            <div className="mt-5">
-              <div className="flex items-center gap-3 mb-4">
-                <div className="flex-1 h-px bg-gray-100" />
-                <span className="text-xs text-gray-400">{t("sso.or", "or")}</span>
-                <div className="flex-1 h-px bg-gray-100" />
-              </div>
-              {ssoError && <div className="mb-3 px-4 py-2.5 bg-red-50 border border-red-200 rounded-xl text-red-700 text-sm">{ssoError}</div>}
-              <form onSubmit={handleSsoLogin} className="space-y-3">
-                <input value={ssoUser} onChange={(e) => setSsoUser(e.target.value)} required placeholder={t("sso.username", "Directory username")} className="w-full px-3.5 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-                <input value={ssoPass} onChange={(e) => setSsoPass(e.target.value)} required type="password" placeholder={t("public.login.password_placeholder")} className="w-full px-3.5 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-                <button type="submit" disabled={ssoLoading} className="w-full bg-slate-800 hover:bg-slate-900 disabled:opacity-60 text-white font-medium py-2.5 px-4 rounded-xl text-sm transition-colors flex items-center justify-center gap-2">
-                  {ssoLoading ? <><Loader2 className="w-4 h-4 animate-spin" /> {t("public.login.submitting")}</> : t("sso.ldap_login", "Sign in with company directory")}
-                </button>
-                <p className="text-xs text-gray-400 text-center">{t("sso.ldap_hint", "Use your Active Directory / LDAP credentials.")}</p>
-              </form>
-            </div>
-          )}
+      {error && (
+        <div className="mb-4 px-4 py-3 bg-red-50 border border-red-200 rounded-xl text-red-700 text-sm">
+          {error}
+        </div>
+      )}
 
-            <div className="flex items-center gap-3 my-5">
-            <div className="flex-1 h-px bg-gray-100" />
-            <span className="text-xs text-gray-400">{t("public.login.divider")}</span>
-            <div className="flex-1 h-px bg-gray-100" />
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <div>
+          <label htmlFor="login-email" className="block text-xs font-medium text-gray-700 mb-1.5">
+            {t("public.login.email_label")}
+          </label>
+          <div className="relative">
+            <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+            <input
+              id="login-email"
+              type="email"
+              value={email}
+              onChange={e => setEmail(e.target.value)}
+              required
+              autoFocus
+              placeholder={t("public.login.email_placeholder")}
+              className="w-full pl-10 pr-3.5 py-3 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+            />
           </div>
-
-          <Link
-            to="/register"
-            className="block w-full text-center py-2.5 border border-gray-200 rounded-xl text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
-          >
-            {t("public.login.create_account")}
-          </Link>
-          </>
-          )}
         </div>
 
-        <div className="mt-6 space-y-2">
-          <div className="flex items-center justify-between">
-            <a href="/" className="text-xs text-blue-600 hover:underline">
-              {t("public.login.back_home")}
-            </a>
-            <p className="text-xs text-slate-500">
-              © {new Date().getFullYear()} GRCEye
-            </p>
+        <div>
+          <div className="flex items-center justify-between mb-1.5">
+            <label htmlFor="login-password" className="block text-xs font-medium text-gray-700">
+              {t("public.login.password_label")}
+            </label>
+            <button type="button" onClick={() => { setShowForgot(true); setForgotEmail(email); }} className="text-xs text-blue-600 hover:underline">
+              {t("public.login.forgot")}
+            </button>
           </div>
-          <p className="text-center text-xs text-slate-600">
-            {t("public.footer.powered_by")}{" "}
-            <a
-              href="https://silentwolf.io/"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="font-semibold hover:text-slate-300 transition-colors"
+          <div className="relative">
+            <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+            <input
+              id="login-password"
+              type={showPwd ? "text" : "password"}
+              value={password}
+              onChange={e => setPassword(e.target.value)}
+              required
+              placeholder={t("public.login.password_placeholder")}
+              className="w-full pl-10 pr-10 py-3 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+            />
+            <button
+              type="button"
+              onClick={() => setShowPwd(v => !v)}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
             >
-              SilentWolf
-            </a>
+              {showPwd ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+            </button>
+          </div>
+        </div>
+
+        <button
+          type="submit"
+          disabled={loading}
+          className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 disabled:opacity-60 text-white font-medium py-3 px-4 rounded-xl text-sm shadow-lg shadow-blue-600/20 hover:shadow-xl hover:shadow-blue-600/25 transition-all flex items-center justify-center gap-2 mt-2"
+        >
+          {loading ? <><Loader2 className="w-4 h-4 animate-spin" /> {t("public.login.submitting")}</> : t("public.login.submit")}
+        </button>
+      </form>
+
+      {ssoEnabled && (
+        <div className="mt-5">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="flex-1 h-px bg-gray-100" />
+            <span className="text-xs text-gray-400">{t("sso.or", "or")}</span>
+            <div className="flex-1 h-px bg-gray-100" />
+          </div>
+          {ssoError && <div className="mb-3 px-4 py-2.5 bg-red-50 border border-red-200 rounded-xl text-red-700 text-sm">{ssoError}</div>}
+          <form onSubmit={handleSsoLogin} className="space-y-3">
+            <input value={ssoUser} onChange={(e) => setSsoUser(e.target.value)} required placeholder={t("sso.username", "Directory username")} className="w-full px-3.5 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            <input value={ssoPass} onChange={(e) => setSsoPass(e.target.value)} required type="password" placeholder={t("public.login.password_placeholder")} className="w-full px-3.5 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            <button type="submit" disabled={ssoLoading} className="w-full bg-slate-800 hover:bg-slate-900 disabled:opacity-60 text-white font-medium py-2.5 px-4 rounded-xl text-sm transition-colors flex items-center justify-center gap-2">
+              {ssoLoading ? <><Loader2 className="w-4 h-4 animate-spin" /> {t("public.login.submitting")}</> : t("sso.ldap_login", "Sign in with company directory")}
+            </button>
+            <p className="text-xs text-gray-400 text-center">{t("sso.ldap_hint", "Use your Active Directory / LDAP credentials.")}</p>
+          </form>
+        </div>
+      )}
+
+      <div className="flex items-center gap-3 my-6">
+        <div className="flex-1 h-px bg-gray-100" />
+        <span className="text-xs text-gray-400">{t("public.login.divider")}</span>
+        <div className="flex-1 h-px bg-gray-100" />
+      </div>
+
+      <Link
+        to="/register"
+        className="block w-full text-center py-3 border border-gray-200 rounded-xl text-sm font-medium text-gray-700 hover:bg-gray-50 hover:border-gray-300 transition-colors"
+      >
+        {t("public.login.create_account")}
+      </Link>
+      </>
+      )}
+
+      <div className="mt-8 space-y-2">
+        <div className="flex items-center justify-between">
+          <a href="/" className="text-xs text-blue-600 hover:underline">
+            {t("public.login.back_home")}
+          </a>
+          <p className="text-xs text-gray-400">
+            © {new Date().getFullYear()} GRCEye
           </p>
         </div>
+        <p className="text-center text-xs text-gray-400">
+          {t("public.footer.powered_by")}{" "}
+          <a
+            href="https://silentwolf.io/"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="font-semibold text-gray-500 hover:text-gray-700 transition-colors"
+          >
+            SilentWolf
+          </a>
+        </p>
       </div>
-    </div>
+    </AuthLayout>
 
     {/* Forgot password modal */}
     {showForgot && (
@@ -389,17 +381,22 @@ export default function LoginPage() {
           ) : (
             <form onSubmit={handleForgotSubmit} className="space-y-4">
               <p className="text-sm text-gray-500">{t("public.login.reset_intro")}</p>
-              <input
-                type="email"
-                required
-                value={forgotEmail}
-                onChange={e => setForgotEmail(e.target.value)}
-                placeholder={t("public.login.email_placeholder")}
-                className="w-full px-3.5 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
+              <div className="relative">
+                <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                <input
+                  type="email"
+                  required
+                  autoFocus
+                  value={forgotEmail}
+                  onChange={e => setForgotEmail(e.target.value)}
+                  placeholder={t("public.login.email_placeholder")}
+                  className="w-full pl-10 pr-3.5 py-3 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                />
+              </div>
               {forgotError && <p className="text-xs text-red-500">{forgotError}</p>}
               <button type="submit" disabled={forgotLoading}
-                className="w-full py-2.5 bg-blue-600 text-white text-sm font-medium rounded-xl hover:bg-blue-700 transition-colors disabled:opacity-50">
+                className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 disabled:opacity-60 text-white font-medium py-3 px-4 rounded-xl text-sm shadow-lg shadow-blue-600/20 hover:shadow-xl hover:shadow-blue-600/25 transition-all inline-flex items-center justify-center gap-2">
+                {forgotLoading && <Loader2 className="w-4 h-4 animate-spin" />}
                 {forgotLoading ? t("public.login.reset_sending") : t("public.login.reset_submit")}
               </button>
             </form>

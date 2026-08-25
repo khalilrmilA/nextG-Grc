@@ -548,3 +548,6 @@ aside:hover ::-webkit-scrollbar-thumb:hover {
 /* ── Origin flips for dropdowns/popovers ── */
 [dir="rtl"] .origin-top-right { transform-origin: top left; }
 [dir="rtl"] .origin-top-left  { transform-origin: top right; }
+
+/* ── Auth pages: mirror the split brand/form panels ── */
+[dir="rtl"] .auth-shell { flex-direction: row-reverse; }
