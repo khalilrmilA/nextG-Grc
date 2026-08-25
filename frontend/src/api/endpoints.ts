@@ -140,6 +140,9 @@ export const authApi = {
   forgotPassword: (email: string) =>
     apiClient.post("/auth/forgot-password", { email }),
 
+  resetPassword: (token: string, new_password: string) =>
+    apiClient.post("/auth/reset-password", { token, new_password }),
+
   listSessions: () => apiClient.get("/auth/sessions").then((r) => r.data),
   revokeSession: (id: string) => apiClient.delete(`/auth/sessions/${id}`),
 };
@@ -1465,6 +1468,10 @@ export const governanceApi = {
   raciList: () => apiClient.get("/governance/raci").then((r) => r.data),
   raciCreate: (data: Record<string, unknown>) => apiClient.post("/governance/raci", data).then((r) => r.data),
   raciDelete: (id: string) => apiClient.delete(`/governance/raci/${id}`),
+  raciPreviewRole: (role: string) => apiClient.get("/governance/raci/roles/preview", { params: { role } }).then((r) => r.data),
+  groupsList: () => apiClient.get("/governance/groups").then((r) => r.data),
+  groupCreate: (data: Record<string, unknown>) => apiClient.post("/governance/groups", data).then((r) => r.data),
+  groupDelete: (id: string) => apiClient.delete(`/governance/groups/${id}`),
   docsList: () => apiClient.get("/governance/documents").then((r) => r.data),
   docsCreate: (data: Record<string, unknown>) => apiClient.post("/governance/documents", data).then((r) => r.data),
   docsDelete: (id: string) => apiClient.delete(`/governance/documents/${id}`),

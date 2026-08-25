@@ -1,7 +1,8 @@
 import { useState, useEffect } from "react";
-import { Plus, X, Loader2, Crown, Trash2, Users, FileText } from "lucide-react";
+import { Plus, X, Loader2, Crown, Trash2, Users, FileText, Eye, UserPlus } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { governanceApi } from "@/api/endpoints";
+import { governanceApi, usersApi } from "@/api/endpoints";
+import { MultiSelect } from "@/components/common/MultiSelect";
 
 const RACI_BADGE: Record<string, string> = {
   R: "bg-blue-100 text-blue-700 border-blue-200",
@@ -10,7 +11,7 @@ const RACI_BADGE: Record<string, string> = {
   I: "bg-gray-100 text-gray-600 border-gray-200",
 };
 const RACI_LABEL: Record<string, string> = { R: "Responsible", A: "Accountable", C: "Consulted", I: "Informed" };
-const ROLES = ["tenant_admin", "ciso", "risk_manager", "compliance_manager", "control_owner", "auditor", "policy_manager"];
+const BUILTIN_ROLES = ["tenant_admin", "ciso", "risk_manager", "compliance_manager", "control_owner", "auditor", "policy_manager"];
 const TYPOLOGIES = ["policy", "charter", "regulation", "minutes", "procedure", "plan"];
 const ACCESS = ["read", "edit", "validate"];
 
@@ -18,34 +19,85 @@ export default function GovernancePage() {
   const { t } = useTranslation();
   const [raci, setRaci] = useState<any[]>([]);
   const [docs, setDocs] = useState<any[]>([]);
+  const [groups, setGroups] = useState<any[]>([]);
+  const [users, setUsers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [raciForm, setRaciForm] = useState({ activity: "", raci: "R", role: "ciso", module: "" });
+  const [raciForm, setRaciForm] = useState({ activity: "", raci: "R", responsible_type: "role", role: "ciso", customRole: "", group_id: "", module: "" });
+  const [useCustomRole, setUseCustomRole] = useState(false);
   const [addingRaci, setAddingRaci] = useState(false);
   const [showDoc, setShowDoc] = useState(false);
   const [docForm, setDocForm] = useState({ title: "", typology: "policy", module: "", access_level: "read", content: "" });
   const [savingDoc, setSavingDoc] = useState(false);
   const [busy, setBusy] = useState("");
 
+  // Custom-role preview: what a role (built-in or custom) is currently responsible for
+  const [previewRole, setPreviewRole] = useState<string | null>(null);
+  const [previewRows, setPreviewRows] = useState<any[]>([]);
+  const [previewLoading, setPreviewLoading] = useState(false);
+
+  // Add-group modal
+  const [showGroup, setShowGroup] = useState(false);
+  const [groupForm, setGroupForm] = useState({ name: "", description: "", member_ids: [] as string[] });
+  const [savingGroup, setSavingGroup] = useState(false);
+
+  const knownRoles = Array.from(new Set([...BUILTIN_ROLES, ...raci.filter((r) => r.responsible_type === "role" && r.role).map((r) => r.role)]));
+
   async function load() {
     try {
-      const [r, d] = await Promise.all([governanceApi.raciList(), governanceApi.docsList()]);
+      const [r, d, g, u] = await Promise.all([governanceApi.raciList(), governanceApi.docsList(), governanceApi.groupsList(), usersApi.list()]);
       setRaci(Array.isArray(r) ? r : []);
       setDocs(Array.isArray(d) ? d : []);
-    } catch { setRaci([]); setDocs([]); } finally { setLoading(false); }
+      setGroups(Array.isArray(g) ? g : []);
+      setUsers(Array.isArray(u) ? u : []);
+    } catch { setRaci([]); setDocs([]); setGroups([]); setUsers([]); } finally { setLoading(false); }
   }
   useEffect(() => { load(); }, []);
 
   async function addRaci(e: React.FormEvent) {
     e.preventDefault();
     if (!raciForm.activity.trim()) return;
+    const responsible_type = raciForm.responsible_type;
+    const role = responsible_type === "role" ? (useCustomRole ? raciForm.customRole.trim() : raciForm.role) : null;
+    if (responsible_type === "role" && !role) return;
+    if (responsible_type === "group" && !raciForm.group_id) return;
     setAddingRaci(true);
     try {
-      await governanceApi.raciCreate({ activity: raciForm.activity, responsible_type: "role", role: raciForm.role, raci: raciForm.raci, module: raciForm.module || null });
-      setRaciForm({ activity: "", raci: "R", role: "ciso", module: "" });
+      await governanceApi.raciCreate({
+        activity: raciForm.activity, raci: raciForm.raci, responsible_type,
+        role, group_id: responsible_type === "group" ? raciForm.group_id : null,
+        module: raciForm.module || null,
+      });
+      setRaciForm({ activity: "", raci: "R", responsible_type: "role", role: "ciso", customRole: "", group_id: "", module: "" });
+      setUseCustomRole(false);
       load();
     } catch {} finally { setAddingRaci(false); }
   }
   async function delRaci(id: string) { setBusy(id); try { await governanceApi.raciDelete(id); load(); } catch {} finally { setBusy(""); } }
+
+  async function openPreview(role: string) {
+    setPreviewRole(role);
+    setPreviewLoading(true);
+    try { setPreviewRows(await governanceApi.raciPreviewRole(role)); } catch { setPreviewRows([]); } finally { setPreviewLoading(false); }
+  }
+
+  async function addGroup(e: React.FormEvent) {
+    e.preventDefault();
+    if (!groupForm.name.trim()) return;
+    setSavingGroup(true);
+    try {
+      await governanceApi.groupCreate({ name: groupForm.name, description: groupForm.description || null, member_ids: groupForm.member_ids });
+      setShowGroup(false);
+      setGroupForm({ name: "", description: "", member_ids: [] });
+      load();
+    } catch {} finally { setSavingGroup(false); }
+  }
+  async function delGroup(id: string) { setBusy(id); try { await governanceApi.groupDelete(id); load(); } catch {} finally { setBusy(""); } }
+
+  function responsibleLabel(r: any): string {
+    if (r.responsible_type === "group") return groups.find((g) => g.id === r.group_id)?.name || t("governance.unknown_group", "Unknown group");
+    if (r.user_id) return users.find((u) => u.id === r.user_id)?.email || r.user_id;
+    return (r.role || "—").replace(/_/g, " ");
+  }
 
   async function addDoc(e: React.FormEvent) {
     e.preventDefault();
@@ -76,18 +128,46 @@ export default function GovernancePage() {
 
       {/* RACI matrix */}
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 space-y-4">
-        <div className="flex items-center gap-2">
-          <Users className="w-5 h-5 text-blue-600" />
-          <h2 className="text-base font-semibold text-gray-900">{t("governance.raci", "RACI matrix")}</h2>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Users className="w-5 h-5 text-blue-600" />
+            <h2 className="text-base font-semibold text-gray-900">{t("governance.raci", "RACI matrix")}</h2>
+          </div>
+          <button type="button" onClick={() => setShowGroup(true)} className="inline-flex items-center gap-2 text-sm text-blue-600 hover:text-blue-700 font-medium">
+            <UserPlus className="w-4 h-4" /> {t("governance.add_group", "Add group")}
+          </button>
         </div>
         <form onSubmit={addRaci} className="flex flex-wrap items-end gap-2">
           <input value={raciForm.activity} onChange={(e) => setRaciForm({ ...raciForm, activity: e.target.value })} placeholder={t("governance.activity", "Activity / decision")} className="flex-1 min-w-[200px] border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
           <select value={raciForm.raci} onChange={(e) => setRaciForm({ ...raciForm, raci: e.target.value })} className="border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
             {["R", "A", "C", "I"].map((x) => <option key={x} value={x}>{x} — {RACI_LABEL[x]}</option>)}
           </select>
-          <select value={raciForm.role} onChange={(e) => setRaciForm({ ...raciForm, role: e.target.value })} className="border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-            {ROLES.map((r) => <option key={r} value={r}>{r.replace(/_/g, " ")}</option>)}
+          <select value={raciForm.responsible_type} onChange={(e) => setRaciForm({ ...raciForm, responsible_type: e.target.value })} className="border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+            <option value="role">{t("governance.by_role", "By role")}</option>
+            <option value="group">{t("governance.by_group", "By group")}</option>
           </select>
+          {raciForm.responsible_type === "role" ? (
+            useCustomRole ? (
+              <div className="flex items-center gap-1">
+                <input value={raciForm.customRole} onChange={(e) => setRaciForm({ ...raciForm, customRole: e.target.value })} placeholder={t("governance.custom_role", "Custom role name")} className="border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                <button type="button" onClick={() => setUseCustomRole(false)} className="text-xs text-gray-400 hover:text-gray-600 px-1">{t("common.cancel", "Cancel")}</button>
+              </div>
+            ) : (
+              <select
+                value={raciForm.role}
+                onChange={(e) => { if (e.target.value === "__custom__") setUseCustomRole(true); else setRaciForm({ ...raciForm, role: e.target.value }); }}
+                className="border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                {knownRoles.map((r) => <option key={r} value={r}>{r.replace(/_/g, " ")}</option>)}
+                <option value="__custom__">+ {t("governance.custom_role", "Custom role")}…</option>
+              </select>
+            )
+          ) : (
+            <select value={raciForm.group_id} onChange={(e) => setRaciForm({ ...raciForm, group_id: e.target.value })} className="border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+              <option value="">{t("governance.select_group", "Select group…")}</option>
+              {groups.map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}
+            </select>
+          )}
           <input value={raciForm.module} onChange={(e) => setRaciForm({ ...raciForm, module: e.target.value })} placeholder={t("governance.module", "Module")} className="w-32 border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
           <button type="submit" disabled={addingRaci} className="inline-flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-xl text-sm font-medium hover:bg-blue-700 disabled:opacity-50">
             {addingRaci ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />} {t("governance.add", "Add")}
@@ -112,7 +192,16 @@ export default function GovernancePage() {
                   <tr key={r.id} className="border-b border-gray-50 hover:bg-gray-50/50">
                     <td className="px-4 py-2.5 text-gray-900">{r.activity}</td>
                     <td className="px-4 py-2.5"><span className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold border ${RACI_BADGE[r.raci] || "bg-gray-100"}`}>{r.raci}</span></td>
-                    <td className="px-4 py-2.5 text-gray-600 capitalize">{(r.role || r.user_id || "—").replace(/_/g, " ")}</td>
+                    <td className="px-4 py-2.5 text-gray-600 capitalize">
+                      <span className="inline-flex items-center gap-1.5">
+                        {responsibleLabel(r)}
+                        {r.responsible_type === "role" && r.role && (
+                          <button type="button" onClick={() => openPreview(r.role)} title={t("governance.preview_role", "Preview role")} className="text-gray-300 hover:text-blue-600">
+                            <Eye className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </span>
+                    </td>
                     <td className="px-4 py-2.5 text-gray-500">{r.module || "—"}</td>
                     <td className="px-4 py-2.5 text-right"><button onClick={() => delRaci(r.id)} disabled={busy === r.id} className="text-gray-400 hover:text-red-500 disabled:opacity-50"><Trash2 className="w-4 h-4" /></button></td>
                   </tr>
@@ -161,6 +250,90 @@ export default function GovernancePage() {
           )}
         </div>
       </div>
+
+      {/* Groups list (shown once at least one group exists, for management) */}
+      {groups.length > 0 && (
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 space-y-3">
+          <div className="flex items-center gap-2">
+            <UserPlus className="w-5 h-5 text-emerald-600" />
+            <h2 className="text-base font-semibold text-gray-900">{t("governance.groups", "Groups")}</h2>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {groups.map((g) => (
+              <span key={g.id} className="inline-flex items-center gap-2 rounded-full border border-gray-200 bg-gray-50 px-3 py-1.5 text-sm text-gray-700">
+                {g.name} <span className="text-gray-400 text-xs">({(g.member_ids || []).length})</span>
+                <button onClick={() => delGroup(g.id)} disabled={busy === g.id} className="text-gray-400 hover:text-red-500 disabled:opacity-50"><X className="w-3.5 h-3.5" /></button>
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Role preview modal */}
+      {previewRole && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setPreviewRole(null)} />
+          <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-lg mx-4 p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-semibold text-gray-900 capitalize">{t("governance.preview_of", "Responsibilities of")} {previewRole.replace(/_/g, " ")}</h2>
+              <button onClick={() => setPreviewRole(null)} className="text-gray-400 hover:text-gray-600"><X className="w-5 h-5" /></button>
+            </div>
+            {previewLoading ? (
+              <div className="flex items-center justify-center py-8"><Loader2 className="w-5 h-5 animate-spin text-blue-500" /></div>
+            ) : previewRows.length === 0 ? (
+              <p className="text-sm text-gray-400 py-3">{t("governance.no_assignments", "No assignments for this role yet.")}</p>
+            ) : (
+              <ul className="space-y-2 max-h-80 overflow-y-auto">
+                {previewRows.map((r) => (
+                  <li key={r.id} className="flex items-center justify-between border border-gray-100 rounded-xl px-3 py-2 text-sm">
+                    <span className="text-gray-800">{r.activity}</span>
+                    <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-semibold border ${RACI_BADGE[r.raci] || "bg-gray-100"}`}>{r.raci}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Add group modal */}
+      {showGroup && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setShowGroup(false)} />
+          <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-lg mx-4 p-6">
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-lg font-semibold text-gray-900">{t("governance.add_group", "Add group")}</h2>
+              <button onClick={() => setShowGroup(false)} className="text-gray-400 hover:text-gray-600"><X className="w-5 h-5" /></button>
+            </div>
+            <form onSubmit={addGroup} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">{t("governance.group_name", "Group name")} *</label>
+                <input value={groupForm.name} onChange={(e) => setGroupForm({ ...groupForm, name: e.target.value })} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">{t("common.description", "Description")}</label>
+                <input value={groupForm.description} onChange={(e) => setGroupForm({ ...groupForm, description: e.target.value })} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">{t("governance.members", "Members")}</label>
+                <MultiSelect
+                  options={users.map((u) => ({ id: u.id, label: `${u.first_name} ${u.last_name} (${u.email})` }))}
+                  selected={groupForm.member_ids}
+                  onChange={(ids) => setGroupForm({ ...groupForm, member_ids: ids })}
+                  placeholder={t("governance.select_members", "Select members…")}
+                  emptyLabel={t("governance.no_users", "No users found")}
+                />
+              </div>
+              <div className="flex justify-end gap-3 pt-2">
+                <button type="button" onClick={() => setShowGroup(false)} className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800">{t("common.cancel", "Cancel")}</button>
+                <button type="submit" disabled={savingGroup} className="inline-flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-xl text-sm font-medium hover:bg-blue-700 disabled:opacity-50">
+                  {savingGroup && <Loader2 className="w-4 h-4 animate-spin" />} {t("common.save", "Save")}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {showDoc && (
         <div className="fixed inset-0 z-50 flex items-center justify-center">

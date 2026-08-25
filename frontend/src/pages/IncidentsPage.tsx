@@ -1,7 +1,8 @@
 import { useState, useEffect } from "react";
 import { Plus, Search, X, Loader2, Filter, AlertTriangle, ShieldAlert, Clock, Flame } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { incidentsApi } from "@/api/endpoints";
+import { incidentsApi, vulnerabilitiesApi } from "@/api/endpoints";
+import { MultiSelect } from "@/components/common/MultiSelect";
 
 const SEV_BADGE: Record<string, string> = {
   critical: "bg-red-100 text-red-700 border-red-200",
@@ -45,7 +46,13 @@ export default function IncidentsPage() {
     category: "other",
     severity: "medium",
     breach_notification_required: false,
+    linked_vulnerabilities: [] as string[],
   });
+  const [vulnOptions, setVulnOptions] = useState<any[]>([]);
+
+  useEffect(() => {
+    vulnerabilitiesApi.list().then((data: any) => setVulnOptions(Array.isArray(data) ? data : data.items || [])).catch(() => setVulnOptions([]));
+  }, []);
 
   async function load() {
     try {
@@ -81,7 +88,7 @@ export default function IncidentsPage() {
     try {
       await incidentsApi.create(form);
       setShowModal(false);
-      setForm({ title: "", description: "", category: "other", severity: "medium", breach_notification_required: false });
+      setForm({ title: "", description: "", category: "other", severity: "medium", breach_notification_required: false, linked_vulnerabilities: [] });
       setLoading(true);
       load();
       loadStats();
@@ -234,6 +241,16 @@ export default function IncidentsPage() {
                     {SEVERITY_OPTIONS.map((s) => <option key={s} value={s}>{t(`compliance.severities.${s}` as never)}</option>)}
                   </select>
                 </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">{t("incidents.form_linked_vulnerabilities", "Linked vulnerabilities")}</label>
+                <MultiSelect
+                  options={vulnOptions.map((v) => ({ id: v.id, label: `${v.ref_id || v.id}${v.title ? " — " + v.title : ""}` }))}
+                  selected={form.linked_vulnerabilities}
+                  onChange={(ids) => setForm({ ...form, linked_vulnerabilities: ids })}
+                  placeholder={t("incidents.select_vulnerabilities", "Select vulnerabilities…")}
+                  emptyLabel={t("incidents.no_vulnerabilities", "No vulnerabilities found")}
+                />
               </div>
               <div className="flex items-center gap-2">
                 <input type="checkbox" id="breach" checked={form.breach_notification_required} onChange={(e) => setForm({ ...form, breach_notification_required: e.target.checked })} className="rounded border-gray-300" />

@@ -27,6 +27,7 @@ class IncidentCreate(BaseModel):
     linked_risks: list[str] = []
     linked_controls: list[str] = []
     linked_vendors: list[str] = []
+    linked_vulnerabilities: list[str] = []
     tags: list[str] = []
 
 class IncidentUpdate(BaseModel):
@@ -54,6 +55,7 @@ class IncidentUpdate(BaseModel):
     linked_risks: list[str] | None = None
     linked_controls: list[str] | None = None
     linked_vendors: list[str] | None = None
+    linked_vulnerabilities: list[str] | None = None
     tags: list[str] | None = None
 
 class IncidentOut(BaseModel):
@@ -68,7 +70,7 @@ class IncidentOut(BaseModel):
     lessons_learned: str | None; post_mortem_url: str | None
     breach_notification_required: bool
     notification_sent_at: str | None; regulatory_reference: str | None
-    linked_risks: list; linked_controls: list; linked_vendors: list; tags: list
+    linked_risks: list; linked_controls: list; linked_vendors: list; linked_vulnerabilities: list; tags: list
     created_at: datetime; updated_at: datetime
     model_config = {"from_attributes": True}
 
@@ -131,7 +133,7 @@ async def create_incident(
         data_types_affected=body.data_types_affected,
         breach_notification_required=body.breach_notification_required,
         linked_risks=body.linked_risks, linked_controls=body.linked_controls,
-        linked_vendors=body.linked_vendors, tags=body.tags,
+        linked_vendors=body.linked_vendors, linked_vulnerabilities=body.linked_vulnerabilities, tags=body.tags,
     )
     db.add(inc); await db.flush(); await db.commit(); await db.refresh(inc)
     return IncidentOut.model_validate(inc)
@@ -152,7 +154,7 @@ async def update_incident(iid: str, body: IncidentUpdate, db: AsyncSession = Dep
               "affected_systems","affected_users_count","data_types_affected","business_impact",
               "financial_impact","root_cause","containment_actions","remediation_actions",
               "lessons_learned","post_mortem_url","breach_notification_required","notification_sent_at",
-              "linked_risks","linked_controls","linked_vendors","tags"]:
+              "linked_risks","linked_controls","linked_vendors","linked_vulnerabilities","tags"]:
         v = getattr(body, f, None)
         if v is not None: setattr(inc, f, v)
     if body.severity: inc.severity = IncidentSeverity(body.severity)

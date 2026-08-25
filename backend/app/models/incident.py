@@ -75,4 +75,5 @@ class Incident(Base):
     linked_risks: Mapped[list] = mapped_column(JSON, default=list)
     linked_controls: Mapped[list] = mapped_column(JSON, default=list)
     linked_vendors: Mapped[list] = mapped_column(JSON, default=list)
+    linked_vulnerabilities: Mapped[list] = mapped_column(JSON, default=list)
     tags: Mapped[list] = mapped_column(JSON, default=list)

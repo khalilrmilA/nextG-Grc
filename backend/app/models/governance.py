@@ -5,7 +5,7 @@ SQLite/PostgreSQL/Oracle/SQL Server; values are validated at the API layer.
 New tables — created by create_all() on restart.
 """
 from sqlalchemy.orm import Mapped, mapped_column
-from sqlalchemy import String, Integer, Text, ForeignKey
+from sqlalchemy import String, Integer, Text, ForeignKey, JSON
 from app.core.database import Base
 
 
@@ -16,13 +16,27 @@ class RaciAssignment(Base):
         String(36), ForeignKey("tenants.id"), nullable=False, index=True
     )
     activity: Mapped[str] = mapped_column(String(300), nullable=False)
-    responsible_type: Mapped[str] = mapped_column(String(10), nullable=False, default="role")  # role | user
+    responsible_type: Mapped[str] = mapped_column(String(10), nullable=False, default="role")  # role | user | group
     role: Mapped[str | None] = mapped_column(String(50), nullable=True)
     user_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    group_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
     raci: Mapped[str] = mapped_column(String(1), nullable=False)  # R | A | C | I
     module: Mapped[str | None] = mapped_column(String(50), nullable=True)
     entity_type: Mapped[str | None] = mapped_column(String(50), nullable=True)
     entity_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+
+
+class GovernanceGroup(Base):
+    """A named collection of users that can be assigned a RACI role as a whole
+    (e.g. "Security Committee"), instead of a single user or a role string."""
+    __tablename__ = "governance_groups"
+
+    tenant_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("tenants.id"), nullable=False, index=True
+    )
+    name: Mapped[str] = mapped_column(String(100), nullable=False)
+    description: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    member_ids: Mapped[list] = mapped_column(JSON, default=list)
 
 
 class GovernanceDocument(Base):

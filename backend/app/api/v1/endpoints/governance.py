@@ -15,7 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.models.user import User, UserRole
-from app.models.governance import RaciAssignment, GovernanceDocument, GovernanceDocumentVersion
+from app.models.governance import RaciAssignment, GovernanceDocument, GovernanceDocumentVersion, GovernanceGroup
 from app.models.notification import NotificationType
 from app.api.v1.dependencies.auth import get_current_user, get_tenant_id
 from app.api.v1.dependencies.features import require_feature
@@ -36,9 +36,10 @@ _DOCUMENT_ELEVATED_ROLES = {UserRole.SUPER_ADMIN, UserRole.TENANT_ADMIN, UserRol
 # ---------------------------------------------------------------------------
 class RaciIn(BaseModel):
     activity: str
-    responsible_type: str = "role"     # role | user
-    role: str | None = None
+    responsible_type: str = "role"     # role | user | group
+    role: str | None = None            # free text — custom roles are supported as-is
     user_id: str | None = None
+    group_id: str | None = None
     raci: str                          # R | A | C | I
     module: str | None = None
     entity_type: str | None = None
@@ -51,6 +52,7 @@ class RaciOut(BaseModel):
     responsible_type: str
     role: str | None
     user_id: str | None
+    group_id: str | None
     raci: str
     module: str | None
     entity_type: str | None
@@ -60,9 +62,10 @@ class RaciOut(BaseModel):
 
 class RaciUpdate(BaseModel):
     activity: str | None = None
-    responsible_type: str | None = None     # role | user
+    responsible_type: str | None = None     # role | user | group
     role: str | None = None
     user_id: str | None = None
+    group_id: str | None = None
     raci: str | None = None                 # R | A | C | I
     module: str | None = None
     entity_type: str | None = None
@@ -89,6 +92,21 @@ async def list_raci(
     return list(result.scalars().all())
 
 
+@router.get("/raci/roles/preview", response_model=list[RaciOut])
+async def preview_role(
+    role: str,
+    current_user: Annotated[User, Depends(require_feature("raci_governance"))],
+    tenant_id: Annotated[str, Depends(get_tenant_id)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    """All RACI assignments currently held by a given role (built-in or custom) —
+    lets an admin preview what a role is responsible for before assigning it further."""
+    result = await db.execute(
+        select(RaciAssignment).where(RaciAssignment.tenant_id == tenant_id, RaciAssignment.role == role)
+    )
+    return list(result.scalars().all())
+
+
 @router.post("/raci", response_model=RaciOut, status_code=201)
 async def create_raci(
     body: RaciIn,
@@ -99,11 +117,11 @@ async def create_raci(
     raci = body.raci.strip().upper()
     if raci not in _VALID_RACI:
         raise HTTPException(status_code=422, detail="raci must be one of R, A, C, I")
-    if body.responsible_type not in ("role", "user"):
-        raise HTTPException(status_code=422, detail="responsible_type must be 'role' or 'user'")
+    if body.responsible_type not in ("role", "user", "group"):
+        raise HTTPException(status_code=422, detail="responsible_type must be 'role', 'user', or 'group'")
     row = RaciAssignment(
         tenant_id=tenant_id, activity=body.activity, responsible_type=body.responsible_type,
-        role=body.role, user_id=body.user_id, raci=raci, module=body.module,
+        role=body.role, user_id=body.user_id, group_id=body.group_id, raci=raci, module=body.module,
         entity_type=body.entity_type, entity_id=body.entity_id,
     )
     db.add(row)
@@ -132,13 +150,13 @@ async def update_raci(
         if raci not in _VALID_RACI:
             raise HTTPException(status_code=422, detail="raci must be one of R, A, C, I")
         body.raci = raci
-    if body.responsible_type is not None and body.responsible_type not in ("role", "user"):
-        raise HTTPException(status_code=422, detail="responsible_type must be 'role' or 'user'")
+    if body.responsible_type is not None and body.responsible_type not in ("role", "user", "group"):
+        raise HTTPException(status_code=422, detail="responsible_type must be 'role', 'user', or 'group'")
 
     old_user_id = row.user_id
     new_responsible_type = body.responsible_type if body.responsible_type is not None else row.responsible_type
 
-    for f in ["activity", "responsible_type", "role", "user_id", "raci", "module", "entity_type", "entity_id"]:
+    for f in ["activity", "responsible_type", "role", "user_id", "group_id", "raci", "module", "entity_type", "entity_id"]:
         v = getattr(body, f, None)
         if v is not None:
             setattr(row, f, v)
@@ -206,6 +224,96 @@ async def delete_raci(
     if row is None:
         raise HTTPException(status_code=404, detail="RACI assignment not found")
     await db.delete(row)
+    await db.commit()
+    return None
+
+
+# ---------------------------------------------------------------------------
+# Groups (collections of users assignable to a RACI role)
+# ---------------------------------------------------------------------------
+class GroupIn(BaseModel):
+    name: str
+    description: str | None = None
+    member_ids: list[str] = []
+
+
+class GroupUpdate(BaseModel):
+    name: str | None = None
+    description: str | None = None
+    member_ids: list[str] | None = None
+
+
+class GroupOut(BaseModel):
+    id: str
+    name: str
+    description: str | None
+    member_ids: list
+    model_config = {"from_attributes": True}
+
+
+@router.get("/groups", response_model=list[GroupOut])
+async def list_groups(
+    current_user: Annotated[User, Depends(require_feature("raci_governance"))],
+    tenant_id: Annotated[str, Depends(get_tenant_id)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    result = await db.execute(select(GovernanceGroup).where(GovernanceGroup.tenant_id == tenant_id))
+    return list(result.scalars().all())
+
+
+@router.post("/groups", response_model=GroupOut, status_code=201)
+async def create_group(
+    body: GroupIn,
+    current_user: Annotated[User, Depends(require_feature("raci_governance"))],
+    tenant_id: Annotated[str, Depends(get_tenant_id)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    group = GovernanceGroup(
+        tenant_id=tenant_id, name=body.name, description=body.description, member_ids=body.member_ids,
+    )
+    db.add(group)
+    await db.commit()
+    await db.refresh(group)
+    return group
+
+
+@router.patch("/groups/{group_id}", response_model=GroupOut)
+async def update_group(
+    group_id: str,
+    body: GroupUpdate,
+    current_user: Annotated[User, Depends(require_feature("raci_governance"))],
+    tenant_id: Annotated[str, Depends(get_tenant_id)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    result = await db.execute(
+        select(GovernanceGroup).where(GovernanceGroup.id == group_id, GovernanceGroup.tenant_id == tenant_id)
+    )
+    group = result.scalar_one_or_none()
+    if group is None:
+        raise HTTPException(status_code=404, detail="Group not found")
+    for f in ["name", "description", "member_ids"]:
+        v = getattr(body, f, None)
+        if v is not None:
+            setattr(group, f, v)
+    await db.commit()
+    await db.refresh(group)
+    return group
+
+
+@router.delete("/groups/{group_id}", status_code=204)
+async def delete_group(
+    group_id: str,
+    current_user: Annotated[User, Depends(require_feature("raci_governance"))],
+    tenant_id: Annotated[str, Depends(get_tenant_id)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    result = await db.execute(
+        select(GovernanceGroup).where(GovernanceGroup.id == group_id, GovernanceGroup.tenant_id == tenant_id)
+    )
+    group = result.scalar_one_or_none()
+    if group is None:
+        raise HTTPException(status_code=404, detail="Group not found")
+    await db.delete(group)
     await db.commit()
     return None
 
