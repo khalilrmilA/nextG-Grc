@@ -58,7 +58,8 @@ frontend/.env.production
 # Live database + snapshots — never commit real client data
 backend/grc_dev.db
 backend/grc_dev.db.bak-*
-backend/grc_dev.db.pre-elite*
+backend/grc_dev.db.pre-*
+backend/grc_dev.db.*.bak
 
 # Local DB backups (rotated by scripts.backup_db)
 backend/backups/
