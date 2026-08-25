@@ -277,7 +277,7 @@ export default function AIAssistant() {
             <p className="text-sm font-semibold leading-none">GRC Assistant</p>
             <div className="flex items-center gap-1 mt-0.5">
               <span className="w-1.5 h-1.5 bg-green-400 rounded-full" />
-              <span className="text-xs text-blue-100">DeepSeek R1 · Local AI</span>
+              <span className="text-xs text-blue-100">Online</span>
             </div>
           </div>
         </div>
