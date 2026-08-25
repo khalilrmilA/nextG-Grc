@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { ArrowRight, Menu, X, ChevronDown, BookOpen, Newspaper, HelpCircle, MessageSquare } from "lucide-react";
 import LanguageSwitcher from "../LanguageSwitcher";
+import { useI18n } from "../../i18n";
 
 type SimpleLink = { kind: "link"; to: string; label: string };
 type DropdownLink = {
@@ -43,6 +44,8 @@ export default function PublicNav() {
   const [mobileExpanded, setMobileExpanded] = useState<string | null>(null);
   const pathname = usePathname();
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const { lang } = useI18n();
+  const withLocale = (path: string) => (path === "/login" || path === "/register" ? path : `/${lang}${path}`);
 
   useEffect(() => { setOpen(false); setActiveDropdown(null); }, [pathname]);
 
@@ -69,7 +72,7 @@ export default function PublicNav() {
     return () => document.removeEventListener("mousedown", onClick);
   }, []);
 
-  const isActive = (to: string) => !to.includes("#") && pathname === to;
+  const isActive = (to: string) => !to.includes("#") && pathname === withLocale(to);
   const linkCls = (to: string) =>
     `px-3 py-1.5 text-sm font-medium rounded-md transition-all ${
       isActive(to) ? "text-blue-600 bg-blue-50" : "text-gray-600 hover:text-gray-900 hover:bg-gray-50"
@@ -87,7 +90,7 @@ export default function PublicNav() {
         <div ref={dropdownRef} className="max-w-6xl mx-auto flex items-center justify-between px-5 sm:px-8 h-16">
 
           {/* Logo */}
-          <Link href="/" className="flex items-center gap-2 flex-shrink-0">
+          <Link href={withLocale("/")} className="flex items-center gap-2 flex-shrink-0">
             <img src="/logo-horizontal.png" alt="GRCEye" className="h-9 sm:h-10 w-auto object-contain" />
           </Link>
 
@@ -96,9 +99,9 @@ export default function PublicNav() {
             {NAV_ITEMS.map((item) => {
               if (item.kind === "link") {
                 return item.to.startsWith("/#") ? (
-                  <a key={item.to} href={item.to} className={linkCls(item.to)}>{item.label}</a>
+                  <a key={item.to} href={withLocale(item.to)} className={linkCls(item.to)}>{item.label}</a>
                 ) : (
-                  <Link key={item.to} href={item.to} className={linkCls(item.to)}>{item.label}</Link>
+                  <Link key={item.to} href={withLocale(item.to)} className={linkCls(item.to)}>{item.label}</Link>
                 );
               }
 
@@ -121,7 +124,7 @@ export default function PublicNav() {
                       {item.items.map(({ to, label, description, icon: Icon }) => (
                         <Link
                           key={to}
-                          href={to}
+                          href={withLocale(to)}
                           onClick={() => setActiveDropdown(null)}
                           className="flex items-start gap-3 px-3 py-2.5 rounded-xl hover:bg-gray-50 transition-colors group"
                         >
@@ -168,6 +171,8 @@ export default function PublicNav() {
             >
               Start trial
             </Link>
+            {/* /login and /register are proxy-rewritten straight to the Vite dashboard
+                (see next.config.js rewrites) and intentionally never get a locale prefix. */}
             <button
               onClick={() => setOpen(true)}
               className="w-9 h-9 flex items-center justify-center rounded-lg hover:bg-gray-100 text-gray-700 transition-colors"
@@ -191,7 +196,7 @@ export default function PublicNav() {
         }`}
       >
         <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
-          <Link href="/" onClick={() => setOpen(false)}>
+          <Link href={withLocale("/")} onClick={() => setOpen(false)}>
             <img src="/logo-horizontal.png" alt="GRCEye" className="h-10 w-auto object-contain" />
           </Link>
           <button
@@ -210,9 +215,9 @@ export default function PublicNav() {
                 isActive(item.to) ? "bg-blue-50 text-blue-600" : "text-gray-700 hover:bg-gray-50"
               }`;
               return item.to.startsWith("/#") ? (
-                <a key={item.to} href={item.to} onClick={() => setOpen(false)} className={cls}>{item.label}</a>
+                <a key={item.to} href={withLocale(item.to)} onClick={() => setOpen(false)} className={cls}>{item.label}</a>
               ) : (
-                <Link key={item.to} href={item.to} onClick={() => setOpen(false)} className={cls}>{item.label}</Link>
+                <Link key={item.to} href={withLocale(item.to)} onClick={() => setOpen(false)} className={cls}>{item.label}</Link>
               );
             }
 
@@ -232,7 +237,7 @@ export default function PublicNav() {
                     {item.items.map(({ to, label, description, icon: Icon }) => (
                       <Link
                         key={to}
-                        href={to}
+                        href={withLocale(to)}
                         onClick={() => setOpen(false)}
                         className="flex items-start gap-3 px-4 py-3 hover:bg-gray-100 transition-colors border-b border-gray-100 last:border-0"
                       >

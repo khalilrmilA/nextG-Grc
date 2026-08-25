@@ -1091,7 +1091,7 @@ export default {
     },
     landing: {
       hero_badge: "70+ compliance frameworks · On-premise AI · Zero data egress",
-      hero_title_pre: "Enterprise GRC for",
+      hero_title_pre: "GRCeye — Enterprise GRC for",
       typeword1: "security teams",
       typeword2: "CISOs",
       typeword3: "risk managers",

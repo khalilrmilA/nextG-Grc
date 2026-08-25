@@ -1,5 +1,6 @@
 "use client";
-import { createContext, useContext, useEffect, useState } from "react";
+import { createContext, useContext } from "react";
+import { useRouter, usePathname } from "next/navigation";
 import en from "./locales/en";
 import fr from "./locales/fr";
 import ar from "./locales/ar";
@@ -14,6 +15,7 @@ export const LANGUAGES: { code: Language; label: string; nativeLabel: string; rt
 
 const RESOURCES: Record<Language, Record<string, unknown>> = { en, fr, ar };
 const LS_KEY = "grceye_lang";
+const LOCALE_SEGMENT = /^\/(en|fr|ar)(?=\/|$)/;
 
 /** Look up a dotted key like "public.nav.features" in a nested object. */
 function lookup(obj: Record<string, unknown>, path: string): string | undefined {
@@ -43,34 +45,24 @@ interface I18nCtx {
 
 const Ctx = createContext<I18nCtx | null>(null);
 
-export function I18nProvider({ children }: { children: React.ReactNode }) {
-  // Always render initial pass with EN to match the server-rendered HTML and
-  // avoid hydration mismatches. We hydrate the saved/browser language after mount.
-  const [lang, setLangState] = useState<Language>("en");
-
-  useEffect(() => {
-    let saved: Language | null = null;
-    try { saved = (localStorage.getItem(LS_KEY) as Language | null); } catch { /* noop */ }
-    let initial: Language = "en";
-    if (saved && (saved === "en" || saved === "fr" || saved === "ar")) {
-      initial = saved;
-    } else if (typeof navigator !== "undefined") {
-      const b = navigator.language.split("-")[0];
-      if (b === "fr") initial = "fr";
-      else if (b === "ar") initial = "ar";
-    }
-    if (initial !== "en") setLangState(initial);
-  }, []);
-
-  // Sync <html lang> and <html dir> with active language.
-  useEffect(() => {
-    document.documentElement.lang = lang;
-    document.documentElement.dir = lang === "ar" ? "rtl" : "ltr";
-  }, [lang]);
+/**
+ * `lang` is the source of truth for locale — it comes from the URL's [locale]
+ * segment (set server-side in app/[locale]/layout.tsx), NOT localStorage. This
+ * lets Google crawl/index /en, /fr and /ar as distinct, correctly-rendered
+ * pages instead of every visitor (including crawlers) landing on client-side-
+ * switched English content.
+ */
+export function I18nProvider({ lang, children }: { lang: Language; children: React.ReactNode }) {
+  const router = useRouter();
+  const pathname = usePathname();
 
   function setLang(l: Language) {
-    setLangState(l);
-    try { localStorage.setItem(LS_KEY, l); } catch { /* noop */ }
+    if (l === lang) return;
+    // Remember the choice so a future bare-domain visit (no /xx prefix) can be
+    // redirected straight to it by middleware, without re-detecting from headers.
+    try { document.cookie = `${LS_KEY}=${l}; path=/; max-age=31536000; samesite=lax`; } catch { /* noop */ }
+    const rest = (pathname || "/").replace(LOCALE_SEGMENT, "");
+    router.push(`/${l}${rest}`);
   }
 
   function t(key: string, vars?: Record<string, string | number>): string {

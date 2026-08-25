@@ -1089,7 +1089,7 @@ export default {
     },
     landing: {
       hero_badge: "70+ référentiels de conformité · IA on-premise · Zéro fuite de données",
-      hero_title_pre: "GRC d'entreprise pour",
+      hero_title_pre: "GRCeye — GRC d'entreprise pour",
       typeword1: "les équipes sécurité",
       typeword2: "les RSSI",
       typeword3: "les responsables risques",

@@ -1,6 +1,10 @@
+"use client";
 import Link from "next/link";
+import { useI18n } from "../../i18n";
 
 export default function PublicFooter() {
+  const { lang } = useI18n();
+  const to = (path: string) => `/${lang}${path}`;
   return (
     <footer className="bg-slate-950 text-slate-400 py-16 px-6">
       <div className="max-w-7xl mx-auto">
@@ -32,7 +36,7 @@ export default function PublicFooter() {
                 { label: "News",      to: "/news"              },
               ].map(l => (
                 <li key={l.label}>
-                  <Link href={l.to} className="hover:text-white transition-colors">{l.label}</Link>
+                  <Link href={to(l.to)} className="hover:text-white transition-colors">{l.label}</Link>
                 </li>
               ))}
             </ul>
@@ -42,9 +46,9 @@ export default function PublicFooter() {
             <p className="text-xs font-bold text-slate-300 uppercase tracking-widest mb-4">Company</p>
             <ul className="space-y-2.5 text-sm">
               <li><a href="#" className="hover:text-white transition-colors">Privacy Policy</a></li>
-              <li><Link href="/terms" className="hover:text-white transition-colors">Terms of Service</Link></li>
+              <li><Link href={to("/terms")} className="hover:text-white transition-colors">Terms of Service</Link></li>
               <li><a href="#" className="hover:text-white transition-colors">Security</a></li>
-              <li><Link href="/contact" className="hover:text-white transition-colors">Contact</Link></li>
+              <li><Link href={to("/contact")} className="hover:text-white transition-colors">Contact</Link></li>
               <li><a href="mailto:support@grceye.com" className="hover:text-white transition-colors">Support</a></li>
             </ul>
           </div>
