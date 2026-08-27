@@ -125,9 +125,15 @@ function handler(req, res) {
   const pathname = u.split("?")[0];
 
   if (/\.[a-zA-Z0-9]+$/.test(pathname)) {
-    // Static file (favicon.ico, robots.txt, sitemap.xml, logo.png, ...) — these are
-    // marketing's own public/ assets, not the dashboard's (those are under /assets/,
-    // already handled above), so they always belong to marketing.
+    // Static file. The dashboard has its own root-level public/ assets (logos, icons -
+    // e.g. logowhite.png) copied into frontend/dist alongside its hashed /assets/*
+    // bundle, distinct from marketing's own public/ (favicon.ico, robots.txt,
+    // sitemap.xml, apple-icon.png, ...). Serve it from whichever one actually has the
+    // file; marketing is the default since most root-level static files are its own.
+    const candidate = path.normalize(path.join(DASH_DIST, pathname));
+    if (candidate.startsWith(DASH_DIST) && fs.existsSync(candidate) && fs.statSync(candidate).isFile()) {
+      return serveDashboard(res, pathname);
+    }
     return proxy(req, res, MARKETING);
   }
 
