@@ -19,6 +19,20 @@ class UserRole(str, enum.Enum):
     VIEWER = "viewer"                 # Read-only access
 
 
+# Roles a tenant_admin can assign to team members or to a Group — excludes
+# SUPER_ADMIN/TENANT_ADMIN, which are never delegated.
+ASSIGNABLE_ROLES = {
+    UserRole.CISO,
+    UserRole.RISK_MANAGER,
+    UserRole.COMPLIANCE_MANAGER,
+    UserRole.AUDITOR,
+    UserRole.POLICY_MANAGER,
+    UserRole.VENDOR_MANAGER,
+    UserRole.CONTROL_OWNER,
+    UserRole.VIEWER,
+}
+
+
 class User(Base):
     __tablename__ = "users"
 
@@ -35,6 +49,10 @@ class User(Base):
     # Multi-role support: list of UserRole strings (e.g. ["ciso", "risk_manager"])
     # When non-empty, access is the union of all listed roles.
     roles: Mapped[list] = mapped_column(JSON, nullable=False, default=list, server_default="[]")
+    # Custom rule: role values to subtract from this user's effective access even
+    # when granted by a Group they belong to (see app/services/authz.py). Lets an
+    # admin carve out an exception for one member without touching the group.
+    excluded_roles: Mapped[list] = mapped_column(JSON, nullable=False, default=list, server_default="[]")
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     is_verified: Mapped[bool] = mapped_column(Boolean, default=False)
     expires_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)

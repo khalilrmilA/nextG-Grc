@@ -20,13 +20,15 @@ def _generate_password() -> str:
 
 from app.core.database import get_db, AsyncSessionLocal
 from app.core.security import hash_password
-from app.models.user import User, UserRole
+from app.models.user import User, UserRole, ASSIGNABLE_ROLES
 from app.models.tenant import Tenant
+from app.models.group import Group
 from app.models.password_reset import PasswordResetToken
 from app.models.compliance import ComplianceAssessment
 from app.models.auditor_assignment import AuditorAssignment
 from app.models.activity_log import ActivityLog
 from app.services.activity_chain import chain_and_add
+from app.services.authz import get_effective_roles
 from app.api.v1.dependencies import get_tenant_id
 from app.api.v1.dependencies.auth import get_current_user, require_roles
 
@@ -78,19 +80,6 @@ async def _send_welcome_email(user: User) -> None:
     except Exception:  # noqa: BLE001 — must never fail account creation
         logger.warning("welcome email failed to send for new user %s", user.id)
 
-# All roles tenant_admin can assign to team members
-_ASSIGNABLE_ROLES = {
-    UserRole.CISO,
-    UserRole.RISK_MANAGER,
-    UserRole.COMPLIANCE_MANAGER,
-    UserRole.AUDITOR,
-    UserRole.POLICY_MANAGER,
-    UserRole.VENDOR_MANAGER,
-    UserRole.CONTROL_OWNER,
-    UserRole.VIEWER,
-}
-
-
 class UserResponse(BaseModel):
     id: str
     email: str
@@ -98,6 +87,8 @@ class UserResponse(BaseModel):
     last_name: str
     role: str
     roles: list[str] = []
+    excluded_roles: list[str] = []
+    effective_roles: list[str] = []
     is_active: bool
     expires_at: datetime | None = None
 
@@ -113,13 +104,14 @@ class CreateUserRequest(BaseModel):
     email: EmailStr
     first_name: str
     last_name: str
-    roles: list[str]          # one or more roles from _ASSIGNABLE_ROLES
+    roles: list[str]          # one or more roles from ASSIGNABLE_ROLES
     expires_at: datetime | None = None
 
 
 class UpdateUserPayload(BaseModel):
     is_active: bool | None = None
-    roles: list[str] | None = None   # replace the user's full roles list
+    roles: list[str] | None = None            # replace the user's full roles list
+    excluded_roles: list[str] | None = None   # replace the user's group-role carve-outs
 
 
 class ResetPasswordResponse(BaseModel):
@@ -136,11 +128,25 @@ async def list_users(
 ):
     result = await db.execute(select(User).where(User.tenant_id == tenant_id).order_by(User.first_name))
     users = result.scalars().all()
+
+    # Fetch the tenant's groups once and reuse across every row instead of
+    # re-querying per user (get_effective_roles alone would be N+1 here).
+    groups = (await db.execute(select(Group).where(Group.tenant_id == tenant_id))).scalars().all()
+
+    def _effective(u: User) -> list[str]:
+        base = set(u.roles or [u.role.value if hasattr(u.role, "value") else u.role])
+        for g in groups:
+            if u.id in (g.member_ids or []):
+                base |= set(g.roles or [])
+        return sorted(base - set(u.excluded_roles or []))
+
     return [
         UserResponse(
             id=u.id, email=u.email, first_name=u.first_name, last_name=u.last_name,
             role=u.role.value if hasattr(u.role, "value") else u.role,
             roles=u.roles or [],
+            excluded_roles=u.excluded_roles or [],
+            effective_roles=_effective(u),
             is_active=u.is_active, expires_at=u.expires_at,
         )
         for u in users
@@ -188,7 +194,7 @@ async def create_user(
             role_enum = UserRole(r)
         except ValueError:
             raise HTTPException(400, f"Invalid role: {r}")
-        if role_enum not in _ASSIGNABLE_ROLES:
+        if role_enum not in ASSIGNABLE_ROLES:
             raise HTTPException(403, f"Cannot assign role: {r}")
         validated_roles.append(role_enum)
 
@@ -217,6 +223,8 @@ async def create_user(
         first_name=new_user.first_name, last_name=new_user.last_name,
         role=new_user.role.value if hasattr(new_user.role, "value") else new_user.role,
         roles=new_user.roles or [],
+        excluded_roles=[],
+        effective_roles=sorted(new_user.roles or []),
         is_active=new_user.is_active,
         expires_at=new_user.expires_at,
         temporary_password=temp_password,
@@ -260,13 +268,29 @@ async def update_user(
                 role_enum = UserRole(r)
             except ValueError:
                 raise HTTPException(400, f"Invalid role: {r}")
-            if role_enum not in _ASSIGNABLE_ROLES:
+            if role_enum not in ASSIGNABLE_ROLES:
                 raise HTTPException(403, f"Cannot assign role: {r}")
             validated.append(role_enum)
         user.role = validated[0]
         user.roles = [r.value for r in validated]
         new_role = user.role.value if hasattr(user.role, "value") else user.role
         role_changed = new_role != old_role or user.roles != old_roles
+
+    if body.excluded_roles is not None:
+        validated_excl: list[str] = []
+        for r in body.excluded_roles:
+            try:
+                role_enum = UserRole(r)
+            except ValueError:
+                raise HTTPException(400, f"Invalid role: {r}")
+            if role_enum not in ASSIGNABLE_ROLES:
+                raise HTTPException(403, f"Cannot exclude role: {r}")
+            validated_excl.append(role_enum.value)
+        user.excluded_roles = validated_excl
+
+    if body.roles is not None or body.excluded_roles is not None:
+        if not await get_effective_roles(user, db):
+            raise HTTPException(400, "This would leave the user with no module access.")
 
     await db.commit()
 
@@ -303,6 +327,8 @@ async def update_user(
         id=user.id, email=user.email, first_name=user.first_name, last_name=user.last_name,
         role=user.role.value if hasattr(user.role, "value") else user.role,
         roles=user.roles or [],
+        excluded_roles=user.excluded_roles or [],
+        effective_roles=sorted(await get_effective_roles(user, db)),
         is_active=user.is_active, expires_at=user.expires_at,
     )
 

@@ -902,10 +902,16 @@ export interface AuditorAssignmentRecord {
   is_active: boolean;
 }
 
+export interface TenantUserRecord {
+  id: string; first_name: string; last_name: string; email: string;
+  role: string; roles: string[]; excluded_roles: string[]; effective_roles: string[];
+  is_active: boolean; expires_at?: string | null;
+}
+
 export const usersApi = {
   list: () =>
     apiClient
-      .get<{ id: string; first_name: string; last_name: string; email: string; role: string; roles: string[]; is_active: boolean; expires_at?: string | null }[]>("/users")
+      .get<TenantUserRecord[]>("/users")
       .then((r) => r.data),
 
   /** @deprecated use list() */
@@ -940,10 +946,11 @@ export const usersApi = {
 
   /** Create a new team member with one or more roles. Returns the one-time temporary password. */
   createUser: (data: { email: string; first_name: string; last_name: string; roles: string[]; expires_at?: string | null }) =>
-    apiClient.post<{ id: string; email: string; first_name: string; last_name: string; role: string; roles: string[]; is_active: boolean; temporary_password: string }>("/users/create", data).then((r) => r.data),
+    apiClient.post<TenantUserRecord & { temporary_password: string }>("/users/create", data).then((r) => r.data),
 
-  update: (user_id: string, data: { is_active?: boolean; roles?: string[] }) =>
-    apiClient.patch<{ id: string; email: string; first_name: string; last_name: string; role: string; roles: string[]; is_active: boolean }>(`/users/${user_id}`, data).then((r) => r.data),
+  /** excluded_roles: replaces the user's group-role carve-outs (the "custom rules" mechanism). */
+  update: (user_id: string, data: { is_active?: boolean; roles?: string[]; excluded_roles?: string[] }) =>
+    apiClient.patch<TenantUserRecord>(`/users/${user_id}`, data).then((r) => r.data),
 
   /** @deprecated use update() */
   updateUser: (user_id: string, data: { is_active?: boolean; role?: string }) =>
@@ -957,6 +964,28 @@ export const usersApi = {
 
   resetPassword: (user_id: string) =>
     apiClient.post<{ temporary_password: string }>(`/users/${user_id}/reset-password`, {}).then((r) => r.data),
+};
+
+export interface TeamGroupRecord {
+  id: string;
+  name: string;
+  description: string | null;
+  member_ids: string[];
+  roles: string[];
+}
+
+/** Team Groups — bundle users and grant them a shared set of roles (distinct
+ * from governanceApi's RACI groups, which have no bearing on access control). */
+export const groupsApi = {
+  list: () => apiClient.get<TeamGroupRecord[]>("/groups").then((r) => r.data),
+
+  create: (data: { name: string; description?: string | null; member_ids: string[]; roles: string[] }) =>
+    apiClient.post<TeamGroupRecord>("/groups", data).then((r) => r.data),
+
+  update: (group_id: string, data: { name?: string; description?: string | null; member_ids?: string[]; roles?: string[] }) =>
+    apiClient.patch<TeamGroupRecord>(`/groups/${group_id}`, data).then((r) => r.data),
+
+  delete: (group_id: string) => apiClient.delete(`/groups/${group_id}`),
 };
 
 // ─── Traceability Matrix ──────────────────────

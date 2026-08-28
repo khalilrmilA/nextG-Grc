@@ -97,12 +97,23 @@ async def get_current_user(
 
 
 def require_roles(*roles: UserRole):
-    """Dependency factory that requires the user to have one of the specified roles."""
-    async def _require_roles(current_user: User = Depends(get_current_user)) -> User:
+    """Dependency factory that requires the user to have one of the specified roles.
+
+    Checks the user's *effective* role set (personal roles ∪ roles granted by
+    any Group they belong to, minus their own excluded_roles carve-outs) — not
+    just the scalar `role` column — so Group-granted access and per-user
+    exclusions (see app/services/authz.py) are actually enforced server-side.
+    """
+    async def _require_roles(
+        current_user: User = Depends(get_current_user),
+        db: AsyncSession = Depends(get_db),
+    ) -> User:
         # super_admin and tenant_admin always have full access
         if current_user.role in (UserRole.SUPER_ADMIN, UserRole.TENANT_ADMIN):
             return current_user
-        if current_user.role not in roles:
+        from app.services.authz import get_effective_roles
+        effective = await get_effective_roles(current_user, db)
+        if not effective.intersection(r.value for r in roles):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail=f"Insufficient permissions. Required roles: {[r.value for r in roles]}",

@@ -604,13 +604,16 @@ async def get_profile(
 
     accessible_modules = await get_accessible_modules(effective_tenant_id, db)
 
+    from app.services.authz import get_effective_roles
+    effective_roles = sorted(await get_effective_roles(current_user, db))
+
     return UserProfileResponse(
         id=current_user.id,
         email=current_user.email,
         first_name=current_user.first_name,
         last_name=current_user.last_name,
         role=current_user.role,
-        roles=current_user.roles or [],
+        roles=effective_roles,
         tenant_id=effective_tenant_id,
         tenant_name=tenant.name if tenant else "",
         primary_framework_id=tenant.primary_framework_id if tenant else None,

@@ -2,12 +2,13 @@ import { useState, useEffect, useCallback } from "react";
 import { Navigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { useAuthStore } from "../store/auth";
-import { usersApi, activityLogApi } from "../api/endpoints";
+import { usersApi, groupsApi, activityLogApi, type TeamGroupRecord } from "../api/endpoints";
 import {
   UserPlus, Trash2, KeyRound, Users, Search, X,
   CheckCircle, Loader2, AlertCircle, Eye, EyeOff,
   Shield, ShieldCheck, ToggleLeft, ToggleRight, Pencil,
   Activity, Clock, Filter, Plus, Download, Upload, LogIn, ScrollText,
+  UsersRound, Ban, FolderPlus,
 } from "lucide-react";
 
 // ── Role definitions ──────────────────────────────────────────────────────────
@@ -45,7 +46,24 @@ interface TenantUser {
   last_name: string;
   role: string;
   roles: string[];
+  excluded_roles: string[];
+  effective_roles: string[];
   is_active: boolean;
+}
+
+type TeamGroup = TeamGroupRecord;
+
+/** Roles a group grants `userId` — used to frame "Custom Rules" as carve-outs
+ * against group membership rather than free-form deny rules. */
+function groupGrantedRoles(userId: string, groups: TeamGroup[]): { role: string; via: string[] }[] {
+  const byRole = new Map<string, string[]>();
+  for (const g of groups) {
+    if (!g.member_ids.includes(userId)) continue;
+    for (const r of g.roles) {
+      byRole.set(r, [...(byRole.get(r) ?? []), g.name]);
+    }
+  }
+  return Array.from(byRole.entries()).map(([role, via]) => ({ role, via }));
 }
 
 // ── Password reveal modal ─────────────────────────────────────────────────────
@@ -122,12 +140,14 @@ function PasswordModal({ name, email, password, onClose }: {
 function UserFormModal({
   mode,
   user,
+  groups,
   onSave,
   onClose,
 }: {
   mode: "create" | "edit";
   user?: TenantUser;
-  onSave: (data: { firstName: string; lastName: string; email: string; roles: string[] }) => Promise<void>;
+  groups: TeamGroup[];
+  onSave: (data: { firstName: string; lastName: string; email: string; roles: string[]; excludedRoles: string[] }) => Promise<void>;
   onClose: () => void;
 }) {
   const { t } = useTranslation();
@@ -137,8 +157,17 @@ function UserFormModal({
   const [selectedRoles, setSelectedRoles] = useState<string[]>(
     user?.roles?.length ? user.roles : (user?.role ? [user.role] : [])
   );
+  const [excludedRoles, setExcludedRoles] = useState<string[]>(user?.excluded_roles ?? []);
   const [saving, setSaving] = useState(false);
   const [error,  setError]  = useState("");
+
+  const grantedViaGroups = user ? groupGrantedRoles(user.id, groups) : [];
+
+  function toggleExclusion(role: string) {
+    setExcludedRoles(prev =>
+      prev.includes(role) ? prev.filter(r => r !== role) : [...prev, role]
+    );
+  }
 
   const roleOptions = ROLE_VALUES.map(value => ({
     value,
@@ -159,7 +188,7 @@ function UserFormModal({
     setSaving(true);
     setError("");
     try {
-      await onSave({ firstName, lastName, email, roles: selectedRoles });
+      await onSave({ firstName, lastName, email, roles: selectedRoles, excludedRoles });
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
       setError(msg ?? t("company_admin.err_save"));
@@ -251,6 +280,48 @@ function UserFormModal({
             </div>
           </div>
 
+          {mode === "edit" && grantedViaGroups.length > 0 && (
+            <div>
+              <label className="block text-xs font-semibold text-gray-600 mb-2">
+                {t("company_admin.custom_rules_title")}
+                <span className="ml-1 text-gray-400 font-normal">{t("company_admin.custom_rules_hint")}</span>
+              </label>
+              <div className="space-y-2">
+                {grantedViaGroups.map(({ role, via }) => {
+                  const excluded = excludedRoles.includes(role);
+                  const label = String(t(`company_admin.roles.${role}_label` as never, role));
+                  return (
+                    <button
+                      key={role}
+                      type="button"
+                      onClick={() => toggleExclusion(role)}
+                      className={`w-full flex items-start gap-3 p-3 rounded-xl border text-left transition-all ${
+                        excluded ? "border-red-300 bg-red-50" : "border-gray-200 hover:border-gray-300 hover:bg-gray-50"
+                      }`}
+                    >
+                      <div className={`mt-0.5 w-4 h-4 rounded flex-shrink-0 flex items-center justify-center border-2 transition-all ${
+                        excluded ? "bg-red-600 border-red-600" : "border-gray-300"
+                      }`}>
+                        {excluded && <Ban className="w-3 h-3 text-white" />}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <span className={`text-xs font-semibold px-2 py-0.5 rounded-full border ${ROLE_COLORS[role] ?? "bg-gray-100 text-gray-600 border-gray-200"}`}>
+                          {label}
+                        </span>
+                        <p className="text-xs text-gray-500 mt-1">
+                          {t("company_admin.custom_rules_via", { groups: via.join(", ") })}
+                        </p>
+                        {excluded && (
+                          <p className="text-xs text-red-600 mt-0.5 font-medium">{t("company_admin.custom_rules_excluded")}</p>
+                        )}
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
           {error && (
             <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-100 rounded-xl text-sm text-red-700">
               <AlertCircle className="w-4 h-4 flex-shrink-0" /> {error}
@@ -270,6 +341,257 @@ function UserFormModal({
           </div>
         </form>
       </div>
+    </div>
+  );
+}
+
+// ── Create / Edit Group modal ─────────────────────────────────────────────────
+
+function GroupFormModal({
+  group,
+  users,
+  onSave,
+  onClose,
+}: {
+  group?: TeamGroup;
+  users: TenantUser[];
+  onSave: (data: { name: string; description: string; memberIds: string[]; roles: string[] }) => Promise<void>;
+  onClose: () => void;
+}) {
+  const { t } = useTranslation();
+  const [name, setName] = useState(group?.name ?? "");
+  const [description, setDescription] = useState(group?.description ?? "");
+  const [selectedRoles, setSelectedRoles] = useState<string[]>(group?.roles ?? []);
+  const [selectedMembers, setSelectedMembers] = useState<string[]>(group?.member_ids ?? []);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+
+  const roleOptions = ROLE_VALUES.map(value => ({
+    value,
+    label: String(t(`company_admin.roles.${value}_label` as never, value)),
+    color: ROLE_COLORS[value] ?? "bg-gray-100 text-gray-600 border-gray-200",
+  }));
+
+  function toggleRole(value: string) {
+    setSelectedRoles(prev => prev.includes(value) ? prev.filter(r => r !== value) : [...prev, value]);
+  }
+  function toggleMember(id: string) {
+    setSelectedMembers(prev => prev.includes(id) ? prev.filter(m => m !== id) : [...prev, id]);
+  }
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!name.trim()) { setError(t("company_admin.group_err_name")); return; }
+    setSaving(true);
+    setError("");
+    try {
+      await onSave({ name: name.trim(), description: description.trim(), memberIds: selectedMembers, roles: selectedRoles });
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
+      setError(msg ?? t("company_admin.err_save"));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 sticky top-0 bg-white z-10">
+          <h2 className="font-semibold text-gray-900 flex items-center gap-2">
+            <UsersRound className="w-4 h-4 text-blue-600" />
+            {group ? t("company_admin.group_form_edit_title") : t("company_admin.group_form_create_title")}
+          </h2>
+          <button type="button" onClick={onClose} className="text-gray-400 hover:text-gray-600">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="px-6 py-5 space-y-5">
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 mb-1">{t("company_admin.group_name")}</label>
+            <input
+              required value={name} onChange={e => setName(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              placeholder={t("company_admin.group_name_placeholder")}
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 mb-1">{t("company_admin.group_description")}</label>
+            <input
+              value={description} onChange={e => setDescription(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              placeholder={t("company_admin.group_description_placeholder")}
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 mb-2">
+              {t("company_admin.group_grants_roles")}
+              <span className="ml-1 text-gray-400 font-normal">{t("company_admin.assign_roles_hint")}</span>
+            </label>
+            <div className="flex flex-wrap gap-2">
+              {roleOptions.map(opt => {
+                const active = selectedRoles.includes(opt.value);
+                return (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    onClick={() => toggleRole(opt.value)}
+                    className={`text-xs font-semibold px-2.5 py-1.5 rounded-full border transition-all ${
+                      active ? opt.color : "bg-white text-gray-400 border-gray-200 hover:border-gray-300"
+                    }`}
+                  >
+                    {opt.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 mb-2">
+              {t("company_admin.group_members")}
+              <span className="ml-1 text-gray-400 font-normal">({selectedMembers.length})</span>
+            </label>
+            <div className="max-h-52 overflow-y-auto space-y-1.5 border border-gray-100 rounded-xl p-2">
+              {users.length === 0 ? (
+                <p className="text-xs text-gray-400 px-2 py-3 text-center">{t("company_admin.no_members")}</p>
+              ) : users.map(u => {
+                const active = selectedMembers.includes(u.id);
+                return (
+                  <button
+                    key={u.id}
+                    type="button"
+                    onClick={() => toggleMember(u.id)}
+                    className={`w-full flex items-center gap-2.5 p-2 rounded-lg text-left transition-all ${
+                      active ? "bg-blue-50" : "hover:bg-gray-50"
+                    }`}
+                  >
+                    <div className={`w-4 h-4 rounded flex-shrink-0 flex items-center justify-center border-2 ${
+                      active ? "bg-blue-600 border-blue-600" : "border-gray-300"
+                    }`}>
+                      {active && <CheckCircle className="w-3 h-3 text-white" />}
+                    </div>
+                    <span className="text-sm text-gray-700 truncate">{u.first_name} {u.last_name}</span>
+                    <span className="text-xs text-gray-400 truncate ml-auto">{u.email}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {error && (
+            <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-100 rounded-xl text-sm text-red-700">
+              <AlertCircle className="w-4 h-4 flex-shrink-0" /> {error}
+            </div>
+          )}
+
+          <div className="flex gap-3 pt-1">
+            <button type="button" onClick={onClose}
+              className="flex-1 px-4 py-2.5 border border-gray-200 rounded-xl text-sm font-semibold text-gray-600 hover:bg-gray-50 transition-colors">
+              {t("company_admin.cancel")}
+            </button>
+            <button type="submit" disabled={saving}
+              className="flex-1 px-4 py-2.5 bg-blue-600 text-white rounded-xl text-sm font-semibold hover:bg-blue-700 disabled:opacity-50 transition-colors flex items-center justify-center gap-2">
+              {saving && <Loader2 className="w-4 h-4 animate-spin" />}
+              {group ? t("company_admin.save_changes") : t("company_admin.group_create")}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+// ── Groups panel ──────────────────────────────────────────────────────────────
+
+function GroupsPanel({
+  groups,
+  users,
+  loading,
+  onCreate,
+  onEdit,
+  onDelete,
+}: {
+  groups: TeamGroup[];
+  users: TenantUser[];
+  loading: boolean;
+  onCreate: () => void;
+  onEdit: (g: TeamGroup) => void;
+  onDelete: (id: string) => void;
+}) {
+  const { t } = useTranslation();
+  const usersById = new Map(users.map(u => [u.id, u]));
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <p className="text-sm text-gray-500">{t("company_admin.groups_subtitle")}</p>
+        <button
+          type="button"
+          onClick={onCreate}
+          className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-xl text-sm font-semibold hover:bg-blue-700 transition-colors shadow-sm"
+        >
+          <FolderPlus className="w-4 h-4" /> {t("company_admin.group_create")}
+        </button>
+      </div>
+
+      {loading ? (
+        <div className="flex items-center justify-center py-16 text-gray-400 bg-white rounded-2xl border border-gray-100">
+          <Loader2 className="w-6 h-6 animate-spin mr-2" /> {t("company_admin.loading")}
+        </div>
+      ) : groups.length === 0 ? (
+        <div className="flex flex-col items-center justify-center py-16 text-center bg-white rounded-2xl border border-gray-100">
+          <UsersRound className="w-10 h-10 text-gray-200 mb-3" />
+          <p className="text-sm font-medium text-gray-500">{t("company_admin.no_groups")}</p>
+          <button type="button" onClick={onCreate} className="mt-3 text-sm text-blue-600 hover:underline font-medium">
+            {t("company_admin.group_create_first")}
+          </button>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {groups.map(g => (
+            <div key={g.id} className="bg-white rounded-2xl border border-gray-100 p-5 space-y-3">
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold text-gray-900 truncate">{g.name}</p>
+                  {g.description && <p className="text-xs text-gray-400 mt-0.5">{g.description}</p>}
+                </div>
+                <div className="flex items-center gap-1 flex-shrink-0">
+                  <button type="button" onClick={() => onEdit(g)} title={t("company_admin.edit_roles_title")}
+                    className="p-2 rounded-lg text-gray-400 hover:text-blue-600 hover:bg-blue-50 transition-colors">
+                    <Pencil className="w-4 h-4" />
+                  </button>
+                  <button type="button" onClick={() => onDelete(g.id)} title={t("company_admin.delete_confirm")}
+                    className="p-2 rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50 transition-colors">
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+
+              <div className="flex flex-wrap gap-1.5">
+                {g.roles.length === 0 ? (
+                  <span className="text-xs text-gray-400">{t("company_admin.group_no_roles")}</span>
+                ) : g.roles.map(r => <RoleBadge key={r} role={r} />)}
+              </div>
+
+              <div className="flex items-center gap-1.5 pt-2 border-t border-gray-50">
+                <Users className="w-3.5 h-3.5 text-gray-300" />
+                <span className="text-xs text-gray-500">
+                  {g.member_ids.length} {g.member_ids.length !== 1 ? t("company_admin.member_count_other") : t("company_admin.member_count_one")}
+                </span>
+                {g.member_ids.length > 0 && (
+                  <span className="text-xs text-gray-400 truncate ml-1">
+                    — {g.member_ids.slice(0, 3).map(id => usersById.get(id)?.first_name ?? "?").join(", ")}
+                    {g.member_ids.length > 3 ? "…" : ""}
+                  </span>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -527,7 +849,7 @@ export default function CompanyAdminPage() {
   // Only tenant_admin can access this page
   if (!user || user.role !== "tenant_admin") return <Navigate to="/dashboard" replace />;
 
-  const [activeTab, setActiveTab] = useState<"team" | "logs">("team");
+  const [activeTab, setActiveTab] = useState<"team" | "groups" | "logs">("team");
   const [logUserId, setLogUserId] = useState<string | undefined>(undefined);
 
   const [users,   setUsers]   = useState<TenantUser[]>([]);
@@ -539,6 +861,12 @@ export default function CompanyAdminPage() {
   const [editTarget,  setEditTarget]  = useState<TenantUser | null>(null);
   const [pwdModal,    setPwdModal]    = useState<{ name: string; email: string; password: string } | null>(null);
   const [deleteId,    setDeleteId]    = useState<string | null>(null);
+
+  const [groups,        setGroups]        = useState<TeamGroup[]>([]);
+  const [groupsLoading, setGroupsLoading] = useState(true);
+  const [groupCreateModal, setGroupCreateModal] = useState(false);
+  const [groupEditTarget,  setGroupEditTarget]  = useState<TeamGroup | null>(null);
+  const [deleteGroupId,    setDeleteGroupId]    = useState<string | null>(null);
 
   const loadUsers = useCallback(async () => {
     setLoading(true);
@@ -553,7 +881,18 @@ export default function CompanyAdminPage() {
     }
   }, [user.tenant_id]);
 
-  useEffect(() => { loadUsers(); }, [loadUsers]);
+  const loadGroups = useCallback(async () => {
+    setGroupsLoading(true);
+    try {
+      setGroups(await groupsApi.list());
+    } catch {
+      setError(t("company_admin.group_err_load"));
+    } finally {
+      setGroupsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { loadUsers(); loadGroups(); }, [loadUsers, loadGroups]);
 
   const filtered = users.filter(u =>
     `${u.first_name} ${u.last_name} ${u.email}`.toLowerCase().includes(search.toLowerCase())
@@ -565,7 +904,7 @@ export default function CompanyAdminPage() {
     inactive: users.filter(u => !u.is_active).length,
   };
 
-  async function handleCreate(data: { firstName: string; lastName: string; email: string; roles: string[] }) {
+  async function handleCreate(data: { firstName: string; lastName: string; email: string; roles: string[]; excludedRoles: string[] }) {
     const result = await usersApi.createUser({
       email: data.email,
       first_name: data.firstName,
@@ -577,11 +916,32 @@ export default function CompanyAdminPage() {
     await loadUsers();
   }
 
-  async function handleEditRoles(data: { firstName: string; lastName: string; email: string; roles: string[] }) {
+  async function handleEditRoles(data: { firstName: string; lastName: string; email: string; roles: string[]; excludedRoles: string[] }) {
     if (!editTarget) return;
-    await usersApi.update(editTarget.id, { roles: data.roles });
+    await usersApi.update(editTarget.id, { roles: data.roles, excluded_roles: data.excludedRoles });
     setEditTarget(null);
     await loadUsers();
+  }
+
+  async function handleCreateGroup(data: { name: string; description: string; memberIds: string[]; roles: string[] }) {
+    await groupsApi.create({ name: data.name, description: data.description || null, member_ids: data.memberIds, roles: data.roles });
+    setGroupCreateModal(false);
+    await loadGroups();
+  }
+
+  async function handleEditGroup(data: { name: string; description: string; memberIds: string[]; roles: string[] }) {
+    if (!groupEditTarget) return;
+    await groupsApi.update(groupEditTarget.id, { name: data.name, description: data.description || null, member_ids: data.memberIds, roles: data.roles });
+    setGroupEditTarget(null);
+    await loadGroups();
+  }
+
+  async function handleDeleteGroup() {
+    if (!deleteGroupId) return;
+    await groupsApi.delete(deleteGroupId);
+    setDeleteGroupId(null);
+    await loadGroups();
+    await loadUsers(); // effective_roles may have changed for former members
   }
 
   async function handleToggleActive(u: TenantUser) {
@@ -642,6 +1002,14 @@ export default function CompanyAdminPage() {
           <Users className="w-4 h-4" /> {t("company_admin.tab_team")}
         </button>
         <button
+          onClick={() => setActiveTab("groups")}
+          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+            activeTab === "groups" ? "bg-white shadow-sm text-gray-900" : "text-gray-500 hover:text-gray-700"
+          }`}
+        >
+          <UsersRound className="w-4 h-4" /> {t("company_admin.tab_groups")}
+        </button>
+        <button
           onClick={() => { setLogUserId(undefined); setActiveTab("logs"); }}
           className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
             activeTab === "logs" ? "bg-white shadow-sm text-gray-900" : "text-gray-500 hover:text-gray-700"
@@ -652,6 +1020,17 @@ export default function CompanyAdminPage() {
       </div>
 
       {activeTab === "logs" && <ActivityLogPanel users={users} initialUserId={logUserId} />}
+
+      {activeTab === "groups" && (
+        <GroupsPanel
+          groups={groups}
+          users={users}
+          loading={groupsLoading}
+          onCreate={() => setGroupCreateModal(true)}
+          onEdit={g => setGroupEditTarget(g)}
+          onDelete={id => setDeleteGroupId(id)}
+        />
+      )}
 
       {activeTab === "team" && <>
 
@@ -718,7 +1097,8 @@ export default function CompanyAdminPage() {
           <div className="divide-y divide-gray-50">
             {filtered.map(u => {
               const initials = `${u.first_name.charAt(0)}${u.last_name.charAt(0)}`.toUpperCase();
-              const displayRoles = u.roles?.length ? u.roles : [u.role];
+              const personalRoles = u.roles?.length ? u.roles : [u.role];
+              const displayRoles = u.effective_roles?.length ? u.effective_roles : personalRoles;
               return (
                 <div key={u.id} className="flex items-center gap-4 px-6 py-4 hover:bg-gray-50/50 transition-colors">
                   {/* Avatar */}
@@ -734,9 +1114,19 @@ export default function CompanyAdminPage() {
                     <p className="text-xs text-gray-400 truncate">{u.email}</p>
                   </div>
 
-                  {/* Role badges */}
+                  {/* Role badges — a small dot flags a role granted via group membership */}
                   <div className="flex flex-wrap gap-1.5 max-w-xs">
-                    {displayRoles.map(r => <RoleBadge key={r} role={r} />)}
+                    {displayRoles.map(r => (
+                      <span key={r} className="relative inline-flex">
+                        <RoleBadge role={r} />
+                        {!personalRoles.includes(r) && (
+                          <span
+                            title={t("company_admin.role_via_group")}
+                            className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-indigo-400 border border-white"
+                          />
+                        )}
+                      </span>
+                    ))}
                   </div>
 
                   {/* Status */}
@@ -824,16 +1214,22 @@ export default function CompanyAdminPage() {
 
       {/* Modals */}
       {createModal && (
-        <UserFormModal mode="create" onSave={handleCreate} onClose={() => setCreateModal(false)} />
+        <UserFormModal mode="create" groups={groups} onSave={handleCreate} onClose={() => setCreateModal(false)} />
       )}
       {editTarget && (
-        <UserFormModal mode="edit" user={editTarget} onSave={handleEditRoles} onClose={() => setEditTarget(null)} />
+        <UserFormModal mode="edit" user={editTarget} groups={groups} onSave={handleEditRoles} onClose={() => setEditTarget(null)} />
       )}
       {pwdModal && (
         <PasswordModal
           name={pwdModal.name} email={pwdModal.email} password={pwdModal.password}
           onClose={() => setPwdModal(null)}
         />
+      )}
+      {groupCreateModal && (
+        <GroupFormModal users={users} onSave={handleCreateGroup} onClose={() => setGroupCreateModal(false)} />
+      )}
+      {groupEditTarget && (
+        <GroupFormModal group={groupEditTarget} users={users} onSave={handleEditGroup} onClose={() => setGroupEditTarget(null)} />
       )}
 
       {/* Delete confirm */}
@@ -851,6 +1247,29 @@ export default function CompanyAdminPage() {
                 {t("company_admin.cancel")}
               </button>
               <button type="button" onClick={handleDelete}
+                className="flex-1 px-4 py-2.5 bg-red-600 text-white rounded-xl text-sm font-semibold hover:bg-red-700">
+                {t("company_admin.delete_confirm")}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete group confirm */}
+      {deleteGroupId && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6 text-center">
+            <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+              <Trash2 className="w-5 h-5 text-red-600" />
+            </div>
+            <h3 className="text-lg font-bold text-gray-900 mb-2">{t("company_admin.group_delete_title")}</h3>
+            <p className="text-sm text-gray-500 mb-6">{t("company_admin.group_delete_desc")}</p>
+            <div className="flex gap-3">
+              <button type="button" onClick={() => setDeleteGroupId(null)}
+                className="flex-1 px-4 py-2.5 border border-gray-200 rounded-xl text-sm font-semibold text-gray-600 hover:bg-gray-50">
+                {t("company_admin.cancel")}
+              </button>
+              <button type="button" onClick={handleDeleteGroup}
                 className="flex-1 px-4 py-2.5 bg-red-600 text-white rounded-xl text-sm font-semibold hover:bg-red-700">
                 {t("company_admin.delete_confirm")}
               </button>

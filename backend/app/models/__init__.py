@@ -53,6 +53,7 @@ from app.models.report_schedule import ReportSchedule, ReportFrequency
 from app.models.login_event import LoginEvent
 from app.models.user_session import UserSession
 from app.models.risk_snapshot import RiskSnapshot
+from app.models.group import Group
 
 __all__ = [
     "Tenant", "User", "UserRole",
@@ -89,4 +90,5 @@ __all__ = [
     "LoginEvent",
     "UserSession",
     "RiskSnapshot",
+    "Group",
 ]

@@ -5,6 +5,7 @@ from app.api.v1.endpoints import (
     ai_access,
     tenants,
     users,
+    groups,
     frameworks,
     risks,
     compliance,
@@ -61,6 +62,7 @@ api_router.include_router(auth.router, prefix="/auth", tags=["Authentication"])
 api_router.include_router(ai_access.router, tags=["AI Access"])
 api_router.include_router(tenants.router, prefix="/tenants", tags=["Tenants"])
 api_router.include_router(users.router, prefix="/users", tags=["Users"])
+api_router.include_router(groups.router, prefix="/groups", tags=["Team Groups"])
 api_router.include_router(frameworks.router, prefix="/frameworks", tags=["Frameworks"])
 api_router.include_router(risks.router, prefix="/risks", tags=["Risk Management"])
 api_router.include_router(compliance.router, prefix="/compliance", tags=["Compliance"])
