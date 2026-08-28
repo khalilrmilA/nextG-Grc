@@ -589,12 +589,7 @@ function SecurityTab() {
       </div>
 
       <div className="space-y-2">
-        <div className="flex items-center gap-2">
-          <p className="text-sm font-semibold text-gray-800">{t("settings.two_factor_title", "Two-Factor Authentication")}</p>
-          <span className="inline-flex items-center gap-1 rounded-full bg-gradient-to-r from-yellow-500/10 to-orange-500/10 border border-yellow-500/20 px-2 py-0.5 text-[11px] font-semibold text-yellow-600">
-            <Crown className="w-3 h-3" /> {t("mfa.elite", "Elite Pack")}
-          </span>
-        </div>
+        <p className="text-sm font-semibold text-gray-800">{t("settings.two_factor_title", "Two-Factor Authentication")}</p>
         <p className="text-xs text-gray-400">{t("settings.two_factor_desc", "Protect your account with a time-based one-time password (TOTP) from an authenticator app.")}</p>
         <MfaPanel />
       </div>

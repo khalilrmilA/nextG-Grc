@@ -51,10 +51,8 @@ import ThreatLibraryPage from "./pages/ThreatLibraryPage";
 import RiskScenariosPage from "./pages/RiskScenariosPage";
 import AppliedControlsPage from "./pages/AppliedControlsPage";
 import SecurityExceptionsPage from "./pages/SecurityExceptionsPage";
-import TrustCenterConfigPage from "./pages/TrustCenterConfigPage";
 import RegulatoryUpdatesPage from "./pages/RegulatoryUpdatesPage";
 import WebhooksPage from "./pages/WebhooksPage";
-import RiskQuantificationPage from "./pages/RiskQuantificationPage";
 import ContractCollaborationPage from "./pages/ContractCollaborationPage";
 import VendorCollaborationPage from "./pages/VendorCollaborationPage";
 import EvidenceUploadPage from "./pages/EvidenceUploadPage";
@@ -121,7 +119,6 @@ const ROUTE_ROLES: Record<string, string[]> = {
   "/asset-graph":         [...CISO_AND_ADMIN, "risk_manager", "compliance_manager", "control_owner", "viewer"],
   "/action-plan":         [...CISO_AND_ADMIN, "risk_manager", "compliance_manager", "control_owner", "viewer"],
   "/risk-scenarios":      [...CISO_AND_ADMIN, "risk_manager", "compliance_manager", "control_owner", "viewer"],
-  "/risk-quantification": [...CISO_AND_ADMIN, "risk_manager", "viewer"],
   "/compliance":          [...CISO_AND_ADMIN, "risk_manager", "compliance_manager", "policy_manager", "control_owner", "viewer"],
   "/framework":           [...CISO_AND_ADMIN, "compliance_manager", "policy_manager", "viewer"],
   "/audits":              [...CISO_AND_ADMIN, "compliance_manager", "viewer"],
@@ -134,7 +131,6 @@ const ROUTE_ROLES: Record<string, string[]> = {
   "/vulnerabilities":     [...CISO_AND_ADMIN, "risk_manager", "compliance_manager", "control_owner", "viewer"],
   "/threats":             [...CISO_AND_ADMIN, "risk_manager", "compliance_manager", "control_owner", "viewer"],
   "/regulatory":          [...CISO_AND_ADMIN, "compliance_manager", "policy_manager", "viewer"],
-  "/trust-center":        [...CISO_AND_ADMIN, "compliance_manager", "viewer"],
   "/webhooks":            [...ADMIN_ROLES],
 };
 
@@ -233,10 +229,8 @@ export default function App() {
         <Route path="vulnerabilities" element={<RoleRoute path="/vulnerabilities"><VulnerabilitiesPage /></RoleRoute>} />
         <Route path="threats" element={<RoleRoute path="/threats"><ThreatLibraryPage /></RoleRoute>} />
         <Route path="risk-scenarios" element={<RoleRoute path="/risk-scenarios"><RiskScenariosPage /></RoleRoute>} />
-        <Route path="risk-quantification" element={<RoleRoute path="/risk-quantification"><RiskQuantificationPage /></RoleRoute>} />
         <Route path="applied-controls" element={<RoleRoute path="/applied-controls"><AppliedControlsPage /></RoleRoute>} />
         <Route path="security-exceptions" element={<RoleRoute path="/security-exceptions"><SecurityExceptionsPage /></RoleRoute>} />
-        <Route path="trust-center" element={<RoleRoute path="/trust-center"><TrustCenterConfigPage /></RoleRoute>} />
         <Route path="regulatory" element={<RoleRoute path="/regulatory"><RegulatoryUpdatesPage /></RoleRoute>} />
         <Route path="activity-log" element={<Navigate to="/super-admin" replace />} />
         <Route path="webhooks" element={<RoleRoute path="/webhooks"><WebhooksPage /></RoleRoute>} />

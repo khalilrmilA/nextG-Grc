@@ -18,7 +18,7 @@ import {
   Crown, X, Trash2, Wand2, Menu,
   AlertCircle, Info, ShieldAlert, ClipboardCheck, RefreshCw,
   Eye, Users, Headphones, Map, ListTodo, Boxes, BarChart3, Gauge, Bug, Radar, Scale, Archive, Database, ScanLine, Network,
-  Target, Workflow, Siren, ShieldCheck, ShieldOff, Landmark, BadgeCheck, Calculator, Webhook,
+  Target, Workflow, Siren, ShieldCheck, ShieldOff, Landmark, Webhook,
 } from "lucide-react";
 
 // roles: null = visible to all authenticated non-auditor users
@@ -71,8 +71,6 @@ const NAV_GROUPS = [
       { to: "/archiving",  icon: Archive, label: "Archiving",  module: "archiving",  roles: ["tenant_admin","ciso","compliance_manager","viewer"] },
       { to: "/system-check", icon: ClipboardCheck, label: "System Check", module: "system-check", roles: ["tenant_admin","ciso"] },
       { to: "/regulatory",          icon: Landmark,   label: "Regulatory Updates",  module: "regulatory",          roles: ["tenant_admin","ciso","compliance_manager","policy_manager","viewer"] },
-      { to: "/trust-center",        icon: BadgeCheck, label: "Trust Center",        module: "trust-center",        roles: ["tenant_admin","ciso","compliance_manager","viewer"] },
-      { to: "/risk-quantification", icon: Calculator, label: "Risk Quantification", module: "risk-quantification", roles: ["tenant_admin","ciso","risk_manager","viewer"] },
       { to: "/webhooks",            icon: Webhook,     label: "Webhooks",            module: "webhooks",            roles: ["tenant_admin"] },
     ],
   },
@@ -96,7 +94,6 @@ const PAGE_LABELS: Record<string, string> = {
   "risk-cartography": "Risk Cartography",
   "action-plan": "Action Plan",
   "risk-scenarios": "Risk Scenarios",
-  "risk-quantification": "Risk Quantification",
   compliance: "Compliance",
   frameworks: "Frameworks",
   audits:     "Audits",
@@ -111,7 +108,6 @@ const PAGE_LABELS: Record<string, string> = {
   "applied-controls": "Applied Controls",
   "security-exceptions": "Exceptions & Waivers",
   regulatory: "Regulatory Updates",
-  "trust-center": "Trust Center",
   "activity-log": "Activity Log",
   webhooks:   "Webhooks",
   settings:   "Settings",

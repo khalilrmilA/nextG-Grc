@@ -8,7 +8,7 @@ import {
   Boxes, Network, BarChart3, ShieldAlert, Gauge, Map, Workflow, ListTodo,
   Siren, Bug, Database, Radar, ShieldCheck, ShieldOff,
   Wand2, ScanLine, ClipboardCheck, Headphones,
-  Scale, Archive, Landmark, BadgeCheck, Calculator, Webhook, Settings,
+  Scale, Archive, Landmark, Webhook, Settings,
 } from "lucide-react";
 import { useAuthStore } from "@/store/auth";
 
@@ -80,8 +80,6 @@ const TOUR_STEP_META: TourStepMeta[] = [
   { id: "archiving",  target: 'a[href="/archiving"]',    icon: Archive,       iconColor: "from-amber-600 to-orange-700", placement: "right",  route: "/archiving" },
   { id: "system_check", target: 'a[href="/system-check"]', icon: ClipboardCheck, iconColor: "from-teal-500 to-cyan-600", placement: "right", route: "/system-check" },
   { id: "regulatory", target: 'a[href="/regulatory"]',   icon: Landmark,      iconColor: "from-indigo-500 to-purple-600", placement: "right", route: "/regulatory" },
-  { id: "trust_center", target: 'a[href="/trust-center"]', icon: BadgeCheck,  iconColor: "from-emerald-500 to-teal-600", placement: "right",  route: "/trust-center" },
-  { id: "risk_quantification", target: 'a[href="/risk-quantification"]', icon: Calculator, iconColor: "from-violet-500 to-purple-600", placement: "right", route: "/risk-quantification" },
   { id: "webhooks",   target: 'a[href="/webhooks"]',     icon: Webhook,       iconColor: "from-slate-500 to-zinc-600",   placement: "right",  route: "/webhooks" },
   // ── Wrap-up ──
   { id: "ai",         target: ".ai-assistant-button",    icon: Sparkles,      iconColor: "from-violet-500 to-purple-600", placement: "top",   route: "/dashboard" },

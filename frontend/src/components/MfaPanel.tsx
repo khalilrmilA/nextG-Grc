@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { Loader2, ShieldCheck, KeyRound, Check, Copy } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import { QRCodeSVG } from "qrcode.react";
 import { mfaApi } from "@/api/endpoints";
 
 /**
@@ -80,14 +81,21 @@ export default function MfaPanel() {
         <div className="space-y-5">
           <div>
             <p className="text-sm font-semibold text-gray-800 mb-1">{t("mfa.step1", "1. Add this key to your authenticator app")}</p>
-            <p className="text-xs text-gray-500 mb-3">{t("mfa.step1_sub", "Scan the setup URI, or enter the secret key manually.")}</p>
-            <div className="flex items-center gap-2">
-              <code className="flex-1 bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm font-mono tracking-wider break-all">{enroll.secret}</code>
-              <button onClick={copySecret} className="inline-flex items-center gap-1.5 border border-gray-200 rounded-xl px-3 py-3 text-sm text-gray-600 hover:bg-gray-50">
-                {copied ? <Check className="w-4 h-4 text-green-600" /> : <Copy className="w-4 h-4" />}
-              </button>
+            <p className="text-xs text-gray-500 mb-3">{t("mfa.step1_sub_qr", "Scan the QR code with Google Authenticator, Microsoft Authenticator, or any TOTP app — or enter the secret key manually if you can't scan.")}</p>
+            <div className="flex items-start gap-4">
+              <div className="shrink-0 bg-white border border-gray-200 rounded-xl p-3">
+                <QRCodeSVG value={enroll.otpauth_uri} size={148} level="M" />
+              </div>
+              <div className="flex-1 min-w-0 space-y-2">
+                <p className="text-xs text-gray-500">{t("mfa.step1_manual", "Can't scan? Enter this key manually:")}</p>
+                <div className="flex items-center gap-2">
+                  <code className="flex-1 bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm font-mono tracking-wider break-all">{enroll.secret}</code>
+                  <button onClick={copySecret} className="inline-flex items-center gap-1.5 border border-gray-200 rounded-xl px-3 py-3 text-sm text-gray-600 hover:bg-gray-50 shrink-0">
+                    {copied ? <Check className="w-4 h-4 text-green-600" /> : <Copy className="w-4 h-4" />}
+                  </button>
+                </div>
+              </div>
             </div>
-            <p className="text-xs text-gray-400 mt-2 break-all">{enroll.otpauth_uri}</p>
           </div>
           <form onSubmit={verify} className="space-y-2">
             <p className="text-sm font-semibold text-gray-800">{t("mfa.step2", "2. Enter the 6-digit code from the app")}</p>

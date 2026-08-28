@@ -1,8 +1,8 @@
-"""TOTP multi-factor authentication endpoints (Elite Pack).
+"""TOTP multi-factor authentication endpoints, available to every user.
 
-Gated behind require_feature("mfa"). Enrollment issues a TOTP secret + otpauth
-URI; verification confirms the device. ``pyotp`` is imported lazily so a missing
-dependency degrades only MFA rather than breaking app startup.
+Enrollment issues a TOTP secret + otpauth URI; verification confirms the
+device. ``pyotp`` is imported lazily so a missing dependency degrades only
+MFA rather than breaking app startup.
 """
 from datetime import datetime, timezone
 from typing import Annotated
@@ -16,7 +16,6 @@ from app.core.database import get_db
 from app.models.user import User
 from app.models.mfa_device import MfaDevice
 from app.api.v1.dependencies.auth import get_current_user
-from app.api.v1.dependencies.features import require_feature
 
 router = APIRouter()
 
@@ -55,7 +54,7 @@ async def _device_for(user_id: str, db: AsyncSession) -> MfaDevice | None:
 
 @router.get("/status", response_model=StatusResponse)
 async def mfa_status(
-    current_user: Annotated[User, Depends(require_feature("mfa"))],
+    current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
     device = await _device_for(current_user.id, db)
@@ -64,7 +63,7 @@ async def mfa_status(
 
 @router.post("/enroll", response_model=EnrollResponse)
 async def mfa_enroll(
-    current_user: Annotated[User, Depends(require_feature("mfa"))],
+    current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
     """Start (or restart) enrollment: issue a fresh unconfirmed TOTP secret."""
@@ -85,7 +84,7 @@ async def mfa_enroll(
 @router.post("/verify", response_model=StatusResponse)
 async def mfa_verify(
     body: VerifyRequest,
-    current_user: Annotated[User, Depends(require_feature("mfa"))],
+    current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
     """Confirm enrollment by validating a code from the authenticator app."""
@@ -103,7 +102,7 @@ async def mfa_verify(
 
 @router.post("/disable", status_code=status.HTTP_204_NO_CONTENT)
 async def mfa_disable(
-    current_user: Annotated[User, Depends(require_feature("mfa"))],
+    current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
     device = await _device_for(current_user.id, db)
