@@ -15,8 +15,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.core.security_utils import assert_assets_in_tenant
-from app.api.v1.dependencies.auth import get_current_user, get_tenant_id
-from app.models.user import User
+from app.api.v1.dependencies.auth import get_current_user, get_tenant_id, require_roles
+from app.models.user import User, UserRole
 from app.models.incident import Incident, IncidentSeverity, IncidentStatus, IncidentCategory
 
 router = APIRouter()
@@ -142,7 +142,7 @@ async def get_incident_stats(
 @router.post("", response_model=IncidentOut, status_code=201)
 async def create_incident(
     body: IncidentCreate, db: AsyncSession = Depends(get_db),
-    user: User = Depends(get_current_user), tenant_id: str = Depends(get_tenant_id),
+    user: User = Depends(require_roles(UserRole.SECURITY_ANALYST, UserRole.CISO)), tenant_id: str = Depends(get_tenant_id),
 ):
     # RFP gap fix (M2.4): each affected-asset id must resolve to a real Asset
     # owned by this tenant (422 listing whichever ids don't) — closes the same
@@ -172,7 +172,7 @@ async def get_incident(iid: str, db: AsyncSession = Depends(get_db), _: User = D
     return IncidentOut.model_validate(inc)
 
 @router.patch("/{iid}", response_model=IncidentOut)
-async def update_incident(iid: str, body: IncidentUpdate, db: AsyncSession = Depends(get_db), _: User = Depends(get_current_user), tenant_id: str = Depends(get_tenant_id)):
+async def update_incident(iid: str, body: IncidentUpdate, db: AsyncSession = Depends(get_db), _: User = Depends(require_roles(UserRole.SECURITY_ANALYST, UserRole.CISO)), tenant_id: str = Depends(get_tenant_id)):
     r = await db.execute(select(Incident).where(Incident.id == iid, Incident.tenant_id == tenant_id))
     inc = r.scalar_one_or_none()
     if not inc: raise HTTPException(404, "Incident not found")
@@ -192,7 +192,7 @@ async def update_incident(iid: str, body: IncidentUpdate, db: AsyncSession = Dep
     return IncidentOut.model_validate(inc)
 
 @router.delete("/{iid}", status_code=204)
-async def delete_incident(iid: str, db: AsyncSession = Depends(get_db), _: User = Depends(get_current_user), tenant_id: str = Depends(get_tenant_id)):
+async def delete_incident(iid: str, db: AsyncSession = Depends(get_db), _: User = Depends(require_roles(UserRole.SECURITY_ANALYST, UserRole.CISO)), tenant_id: str = Depends(get_tenant_id)):
     r = await db.execute(select(Incident).where(Incident.id == iid, Incident.tenant_id == tenant_id))
     inc = r.scalar_one_or_none()
     if not inc: raise HTTPException(404, "Incident not found")

@@ -11,7 +11,7 @@ const RACI_BADGE: Record<string, string> = {
   I: "bg-gray-100 text-gray-600 border-gray-200",
 };
 const RACI_LABEL: Record<string, string> = { R: "Responsible", A: "Accountable", C: "Consulted", I: "Informed" };
-const BUILTIN_ROLES = ["tenant_admin", "ciso", "risk_manager", "compliance_manager", "control_owner", "auditor", "policy_manager"];
+const BUILTIN_ROLES = ["tenant_admin", "ciso", "risk_manager", "compliance_manager", "control_owner", "business_owner", "security_analyst", "executive", "auditor", "policy_manager"];
 const TYPOLOGIES = ["policy", "charter", "regulation", "minutes", "procedure", "plan"];
 const ACCESS = ["read", "edit", "validate"];
 const DOC_PERMISSIONS = ["view", "edit", "validate"];

@@ -6,8 +6,8 @@ from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
-from app.api.v1.dependencies.auth import get_current_user, get_tenant_id
-from app.models.user import User
+from app.api.v1.dependencies.auth import get_current_user, get_tenant_id, require_roles
+from app.models.user import User, UserRole
 from app.models.risk_scenario import RiskScenario
 from app.models.risk import Risk
 from app.models.scenario_version import RiskScenarioVersion
@@ -205,7 +205,7 @@ async def list_scenarios(
     return [ScenarioOut.model_validate(s) for s in scenarios]
 
 @router.post("", response_model=ScenarioOut, status_code=201)
-async def create_scenario(body: ScenarioCreate, db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user), tenant_id: str = Depends(get_tenant_id)):
+async def create_scenario(body: ScenarioCreate, db: AsyncSession = Depends(get_db), user: User = Depends(require_roles(UserRole.RISK_MANAGER, UserRole.CISO)), tenant_id: str = Depends(get_tenant_id)):
     # Per-scenario appetite threshold is an Elite Pack capability (RFP gap fix),
     # same flag as the risk-register version.
     if body.appetite_threshold is not None:
@@ -257,7 +257,7 @@ async def get_scenario(sid: str, db: AsyncSession = Depends(get_db), _: User = D
     return ScenarioOut.model_validate(s)
 
 @router.patch("/{sid}", response_model=ScenarioOut)
-async def update_scenario(sid: str, body: ScenarioUpdate, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user), tenant_id: str = Depends(get_tenant_id)):
+async def update_scenario(sid: str, body: ScenarioUpdate, db: AsyncSession = Depends(get_db), current_user: User = Depends(require_roles(UserRole.RISK_MANAGER, UserRole.CISO)), tenant_id: str = Depends(get_tenant_id)):
     r = await db.execute(select(RiskScenario).where(RiskScenario.id == sid, RiskScenario.tenant_id == tenant_id))
     s = r.scalar_one_or_none()
     if not s: raise HTTPException(404, "Scenario not found")
@@ -316,7 +316,7 @@ async def update_scenario(sid: str, body: ScenarioUpdate, db: AsyncSession = Dep
     return ScenarioOut.model_validate(s)
 
 @router.delete("/{sid}", status_code=204)
-async def delete_scenario(sid: str, db: AsyncSession = Depends(get_db), _: User = Depends(get_current_user), tenant_id: str = Depends(get_tenant_id)):
+async def delete_scenario(sid: str, db: AsyncSession = Depends(get_db), _: User = Depends(require_roles(UserRole.RISK_MANAGER, UserRole.CISO)), tenant_id: str = Depends(get_tenant_id)):
     r = await db.execute(select(RiskScenario).where(RiskScenario.id == sid, RiskScenario.tenant_id == tenant_id))
     s = r.scalar_one_or_none()
     if not s: raise HTTPException(404, "Scenario not found")
