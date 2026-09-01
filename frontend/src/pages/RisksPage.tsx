@@ -7,6 +7,8 @@ import type { Risk, RiskSeverity } from "../types";
 import RiskAIPanel from "../components/ai/RiskAIPanel";
 import { exportRisksCSV } from "../utils/exportUtils";
 import { useAuthStore, hasAnyRole } from "../store/auth";
+import { useColumnVisibility, type ColumnDef } from "../components/common/useColumnVisibility";
+import ColumnsMenu from "../components/common/ColumnsMenu";
 
 const SEV_BADGE: Record<RiskSeverity, string> = {
   critical: "bg-red-100 text-red-700 border-red-200",
@@ -563,6 +565,17 @@ export default function RisksPage() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [selectedRisk, setSelectedRisk] = useState<Risk | null>(null);
 
+  const RISK_COLUMNS: ColumnDef[] = [
+    { key: "title", label: t("risks.risk_title"), lockable: false },
+    { key: "category", label: t("risks.category") },
+    { key: "severity", label: t("common.severity") },
+    { key: "li", label: "L × I" },
+    { key: "score", label: t("risks.risk_score") },
+    { key: "status", label: t("common.status") },
+    { key: "tags", label: t("risks.tags") },
+  ];
+  const { isVisible, toggle, reset } = useColumnVisibility("risks", RISK_COLUMNS);
+
   const queryClient = useQueryClient();
   const { data, isError } = useQuery({ queryKey: ["risks"], queryFn: () => risksApi.list(), retry: false });
   const risks = (isError || !data?.items?.length) ? DEMO_RISKS : data.items;
@@ -590,6 +603,7 @@ export default function RisksPage() {
           <p className="text-gray-500 text-sm mt-1">{t("risks.risks_tracked", { count: risks.length })}</p>
         </div>
         <div className="flex items-center gap-2">
+          <ColumnsMenu columns={RISK_COLUMNS} isVisible={isVisible} toggle={toggle} reset={reset} />
           <button
             onClick={() => exportRisksCSV(risks)}
             className="flex items-center gap-2 border border-gray-200 hover:bg-gray-50 text-gray-600 px-4 py-2.5 rounded-lg text-sm font-medium transition-colors"
@@ -664,9 +678,14 @@ export default function RisksPage() {
         <table className="w-full">
           <thead>
             <tr className="bg-gray-50 border-b border-gray-100">
-              {[t("risks.risk_title"), t("risks.category"), t("common.severity"), "L × I", t("risks.risk_score"), t("common.status"), t("risks.tags"), ""].map(h => (
-                <th key={h} className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wider px-4 py-3.5 first:px-6">{h}</th>
-              ))}
+              <th className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wider px-4 py-3.5 first:px-6">{t("risks.risk_title")}</th>
+              {isVisible("category") && <th className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wider px-4 py-3.5">{t("risks.category")}</th>}
+              {isVisible("severity") && <th className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wider px-4 py-3.5">{t("common.severity")}</th>}
+              {isVisible("li") && <th className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wider px-4 py-3.5">L × I</th>}
+              {isVisible("score") && <th className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wider px-4 py-3.5">{t("risks.risk_score")}</th>}
+              {isVisible("status") && <th className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wider px-4 py-3.5">{t("common.status")}</th>}
+              {isVisible("tags") && <th className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wider px-4 py-3.5">{t("risks.tags")}</th>}
+              <th className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wider px-4 py-3.5"></th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-50">
@@ -682,37 +701,47 @@ export default function RisksPage() {
                     </div>
                   </div>
                 </td>
-                <td className="px-4 py-4 text-sm text-gray-500 whitespace-nowrap">{risk.risk_category ?? "—"}</td>
-                <td className="px-4 py-4">
-                  {risk.severity && (
-                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border capitalize ${SEV_BADGE[risk.severity]}`}>
-                      {risk.severity}
-                    </span>
-                  )}
-                </td>
-                <td className="px-4 py-4 text-center">
-                  {risk.likelihood && risk.impact
-                    ? <span className="text-xs font-semibold text-gray-500">{risk.likelihood} × {risk.impact}</span>
-                    : "—"}
-                </td>
-                <td className="px-4 py-4 text-center">
-                  {risk.inherent_risk_score != null && (
-                    <span className={`inline-flex items-center justify-center w-8 h-8 rounded-lg text-sm font-bold ${scoreChipCls(risk.inherent_risk_score)}`}>
-                      {risk.inherent_risk_score}
-                    </span>
-                  )}
-                </td>
-                <td className="px-4 py-4">
-                  <span className="text-xs text-gray-500 capitalize">{risk.status.replaceAll("_", " ")}</span>
-                </td>
-                <td className="px-4 py-4">
-                  <div className="flex flex-wrap gap-1">
-                    {risk.tags.slice(0, 2).map(tag => (
-                      <span key={tag} className="px-2 py-0.5 bg-slate-100 text-slate-600 text-xs rounded-md">{tag}</span>
-                    ))}
-                    {risk.tags.length > 2 && <span className="text-xs text-gray-400">+{risk.tags.length - 2}</span>}
-                  </div>
-                </td>
+                {isVisible("category") && <td className="px-4 py-4 text-sm text-gray-500 whitespace-nowrap">{risk.risk_category ?? "—"}</td>}
+                {isVisible("severity") && (
+                  <td className="px-4 py-4">
+                    {risk.severity && (
+                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border capitalize ${SEV_BADGE[risk.severity]}`}>
+                        {risk.severity}
+                      </span>
+                    )}
+                  </td>
+                )}
+                {isVisible("li") && (
+                  <td className="px-4 py-4 text-center">
+                    {risk.likelihood && risk.impact
+                      ? <span className="text-xs font-semibold text-gray-500">{risk.likelihood} × {risk.impact}</span>
+                      : "—"}
+                  </td>
+                )}
+                {isVisible("score") && (
+                  <td className="px-4 py-4 text-center">
+                    {risk.inherent_risk_score != null && (
+                      <span className={`inline-flex items-center justify-center w-8 h-8 rounded-lg text-sm font-bold ${scoreChipCls(risk.inherent_risk_score)}`}>
+                        {risk.inherent_risk_score}
+                      </span>
+                    )}
+                  </td>
+                )}
+                {isVisible("status") && (
+                  <td className="px-4 py-4">
+                    <span className="text-xs text-gray-500 capitalize">{risk.status.replaceAll("_", " ")}</span>
+                  </td>
+                )}
+                {isVisible("tags") && (
+                  <td className="px-4 py-4">
+                    <div className="flex flex-wrap gap-1">
+                      {risk.tags.slice(0, 2).map(tag => (
+                        <span key={tag} className="px-2 py-0.5 bg-slate-100 text-slate-600 text-xs rounded-md">{tag}</span>
+                      ))}
+                      {risk.tags.length > 2 && <span className="text-xs text-gray-400">+{risk.tags.length - 2}</span>}
+                    </div>
+                  </td>
+                )}
                 <td className="px-4 py-4">
                   <ChevronRight className="w-4 h-4 text-gray-300 group-hover:text-blue-500 transition-colors" />
                 </td>

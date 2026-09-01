@@ -2,6 +2,8 @@ import { useState, useEffect } from "react";
 import { Plus, Search, X, Loader2, Filter, Boxes, ShieldCheck, Layers, Crown, AlertTriangle } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { assetsApi, usersApi, authApi } from "@/api/endpoints";
+import { useColumnVisibility, type ColumnDef } from "@/components/common/useColumnVisibility";
+import ColumnsMenu from "@/components/common/ColumnsMenu";
 
 const CRIT_BADGE: Record<string, string> = {
   critical: "bg-red-100 text-red-700 border-red-200",
@@ -44,6 +46,17 @@ export default function AssetsPage() {
   const [submitting, setSubmitting] = useState(false);
   const [eolAssets, setEolAssets] = useState<any[]>([]);
   const [eolDismissed, setEolDismissed] = useState(false);
+
+  const ASSET_COLUMNS: ColumnDef[] = [
+    { key: "name", label: t("assets.col_name", "Name"), lockable: false },
+    { key: "type", label: t("assets.col_type", "Type") },
+    { key: "class", label: t("assets.col_class", "Class") },
+    { key: "criticality", label: t("assets.col_criticality", "Criticality") },
+    { key: "cia", label: t("assets.col_cia", "C·I·A") },
+    { key: "owner", label: t("assets.col_owner", "Owner") },
+    { key: "lifecycle", label: t("assets.col_lifecycle", "Lifecycle") },
+  ];
+  const { isVisible, toggle, reset } = useColumnVisibility("assets", ASSET_COLUMNS);
 
   useEffect(() => {
     assetsApi.eolSoon().then((d: any) => setEolAssets(Array.isArray(d) ? d : [])).catch(() => setEolAssets([]));
@@ -222,6 +235,7 @@ export default function AssetsPage() {
             <option value="">{t("assets.all_classes", "Primary & support")}</option>
             {CLASSES.map((c) => <option key={c} value={c}>{c}</option>)}
           </select>
+          <ColumnsMenu columns={ASSET_COLUMNS} isVisible={isVisible} toggle={toggle} reset={reset} />
         </div>
       </div>
 
@@ -239,12 +253,12 @@ export default function AssetsPage() {
               <thead>
                 <tr className="border-b border-gray-100 bg-gray-50/50">
                   <th className="text-left px-6 py-3 font-medium text-gray-500">{t("assets.col_name", "Name")}</th>
-                  <th className="text-left px-6 py-3 font-medium text-gray-500">{t("assets.col_type", "Type")}</th>
-                  <th className="text-left px-6 py-3 font-medium text-gray-500">{t("assets.col_class", "Class")}</th>
-                  <th className="text-left px-6 py-3 font-medium text-gray-500">{t("assets.col_criticality", "Criticality")}</th>
-                  <th className="text-left px-6 py-3 font-medium text-gray-500">{t("assets.col_cia", "C·I·A")}</th>
-                  <th className="text-left px-6 py-3 font-medium text-gray-500">{t("assets.col_owner", "Owner")}</th>
-                  <th className="text-left px-6 py-3 font-medium text-gray-500">{t("assets.col_lifecycle", "Lifecycle")}</th>
+                  {isVisible("type") && <th className="text-left px-6 py-3 font-medium text-gray-500">{t("assets.col_type", "Type")}</th>}
+                  {isVisible("class") && <th className="text-left px-6 py-3 font-medium text-gray-500">{t("assets.col_class", "Class")}</th>}
+                  {isVisible("criticality") && <th className="text-left px-6 py-3 font-medium text-gray-500">{t("assets.col_criticality", "Criticality")}</th>}
+                  {isVisible("cia") && <th className="text-left px-6 py-3 font-medium text-gray-500">{t("assets.col_cia", "C·I·A")}</th>}
+                  {isVisible("owner") && <th className="text-left px-6 py-3 font-medium text-gray-500">{t("assets.col_owner", "Owner")}</th>}
+                  {isVisible("lifecycle") && <th className="text-left px-6 py-3 font-medium text-gray-500">{t("assets.col_lifecycle", "Lifecycle")}</th>}
                 </tr>
               </thead>
               <tbody>
@@ -253,26 +267,34 @@ export default function AssetsPage() {
                   return (
                     <tr key={item.id} className="border-b border-gray-50 hover:bg-gray-50/50 transition-colors">
                       <td className="px-6 py-4 font-medium text-gray-900">{item.name}</td>
-                      <td className="px-6 py-4 text-gray-600">{(item.asset_type || "").replace(/_/g, " ")}</td>
-                      <td className="px-6 py-4">
-                        <span className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold border ${CLASS_BADGE[item.asset_class] || "bg-gray-100 text-gray-600"}`}>
-                          {item.asset_class || "—"}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4">
-                        <span className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold border ${CRIT_BADGE[item.criticality] || "bg-gray-100 text-gray-600"}`}>
-                          {item.criticality || "—"}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 font-mono text-xs text-gray-600">
-                        {so.confidentiality ?? "-"}·{so.integrity ?? "-"}·{so.availability ?? "-"}
-                      </td>
-                      <td className="px-6 py-4 text-gray-700">{ownerName(item.owner_id)}</td>
-                      <td className="px-6 py-4">
-                        <span className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold border ${LIFECYCLE_BADGE[item.lifecycle_state] || "bg-gray-100 text-gray-500"}`}>
-                          {(item.lifecycle_state || "—").replace(/_/g, " ")}
-                        </span>
-                      </td>
+                      {isVisible("type") && <td className="px-6 py-4 text-gray-600">{(item.asset_type || "").replace(/_/g, " ")}</td>}
+                      {isVisible("class") && (
+                        <td className="px-6 py-4">
+                          <span className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold border ${CLASS_BADGE[item.asset_class] || "bg-gray-100 text-gray-600"}`}>
+                            {item.asset_class || "—"}
+                          </span>
+                        </td>
+                      )}
+                      {isVisible("criticality") && (
+                        <td className="px-6 py-4">
+                          <span className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold border ${CRIT_BADGE[item.criticality] || "bg-gray-100 text-gray-600"}`}>
+                            {item.criticality || "—"}
+                          </span>
+                        </td>
+                      )}
+                      {isVisible("cia") && (
+                        <td className="px-6 py-4 font-mono text-xs text-gray-600">
+                          {so.confidentiality ?? "-"}·{so.integrity ?? "-"}·{so.availability ?? "-"}
+                        </td>
+                      )}
+                      {isVisible("owner") && <td className="px-6 py-4 text-gray-700">{ownerName(item.owner_id)}</td>}
+                      {isVisible("lifecycle") && (
+                        <td className="px-6 py-4">
+                          <span className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold border ${LIFECYCLE_BADGE[item.lifecycle_state] || "bg-gray-100 text-gray-500"}`}>
+                            {(item.lifecycle_state || "—").replace(/_/g, " ")}
+                          </span>
+                        </td>
+                      )}
                     </tr>
                   );
                 })}

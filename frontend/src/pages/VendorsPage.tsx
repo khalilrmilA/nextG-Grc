@@ -5,6 +5,8 @@ import { Building2, Plus, Globe, AlertTriangle, Search, ShieldCheck, ShieldX, X,
 import VendorAIModal from "../components/ai/VendorAIModal";
 import VendorRiskCartography from "../components/vendor/VendorRiskCartography";
 import { vendorsApi, contractCollabApi } from "@/api/endpoints";
+import { useColumnVisibility, type ColumnDef } from "@/components/common/useColumnVisibility";
+import ColumnsMenu from "@/components/common/ColumnsMenu";
 
 interface VendorEntry {
   id: string;
@@ -811,6 +813,17 @@ export default function VendorsPage() {
   const [selected, setSelected] = useState<VendorEntry | null>(null);
   const [aiVendor, setAiVendor] = useState<VendorEntry | null>(null);
 
+  const VENDOR_COLUMNS: ColumnDef[] = [
+    { key: "vendor", label: t("vendors.col_vendor"), lockable: false },
+    { key: "risk_tier", label: t("vendors.col_risk_tier") },
+    { key: "status", label: t("vendors.col_status") },
+    { key: "risk_score", label: t("vendors.col_risk_score") },
+    { key: "dpa", label: t("vendors.col_dpa") },
+    { key: "contract_expiry", label: t("vendors.col_contract_expiry") },
+    { key: "services", label: t("vendors.col_services") },
+  ];
+  const { isVisible, toggle, reset } = useColumnVisibility("vendors", VENDOR_COLUMNS);
+
   useEffect(() => {
     const loadVendors = async () => {
       try {
@@ -904,15 +917,21 @@ export default function VendorsPage() {
             </button>
           ))}
         </div>
+        <ColumnsMenu columns={VENDOR_COLUMNS} isVisible={isVisible} toggle={toggle} reset={reset} />
       </div>
 
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
         <table className="w-full">
           <thead>
             <tr className="bg-gray-50 border-b border-gray-100">
-              {[t("vendors.col_vendor"), t("vendors.col_risk_tier"), t("vendors.col_status"), t("vendors.col_risk_score"), t("vendors.col_dpa"), t("vendors.col_contract_expiry"), t("vendors.col_services"), ""].map(h => (
-                <th key={h} className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wider px-4 py-3.5 first:px-6">{h}</th>
-              ))}
+              <th className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wider px-4 py-3.5 first:px-6">{t("vendors.col_vendor")}</th>
+              {isVisible("risk_tier") && <th className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wider px-4 py-3.5">{t("vendors.col_risk_tier")}</th>}
+              {isVisible("status") && <th className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wider px-4 py-3.5">{t("vendors.col_status")}</th>}
+              {isVisible("risk_score") && <th className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wider px-4 py-3.5">{t("vendors.col_risk_score")}</th>}
+              {isVisible("dpa") && <th className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wider px-4 py-3.5">{t("vendors.col_dpa")}</th>}
+              {isVisible("contract_expiry") && <th className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wider px-4 py-3.5">{t("vendors.col_contract_expiry")}</th>}
+              {isVisible("services") && <th className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wider px-4 py-3.5">{t("vendors.col_services")}</th>}
+              <th className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wider px-4 py-3.5"></th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-50">
@@ -933,30 +952,38 @@ export default function VendorsPage() {
                     </div>
                   </div>
                 </td>
-                <td className="px-4 py-4">
-                  <span className={`text-xs font-semibold px-2.5 py-1 rounded-full border capitalize ${TIER_BADGE[v.risk_tier as Tier]}`}>
-                    {v.risk_tier}
-                  </span>
-                </td>
-                <td className="px-4 py-4">
-                  <span className={`text-xs font-medium px-2.5 py-1 rounded-full capitalize ${STATUS_BADGE[v.status as Status]}`}>
-                    {v.status.replaceAll("_", " ")}
-                  </span>
-                </td>
-                <td className="px-4 py-4 text-center">
-                  <div className="flex items-center justify-center gap-1.5">
-                    {(v.risk_score ?? 0) > 20 && <AlertTriangle className="w-3.5 h-3.5 text-red-500 flex-shrink-0" />}
-                    <span className={`text-sm font-bold px-2 py-0.5 rounded-lg ${riskScoreColor(v.risk_score ?? 0)}`}>{v.risk_score}</span>
-                  </div>
-                </td>
-                <td className="px-4 py-4 text-center">
-                  {v.has_data_processing_agreement
-                    ? <ShieldCheck className="w-4 h-4 text-green-500 mx-auto" />
-                    : <ShieldX className="w-4 h-4 text-red-500 mx-auto" />
-                  }
-                </td>
-                <td className="px-4 py-4 text-xs text-gray-500">{v.contract_expiry}</td>
-                <td className="px-4 py-4 text-xs text-gray-400 max-w-[160px] truncate">{v.services_provided}</td>
+                {isVisible("risk_tier") && (
+                  <td className="px-4 py-4">
+                    <span className={`text-xs font-semibold px-2.5 py-1 rounded-full border capitalize ${TIER_BADGE[v.risk_tier as Tier]}`}>
+                      {v.risk_tier}
+                    </span>
+                  </td>
+                )}
+                {isVisible("status") && (
+                  <td className="px-4 py-4">
+                    <span className={`text-xs font-medium px-2.5 py-1 rounded-full capitalize ${STATUS_BADGE[v.status as Status]}`}>
+                      {v.status.replaceAll("_", " ")}
+                    </span>
+                  </td>
+                )}
+                {isVisible("risk_score") && (
+                  <td className="px-4 py-4 text-center">
+                    <div className="flex items-center justify-center gap-1.5">
+                      {(v.risk_score ?? 0) > 20 && <AlertTriangle className="w-3.5 h-3.5 text-red-500 flex-shrink-0" />}
+                      <span className={`text-sm font-bold px-2 py-0.5 rounded-lg ${riskScoreColor(v.risk_score ?? 0)}`}>{v.risk_score}</span>
+                    </div>
+                  </td>
+                )}
+                {isVisible("dpa") && (
+                  <td className="px-4 py-4 text-center">
+                    {v.has_data_processing_agreement
+                      ? <ShieldCheck className="w-4 h-4 text-green-500 mx-auto" />
+                      : <ShieldX className="w-4 h-4 text-red-500 mx-auto" />
+                    }
+                  </td>
+                )}
+                {isVisible("contract_expiry") && <td className="px-4 py-4 text-xs text-gray-500">{v.contract_expiry}</td>}
+                {isVisible("services") && <td className="px-4 py-4 text-xs text-gray-400 max-w-[160px] truncate">{v.services_provided}</td>}
                 <td className="px-4 py-4">
                   <ChevronRight className="w-4 h-4 text-gray-300 group-hover:text-blue-500 transition-colors" />
                 </td>
