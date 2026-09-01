@@ -20,6 +20,11 @@ from app.models.license import LicenseActivation
 from app.models.subscription import Subscription, SubscriptionStatus, SubscriptionTier
 from app.models.user import User, UserRole
 from app.api.v1.dependencies.auth import get_current_user
+from app.services.license_client import (
+    LicenseServerError,
+    fetch_license_key,
+    server_configured,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -40,6 +45,10 @@ class LicenseStatusResponse(BaseModel):
 
 class ActivateLicenseRequest(BaseModel):
     license_key: str
+
+
+class ActivateOnlineRequest(BaseModel):
+    activation_code: str
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -133,12 +142,51 @@ async def activate_license(
     if current_user.role not in (UserRole.TENANT_ADMIN, UserRole.SUPER_ADMIN):
         raise HTTPException(status_code=403, detail="Admin access required")
 
+    return await _verify_and_store(db, current_user, body.license_key)
+
+
+@router.post("/activate-online", response_model=LicenseStatusResponse)
+async def activate_license_online(
+    body: ActivateOnlineRequest,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_user)],
+):
+    """Exchange an activation code for a licence key, then activate it.
+
+    This is the only outbound connection the product makes on an administrator's
+    behalf, and it is optional: when LICENSE_SERVER_URL is unset the endpoint
+    returns 503 and directs the operator to offline activation. The fetched key
+    is verified locally against the baked-in public key by the same code path as
+    a pasted key, so reaching the server is a convenience and never an authority.
+    """
+    if current_user.role not in (UserRole.TENANT_ADMIN, UserRole.SUPER_ADMIN):
+        raise HTTPException(status_code=403, detail="Admin access required")
+
+    if not server_configured():
+        raise HTTPException(
+            status_code=503,
+            detail=("No licence server is configured on this deployment. "
+                    "Use offline activation and paste the licence key you were issued."),
+        )
+
+    try:
+        license_key = await fetch_license_key(body.activation_code)
+    except LicenseServerError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+    return await _verify_and_store(db, current_user, license_key)
+
+
+async def _verify_and_store(
+    db: AsyncSession, current_user: User, license_key: str
+) -> LicenseStatusResponse:
+    """Verify a licence key and record the activation. Shared by both paths."""
     public_key = effective_public_key()
     if not public_key:
         raise HTTPException(status_code=503, detail="License public key not configured")
 
     try:
-        payload = verify_license(body.license_key, public_key)
+        payload = verify_license(license_key, public_key)
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid license key")
 
@@ -156,7 +204,7 @@ async def activate_license(
 
     now_iso = _iso_z(now)
     activation = LicenseActivation(
-        license_key=body.license_key.strip(),
+        license_key=license_key.strip(),
         lid=payload.get("lid", ""),
         customer_name=payload.get("customer", ""),
         contact_email=payload.get("email", ""),

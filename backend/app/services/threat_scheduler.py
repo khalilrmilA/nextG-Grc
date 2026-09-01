@@ -5,6 +5,7 @@ and creates pending_approval threats for every active tenant.
 """
 import asyncio
 import logging
+import os
 
 from sqlalchemy import select
 
@@ -113,7 +114,16 @@ async def start_threat_scheduler() -> None:
     Long-running background coroutine.
     Wait 2 min after startup, then fetch every INTERVAL_HOURS hours.
     Cancel this task on shutdown (handled in lifespan).
+
+    Disable with ENABLE_THREAT_SCHEDULER=0, matching the other five schedulers.
+    This feed reaches the public internet, so an air-gapped deployment (and the
+    virtual appliance, which ships with every feed off) needs a way to stop it
+    retrying forever against a network that is not there.
     """
+    if os.getenv("ENABLE_THREAT_SCHEDULER", "1") == "0":
+        logger.info("Threat scheduler disabled via ENABLE_THREAT_SCHEDULER=0")
+        return
+
     logger.info(
         "Threat scheduler started — first run in 2 min, then every %dh", INTERVAL_HOURS
     )

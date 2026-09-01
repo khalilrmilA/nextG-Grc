@@ -113,6 +113,11 @@ class Settings(BaseSettings):
     LICENSE_PRIVATE_KEY: str = ""   # base64 of the 32-byte Ed25519 private seed — vendor SaaS server ONLY
     LICENSE_PUBLIC_KEY: str = ""    # base64 of the 32-byte raw public key — client installs
     LICENSE_ENFORCEMENT: bool = False
+    # Optional. Base URL of the vendor licence server used by online activation
+    # (POST /license/activate-online). Empty means offline activation only, which
+    # is the correct setting for air-gapped deployments. Nothing contacts this
+    # URL unless an administrator activates a licence by hand.
+    LICENSE_SERVER_URL: str = ""
 
 
 _INSECURE_SECRETS = {
