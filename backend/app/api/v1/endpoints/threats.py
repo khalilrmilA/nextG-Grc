@@ -8,9 +8,9 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
-from app.api.v1.dependencies.auth import get_current_user, get_tenant_id
+from app.api.v1.dependencies.auth import get_current_user, get_tenant_id, require_roles
 from app.api.v1.dependencies.features import require_feature
-from app.models.user import User
+from app.models.user import User, UserRole
 from app.models.threat import Threat, ThreatCategory
 from app.services.threat_feeds import fetch_all_threat_feeds
 
@@ -137,7 +137,7 @@ async def list_threats(
 async def create_threat(
     body: ThreatCreate,
     db: Annotated[AsyncSession, Depends(get_db)],
-    _: Annotated[User, Depends(get_current_user)],
+    _: Annotated[User, Depends(require_roles(UserRole.SECURITY_ANALYST, UserRole.CISO))],
     tenant_id: Annotated[str, Depends(get_tenant_id)],
 ):
     t = Threat(ref_id=body.ref_id, name=body.name, description=body.description,
@@ -167,7 +167,7 @@ async def update_threat(
     tid: str,
     body: ThreatUpdate,
     db: Annotated[AsyncSession, Depends(get_db)],
-    _: Annotated[User, Depends(get_current_user)],
+    _: Annotated[User, Depends(require_roles(UserRole.SECURITY_ANALYST, UserRole.CISO))],
     tenant_id: Annotated[str, Depends(get_tenant_id)],
 ):
     """Edit a tenant-owned threat (built-in threats stay read-only)."""
@@ -206,7 +206,7 @@ async def update_threat_profile(
 async def delete_threat(
     tid: str,
     db: Annotated[AsyncSession, Depends(get_db)],
-    _: Annotated[User, Depends(get_current_user)],
+    _: Annotated[User, Depends(require_roles(UserRole.SECURITY_ANALYST, UserRole.CISO))],
     tenant_id: Annotated[str, Depends(get_tenant_id)],
 ):
     r = await db.execute(select(Threat).where(Threat.id == tid, Threat.tenant_id == tenant_id, Threat.is_builtin == False))  # noqa: E712
@@ -222,7 +222,7 @@ async def delete_threat(
 @router.post("/import-mitre", response_model=ImportOut)
 async def import_mitre(
     db: Annotated[AsyncSession, Depends(get_db)],
-    _: Annotated[User, Depends(get_current_user)],
+    _: Annotated[User, Depends(require_roles(UserRole.SECURITY_ANALYST, UserRole.CISO))],
     tenant_id: Annotated[str, Depends(get_tenant_id)],
 ):
     """Bulk-import all MITRE ATT&CK Enterprise techniques (one-time seed)."""
@@ -288,7 +288,7 @@ async def import_mitre(
 @router.post("/fetch-news", response_model=FetchOut)
 async def fetch_threat_news(
     db: Annotated[AsyncSession, Depends(get_db)],
-    _: Annotated[User, Depends(get_current_user)],
+    _: Annotated[User, Depends(require_roles(UserRole.SECURITY_ANALYST, UserRole.CISO))],
     tenant_id: Annotated[str, Depends(get_tenant_id)],
 ):
     """Fetch latest threats from CISA KEV, SANS ISC, and opensourcemalware.com."""
@@ -362,7 +362,7 @@ async def list_pending(
 async def approve_threat(
     tid: str,
     db: Annotated[AsyncSession, Depends(get_db)],
-    _: Annotated[User, Depends(get_current_user)],
+    _: Annotated[User, Depends(require_roles(UserRole.SECURITY_ANALYST, UserRole.CISO))],
     tenant_id: Annotated[str, Depends(get_tenant_id)],
 ):
     r = await db.execute(select(Threat).where(Threat.id == tid, Threat.tenant_id == tenant_id))
@@ -379,7 +379,7 @@ async def approve_threat(
 async def reject_threat(
     tid: str,
     db: Annotated[AsyncSession, Depends(get_db)],
-    _: Annotated[User, Depends(get_current_user)],
+    _: Annotated[User, Depends(require_roles(UserRole.SECURITY_ANALYST, UserRole.CISO))],
     tenant_id: Annotated[str, Depends(get_tenant_id)],
 ):
     r = await db.execute(select(Threat).where(Threat.id == tid, Threat.tenant_id == tenant_id))

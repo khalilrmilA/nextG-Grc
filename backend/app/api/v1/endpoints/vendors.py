@@ -13,8 +13,8 @@ from pathlib import Path
 from app.core.database import get_db
 from app.core.security_utils import assert_path_within, sanitize_filename, verify_file_signature, sanitize_for_prompt
 from app.core import ai_quota
-from app.api.v1.dependencies.auth import get_current_user, get_tenant_id
-from app.models.user import User
+from app.api.v1.dependencies.auth import get_current_user, get_tenant_id, require_roles
+from app.models.user import User, UserRole
 from app.models.vendor import Vendor, VendorRiskTier, VendorStatus, VendorContract, ContractValidationStatus
 from app.core.config import settings
 
@@ -181,7 +181,7 @@ async def list_vendors(
 async def create_vendor(
     body: VendorCreateRequest,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_roles(UserRole.VENDOR_MANAGER, UserRole.CISO)),
     tenant_id: str = Depends(get_tenant_id),
 ):
     """Create a new vendor."""
@@ -236,7 +236,7 @@ async def update_vendor(
     vendor_id: str,
     body: VendorCreateRequest,
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(get_current_user),
+    _: User = Depends(require_roles(UserRole.VENDOR_MANAGER, UserRole.CISO)),
     tenant_id: str = Depends(get_tenant_id),
 ):
     """Update a vendor."""
@@ -275,7 +275,7 @@ async def update_vendor(
 async def delete_vendor(
     vendor_id: str,
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(get_current_user),
+    _: User = Depends(require_roles(UserRole.VENDOR_MANAGER, UserRole.CISO)),
     tenant_id: str = Depends(get_tenant_id),
 ):
     """Delete a vendor."""
@@ -297,7 +297,7 @@ async def approve_vendor_analysis(
     vendor_id: str,
     body: VendorApproveAnalysisRequest,
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(get_current_user),
+    _: User = Depends(require_roles(UserRole.VENDOR_MANAGER, UserRole.CISO)),
     tenant_id: str = Depends(get_tenant_id),
 ):
     """Approve AI analysis and update vendor risk score."""
@@ -329,7 +329,7 @@ async def analyze_vendor_with_web_search(
     vendor_id: str,
     body: VendorAnalysisRequest,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_roles(UserRole.VENDOR_MANAGER, UserRole.CISO)),
     tenant_id: str = Depends(get_tenant_id),
 ):
     """Analyze vendor using web search + questionnaire responses with AI."""
@@ -568,7 +568,7 @@ async def upload_vendor_contract(
     vendor_id: str,
     contract_file: UploadFile = File(...),
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(get_current_user),
+    _: User = Depends(require_roles(UserRole.VENDOR_MANAGER, UserRole.CISO)),
     tenant_id: str = Depends(get_tenant_id),
 ):
     """Upload a contract for a vendor and trigger AI review."""
@@ -857,7 +857,7 @@ async def ciso_review_contract(
     contract_id: str,
     body: CisoReviewRequest,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_roles(UserRole.VENDOR_MANAGER, UserRole.CISO)),
     tenant_id: str = Depends(get_tenant_id),
 ):
     """CISO approves or rejects a contract after review."""
@@ -897,7 +897,7 @@ async def ciso_review_contract(
 async def send_contract_to_vendor(
     contract_id: str,
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(get_current_user),
+    _: User = Depends(require_roles(UserRole.VENDOR_MANAGER, UserRole.CISO)),
     tenant_id: str = Depends(get_tenant_id),
 ):
     """Mark contract as sent to vendor after CISO approval."""
@@ -1197,7 +1197,7 @@ async def get_vendor_risk_cartography(
 @router.post("/prescreen", response_model=PrescreenQuestionnaireResponse)
 async def prescreen_vendor_questionnaire(
     body: PrescreenQuestionnaireRequest,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_roles(UserRole.VENDOR_MANAGER, UserRole.CISO)),
 ):
     ai_quota.check_quota_or_raise(current_user.id)
     """

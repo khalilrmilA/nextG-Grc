@@ -19,8 +19,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import settings
 from app.core.database import get_db
 from app.core.security_utils import csv_safe_cell
-from app.api.v1.dependencies.auth import get_current_user, get_tenant_id
-from app.models.user import User
+from app.api.v1.dependencies.auth import get_current_user, get_tenant_id, require_roles
+from app.models.user import User, UserRole
 from app.models.risk import Risk
 from app.models.vendor import Vendor, VendorRiskTier
 from app.models.asset import Asset, AssetType, AssetCriticality
@@ -276,7 +276,7 @@ async def export_threats(format: str = "csv", db: AsyncSession = Depends(get_db)
 # ── IMPORTS ──────────────────────────────────────────────────────────────
 
 @router.post("/import/risks")
-async def import_risks(file: UploadFile = File(...), format: str = "csv", db: AsyncSession = Depends(get_db), _: User = Depends(get_current_user), tenant_id: str = Depends(get_tenant_id)):
+async def import_risks(file: UploadFile = File(...), format: str = "csv", db: AsyncSession = Depends(get_db), _: User = Depends(require_roles(UserRole.RISK_MANAGER, UserRole.CISO)), tenant_id: str = Depends(get_tenant_id)):
     """Import risks from CSV or XML (``?format=csv|xml``, default csv).
     Fields: title, description, category, likelihood, impact, severity."""
     rows, start = await _read_import_rows(file, format)
@@ -290,7 +290,7 @@ async def import_risks(file: UploadFile = File(...), format: str = "csv", db: As
     return {"created": created, "errors": errors, "total_rows": created + len(errors)}
 
 @router.post("/import/vendors")
-async def import_vendors(file: UploadFile = File(...), format: str = "csv", db: AsyncSession = Depends(get_db), _: User = Depends(get_current_user), tenant_id: str = Depends(get_tenant_id)):
+async def import_vendors(file: UploadFile = File(...), format: str = "csv", db: AsyncSession = Depends(get_db), _: User = Depends(require_roles(UserRole.VENDOR_MANAGER, UserRole.CISO)), tenant_id: str = Depends(get_tenant_id)):
     """Import vendors from CSV or XML (``?format=csv|xml``, default csv).
     Fields: name, industry, country, risk_tier, services_provided, website."""
     rows, start = await _read_import_rows(file, format)
@@ -304,7 +304,7 @@ async def import_vendors(file: UploadFile = File(...), format: str = "csv", db: 
     return {"created": created, "errors": errors, "total_rows": created + len(errors)}
 
 @router.post("/import/assets")
-async def import_assets(file: UploadFile = File(...), format: str = "csv", db: AsyncSession = Depends(get_db), _: User = Depends(get_current_user), tenant_id: str = Depends(get_tenant_id)):
+async def import_assets(file: UploadFile = File(...), format: str = "csv", db: AsyncSession = Depends(get_db), _: User = Depends(require_roles(UserRole.BUSINESS_OWNER, UserRole.CISO)), tenant_id: str = Depends(get_tenant_id)):
     """Import assets from CSV or XML (``?format=csv|xml``, default csv).
     Fields: name, asset_type, criticality, description, hosting_type, location."""
     rows, start = await _read_import_rows(file, format)

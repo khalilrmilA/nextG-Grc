@@ -19,7 +19,7 @@ from app.core.licensing import (
 from app.models.license import LicenseActivation
 from app.models.subscription import Subscription, SubscriptionStatus, SubscriptionTier
 from app.models.user import User, UserRole
-from app.api.v1.dependencies.auth import get_current_user
+from app.api.v1.dependencies.auth import get_current_user, require_roles
 from app.services.license_client import (
     LicenseServerError,
     fetch_license_key,
@@ -136,7 +136,7 @@ async def get_license_status(
 async def activate_license(
     body: ActivateLicenseRequest,
     db: Annotated[AsyncSession, Depends(get_db)],
-    current_user: Annotated[User, Depends(get_current_user)],
+    current_user: Annotated[User, Depends(require_roles(UserRole.TENANT_ADMIN))],
 ):
     """Activate a license key. Restricted to tenant_admin / super_admin."""
     if current_user.role not in (UserRole.TENANT_ADMIN, UserRole.SUPER_ADMIN):
@@ -149,7 +149,7 @@ async def activate_license(
 async def activate_license_online(
     body: ActivateOnlineRequest,
     db: Annotated[AsyncSession, Depends(get_db)],
-    current_user: Annotated[User, Depends(get_current_user)],
+    current_user: Annotated[User, Depends(require_roles(UserRole.TENANT_ADMIN))],
 ):
     """Exchange an activation code for a licence key, then activate it.
 

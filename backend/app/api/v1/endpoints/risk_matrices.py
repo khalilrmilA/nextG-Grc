@@ -6,8 +6,8 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
-from app.api.v1.dependencies.auth import get_current_user, get_tenant_id
-from app.models.user import User
+from app.api.v1.dependencies.auth import get_current_user, get_tenant_id, require_roles
+from app.models.user import User, UserRole
 from app.models.risk_matrix import RiskMatrix
 from app.services.risk_scoring import DEFAULT_MATRIX_5X5, DEFAULT_MATRIX_3X3
 
@@ -41,14 +41,14 @@ async def list_matrices(db: AsyncSession = Depends(get_db), _: User = Depends(ge
     return [MatrixOut.model_validate(m) for m in matrices]
 
 @router.post("", response_model=MatrixOut, status_code=201)
-async def create_matrix(body: MatrixCreate, db: AsyncSession = Depends(get_db), _: User = Depends(get_current_user), tenant_id: str = Depends(get_tenant_id)):
+async def create_matrix(body: MatrixCreate, db: AsyncSession = Depends(get_db), _: User = Depends(require_roles(UserRole.RISK_MANAGER, UserRole.CISO)), tenant_id: str = Depends(get_tenant_id)):
     m = RiskMatrix(tenant_id=tenant_id, name=body.name, description=body.description,
                    definition=body.definition, is_default=body.is_default, is_builtin=False)
     db.add(m); await db.flush(); await db.commit(); await db.refresh(m)
     return MatrixOut.model_validate(m)
 
 @router.put("/{mid}/default", response_model=MatrixOut)
-async def set_default_matrix(mid: str, db: AsyncSession = Depends(get_db), _: User = Depends(get_current_user), tenant_id: str = Depends(get_tenant_id)):
+async def set_default_matrix(mid: str, db: AsyncSession = Depends(get_db), _: User = Depends(require_roles(UserRole.RISK_MANAGER, UserRole.CISO)), tenant_id: str = Depends(get_tenant_id)):
     """Activate a tenant-owned matrix as the default that drives risk scoring.
 
     Clears is_default on the tenant's other matrices so exactly one is active.
@@ -66,7 +66,7 @@ async def set_default_matrix(mid: str, db: AsyncSession = Depends(get_db), _: Us
 
 
 @router.delete("/{mid}", status_code=204)
-async def delete_matrix(mid: str, db: AsyncSession = Depends(get_db), _: User = Depends(get_current_user), tenant_id: str = Depends(get_tenant_id)):
+async def delete_matrix(mid: str, db: AsyncSession = Depends(get_db), _: User = Depends(require_roles(UserRole.RISK_MANAGER, UserRole.CISO)), tenant_id: str = Depends(get_tenant_id)):
     r = await db.execute(select(RiskMatrix).where(RiskMatrix.id == mid, RiskMatrix.tenant_id == tenant_id, RiskMatrix.is_builtin == False))  # noqa: E712
     m = r.scalar_one_or_none()
     if not m: raise HTTPException(404, "Matrix not found or is built-in")

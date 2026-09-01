@@ -9,8 +9,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.core.security_utils import assert_user_in_tenant
-from app.api.v1.dependencies.auth import get_current_user, get_tenant_id
-from app.models.user import User
+from app.api.v1.dependencies.auth import get_current_user, get_tenant_id, require_roles
+from app.models.user import User, UserRole
 from app.models.policy import Policy, PolicyVersion, PolicyAttestation, PolicyStatus, AttestationStatus
 from app.models.org_unit import OrgEntity, BusinessProcess
 
@@ -122,7 +122,7 @@ async def list_policies(db: AsyncSession = Depends(get_db), _: User = Depends(ge
     return [await _enrich(db, p) for p in policies]
 
 @router.post("", response_model=PolicyOut, status_code=201)
-async def create_policy(body: PolicyCreate, db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user), tenant_id: str = Depends(get_tenant_id)):
+async def create_policy(body: PolicyCreate, db: AsyncSession = Depends(get_db), user: User = Depends(require_roles(UserRole.POLICY_MANAGER, UserRole.CISO)), tenant_id: str = Depends(get_tenant_id)):
     await assert_user_in_tenant(db, body.owner_id, tenant_id, field_name="owner_id")
     await _assert_process_in_tenant(db, body.business_process_id, tenant_id)
     await _assert_entity_in_tenant(db, body.org_entity_id, tenant_id)
@@ -149,7 +149,7 @@ async def get_policy(pid: str, db: AsyncSession = Depends(get_db), _: User = Dep
     return await _enrich(db, await _policy(db, pid, tenant_id))
 
 @router.patch("/{pid}", response_model=PolicyOut)
-async def update_policy(pid: str, body: PolicyUpdate, db: AsyncSession = Depends(get_db), _: User = Depends(get_current_user), tenant_id: str = Depends(get_tenant_id)):
+async def update_policy(pid: str, body: PolicyUpdate, db: AsyncSession = Depends(get_db), _: User = Depends(require_roles(UserRole.POLICY_MANAGER, UserRole.CISO)), tenant_id: str = Depends(get_tenant_id)):
     p = await _policy(db, pid, tenant_id)
     await assert_user_in_tenant(db, body.owner_id, tenant_id, field_name="owner_id")
     await _assert_process_in_tenant(db, body.business_process_id, tenant_id)
@@ -163,7 +163,7 @@ async def update_policy(pid: str, body: PolicyUpdate, db: AsyncSession = Depends
     return await _enrich(db, p)
 
 @router.delete("/{pid}", status_code=204)
-async def delete_policy(pid: str, db: AsyncSession = Depends(get_db), _: User = Depends(get_current_user), tenant_id: str = Depends(get_tenant_id)):
+async def delete_policy(pid: str, db: AsyncSession = Depends(get_db), _: User = Depends(require_roles(UserRole.POLICY_MANAGER, UserRole.CISO)), tenant_id: str = Depends(get_tenant_id)):
     p = await _policy(db, pid, tenant_id)
     # Delete child records before the policy to avoid FK constraint errors
     versions = (await db.execute(select(PolicyVersion).where(PolicyVersion.policy_id == pid))).scalars().all()
@@ -184,7 +184,7 @@ async def list_versions(pid: str, db: AsyncSession = Depends(get_db), _: User = 
     return [VersionOut.model_validate(v) for v in (await db.execute(select(PolicyVersion).where(PolicyVersion.policy_id == pid).order_by(PolicyVersion.version_number.desc()))).scalars().all()]
 
 @router.post("/{pid}/versions", response_model=VersionOut, status_code=201)
-async def create_version(pid: str, body: VersionCreate, db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user), tenant_id: str = Depends(get_tenant_id)):
+async def create_version(pid: str, body: VersionCreate, db: AsyncSession = Depends(get_db), user: User = Depends(require_roles(UserRole.POLICY_MANAGER, UserRole.CISO)), tenant_id: str = Depends(get_tenant_id)):
     await _policy(db, pid, tenant_id)
     # Get next version number
     max_v = (await db.execute(select(func.max(PolicyVersion.version_number)).where(PolicyVersion.policy_id == pid))).scalar() or 0
@@ -197,7 +197,7 @@ async def create_version(pid: str, body: VersionCreate, db: AsyncSession = Depen
     return VersionOut.model_validate(v)
 
 @router.patch("/{pid}/versions/{vid}/approve", response_model=VersionOut)
-async def approve_version(pid: str, vid: str, db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user), tenant_id: str = Depends(get_tenant_id)):
+async def approve_version(pid: str, vid: str, db: AsyncSession = Depends(get_db), user: User = Depends(require_roles(UserRole.POLICY_MANAGER, UserRole.CISO)), tenant_id: str = Depends(get_tenant_id)):
     await _policy(db, pid, tenant_id)
     r = await db.execute(select(PolicyVersion).where(PolicyVersion.id == vid, PolicyVersion.policy_id == pid))
     v = r.scalar_one_or_none()
@@ -215,7 +215,7 @@ async def list_attestations(pid: str, db: AsyncSession = Depends(get_db), _: Use
     return [AttestationOut.model_validate(a) for a in (await db.execute(select(PolicyAttestation).where(PolicyAttestation.policy_id == pid).order_by(PolicyAttestation.created_at.desc()))).scalars().all()]
 
 @router.post("/{pid}/attestations", response_model=list[AttestationOut], status_code=201)
-async def create_attestations(pid: str, body: AttestationCreate, db: AsyncSession = Depends(get_db), _: User = Depends(get_current_user), tenant_id: str = Depends(get_tenant_id)):
+async def create_attestations(pid: str, body: AttestationCreate, db: AsyncSession = Depends(get_db), _: User = Depends(require_roles(UserRole.POLICY_MANAGER, UserRole.CISO)), tenant_id: str = Depends(get_tenant_id)):
     p = await _policy(db, pid, tenant_id)
     # Verify each user_id belongs to this tenant (close cross-tenant IDOR).
     for uid in body.user_ids:

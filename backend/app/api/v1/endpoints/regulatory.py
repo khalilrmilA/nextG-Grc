@@ -10,8 +10,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 import httpx
 
 from app.core.database import get_db
-from app.api.v1.dependencies.auth import get_current_user, get_tenant_id
-from app.models.user import User
+from app.api.v1.dependencies.auth import get_current_user, get_tenant_id, require_roles
+from app.models.user import User, UserRole
 from app.models.regulatory_update import RegulatoryUpdate, UpdateImpact, UpdateStatus
 from app.models.tenant import Tenant
 from app.models.framework import Framework
@@ -183,7 +183,7 @@ async def list_updates(status_filter: str | None = None, db: AsyncSession = Depe
     return [RegUpdateOut.model_validate(u) for u in (await db.execute(q.order_by(RegulatoryUpdate.created_at.desc()))).scalars().all()]
 
 @router.post("", response_model=RegUpdateOut, status_code=201)
-async def create_update(body: RegUpdateCreate, db: AsyncSession = Depends(get_db), _: User = Depends(get_current_user), tenant_id: str = Depends(get_tenant_id)):
+async def create_update(body: RegUpdateCreate, db: AsyncSession = Depends(get_db), _: User = Depends(require_roles(UserRole.COMPLIANCE_MANAGER, UserRole.CISO)), tenant_id: str = Depends(get_tenant_id)):
     u = RegulatoryUpdate(
         tenant_id=tenant_id, title=body.title, description=body.description,
         source=body.source, regulation_name=body.regulation_name,
@@ -202,7 +202,7 @@ async def get_update(uid: str, db: AsyncSession = Depends(get_db), _: User = Dep
     return RegUpdateOut.model_validate(u)
 
 @router.patch("/{uid}", response_model=RegUpdateOut)
-async def modify_update(uid: str, body: RegUpdateMod, db: AsyncSession = Depends(get_db), _: User = Depends(get_current_user), tenant_id: str = Depends(get_tenant_id)):
+async def modify_update(uid: str, body: RegUpdateMod, db: AsyncSession = Depends(get_db), _: User = Depends(require_roles(UserRole.COMPLIANCE_MANAGER, UserRole.CISO)), tenant_id: str = Depends(get_tenant_id)):
     r = await db.execute(select(RegulatoryUpdate).where(RegulatoryUpdate.id == uid, RegulatoryUpdate.tenant_id == tenant_id))
     u = r.scalar_one_or_none()
     if not u: raise HTTPException(404, "Update not found")
@@ -215,7 +215,7 @@ async def modify_update(uid: str, body: RegUpdateMod, db: AsyncSession = Depends
     return RegUpdateOut.model_validate(u)
 
 @router.delete("/{uid}", status_code=204)
-async def delete_update(uid: str, db: AsyncSession = Depends(get_db), _: User = Depends(get_current_user), tenant_id: str = Depends(get_tenant_id)):
+async def delete_update(uid: str, db: AsyncSession = Depends(get_db), _: User = Depends(require_roles(UserRole.COMPLIANCE_MANAGER, UserRole.CISO)), tenant_id: str = Depends(get_tenant_id)):
     r = await db.execute(select(RegulatoryUpdate).where(RegulatoryUpdate.id == uid, RegulatoryUpdate.tenant_id == tenant_id))
     u = r.scalar_one_or_none()
     if not u: raise HTTPException(404, "Update not found")
@@ -232,7 +232,7 @@ class FetchNewsOut(BaseModel):
 @router.post("/fetch-news", response_model=FetchNewsOut)
 async def fetch_regulatory_news(
     db: Annotated[AsyncSession, Depends(get_db)],
-    current_user: Annotated[User, Depends(get_current_user)],
+    current_user: Annotated[User, Depends(require_roles(UserRole.COMPLIANCE_MANAGER, UserRole.CISO))],
     tenant_id: Annotated[str, Depends(get_tenant_id)],
 ):
     """Fetch RSS feeds from regulatory bodies, assess with AI, and create draft updates."""
@@ -310,7 +310,7 @@ async def fetch_regulatory_news(
 async def approve_update(
     uid: str,
     db: Annotated[AsyncSession, Depends(get_db)],
-    _: Annotated[User, Depends(get_current_user)],
+    _: Annotated[User, Depends(require_roles(UserRole.COMPLIANCE_MANAGER, UserRole.CISO))],
     tenant_id: Annotated[str, Depends(get_tenant_id)],
 ):
     """Approve a pending_approval update — moves it to 'new' status."""
@@ -328,7 +328,7 @@ async def approve_update(
 async def reject_update(
     uid: str,
     db: Annotated[AsyncSession, Depends(get_db)],
-    _: Annotated[User, Depends(get_current_user)],
+    _: Annotated[User, Depends(require_roles(UserRole.COMPLIANCE_MANAGER, UserRole.CISO))],
     tenant_id: Annotated[str, Depends(get_tenant_id)],
 ):
     """Reject a pending_approval update — permanently deletes it."""

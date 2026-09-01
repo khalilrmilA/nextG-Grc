@@ -20,8 +20,8 @@ from sqlalchemy import select
 
 from app.core.database import get_db
 from app.api.v1.dependencies import get_tenant_id
-from app.api.v1.dependencies.auth import get_current_user
-from app.models.user import User
+from app.api.v1.dependencies.auth import get_current_user, require_roles
+from app.models.user import User, UserRole
 from app.models.vendor import Vendor, VendorContract
 from app.models.contract_collaboration import ContractCollaboration, ContractMessage
 from app.models.notification import NotificationType
@@ -135,7 +135,7 @@ class VendorActionItemRequest(BaseModel):
 async def create_collaboration(
     body: CreateCollabRequest,
     db: Annotated[AsyncSession, Depends(get_db)],
-    current_user: Annotated[User, Depends(get_current_user)],
+    current_user: Annotated[User, Depends(require_roles(UserRole.VENDOR_MANAGER, UserRole.CISO))],
     tenant_id: Annotated[str, Depends(get_tenant_id)],
 ):
     """Start a collaboration session for a contract.
@@ -199,7 +199,7 @@ async def update_content(
     collab_id: str,
     body: UpdateContentRequest,
     db: Annotated[AsyncSession, Depends(get_db)],
-    current_user: Annotated[User, Depends(get_current_user)],
+    current_user: Annotated[User, Depends(require_roles(UserRole.VENDOR_MANAGER, UserRole.CISO))],
     tenant_id: Annotated[str, Depends(get_tenant_id)],
 ):
     """Update contract text, AI suggestions, or action plan."""
@@ -221,7 +221,7 @@ async def send_message(
     collab_id: str,
     body: SendMessageRequest,
     db: Annotated[AsyncSession, Depends(get_db)],
-    current_user: Annotated[User, Depends(get_current_user)],
+    current_user: Annotated[User, Depends(require_roles(UserRole.VENDOR_MANAGER, UserRole.CISO))],
     tenant_id: Annotated[str, Depends(get_tenant_id)],
 ):
     collab = await _require_collab(collab_id, tenant_id, db)
@@ -258,7 +258,7 @@ async def list_messages(
 async def mark_agreed_internal(
     collab_id: str,
     db: Annotated[AsyncSession, Depends(get_db)],
-    current_user: Annotated[User, Depends(get_current_user)],
+    current_user: Annotated[User, Depends(require_roles(UserRole.VENDOR_MANAGER, UserRole.CISO))],
     tenant_id: Annotated[str, Depends(get_tenant_id)],
 ):
     """Mark the internal side as agreed. If vendor already agreed → finalise."""
@@ -280,7 +280,7 @@ async def finalize_plan(
     collab_id: str,
     body: FinalizePlanRequest,
     db: Annotated[AsyncSession, Depends(get_db)],
-    current_user: Annotated[User, Depends(get_current_user)],
+    current_user: Annotated[User, Depends(require_roles(UserRole.VENDOR_MANAGER, UserRole.CISO))],
     tenant_id: Annotated[str, Depends(get_tenant_id)],
 ):
     """CISO locks the action plan with real calendar deadlines.
@@ -414,7 +414,7 @@ async def sign_agreement_internal(
     collab_id: str,
     body: SignRequest,
     db: Annotated[AsyncSession, Depends(get_db)],
-    current_user: Annotated[User, Depends(get_current_user)],
+    current_user: Annotated[User, Depends(require_roles(UserRole.VENDOR_MANAGER, UserRole.CISO))],
     tenant_id: Annotated[str, Depends(get_tenant_id)],
 ):
     """CISO digitally signs the agreement document."""

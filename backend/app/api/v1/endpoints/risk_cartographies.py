@@ -18,8 +18,8 @@ from reportlab.platypus import (
 from reportlab.lib.enums import TA_CENTER, TA_LEFT
 
 from app.core.database import get_db
-from app.api.v1.dependencies.auth import get_current_user, get_tenant_id
-from app.models.user import User
+from app.api.v1.dependencies.auth import get_current_user, get_tenant_id, require_roles
+from app.models.user import User, UserRole
 from app.models.risk import Risk
 from app.models.risk_cartography import RiskCartography
 from app.models.tenant import Tenant
@@ -229,7 +229,7 @@ async def list_cartographies(
 async def create_cartography(
     body: CartographyCreate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_roles(UserRole.RISK_MANAGER, UserRole.CISO)),
     tenant_id: str = Depends(get_tenant_id),
 ):
     defn = body.definition if body.definition else DEFAULT_DEFINITION
@@ -297,7 +297,7 @@ async def update_cartography(
     cid: str,
     body: CartographyUpdate,
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(get_current_user),
+    _: User = Depends(require_roles(UserRole.RISK_MANAGER, UserRole.CISO)),
     tenant_id: str = Depends(get_tenant_id),
 ):
     c = (await db.execute(
@@ -342,7 +342,7 @@ async def update_cartography(
 async def delete_cartography(
     cid: str,
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(get_current_user),
+    _: User = Depends(require_roles(UserRole.RISK_MANAGER, UserRole.CISO)),
     tenant_id: str = Depends(get_tenant_id),
 ):
     c = (await db.execute(
@@ -364,7 +364,7 @@ async def update_risk_positions(
     cid: str,
     positions: dict[str, PositionOverride | None],
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(get_current_user),
+    _: User = Depends(require_roles(UserRole.RISK_MANAGER, UserRole.CISO)),
     tenant_id: str = Depends(get_tenant_id),
 ):
     """Bulk-update manual risk position overrides.
