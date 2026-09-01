@@ -3,6 +3,7 @@ from app.models.user import User, UserRole
 from app.models.ai_access import AiAccessRequest, AiUsageQuota, ApiToken
 from app.models.framework import Framework, FrameworkControl, ControlRequirement
 from app.models.risk import Risk, RiskAssessment, RiskTreatment
+from app.models.risk_treatment_version import RiskTreatmentVersion
 from app.models.compliance import (
     ComplianceAssessment,
     ControlAssessment,
@@ -46,7 +47,10 @@ from app.models.cve_entry import CveEntry, CveAnnotation
 from app.models.asset_history import AssetValuationHistory
 from app.models.scan_journal import ScanJournal
 from app.models.report_builder import ReportTemplate
-from app.models.governance import RaciAssignment, GovernanceDocument, GovernanceDocumentVersion
+from app.models.governance import (
+    RaciAssignment, GovernanceDocument, GovernanceDocumentVersion,
+    GovernanceDocumentAccess,
+)
 from app.models.archive import ArchiveRecord, ArchivingRule
 from app.models.scenario_version import RiskScenarioVersion
 from app.models.scanner_connector import ScannerConnector
@@ -56,11 +60,12 @@ from app.models.user_session import UserSession
 from app.models.risk_snapshot import RiskSnapshot
 from app.models.group import Group
 from app.models.tenant_ai_config import TenantAIConfig
+from app.models.dashboard_layout import DashboardLayout
 
 __all__ = [
     "Tenant", "User", "UserRole",
     "Framework", "FrameworkControl", "ControlRequirement",
-    "Risk", "RiskAssessment", "RiskTreatment",
+    "Risk", "RiskAssessment", "RiskTreatment", "RiskTreatmentVersion",
     "ComplianceAssessment", "ControlAssessment", "Evidence", "ComplianceGap", "UploadedDocument",
     "MandatoryDocument",
     "ActionItem", "ActionItemStatus", "ActionItemPriority",
@@ -85,6 +90,7 @@ __all__ = [
     "AssetValuationHistory", "ScanJournal",
     "ReportTemplate",
     "RaciAssignment", "GovernanceDocument", "GovernanceDocumentVersion",
+    "GovernanceDocumentAccess",
     "ArchiveRecord", "ArchivingRule",
     "RiskScenarioVersion",
     "ScannerConnector",
@@ -95,4 +101,5 @@ __all__ = [
     "Group",
     "TenantAIConfig",
     "AiAccessRequest", "AiUsageQuota", "ApiToken",
+    "DashboardLayout",
 ]

@@ -12,8 +12,9 @@ import {
   Sparkles, Upload, CheckCircle2, XCircle,
   AlertCircle, LayoutDashboard, BookOpen, X, Loader2,
   CheckSquare, Circle, Clock,
+  SlidersHorizontal, ArrowUp, ArrowDown, Eye, EyeOff, Save,
 } from "lucide-react";
-import { dashboardApi, frameworksApi, authApi, complianceApi, type ActionPlanItem } from "../api/endpoints";
+import { dashboardApi, frameworksApi, authApi, complianceApi, type ActionPlanItem, type DashboardWidgetItem } from "../api/endpoints";
 import { useAuthStore, authSession } from "../store/auth";
 import type { DashboardSummary, Framework } from "../types";
 import ComplianceJourneyMap from "../components/features/compliance/ComplianceJourneyMap";
@@ -637,6 +638,89 @@ function FrameworkOverviewCard({ fw, onSelect }: { fw: any; onSelect: () => void
   );
 }
 
+// ── Dashboard widget personalization (Elite Pack — custom_dashboards) ────────
+// M14.9 (partial): the main Dashboard's overview sections can be hidden/reordered
+// per user, persisted via GET/PUT /dashboard/layout. Saving is gated behind the
+// custom_dashboards flag (402 handled globally by the elite-upsell listener, see
+// client.ts); reading always falls back to a sensible default so nothing breaks
+// for non-Elite tenants.
+const MAIN_WIDGET_IDS = ["frameworks_grid", "action_plan", "platform_kpis"] as const;
+type MainWidgetId = (typeof MAIN_WIDGET_IDS)[number];
+
+function defaultMainWidgetConfig(): DashboardWidgetItem[] {
+  return MAIN_WIDGET_IDS.map((id) => ({ id, visible: true }));
+}
+
+function CustomizePanel({
+  layout, labels, onChange, onSave, onCancel, saving,
+}: {
+  layout: DashboardWidgetItem[];
+  labels: Record<string, string>;
+  onChange: (next: DashboardWidgetItem[]) => void;
+  onSave: () => void;
+  onCancel: () => void;
+  saving: boolean;
+}) {
+  const { t } = useTranslation();
+
+  function toggle(idx: number) {
+    const next = layout.slice();
+    next[idx] = { ...next[idx], visible: !next[idx].visible };
+    onChange(next);
+  }
+  function move(idx: number, dir: -1 | 1) {
+    const target = idx + dir;
+    if (target < 0 || target >= layout.length) return;
+    const next = layout.slice();
+    [next[idx], next[target]] = [next[target], next[idx]];
+    onChange(next);
+  }
+
+  return (
+    <div className="bg-white rounded-2xl border border-blue-100 shadow-sm p-5 space-y-3">
+      <div className="flex items-center justify-between">
+        <div>
+          <h3 className="font-semibold text-gray-900 text-sm">{t("dashboard.customize_title", "Customize this dashboard")}</h3>
+          <p className="text-xs text-gray-500 mt-0.5">{t("dashboard.customize_hint", "Choose which sections are visible and their order.")}</p>
+        </div>
+        <button onClick={onCancel} className="text-gray-400 hover:text-gray-600"><X className="w-4 h-4" /></button>
+      </div>
+      <div className="space-y-1.5">
+        {layout.map((w, idx) => (
+          <div key={w.id} className="flex items-center gap-2 border border-gray-100 rounded-xl px-3 py-2">
+            <button
+              type="button"
+              onClick={() => toggle(idx)}
+              title={w.visible ? t("dashboard.hide_widget", "Hide") : t("dashboard.show_widget", "Show")}
+              className={`flex-shrink-0 ${w.visible ? "text-blue-600" : "text-gray-300"}`}
+            >
+              {w.visible ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
+            </button>
+            <span className={`flex-1 text-sm ${w.visible ? "text-gray-800" : "text-gray-400"}`}>{labels[w.id] ?? w.id}</span>
+            <button type="button" onClick={() => move(idx, -1)} disabled={idx === 0} title={t("dashboard.move_up", "Move up")} className="text-gray-400 hover:text-gray-700 disabled:opacity-30">
+              <ArrowUp className="w-3.5 h-3.5" />
+            </button>
+            <button type="button" onClick={() => move(idx, 1)} disabled={idx === layout.length - 1} title={t("dashboard.move_down", "Move down")} className="text-gray-400 hover:text-gray-700 disabled:opacity-30">
+              <ArrowDown className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        ))}
+      </div>
+      <div className="flex justify-end gap-2 pt-1">
+        <button onClick={onCancel} className="px-3 py-1.5 text-sm text-gray-600 hover:text-gray-800">{t("common.cancel", "Cancel")}</button>
+        <button
+          onClick={onSave}
+          disabled={saving}
+          className="inline-flex items-center gap-1.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-sm font-medium px-3.5 py-1.5 rounded-lg transition-colors"
+        >
+          {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+          {t("common.save", "Save")}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // ── Framework Management Modal ────────────────────────────────────────────────
 
 function FrameworkManagementModal({
@@ -854,6 +938,153 @@ function OverviewDashboard({
     }))
     .filter(a => a.items.length > 0);
 
+  // ── Widget personalization (M14.9 partial) ──────────────────────────────
+  const [customizing, setCustomizing] = useState(false);
+  const [layout, setLayout] = useState<DashboardWidgetItem[]>(defaultMainWidgetConfig());
+  const [draftLayout, setDraftLayout] = useState<DashboardWidgetItem[]>(defaultMainWidgetConfig());
+  const [savingLayout, setSavingLayout] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    dashboardApi.getLayout("main")
+      .then((res) => {
+        if (cancelled) return;
+        const known = new Set<string>(MAIN_WIDGET_IDS);
+        const saved = (res.widget_config || []).filter((w) => known.has(w.id));
+        const savedIds = new Set(saved.map((w) => w.id));
+        const missing = MAIN_WIDGET_IDS.filter((id) => !savedIds.has(id)).map((id) => ({ id, visible: true }));
+        const merged = [...saved, ...missing];
+        setLayout(merged);
+        setDraftLayout(merged);
+      })
+      .catch(() => { /* keep the default layout */ });
+    return () => { cancelled = true; };
+  }, []);
+
+  async function handleSaveLayout() {
+    setSavingLayout(true);
+    try {
+      await dashboardApi.saveLayout(draftLayout, "main");
+      setLayout(draftLayout);
+      setCustomizing(false);
+    } catch {
+      /* 402 (non-Elite plan) is handled globally by the elite-upsell listener */
+    } finally {
+      setSavingLayout(false);
+    }
+  }
+
+  const widgetLabels: Record<string, string> = {
+    frameworks_grid: t("dashboard.widget_frameworks", "Your Frameworks"),
+    action_plan: t("dashboard.widget_action_plan", "Action Plan"),
+    platform_kpis: t("dashboard.widget_platform_kpis", "Platform Overview KPIs"),
+  };
+
+  const isWidgetVisible = (id: MainWidgetId) => layout.find((w) => w.id === id)?.visible !== false;
+  const visibleOrder = layout.length ? layout : defaultMainWidgetConfig();
+
+  const frameworksSection = (
+    <div>
+      <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">
+        {t("dashboard.your_frameworks")}
+      </h2>
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        {frameworks.map((fw: any) => (
+          <FrameworkOverviewCard
+            key={fw.framework_id}
+            fw={fw}
+            onSelect={() => {
+              if (fw.has_assessment) {
+                onSelectFramework(fw.framework_id);
+              } else {
+                // No assessment yet — create one then navigate directly to it
+                complianceApi.createAssessment({
+                  framework_id: fw.framework_id,
+                  name: `${fw.framework_short_name} Assessment`,
+                  description: `Compliance assessment for ${fw.framework_name}`,
+                  scope_description: `Assessment scope for ${fw.framework_short_name} framework`,
+                }).then((a) => {
+                  navigate(`/compliance/${a.id}`);
+                }).catch(() => {
+                  onSelectFramework(fw.framework_id);
+                });
+              }
+            }}
+          />
+        ))}
+        {/* Add framework card */}
+        <button
+          onClick={() => setShowFrameworkModal(true)}
+          className="group bg-white rounded-2xl border border-gray-100 shadow-sm hover:shadow-lg hover:border-blue-200 transition-all p-6 text-left flex flex-col gap-4 w-full min-h-[240px] items-center justify-center"
+        >
+          <div className="flex flex-col items-center gap-3">
+            <div className="w-12 h-12 rounded-xl bg-blue-100 flex items-center justify-center">
+              <Plus className="w-6 h-6 text-blue-600" />
+            </div>
+            <div className="text-center">
+              <p className="text-sm font-semibold text-gray-800">{t("dashboard.add_framework")}</p>
+              <p className="text-xs text-gray-400 mt-1">{t("dashboard.select_from_available")}</p>
+            </div>
+          </div>
+        </button>
+      </div>
+    </div>
+  );
+
+  const actionPlanSection = assessmentsWithItems.length > 0 && (
+    <div>
+      <div className="flex items-center justify-between mb-3">
+        <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide">
+          {t("action_plan.page_title")}
+        </h2>
+        <Link
+          to="/action-plan"
+          className="text-xs text-blue-600 hover:text-blue-700 flex items-center gap-1 font-medium"
+        >
+          {t("action_plan.view_global")} <ChevronRight className="w-3 h-3" />
+        </Link>
+      </div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        {assessmentsWithItems.map(a => (
+          <AssessmentToDoWidget
+            key={a.assessmentId}
+            assessmentId={a.assessmentId}
+            assessmentName={a.assessmentName}
+            frameworkShortName={a.frameworkShortName}
+            items={a.items}
+          />
+        ))}
+      </div>
+    </div>
+  );
+
+  const kpisSection = (
+    <div>
+      <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">
+        {t("dashboard.platform_overview")}
+      </h2>
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <KpiCard title={t("dashboard.open_risks")} value={d.risk.total_open}
+          subtitle={`${d.risk.critical} ${t("compliance.severities.critical")} · ${d.risk.high} ${t("compliance.severities.high")}`}
+          icon={AlertTriangle} iconBg="bg-red-500" />
+        <KpiCard title={t("dashboard.avg_compliance")} value={`${d.compliance.average_score ?? 0}%`}
+          subtitle={`${d.compliance.total_assessments} ${t("compliance.assessments")}`}
+          icon={Shield} iconBg="bg-blue-500" />
+        <KpiCard title={t("dashboard.open_audit_findings")} value={d.audit.open_findings}
+          icon={ClipboardList} iconBg="bg-orange-500" />
+        <KpiCard title={t("dashboard.policy_attestation")} value={`${d.policy.attestation_rate_percent ?? 0}%`}
+          subtitle={`${d.policy.total_attestations} ${t("dashboard.attestations")}`}
+          icon={BookOpen} iconBg="bg-indigo-500" />
+      </div>
+    </div>
+  );
+
+  const sectionsById: Record<MainWidgetId, React.ReactNode> = {
+    frameworks_grid: frameworksSection,
+    action_plan: actionPlanSection,
+    platform_kpis: kpisSection,
+  };
+
   return (
     <div className="space-y-8">
       {/* Header */}
@@ -864,86 +1095,36 @@ function OverviewDashboard({
             {t("dashboard.frameworks_count", { count: frameworks.length })} · {t("dashboard.select_to_drill")}
           </p>
         </div>
-        {isDemo && (
-          <span className="flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 bg-amber-50 border border-amber-200 rounded-lg text-amber-700">
-            <Activity className="w-3.5 h-3.5" /> Demo data
-          </span>
-        )}
-      </div>
-
-      {/* Framework cards */}
-      <div>
-        <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">
-          {t("dashboard.your_frameworks")}
-        </h2>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {frameworks.map((fw: any) => (
-            <FrameworkOverviewCard
-              key={fw.framework_id}
-              fw={fw}
-              onSelect={() => {
-                if (fw.has_assessment) {
-                  onSelectFramework(fw.framework_id);
-                } else {
-                  // No assessment yet — create one then navigate directly to it
-                  complianceApi.createAssessment({
-                    framework_id: fw.framework_id,
-                    name: `${fw.framework_short_name} Assessment`,
-                    description: `Compliance assessment for ${fw.framework_name}`,
-                    scope_description: `Assessment scope for ${fw.framework_short_name} framework`,
-                  }).then((a) => {
-                    navigate(`/compliance/${a.id}`);
-                  }).catch(() => {
-                    onSelectFramework(fw.framework_id);
-                  });
-                }
-              }}
-            />
-          ))}
-          {/* Add framework card */}
+        <div className="flex items-center gap-2">
+          {isDemo && (
+            <span className="flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 bg-amber-50 border border-amber-200 rounded-lg text-amber-700">
+              <Activity className="w-3.5 h-3.5" /> Demo data
+            </span>
+          )}
           <button
-            onClick={() => setShowFrameworkModal(true)}
-            className="group bg-white rounded-2xl border border-gray-100 shadow-sm hover:shadow-lg hover:border-blue-200 transition-all p-6 text-left flex flex-col gap-4 w-full min-h-[240px] items-center justify-center"
+            onClick={() => { setDraftLayout(layout); setCustomizing((v) => !v); }}
+            className="inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors"
           >
-            <div className="flex flex-col items-center gap-3">
-              <div className="w-12 h-12 rounded-xl bg-blue-100 flex items-center justify-center">
-                <Plus className="w-6 h-6 text-blue-600" />
-              </div>
-              <div className="text-center">
-                <p className="text-sm font-semibold text-gray-800">{t("dashboard.add_framework")}</p>
-                <p className="text-xs text-gray-400 mt-1">{t("dashboard.select_from_available")}</p>
-              </div>
-            </div>
+            <SlidersHorizontal className="w-3.5 h-3.5" /> {t("dashboard.customize", "Customize")}
           </button>
         </div>
       </div>
 
-      {/* Per-assessment action plan to-do lists */}
-      {assessmentsWithItems.length > 0 && (
-        <div>
-          <div className="flex items-center justify-between mb-3">
-            <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide">
-              {t("action_plan.page_title")}
-            </h2>
-            <Link
-              to="/action-plan"
-              className="text-xs text-blue-600 hover:text-blue-700 flex items-center gap-1 font-medium"
-            >
-              {t("action_plan.view_global")} <ChevronRight className="w-3 h-3" />
-            </Link>
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {assessmentsWithItems.map(a => (
-              <AssessmentToDoWidget
-                key={a.assessmentId}
-                assessmentId={a.assessmentId}
-                assessmentName={a.assessmentName}
-                frameworkShortName={a.frameworkShortName}
-                items={a.items}
-              />
-            ))}
-          </div>
-        </div>
+      {customizing && (
+        <CustomizePanel
+          layout={draftLayout}
+          labels={widgetLabels}
+          onChange={setDraftLayout}
+          onSave={handleSaveLayout}
+          onCancel={() => setCustomizing(false)}
+          saving={savingLayout}
+        />
+      )}
+
+      {visibleOrder.map((w) =>
+        isWidgetVisible(w.id as MainWidgetId) ? (
+          <div key={w.id}>{sectionsById[w.id as MainWidgetId]}</div>
+        ) : null
       )}
 
       {/* Framework management modal */}
@@ -956,26 +1137,6 @@ function OverviewDashboard({
           setShowFrameworkModal(false);
         }}
       />
-
-      {/* Cross-module KPIs */}
-      <div>
-        <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">
-          {t("dashboard.platform_overview")}
-        </h2>
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          <KpiCard title={t("dashboard.open_risks")} value={d.risk.total_open}
-            subtitle={`${d.risk.critical} ${t("compliance.severities.critical")} · ${d.risk.high} ${t("compliance.severities.high")}`}
-            icon={AlertTriangle} iconBg="bg-red-500" />
-          <KpiCard title={t("dashboard.avg_compliance")} value={`${d.compliance.average_score ?? 0}%`}
-            subtitle={`${d.compliance.total_assessments} ${t("compliance.assessments")}`}
-            icon={Shield} iconBg="bg-blue-500" />
-          <KpiCard title={t("dashboard.open_audit_findings")} value={d.audit.open_findings}
-            icon={ClipboardList} iconBg="bg-orange-500" />
-          <KpiCard title={t("dashboard.policy_attestation")} value={`${d.policy.attestation_rate_percent ?? 0}%`}
-            subtitle={`${d.policy.total_attestations} ${t("dashboard.attestations")}`}
-            icon={BookOpen} iconBg="bg-indigo-500" />
-        </div>
-      </div>
     </div>
   );
 }

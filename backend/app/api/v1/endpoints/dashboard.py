@@ -1,6 +1,7 @@
 """Dashboard and analytics endpoints."""
 from datetime import datetime
 from fastapi import APIRouter, Depends
+from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, case
 from typing import Annotated
@@ -15,7 +16,9 @@ from app.models.framework import Framework, FrameworkControl
 from app.models.mandatory_document import MandatoryDocument
 from app.models.tenant import Tenant
 from app.models.risk_snapshot import RiskSnapshot
+from app.models.dashboard_layout import DashboardLayout
 from app.api.v1.dependencies import get_current_user, get_tenant_id
+from app.api.v1.dependencies.features import require_feature
 from app.models.user import User
 
 router = APIRouter()
@@ -547,3 +550,98 @@ async def get_framework_summary(
         "selected_frameworks": selected_fws_info,
         "active_framework_id": fw.id,
     }
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Dashboard widget personalization (Elite Pack, M14.9 partial).
+#
+# The RFP gap: tiles on the main Dashboard and the 7 module Analytics
+# dashboards (dashboards.py) were fixed — `custom_dashboards` only gated
+# access to the dashboard SET, not any actual layout personalization. This
+# lets a user save which widgets are visible and in what order, per
+# dashboard_key ("main" for this page, or a module key like "risks" for the
+# Analytics dashboards). GET always works with a sensible all-visible default
+# so nothing breaks for non-Elite tenants; only saving is gated.
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Built-in default widget id lists, in display order — used whenever a user has
+# no saved layout yet (or is on a plan that can't save one).
+_DEFAULT_DASHBOARD_WIDGETS: dict[str, list[str]] = {
+    "main": ["frameworks_grid", "action_plan", "platform_kpis"],
+    "risks": ["total", "by_severity", "by_status", "heatmap"],
+    "compliance": ["policies_total", "policies_by_status", "attestations_by_status"],
+    "assets": ["total", "by_type", "by_criticality", "by_class", "by_lifecycle"],
+    "vulnerabilities": ["total", "by_severity", "by_status", "avg_cvss", "cve"],
+    "threats": ["total", "by_category", "pending"],
+    "controls": ["total", "by_status", "avg_progress", "total_cost"],
+    "governance": ["policies_total", "policies_by_status", "attestations_by_status"],
+    "audit": ["audits_total", "audits_by_status", "findings_by_severity", "findings_by_status"],
+}
+
+
+class DashboardLayoutIn(BaseModel):
+    # Ordered list of {"id": <widget-id>, "visible": <bool>}. List order IS the
+    # display order — kept intentionally unstructured (list[dict]) rather than a
+    # strict widget schema so the frontend owns the widget-id catalogue.
+    widget_config: list[dict]
+
+
+class DashboardLayoutOut(BaseModel):
+    dashboard_key: str
+    widget_config: list[dict]
+    is_default: bool  # True when nothing was ever saved — a built-in default was returned instead
+
+
+def _default_widget_config(dashboard_key: str) -> list[dict]:
+    return [{"id": wid, "visible": True} for wid in _DEFAULT_DASHBOARD_WIDGETS.get(dashboard_key, [])]
+
+
+@router.get("/layout", response_model=DashboardLayoutOut)
+async def get_dashboard_layout(
+    dashboard_key: str = "main",
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Read the current user's saved widget layout — never feature-gated, since a
+    missing/denied layout must still render a normal (all-widgets, default order)
+    dashboard for every tenant, Elite or not."""
+    row = (await db.execute(
+        select(DashboardLayout).where(
+            DashboardLayout.user_id == current_user.id,
+            DashboardLayout.dashboard_key == dashboard_key,
+        )
+    )).scalar_one_or_none()
+    if row is not None and row.widget_config:
+        return DashboardLayoutOut(dashboard_key=dashboard_key, widget_config=row.widget_config, is_default=False)
+    return DashboardLayoutOut(dashboard_key=dashboard_key, widget_config=_default_widget_config(dashboard_key), is_default=True)
+
+
+@router.put("/layout", response_model=DashboardLayoutOut)
+async def save_dashboard_layout(
+    body: DashboardLayoutIn,
+    dashboard_key: str = "main",
+    db: AsyncSession = Depends(get_db),
+    tenant_id: str = Depends(get_tenant_id),
+    current_user: User = Depends(require_feature("custom_dashboards")),
+):
+    """Save the current user's widget visibility + order for a dashboard.
+    Gated behind custom_dashboards (Elite Pack) — 402s with the standard
+    feature_not_in_plan payload for everyone else, handled by the frontend's
+    global elite-upsell listener."""
+    row = (await db.execute(
+        select(DashboardLayout).where(
+            DashboardLayout.user_id == current_user.id,
+            DashboardLayout.dashboard_key == dashboard_key,
+        )
+    )).scalar_one_or_none()
+    if row is None:
+        row = DashboardLayout(
+            user_id=current_user.id, tenant_id=tenant_id,
+            dashboard_key=dashboard_key, widget_config=body.widget_config,
+        )
+        db.add(row)
+    else:
+        row.widget_config = body.widget_config
+    await db.commit()
+    await db.refresh(row)
+    return DashboardLayoutOut(dashboard_key=dashboard_key, widget_config=row.widget_config, is_default=False)
