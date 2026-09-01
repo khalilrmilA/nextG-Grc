@@ -1,0 +1,66 @@
+#cloud-config
+# Autoinstall seed for the appliance installer ISO.
+#
+# Rendered by scripts/build-iso.sh, which fills in the doubled-at placeholders
+# below. It refuses to build if any of them survive substitution.
+# Do not put a credential in this file: it is committed to the repository, and
+# every ISO ever handed to a customer is byte identical, so anything literal
+# here is a secret shared across the entire install base.
+#
+# The password field below is a SHA-512 crypt hash of a 32 character random
+# password generated at ISO build time and never written down. subiquity
+# refuses to install without an identity section, so the account has to exist;
+# nobody, including us, knows its password, and 99-seal.sh replaces the hash
+# with "!" at the end of provisioning anyway.
+#
+# This installs Ubuntu only. The appliance itself is built on the first boot by
+# appliance-provision.service, because the provisioning scripts need a running
+# systemd, a live kernel and a loadable AppArmor policy, none of which exist in
+# the installer's chroot.
+autoinstall:
+  version: 1
+  locale: en_US.UTF-8
+  keyboard:
+    layout: us
+  network:
+    version: 2
+    ethernets:
+      any:
+        match:
+          name: "en*"
+        dhcp4: true
+  ssh:
+    install-server: true
+    # 30-harden.sh writes the real policy (PermitRootLogin no,
+    # PasswordAuthentication yes) during provisioning. The console support flow
+    # depends on password auth being available, so do not tighten it here.
+    allow-pw: true
+  storage:
+    layout:
+      name: lvm
+  identity:
+    hostname: @@HOSTNAME@@
+    realname: Appliance setup
+    username: setup
+    password: "@@SETUP_PASSWORD_HASH@@"
+  user-data:
+    disable_root: true
+  packages:
+    - python3
+    - curl
+    - ca-certificates
+  late-commands:
+    # subiquity's lvm layout leaves the rest of the volume group unallocated. On
+    # a 40 GB virtual disk that is survivable; on the 2 TB array somebody
+    # installs this on, it would strand almost the whole disk. Neither command
+    # is fatal: on a disk small enough that there is nothing free, lvextend
+    # exits non zero and that is the correct outcome.
+    - curtin in-target --target=/target -- sh -c 'lvextend -l +100%FREE /dev/mapper/ubuntu--vg-ubuntu--lv || true'
+    - curtin in-target --target=/target -- sh -c 'resize2fs /dev/mapper/ubuntu--vg-ubuntu--lv || true'
+
+    # Carry the payload off the ISO before it is unmounted. /cdrom is gone by
+    # the time the installed system boots.
+    - mkdir -p /target/opt/appliance-build
+    - cp -a /cdrom/appliance/. /target/opt/appliance-build/
+    - install -m 0644 /cdrom/appliance/appliance-provision.service /target/etc/systemd/system/appliance-provision.service
+    - curtin in-target --target=/target -- systemctl enable appliance-provision.service

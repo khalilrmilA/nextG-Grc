@@ -1,0 +1,344 @@
+#!/usr/bin/env bash
+# Restricted appliance console. Runs instead of a login shell on tty1.
+#
+# There is deliberately no path from here to a shell. The pager is invoked with
+# LESSSECURE=1 so its "!command" escape is closed, and no editor is installed.
+# Any new menu entry added here must be checked against that rule.
+
+set -uo pipefail
+trap '' INT TSTP QUIT
+export LESSSECURE=1
+export PATH=/usr/sbin:/usr/bin:/sbin:/bin
+
+CONF=/etc/appliance/version
+# shellcheck source=/dev/null
+[ -r "$CONF" ] && . "$CONF"
+NAME="${NAME:-Appliance}"
+VERSION="${VERSION:-unknown}"
+
+pause() { printf '\nPress Enter to continue. '; read -r _; }
+
+header() {
+  clear
+  ip="$(hostname -I 2>/dev/null | awk '{print $1}')"
+  printf '=======================================================\n'
+  printf '  %s %s\n' "$NAME" "$VERSION"
+  printf '  Host : %s\n' "$(hostname)"
+  printf '  URL  : https://%s/\n' "${ip:-no address}"
+  printf '=======================================================\n\n'
+  show_initial_credentials
+}
+
+show_initial_credentials() {
+  # firstboot.sh writes the generated administrator password into /etc/issue,
+  # which is the conventional place for it. But /etc/issue is only ever rendered
+  # by a getty, and 35-lockdown.sh replaces the getty on tty1 with THIS menu. So
+  # without this block the password is generated, written, and shown to nobody:
+  # the operator powers the appliance on and has no way to log in.
+  #
+  # The banner stays visible until the administrator changes the password, at
+  # which point the application clears it. The password is single use in
+  # practice because create-admin sets must_change_password.
+  [ -r /etc/appliance/initial-credentials ] || return 0
+  printf '  FIRST LOGIN\n'
+  printf '  -----------\n'
+  while IFS= read -r line; do printf '  %s\n' "$line"; done < /etc/appliance/initial-credentials
+  printf '\n  Change the password at first login; this notice then disappears.\n\n'
+}
+
+status() {
+  header
+  # SQLite, so there is no database service to report.
+  for s in appliance-api nginx appliance-firstboot; do
+    state="$(systemctl is-active "$s" 2>/dev/null)"
+    printf '  %-18s %s\n' "$s" "$state"
+  done
+  printf '\n  Uptime : %s\n' "$(uptime -p)"
+  printf '  Disk   : %s\n' "$(df -h / | awk 'NR==2 {print $4" free of "$2}')"
+  printf '  Memory : %s\n' "$(free -h | awk 'NR==2 {print $7" available of "$2}')"
+  pause
+}
+
+network() {
+  header
+  printf '  1) DHCP\n  2) Static address\n  3) Back\n\n'
+  printf 'Choice: '; read -r c
+  case "$c" in
+    1) /opt/appliance/bin/netconfig.sh dhcp; pause ;;
+    2)
+      printf 'IPv4 address   : '; read -r ip
+      printf 'Prefix (e.g 24): '; read -r pfx
+      printf 'Gateway        : '; read -r gw
+      printf 'DNS (comma sep): '; read -r dns
+      # Reject anything that is not a plain address before it reaches netplan.
+      if ! printf '%s' "$ip" | grep -Eq '^[0-9]{1,3}(\.[0-9]{1,3}){3}$' ||
+         ! printf '%s' "$gw" | grep -Eq '^[0-9]{1,3}(\.[0-9]{1,3}){3}$' ||
+         ! printf '%s' "$pfx" | grep -Eq '^[0-9]{1,2}$'; then
+        printf '\nInvalid input, nothing changed.\n'; pause; return
+      fi
+      /opt/appliance/bin/netconfig.sh static "$ip" "$pfx" "$gw" "${dns:-1.1.1.1,8.8.8.8}"
+      pause ;;
+    *) return ;;
+  esac
+}
+
+logs() {
+  header
+  printf '  1) Application\n  2) Web server\n  3) First boot\n  4) Back\n\n'
+  printf 'Choice: '; read -r c
+  case "$c" in
+    1) journalctl -u appliance-api -n 200 --no-pager | less ;;
+    2) journalctl -u nginx -n 200 --no-pager | less ;;
+    3) less /var/log/appliance/firstboot.log 2>/dev/null || { printf 'Not available.\n'; pause; } ;;
+    *) return ;;
+  esac
+}
+
+licence() {
+  header
+  # Support is asked "is it licensed" constantly; without this the only way to
+  # answer is to log in to the web console.
+  #
+  # As the SERVICE user: the licence activation row lives in the
+  # appliance-owned database, and under the AppArmor profile a confined root
+  # process has no CAP_DAC_OVERRIDE, so it cannot open a file it does not own.
+  # The deployment's DATABASE_URL lives in app.env. Without it the binary falls
+  # back to the compiled-in default, which points at a path inside the runtime
+  # directory that the AppArmor profile explicitly denies writing - so this
+  # reported "unavailable" even on a correctly licensed appliance.
+  if [ -r /etc/appliance/app.env ]; then
+    set -a
+    # shellcheck source=/dev/null disable=SC1091
+    . /etc/appliance/app.env
+    set +a
+  fi
+  runuser -u appliance -- env \
+    APPLIANCE_STATE_DIR=/var/lib/appliance \
+    DATABASE_URL="${DATABASE_URL:-}" \
+    ENVIRONMENT="${ENVIRONMENT:-production}" \
+    SECRET_KEY="${SECRET_KEY:-}" \
+    /opt/appliance/runtime/appliance-api license-status 2>/dev/null \
+    || printf '  Licence status unavailable.\n'
+  pause
+}
+
+reset_admin() {
+  header
+  printf 'This resets the administrator password and prints a new one.\n'
+  printf 'Continue? (yes/no): '; read -r c
+  [ "$c" = "yes" ] || return
+  # The password is generated by the application, not here: its policy
+  # (app/core/password_policy.py) requires a symbol, and "tr -dc A-Za-z0-9"
+  # strips every symbol, so a password generated in shell is always rejected.
+  if new="$(/opt/appliance/bin/admin-reset 2>/dev/null)" && [ -n "$new" ]; then
+    printf '\nNew administrator password: %s\n' "$new"
+    printf 'It must be changed at next login.\n'
+    logger -t appliance-console "administrator password reset from console"
+  else
+    printf '\nReset failed. Check the application log.\n'
+  fi
+  pause
+}
+
+support() {
+  header
+  printf 'Temporary support access\n\n'
+  printf 'Give this challenge to your support contact. They return a signed\n'
+  printf 'response that unlocks a shell for 60 minutes. The session is logged.\n\n'
+  # Bound to this appliance and this hour so a response cannot be replayed
+  # against another deployment or reused tomorrow.
+  chal="$(printf '%s|%s|%s' "$(cat /etc/machine-id)" "$VERSION" "$(date -u +%Y%m%d%H)" \
+          | sha256sum | cut -c1-32)"
+  printf '  Challenge: %s\n\n' "$chal"
+  printf 'Response (blank to cancel): '; read -r resp
+  [ -z "$resp" ] && return
+  if /opt/appliance/bin/support-verify "$chal" "$resp"; then
+    logger -t appliance-console "support access granted"
+
+    # Opening SSH is not enough on its own. 35-lockdown.sh sets every
+    # interactive account to nologin and locks it, and 99-seal.sh replaces the
+    # remaining password hashes with "!", so there is deliberately NO account
+    # left that can authenticate. Without provisioning one here, this menu entry
+    # opens a port to a host nobody can log in to.
+    #
+    # So mint a throwaway account for the window and tear it down with it. The
+    # password is shown once, on this console, to the administrator who just
+    # completed a signed challenge; it is never stored anywhere else.
+    supportpw="$(openssl rand -base64 24 | tr -dc 'A-Za-z0-9' | head -c 20)"
+    id -u support >/dev/null 2>&1 || \
+      useradd -m -s /bin/bash -c "temporary vendor support access" support
+    usermod -s /bin/bash -U support >/dev/null 2>&1
+    printf 'support:%s\n' "$supportpw" | chpasswd
+    printf 'support ALL=(ALL) NOPASSWD:ALL\n' > /etc/sudoers.d/support-window
+    chmod 0440 /etc/sudoers.d/support-window
+
+    systemctl unmask ssh.socket ssh.service >/dev/null 2>&1
+    systemctl start ssh >/dev/null 2>&1 || systemctl start ssh.socket >/dev/null 2>&1
+    ufw allow 22/tcp >/dev/null
+
+    ip="$(hostname -I 2>/dev/null | awk '{print $1}')"
+    printf '\nGranted for 60 minutes.\n\n'
+    printf '  ssh support@%s\n' "${ip:-<address>}"
+    printf '  password: %s\n\n' "$supportpw"
+    printf 'The account and the firewall rule are removed automatically.\n'
+
+    # One timer tears down everything this block created.
+    systemd-run --on-active=60m --unit=support-window-close \
+      /bin/sh -c 'ufw delete allow 22/tcp; systemctl stop ssh ssh.socket; systemctl mask ssh.socket ssh.service; rm -f /etc/sudoers.d/support-window; userdel -r -f support' >/dev/null
+  else
+    logger -t appliance-console "support access DENIED"
+    printf '\nInvalid response.\n'
+  fi
+  pause
+}
+
+wait_for_firstboot() {
+  # appliance-firstboot.service and this menu both start on the first boot and
+  # nothing orders them against each other. The menu wins that race every time:
+  # it draws its header, blocks on read, and then never redraws, because the
+  # loop only comes back round when somebody presses a key.
+  #
+  # firstboot writes the generated administrator password AFTER that point, so
+  # the operator is left looking at a menu with no credentials on it and no
+  # reason to suspect that pressing Enter would reveal them. Observed on the
+  # first boot of the built OVA: the FIRST LOGIN block was absent until a key
+  # was pressed.
+  [ -e /var/lib/appliance/.firstboot-done ] && return 0
+  clear
+  printf '
+'
+  printf '  %s %s is starting for the first time.
+
+' "$NAME" "$VERSION"
+  printf '  Generating keys, preparing the database and creating the
+'
+  printf '  administrator account. This takes a couple of minutes.
+
+'
+  printf '  The login details appear here as soon as it is done.
+
+  '
+  i=0
+  while [ ! -e /var/lib/appliance/.firstboot-done ]; do
+    # Give up after 20 minutes and fall through to the menu anyway. If firstboot
+    # is genuinely stuck, the operator needs to reach the log viewer; trapping
+    # them on this screen would remove the only way to find out why.
+    [ "$i" -ge 600 ] && break
+    printf '.'
+    sleep 2
+    i=$((i + 1))
+  done
+  printf '
+'
+}
+
+ai_provider() {
+  header
+  printf '  AI provider\n'
+  printf '  -----------\n\n'
+  printf '  By default this appliance uses its bundled model and sends nothing\n'
+  printf '  outside your network. Configure your own AI here instead.\n\n'
+
+  cur_provider=""; cur_url=""; cur_model=""; cur_key=""
+  if [ -r /etc/appliance/app.env ]; then
+    cur_provider="$(grep -m1 '^AI_PROVIDER=' /etc/appliance/app.env | cut -d= -f2-)"
+    cur_url="$(grep -m1 '^AI_BASE_URL=' /etc/appliance/app.env | cut -d= -f2-)"
+    cur_model="$(grep -m1 '^AI_MODEL=' /etc/appliance/app.env | cut -d= -f2-)"
+    cur_key="$(grep -m1 '^AI_API_KEY=' /etc/appliance/app.env | cut -d= -f2-)"
+  fi
+  printf '  Current: provider=%s url=%s model=%s key=%s\n\n' \
+    "${cur_provider:-bundled}" "${cur_url:-<bundled>}" "${cur_model:-<default>}" \
+    "$([ -n "$cur_key" ] && echo set || echo unset)"
+
+  printf '  1) Use your own AI\n  2) Go back to the bundled model\n  3) Cancel\n\n'
+  printf 'Choice: '; read -r c
+  case "$c" in
+    1) ;;
+    2)
+      set_env AI_PROVIDER ""; set_env AI_BASE_URL ""; set_env AI_API_KEY ""; set_env AI_MODEL ""
+      printf '\nReverted to the bundled model. Restarting the application.\n'
+      systemctl restart appliance-api >/dev/null 2>&1
+      pause; return ;;
+    *) return ;;
+  esac
+
+  printf '\n  Provider: 1) OpenAI compatible   2) Ollama\n'
+  printf 'Choice: '; read -r pc
+  case "$pc" in
+    1) prov=openai ;;
+    2) prov=ollama ;;
+    *) printf '\nCancelled.\n'; pause; return ;;
+  esac
+
+  printf 'Endpoint URL (include /v1 for OpenAI compatible): '; read -r url
+  printf 'Model name                                     : '; read -r mdl
+  # No terminal echo for the key. It is the customer's credential and the
+  # console is often on a screen someone else can see.
+  printf 'API key (leave blank for none)                 : '
+  stty -echo 2>/dev/null; read -r key; stty echo 2>/dev/null; printf '\n'
+
+  # Refuse plain http to anything that is not a private address, and refuse a
+  # key embedded in the URL: both would put the credential somewhere it leaks.
+  case "$url" in
+    https://*) ;;
+    http://10.*|http://192.168.*|http://172.1[6-9].*|http://172.2*.*|http://172.3[01].*|http://127.*|http://localhost*) ;;
+    *) printf '\nRefused: use https, or a private address for plain http.\n'; pause; return ;;
+  esac
+  case "$url" in
+    *@*) printf '\nRefused: do not put credentials in the URL.\n'; pause; return ;;
+  esac
+
+  set_env AI_PROVIDER "$prov"
+  set_env AI_BASE_URL "$url"
+  set_env AI_MODEL "$mdl"
+  set_env AI_API_KEY "$key"
+
+  printf '\nSaved. Restarting the application.\n'
+  systemctl restart appliance-api >/dev/null 2>&1
+  logger -t appliance-console "AI provider set to ${prov} (${url})"
+  printf 'Done. Test it from the web console.\n'
+  pause
+}
+
+set_env() {
+  # Replace KEY=... in app.env, or append it. The file is 0640 root:appliance
+  # and holds SECRET_KEY as well, so the mode is restored explicitly after the
+  # rewrite rather than trusted to survive it.
+  key="$1"; val="$2"; f=/etc/appliance/app.env
+  [ -f "$f" ] || return 0
+  tmp="$(mktemp)"
+  grep -v "^${key}=" "$f" > "$tmp" 2>/dev/null || true
+  printf '%s=%s\n' "$key" "$val" >> "$tmp"
+  cat "$tmp" > "$f"
+  rm -f "$tmp"
+  chown root:appliance "$f" 2>/dev/null || true
+  chmod 0640 "$f" 2>/dev/null || true
+}
+
+wait_for_firstboot
+
+while true; do
+  header
+  printf '  1) Status\n'
+  printf '  2) Network configuration\n'
+  printf '  3) View logs\n'
+  printf '  4) Reset administrator password\n'
+  printf '  5) Temporary support access\n'
+  printf '  6) Licence status\n'
+  printf '  7) AI provider\n'
+  printf '  8) Reboot\n'
+  printf '  9) Shut down\n\n'
+  printf 'Choice: '; read -r choice
+  case "$choice" in
+    1) status ;;
+    2) network ;;
+    3) logs ;;
+    4) reset_admin ;;
+    5) support ;;
+    6) licence ;;
+    7) ai_provider ;;
+    8) printf 'Reboot? (yes/no): '; read -r c; [ "$c" = "yes" ] && systemctl reboot ;;
+    9) printf 'Shut down? (yes/no): '; read -r c; [ "$c" = "yes" ] && systemctl poweroff ;;
+    *) ;;
+  esac
+done

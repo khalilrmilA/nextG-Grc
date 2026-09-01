@@ -1,0 +1,16 @@
+[Unit]
+Description=Appliance first boot configuration
+After=network.target vgauthd.service vmtoolsd.service
+Before=appliance-api.service nginx.service
+ConditionPathExists=!/var/lib/appliance/.firstboot-done
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/opt/appliance/bin/firstboot.sh
+TimeoutStartSec=600
+StandardOutput=journal+console
+StandardError=journal+console
+
+[Install]
+WantedBy=multi-user.target

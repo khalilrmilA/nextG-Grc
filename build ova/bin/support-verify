@@ -1,0 +1,38 @@
+#!/usr/bin/env bash
+# support-verify <challenge> <response>
+#
+# Exit 0 grants temporary support access; any other status denies it. Called by
+# the console menu (option 5), and referenced there since the scaffold was
+# written but never implemented, which is defect 3.
+#
+# The verification itself lives in the compiled binary so it needs no
+# interpreter and cannot be edited on the appliance. It checks two things, and
+# both matter:
+#
+#   1. the signature is a valid Ed25519 signature over the challenge, made with
+#      the private key that matches /etc/appliance/support.pub
+#   2. the challenge is one this appliance actually issued in the last few
+#      hours. Without this, a challenge and response pair captured once would
+#      work forever, on this appliance and on every other one sharing the key.
+#
+# Only the public key is on the image. The private key stays on the vendor's
+# infrastructure; tools/sign-challenge is the other half of this exchange.
+set -euo pipefail
+
+APPBIN=/opt/appliance/runtime/appliance-api
+
+if [ "$#" -ne 2 ]; then
+  echo "usage: support-verify <challenge> <response>" >&2
+  exit 2
+fi
+
+if [ ! -x "${APPBIN}" ]; then
+  echo "application binary not found at ${APPBIN}" >&2
+  exit 1
+fi
+
+# Run as the service user: see the note in bin/admin-reset. This one reads
+# /etc/appliance/support.pub and /etc/machine-id, both of which the profile
+# permits and the appliance user can read.
+exec runuser -u appliance -- env APPLIANCE_STATE_DIR=/var/lib/appliance \
+  "${APPBIN}" support-verify "$1" "$2"

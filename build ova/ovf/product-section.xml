@@ -1,0 +1,86 @@
+<!--
+  Paste this ProductSection inside the <VirtualSystem> element of the exported
+  .ovf, immediately before </VirtualSystem>.
+
+  Also add the transport attribute to the VirtualHardwareSection so the guest
+  can read these values through VMware Tools:
+
+      <VirtualHardwareSection ovf:transport="com.vmware.guestInfo">
+
+  IMPORTANT: vApp properties are only presented to the operator when the OVA is
+  deployed through vCenter. The standalone ESXi host client ignores them, which
+  is why firstboot.sh falls back to DHCP.
+-->
+<ProductSection ovf:required="false">
+  <Info>Appliance configuration</Info>
+  <Product>GRCEye Appliance</Product>
+  <Vendor>Next Step IT</Vendor>
+  <Version>1.0.0</Version>
+  <ProductUrl>https://www.example.com/</ProductUrl>
+
+  <Category>1. Network</Category>
+
+  <Property ovf:key="net_mode" ovf:type="string" ovf:value="dhcp"
+            ovf:userConfigurable="true" ovf:qualifiers="ValueMap{&quot;dhcp&quot;,&quot;static&quot;}">
+    <Label>Address assignment</Label>
+    <Description>Use DHCP or a static address.</Description>
+  </Property>
+
+  <Property ovf:key="net_ip" ovf:type="string" ovf:value=""
+            ovf:userConfigurable="true">
+    <Label>IPv4 address</Label>
+    <Description>Ignored when the mode is dhcp.</Description>
+  </Property>
+
+  <Property ovf:key="net_prefix" ovf:type="string" ovf:value="24"
+            ovf:userConfigurable="true">
+    <Label>Prefix length</Label>
+    <Description>Netmask in CIDR notation, for example 24.</Description>
+  </Property>
+
+  <Property ovf:key="net_gateway" ovf:type="string" ovf:value=""
+            ovf:userConfigurable="true">
+    <Label>Default gateway</Label>
+    <Description>Ignored when the mode is dhcp.</Description>
+  </Property>
+
+  <Property ovf:key="net_dns" ovf:type="string" ovf:value="1.1.1.1,8.8.8.8"
+            ovf:userConfigurable="true">
+    <Label>DNS servers</Label>
+    <Description>Comma separated list of resolvers.</Description>
+  </Property>
+
+  <Category>2. System</Category>
+
+  <Property ovf:key="appliance_hostname" ovf:type="string" ovf:value="appliance"
+            ovf:userConfigurable="true">
+    <Label>Hostname</Label>
+    <Description>Fully qualified name used in the generated certificate.</Description>
+  </Property>
+
+  <Property ovf:key="appliance_org" ovf:type="string" ovf:value="Appliance"
+            ovf:userConfigurable="true">
+    <Label>Organisation name</Label>
+    <Description>Shown throughout the application. Replaces the placeholder name
+      carried by the reference database.</Description>
+  </Property>
+
+  <Property ovf:key="appliance_admin_email" ovf:type="string" ovf:value="admin@localhost"
+            ovf:userConfigurable="true">
+    <Label>Administrator email</Label>
+    <Description>Login for the first administrator account. Its password is
+      generated at first boot and shown on the VM console; it must be changed at
+      first login.</Description>
+  </Property>
+
+  <Category>3. Licensing</Category>
+
+  <Property ovf:key="appliance_license_server" ovf:type="string" ovf:value=""
+            ovf:userConfigurable="true">
+    <Label>Licence server URL</Label>
+    <Description>Optional. Set this to activate a licence online from the web
+      console. Leave it empty for air-gapped deployments: the appliance then
+      accepts a signed licence key pasted in by hand, and makes no outbound
+      connection of any kind.</Description>
+  </Property>
+</ProductSection>

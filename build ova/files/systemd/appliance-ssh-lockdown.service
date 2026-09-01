@@ -1,0 +1,31 @@
+[Unit]
+Description=Disable SSH on the customer's first boot
+# Defect 2 in the scaffold: 35-lockdown.sh masked SSH during the build, but the
+# build itself is driven over SSH and 99-seal.sh still has to run afterwards, so
+# masking there killed the build. The masking belongs on the customer's side of
+# the image, which is what this unit does.
+#
+# SSH stays installed. The console's support flow unmasks it for a bounded
+# window after verifying an Ed25519 signed response, so removing the package
+# outright would take away the only supported way to reach a broken appliance.
+DefaultDependencies=no
+After=local-fs.target
+Before=sysinit.target
+ConditionPathExists=!/var/lib/appliance/.ssh-locked
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/bin/systemctl disable --now ssh.socket ssh.service
+ExecStart=/usr/bin/systemctl mask ssh.socket ssh.service
+ExecStart=/bin/sh -c '/usr/sbin/ufw delete allow 22/tcp >/dev/null 2>&1 || true'
+ExecStart=/bin/mkdir -p /var/lib/appliance
+ExecStart=/bin/touch /var/lib/appliance/.ssh-locked
+# A failure here must not stop the appliance booting; it would leave SSH
+# reachable, which the firewall and the locked accounts already cover.
+SuccessExitStatus=0 1
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=sysinit.target

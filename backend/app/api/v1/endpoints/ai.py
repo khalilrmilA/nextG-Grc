@@ -4,6 +4,7 @@ Uses Ollama's OpenAI-compatible /api/chat endpoint with streaming.
 """
 import json
 import asyncio
+import logging
 from collections.abc import AsyncGenerator
 from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -17,6 +18,8 @@ from app.models.user import User
 from app.models.ai_access import AiUsageQuota
 from pydantic import BaseModel
 import httpx
+
+logger = logging.getLogger(__name__)
 
 from app.core.config import settings
 from app.core import ai_quota
@@ -223,52 +226,71 @@ async def _ollama_sse_generator(
     messages: list[dict],
     model: str,
     system_prompt: str,
+    cfg=None,
 ) -> AsyncGenerator[str, None]:
-    """Async generator that yields SSE chunks from Ollama streaming API."""
-    base_url = settings.OLLAMA_BASE_URL.rstrip("/")
-    url = f"{base_url}/api/chat"
+    """Stream SSE chunks from the configured AI provider.
 
-    payload = {
-        "model": model,
-        "stream": True,
-        "messages": [{"role": "system", "content": system_prompt}, *messages],
-    }
+    Name kept for its callers. With nothing configured, `cfg` resolves to the
+    deployment default and this sends exactly the request it always sent: local
+    Ollama, native /api/chat, and no Authorization header at all.
+
+    Pass `cfg` (from ai_provider.load_ai_config) to use a tenant's own endpoint.
+    """
+    from app.services import ai_provider  # noqa: PLC0415
+
+    if cfg is None:
+        cfg = ai_provider.env_ai_config()
+        if model:
+            cfg = ai_provider.resolve_ai_config(None, requested_model=model)
+
+    url = ai_provider.chat_url(cfg)
+    payload = ai_provider.build_payload(
+        cfg, messages, stream=True, system_prompt=system_prompt
+    )
+    kwargs = ai_provider.request_kwargs(cfg, payload)
 
     try:
-        async with httpx.AsyncClient(timeout=300.0) as client:
-            async with client.stream("POST", url, json=payload) as response:
+        async with httpx.AsyncClient(timeout=300.0, verify=cfg.verify) as client:
+            async with client.stream("POST", url, **kwargs) as response:
                 if response.status_code != 200:
-                    body = await response.aread()
-                    yield f"data: {json.dumps({'error': f'Ollama error {response.status_code}: {body.decode()}'})}\n\n"
+                    # Deliberately NOT the upstream body: a 401 from a provider
+                    # commonly echoes an org id or a key prefix, and this string
+                    # goes straight to the browser.
+                    await response.aread()
+                    logger.warning(
+                        "ai provider returned %s (provider=%s host=%s)",
+                        response.status_code, cfg.provider,
+                        ai_provider._host(cfg.base_url),
+                    )
+                    yield f"data: {json.dumps({'error': f'AI provider returned HTTP {response.status_code}.'})}\n\n"
                     yield _SSE_DONE
                     return
 
                 async for line in response.aiter_lines():
-                    if not line:
-                        continue
-                    try:
-                        chunk = json.loads(line)
-                    except json.JSONDecodeError:
-                        continue
-
-                    # Ollama streams: {"message": {"role": "assistant", "content": "..."}, "done": false}
-                    token = chunk.get("message", {}).get("content", "")
-                    if token:
-                        yield f"data: {json.dumps({'token': token})}\n\n"
-
-                    if chunk.get("done"):
-                        break
+                    for chunk in ai_provider.iter_stream_payloads(cfg, line):
+                        token, finished = ai_provider.stream_token(cfg, chunk)
+                        if token:
+                            yield f"data: {json.dumps({'token': token})}\n\n"
+                        if finished:
+                            yield _SSE_DONE
+                            return
 
         yield _SSE_DONE
 
     except httpx.ConnectError:
-        yield f"data: {json.dumps({'error': f'Cannot connect to Ollama at {base_url}. Make sure Ollama is running.'})}\n\n"
+        # No URL: for a customer using their own AI that is private
+        # infrastructure, and ai.py already treats URL disclosure as a bug
+        # elsewhere in this file.
+        logger.warning("ai provider unreachable (host=%s)", ai_provider._host(cfg.base_url))
+        yield f"data: {json.dumps({'error': 'Cannot reach the configured AI service.'})}\n\n"
         yield _SSE_DONE
     except asyncio.TimeoutError:
-        yield f"data: {json.dumps({'error': 'Ollama request timed out (300s). The cloud model may be loading.'})}\n\n"
+        yield f"data: {json.dumps({'error': 'The AI request timed out (300s). The model may still be loading.'})}\n\n"
         yield _SSE_DONE
     except Exception as exc:
-        yield f"data: {json.dumps({'error': str(exc)})}\n\n"
+        # str(exc) is not safe here: httpx embeds the full request URL.
+        logger.exception("ai request failed")
+        yield f"data: {json.dumps({'error': f'AI request failed ({type(exc).__name__}).'})}\n\n"
         yield _SSE_DONE
 
 

@@ -1,0 +1,32 @@
+[Unit]
+Description=Build the appliance on first boot (ISO install only)
+Documentation=file:/var/log/appliance-provision.log
+# Needs a real network: the provisioning scripts install apt, pip and npm
+# packages and compile the backend. network-online.target is necessary but not
+# sufficient, so provision.sh also waits for DNS to actually resolve.
+After=network-online.target
+Wants=network-online.target
+# Runs once. provision.sh writes this file just before it seals and reboots, so
+# a reboot that races the write cannot cause a second provisioning pass.
+ConditionPathExists=!/var/lib/appliance-provisioned
+# Ordered before the units 20-app.sh enables, so that on the provisioning boot
+# neither one starts against a half built tree. They are not enabled yet on this
+# boot in any case, but stating it keeps the ordering true if that changes.
+Before=appliance-firstboot.service appliance-api.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/opt/appliance-build/provision.sh
+# The operator is watching a physical console with no other output on it. Send
+# progress there as well as to the journal, otherwise a 45 minute silent boot
+# looks like a hang and the machine gets powered off mid install.
+StandardOutput=journal+console
+StandardError=journal+console
+# No TimeoutStartSec here on purpose. The default is 90 seconds, which this
+# blows through during apt alone; a Nuitka compile on slow hardware can run past
+# an hour and being killed part way would leave an unbootable half built system.
+TimeoutStartSec=infinity
+
+[Install]
+WantedBy=multi-user.target

@@ -55,6 +55,7 @@ from app.models.login_event import LoginEvent
 from app.models.user_session import UserSession
 from app.models.risk_snapshot import RiskSnapshot
 from app.models.group import Group
+from app.models.tenant_ai_config import TenantAIConfig
 
 __all__ = [
     "Tenant", "User", "UserRole",
@@ -92,5 +93,6 @@ __all__ = [
     "UserSession",
     "RiskSnapshot",
     "Group",
+    "TenantAIConfig",
     "AiAccessRequest", "AiUsageQuota", "ApiToken",
 ]

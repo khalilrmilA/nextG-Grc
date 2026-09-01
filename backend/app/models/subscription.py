@@ -179,6 +179,14 @@ class Subscription(Base):
         the future that isn't yet listed in ELITE_FEATURES. Non-Elite tiers fall back to
         their effective limits map (tier defaults + custom_limits overrides).
         """
+        # An EXPLICIT override always wins, including over Elite. Without this,
+        # a platform owner cannot take a single feature away from an Elite
+        # tenant, which is the exact case the Access Control page exists for.
+        # Absent an override the behaviour is unchanged: Elite unlocks
+        # everything, including flags added after ELITE_FEATURES was written.
+        override = (self.custom_limits or {}).get(feature)
+        if override is not None:
+            return bool(override)
         if self.tier == SubscriptionTier.ELITE:
             return True
         return bool(self.limits.get(feature, False))

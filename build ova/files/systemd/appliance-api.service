@@ -1,0 +1,52 @@
+[Unit]
+Description=Appliance API
+After=network-online.target appliance-firstboot.service
+Wants=network-online.target
+Requires=appliance-firstboot.service
+
+[Service]
+Type=simple
+User=appliance
+Group=appliance
+# The database and the uploads directory live here, and app/core/config.py
+# resolves UPLOADS_DIR relative to the working directory when it is not
+# absolute, so this is the only safe value.
+WorkingDirectory=/var/lib/appliance
+EnvironmentFile=/etc/appliance/app.env
+# Rewritten by 25-protect-app.sh to point at the artefact the chosen
+# PROTECT_LEVEL produced. One worker: JWT revocation, rate limiting and the
+# background schedulers all hold state in process memory, so a second worker
+# would split it.
+ExecStart=/opt/appliance/runtime/appliance-api serve
+Restart=on-failure
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=appliance-api
+
+# A core dump of this process contains the decompiled application and every
+# secret it holds.
+LimitCORE=0
+
+# Sandboxing
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+ProtectProc=invisible
+RestrictSUIDSGID=true
+RestrictNamespaces=true
+RestrictRealtime=true
+LockPersonality=true
+MemoryDenyWriteExecute=false
+SystemCallArchitectures=native
+CapabilityBoundingSet=
+AmbientCapabilities=
+ReadWritePaths=/var/lib/appliance /var/log/appliance
+
+[Install]
+WantedBy=multi-user.target

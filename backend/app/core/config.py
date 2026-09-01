@@ -102,6 +102,23 @@ class Settings(BaseSettings):
     OLLAMA_CHAT_MODEL: str = "gpt-oss:120b-cloud"
     OLLAMA_ANALYSIS_BATCH_SIZE: int = 25
 
+    # Bring your own AI. An empty AI_PROVIDER means today's behaviour exactly:
+    # local Ollama, native /api/chat, and no Authorization header at all. The
+    # OLLAMA_* settings above are deliberately left alone so nothing that reads
+    # them changes.
+    AI_PROVIDER: str = ""                      # "" | "ollama" | "openai"
+    AI_BASE_URL: str = ""                      # e.g. https://api.openai.com/v1
+    AI_API_KEY: str = ""
+    AI_MODEL: str = ""
+    # SaaS keeps this on so each customer can bring their own endpoint. A locked
+    # down appliance can set it to 0 and pin every tenant to the deployment's.
+    AI_ALLOW_TENANT_OVERRIDE: bool = True
+    # Plain http is refused to public hosts; private addresses are always
+    # allowed. This is the escape hatch for an unusual network.
+    AI_ALLOW_INSECURE_ENDPOINTS: bool = False
+    # A private CA bundle, for customers behind an inspecting proxy.
+    AI_CA_BUNDLE: str = ""
+
     # Threat Intelligence
     OPENSOURCEMALWARE: str = ""   # opensourcemalware.com API key
 

@@ -16,7 +16,13 @@ from app.core.security import hash_password
 from app.models.license import IssuedLicense
 from app.models.user import User, UserRole
 from app.models.tenant import Tenant
-from app.models.subscription import Subscription, SubscriptionTier, SubscriptionStatus
+from app.models.subscription import (
+    Subscription,
+    SubscriptionTier,
+    SubscriptionStatus,
+    TIER_LIMITS,
+    ELITE_FEATURES,
+)
 from app.models.ai_access import AiAccessRequest, AiUsageQuota
 from app.api.v1.dependencies.auth import get_current_user
 from app.workers.tasks.notifications import (
@@ -81,7 +87,36 @@ class TenantAccessResponse(BaseModel):
     tenant_id: str
     tenant_name: str
     plan: str
+    # Kept so the existing Access Control page keeps rendering. It now carries
+    # the tenant's REAL enabled set instead of the same 8 constants for everyone.
     enabled_modules: list[str]
+    # The full effective map: pack defaults with per-tenant overrides applied.
+    features: dict
+    # Only the explicit per-tenant overrides, so the UI can show what was
+    # deliberately changed away from the pack.
+    overrides: dict
+
+
+class TenantAccessUpdate(BaseModel):
+    """Either or both may be sent.
+
+    pack     switches the tenant's subscription tier.
+    features per-feature overrides; a value equal to the pack default is dropped
+             rather than stored, so custom_limits records only real deviations.
+    """
+    pack: str | None = None
+    features: dict[str, bool] | None = None
+
+
+class FeatureCatalogueEntry(BaseModel):
+    key: str
+    group: str
+
+
+class FeatureCatalogueResponse(BaseModel):
+    packs: list[str]
+    features: list[FeatureCatalogueEntry]
+    pack_defaults: dict
 
 
 # ── Users ─────────────────────────────────────────────────────────────────────
@@ -242,56 +277,153 @@ async def delete_user(
 MODULE_DEFAULTS = ["dashboard", "risks", "compliance", "frameworks", "audits", "policies", "vendors", "policy-generator"]
 
 
+# Core modules every tenant has. These are NOT gated by require_feature; they are
+# the product. Listed so the page can show them alongside the paid features.
+CORE_MODULES = MODULE_DEFAULTS
+
+# Numeric limits are shown but not toggled, so keep them out of the switch list.
+_NON_TOGGLE = {"max_frameworks", "max_admin_users", "max_vendors",
+               "max_integrations", "sla_uptime"}
+
+
+def _togglable_features() -> list[tuple[str, str]]:
+    """Every boolean entitlement, with the group it belongs to."""
+    out: list[tuple[str, str]] = []
+    for key in TIER_LIMITS[SubscriptionTier.ENTERPRISE]:
+        if key not in _NON_TOGGLE:
+            out.append((key, "platform"))
+    for key in ELITE_FEATURES:
+        out.append((key, "elite_pack"))
+    seen, uniq = set(), []
+    for key, group in out:
+        if key not in seen:
+            seen.add(key)
+            uniq.append((key, group))
+    return uniq
+
+
+def _effective(sub: Subscription | None) -> dict:
+    """The tenant's real feature map, overrides included."""
+    if sub is None:
+        base = dict(TIER_LIMITS[SubscriptionTier.STARTER])
+        return {k: bool(base.get(k, False)) for k, _ in _togglable_features()}
+    return {k: sub.has_feature(k) for k, _ in _togglable_features()}
+
+
+def _access_row(tenant: Tenant, sub: Subscription | None) -> TenantAccessResponse:
+    features = _effective(sub)
+    enabled = list(CORE_MODULES) + sorted(k for k, v in features.items() if v)
+    return TenantAccessResponse(
+        tenant_id=tenant.id,
+        tenant_name=tenant.name,
+        plan=sub.tier.value if sub else "free_trial",
+        enabled_modules=enabled,
+        features=features,
+        overrides=dict(sub.custom_limits or {}) if sub else {},
+    )
+
+
+@router.get("/feature-catalogue", response_model=FeatureCatalogueResponse)
+async def feature_catalogue(
+    _: Annotated[User, Depends(_require_super_admin())],
+):
+    """Everything the Access Control page needs to render: packs and features.
+
+    Served from the same TIER_LIMITS the gate reads, so the page can never drift
+    out of sync with what is actually enforced.
+    """
+    feats = _togglable_features()
+    return FeatureCatalogueResponse(
+        packs=[t.value for t in SubscriptionTier],
+        features=[FeatureCatalogueEntry(key=k, group=g) for k, g in feats],
+        pack_defaults={
+            tier.value: {k: bool(TIER_LIMITS[tier].get(k, False)) for k, _ in feats}
+            for tier in SubscriptionTier
+        },
+    )
+
+
 @router.get("/tenant-access", response_model=list[TenantAccessResponse])
 async def list_tenant_access(
     db: Annotated[AsyncSession, Depends(get_db)],
     _: Annotated[User, Depends(_require_super_admin())],
 ):
-    """List all tenants with their enabled modules."""
+    """Every tenant with the modules and features it can actually use."""
     result = await db.execute(
         select(Tenant, Subscription)
         .outerjoin(Subscription, Subscription.tenant_id == Tenant.id)
         .where(Tenant.slug != "platform")
         .order_by(Tenant.name)
     )
-    rows = result.all()
-    out = []
-    for tenant, sub in rows:
-        plan = sub.tier.value if sub else "free_trial"
-        # Use enabled_modules stored on subscription metadata if available, else defaults
-        enabled = getattr(sub, "enabled_modules", None) or MODULE_DEFAULTS
-        out.append(TenantAccessResponse(
-            tenant_id=tenant.id,
-            tenant_name=tenant.name,
-            plan=plan,
-            enabled_modules=enabled,
-        ))
-    return out
+    return [_access_row(tenant, sub) for tenant, sub in result.all()]
 
 
 @router.patch("/tenant-access/{tenant_id}", response_model=TenantAccessResponse)
 async def update_tenant_access(
     tenant_id: str,
-    body: dict,
+    body: TenantAccessUpdate,
     db: Annotated[AsyncSession, Depends(get_db)],
     _: Annotated[User, Depends(_require_super_admin())],
 ):
-    """Update enabled modules for a tenant."""
+    """Set a tenant's pack and/or individual feature overrides.
+
+    This endpoint previously returned the request body without writing anything,
+    so the page appeared to save and a refresh discarded the change.
+    """
     result = await db.execute(select(Tenant).where(Tenant.id == tenant_id))
     tenant = result.scalar_one_or_none()
     if not tenant:
         raise HTTPException(status_code=404, detail="Tenant not found")
 
-    sub_result = await db.execute(select(Subscription).where(Subscription.tenant_id == tenant_id))
-    sub = sub_result.scalar_one_or_none()
-    plan = sub.tier.value if sub else "free_trial"
-
-    return TenantAccessResponse(
-        tenant_id=tenant.id,
-        tenant_name=tenant.name,
-        plan=plan,
-        enabled_modules=body.get("enabled_modules", MODULE_DEFAULTS),
+    sub_result = await db.execute(
+        select(Subscription).where(Subscription.tenant_id == tenant_id)
     )
+    sub = sub_result.scalar_one_or_none()
+    if not sub:
+        raise HTTPException(
+            status_code=404, detail="Subscription not found for this tenant"
+        )
+
+    if body.pack is not None:
+        try:
+            sub.tier = SubscriptionTier(body.pack)
+        except ValueError:
+            raise HTTPException(
+                status_code=422,
+                detail="Unknown pack %r; expected one of %s"
+                % (body.pack, [t.value for t in SubscriptionTier]),
+            )
+
+    if body.features is not None:
+        known = {k for k, _ in _togglable_features()}
+        unknown = sorted(set(body.features) - known)
+        if unknown:
+            raise HTTPException(
+                status_code=422, detail="Unknown feature(s): %s" % unknown
+            )
+        # Store only genuine deviations from the pack, so switching pack later
+        # does not leave stale overrides silently pinning old values.
+        defaults = TIER_LIMITS[sub.tier]
+        overrides = dict(sub.custom_limits or {})
+        for key, value in body.features.items():
+            is_elite = sub.tier == SubscriptionTier.ELITE
+            default = True if is_elite else bool(defaults.get(key, False))
+            if bool(value) == default:
+                overrides.pop(key, None)
+            else:
+                overrides[key] = bool(value)
+        # Reassign rather than mutate: SQLAlchemy does not track in-place edits
+        # of a JSON column, so mutating it would not be persisted.
+        sub.custom_limits = overrides
+
+    await db.commit()
+    await db.refresh(sub)
+    logger.info(
+        "tenant access updated",
+        extra={"tenant_id": tenant_id, "pack": sub.tier.value,
+               "override_count": len(sub.custom_limits or {})},
+    )
+    return _access_row(tenant, sub)
 
 
 # ── AI Access Management ───────────────────────────────────────────────────────

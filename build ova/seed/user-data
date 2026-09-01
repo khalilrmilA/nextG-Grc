@@ -1,0 +1,23 @@
+#cloud-config
+# cloud-init seed for the VirtualBox build path (scripts/build-ova-local.sh).
+#
+# This path boots the Ubuntu cloud image rather than running the installer, so
+# it authenticates with a build SSH key generated on the fly. The literal
+# REPLACED_AT_BUILD_TIME below is substituted with the public half of that key;
+# no credential is committed here.
+users:
+  - name: builder
+    sudo: ALL=(ALL) NOPASSWD:ALL
+    shell: /bin/bash
+    lock_passwd: true
+    ssh_authorized_keys:
+      - REPLACED_AT_BUILD_TIME
+
+ssh_pwauth: false
+disable_root: true
+
+packages:
+  - open-vm-tools
+  - python3
+  - curl
+  - ca-certificates

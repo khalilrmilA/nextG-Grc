@@ -1,0 +1,10 @@
+# Build artefacts and detritus. None of this belongs in the repository, and
+# some of it (crash logs, staged source, exported images) can contain paths,
+# variable names or the application itself.
+.build/
+output/
+packer/crash.log
+*.ova
+*.ova.sha256
+__pycache__/
+packer/packer_cache/

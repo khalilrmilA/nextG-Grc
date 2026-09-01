@@ -1,0 +1,49 @@
+#!/usr/bin/env bash
+# admin-reset <new-password>
+#
+# Called by the console menu (files/console/appliance-console.sh, option 4).
+# Referenced by that menu since the scaffold was written but never implemented,
+# which is defect 3.
+#
+# The console passes a password it generated. That generator strips symbols,
+# and app/core/password_policy.py requires one, so a password arriving here can
+# legitimately be rejected. When no argument is given the binary generates a
+# compliant password itself and prints it, which is the path the console now
+# uses.
+set -euo pipefail
+
+APPBIN=/opt/appliance/runtime/appliance-api
+ENVFILE=/etc/appliance/app.env
+
+if [ ! -x "${APPBIN}" ]; then
+  echo "application binary not found at ${APPBIN}" >&2
+  exit 1
+fi
+
+if [ -r "${ENVFILE}" ]; then
+  set -a
+  # shellcheck disable=SC1090
+  . "${ENVFILE}"
+  set +a
+fi
+
+# Run as the SERVICE user, not as root.
+#
+# 35-lockdown.sh loads an AppArmor profile, and AppArmor grants no capability it
+# is not asked for. A confined root process therefore has no CAP_DAC_OVERRIDE,
+# so it falls into "other" on appliance-owned files and gets nothing:
+#
+#   sqlalchemy.exc.OperationalError: unable to open database file
+#
+# Everything this binary touches (the database, uploads, the state directory) is
+# owned by "appliance", so running as that user is both the fix and the correct
+# least-privilege design.
+run_app() { runuser -u appliance -- env APPLIANCE_STATE_DIR=/var/lib/appliance "${APPBIN}" "$@"; }
+
+if [ "$#" -ge 1 ] && [ -n "${1:-}" ]; then
+  # Password supplied: hand it over on stdin, never on argv, so it does not
+  # appear in /proc/<pid>/cmdline or in a process listing.
+  printf '%s\n' "$1" | run_app admin-reset --password-stdin
+else
+  run_app admin-reset --generate
+fi
