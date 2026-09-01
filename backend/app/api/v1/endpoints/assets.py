@@ -11,9 +11,9 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
-from app.api.v1.dependencies.auth import get_current_user, get_tenant_id
+from app.api.v1.dependencies.auth import get_current_user, get_tenant_id, require_roles
 from app.api.v1.dependencies.features import require_feature
-from app.models.user import User
+from app.models.user import User, UserRole
 from app.models.asset import Asset, AssetType, AssetCriticality
 from app.models.asset_history import AssetValuationHistory
 
@@ -215,7 +215,7 @@ async def eol_soon(
 
 
 @router.post("", response_model=AssetOut, status_code=201)
-async def create_asset(body: AssetCreate, db: AsyncSession = Depends(get_db), _: User = Depends(get_current_user), tenant_id: str = Depends(get_tenant_id)):
+async def create_asset(body: AssetCreate, db: AsyncSession = Depends(get_db), _: User = Depends(require_roles(UserRole.BUSINESS_OWNER, UserRole.CISO)), tenant_id: str = Depends(get_tenant_id)):
     # RFP: mandatory business owner — validate it belongs to the tenant.
     owner = (await db.execute(
         select(User).where(User.id == body.owner_id, User.tenant_id == tenant_id)
@@ -247,7 +247,7 @@ async def get_asset(aid: str, db: AsyncSession = Depends(get_db), _: User = Depe
 
 
 @router.patch("/{aid}", response_model=AssetOut)
-async def update_asset(aid: str, body: AssetUpdate, db: AsyncSession = Depends(get_db), _: User = Depends(get_current_user), tenant_id: str = Depends(get_tenant_id)):
+async def update_asset(aid: str, body: AssetUpdate, db: AsyncSession = Depends(get_db), _: User = Depends(require_roles(UserRole.BUSINESS_OWNER, UserRole.CISO)), tenant_id: str = Depends(get_tenant_id)):
     a = await _get_asset(aid, tenant_id, db)
     for f in ["name", "description", "owner_id", "hosting_type", "cloud_provider", "location",
               "data_classification", "contains_pii", "contains_phi", "contains_pci", "tags",
@@ -322,6 +322,6 @@ async def cia_history(
 
 
 @router.delete("/{aid}", status_code=204)
-async def delete_asset(aid: str, db: AsyncSession = Depends(get_db), _: User = Depends(get_current_user), tenant_id: str = Depends(get_tenant_id)):
+async def delete_asset(aid: str, db: AsyncSession = Depends(get_db), _: User = Depends(require_roles(UserRole.BUSINESS_OWNER, UserRole.CISO)), tenant_id: str = Depends(get_tenant_id)):
     a = await _get_asset(aid, tenant_id, db)
     await db.delete(a); await db.commit()

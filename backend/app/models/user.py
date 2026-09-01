@@ -9,13 +9,16 @@ from app.core.database import Base
 class UserRole(str, enum.Enum):
     SUPER_ADMIN = "super_admin"       # Platform admin (internal)
     TENANT_ADMIN = "tenant_admin"     # Company/tenant owner — manages all users
-    CISO = "ciso"                     # Chief Information Security Officer
+    CISO = "ciso"                     # Chief Information Security Officer / RSSI
     RISK_MANAGER = "risk_manager"     # Risk management team
     COMPLIANCE_MANAGER = "compliance_manager"
     AUDITOR = "auditor"               # Internal/external auditor (read-heavy)
     POLICY_MANAGER = "policy_manager"
     VENDOR_MANAGER = "vendor_manager"
     CONTROL_OWNER = "control_owner"   # Owns specific controls
+    BUSINESS_OWNER = "business_owner"     # Propriétaire métier — asset qualification/ownership
+    SECURITY_ANALYST = "security_analyst"  # Analyste sécurité — threat/vulnerability analysis
+    EXECUTIVE = "executive"           # Direction Générale — strategic dashboards, read-only
     VIEWER = "viewer"                 # Read-only access
 
 
@@ -29,8 +32,17 @@ ASSIGNABLE_ROLES = {
     UserRole.POLICY_MANAGER,
     UserRole.VENDOR_MANAGER,
     UserRole.CONTROL_OWNER,
+    UserRole.BUSINESS_OWNER,
+    UserRole.SECURITY_ANALYST,
+    UserRole.EXECUTIVE,
     UserRole.VIEWER,
 }
+
+# Read-only profiles: never granted write access via require_roles() checks,
+# regardless of which roles a route lists — mirrors the VIEWER write-block in
+# get_current_user. Direction Générale ("Executive") is read-only by RFP design
+# (consultation des tableaux de bord stratégiques), not a data-entry role.
+READ_ONLY_ROLES = {UserRole.VIEWER, UserRole.EXECUTIVE}
 
 
 class User(Base):

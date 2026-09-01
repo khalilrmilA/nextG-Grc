@@ -79,6 +79,14 @@ async def get_current_user(
             detail="Demo accounts are read-only. Upgrade to a full account to use this feature.",
         )
 
+    # Executive (Direction Générale) is a strategic read-only profile by RFP
+    # design — consultation of dashboards/KPIs only, never data entry.
+    if user.role == UserRole.EXECUTIVE and request.method in _WRITE_METHODS:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Executive accounts are read-only (strategic dashboards / consultation).",
+        )
+
     # Active-sessions revocation: reject a token whose session was revoked. Fail-open on
     # any error (or tokens with no sid) so this can never lock users out of the app.
     sid = payload.get("sid")
