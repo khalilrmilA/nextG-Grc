@@ -80,7 +80,7 @@ export const eliteEn = {
   docs: {
     title: "Documentation", subtitle: "Administrator guide, training programme and service level for the platform",
     tab_admin: "Administrator Guide", tab_training: "Training", tab_sla: "Service Level (SLA)",
-    sla_note: "Proposed terms for STB's review; figures are indicative and to be confirmed contractually.",
+    sla_note: "Proposed terms for your review; figures are indicative and to be confirmed contractually.",
     sla_thead: ["Severity", "Definition", "Response", "Resolution"],
     sla_rows: [
       ["S1 — Critical", "Platform down / data at risk", "1 business hour", "4 business hours"],
@@ -98,17 +98,17 @@ export const eliteEn = {
       { h: "Elite Pack & troubleshooting", items: ["Grant the pack: `scripts.grant_elite_pack --tenant <slug>`.", "A 'Service unavailable' page = the app fell back on a 5xx/network error — check health & logs.", "The CVE catalog refreshes daily; trigger manually with 'Sync from NVD'."] },
     ],
     training: [
-      { h: "Objectives", items: ["Enable STB staff to operate the platform independently — administrators to install, secure, back up and maintain it; risk & compliance teams to run the GRC workflow end to end."] },
+      { h: "Objectives", items: ["Enable your organization's staff to operate the platform independently — administrators to install, secure, back up and maintain it; risk & compliance teams to run the GRC workflow end to end."] },
       { h: "Audience", items: ["Platform administrators (IT / security operations)", "CISO office, risk managers, compliance officers", "Auditors (assigned-scope usage)"] },
       { h: "Day 1 — Functional", items: ["Platform tour, roles & navigation; assets & CIA valuation", "Vulnerabilities, scanner import, CVE knowledge base & triage", "Threats, risk register, matrices, scenarios & appetite", "Lab: build a risk scenario and read its residual/target score"] },
       { h: "Day 2 — Compliance, governance & administration", items: ["Framework assessments, gaps, evidence & control effectiveness", "Governance, audit lifecycle, reporting & dashboards, OCR & doc generator", "Administration: users, MFA & sessions, backups, hardening, Elite grants", "Lab: run an assessment, generate a report, perform a backup and a readiness check"] },
       { h: "Materials & handover", items: ["This documentation + in-app Help + a training tenant with sample data", "Scenario-based assessment and an administrator runbook walkthrough", "30-day post-training support window (see SLA)"] },
     ],
     sla: [
-      { h: "Scope & availability", items: ["Operation, support and maintenance on STB-approved infrastructure.", "Availability target: **99.5%** monthly, excluding scheduled maintenance (announced at least 48h ahead)."] },
+      { h: "Scope & availability", items: ["Operation, support and maintenance on your organization's approved infrastructure.", "Availability target: **99.5%** monthly, excluding scheduled maintenance (announced at least 48h ahead)."] },
       { h: "Support & incident response", items: [], table: true },
-      { h: "Backup, DR & security", items: ["Automated backups (default hourly); recovery objectives **RPO <= 1h**, **RTO <= 4h** (to confirm with STB DR).", "Role-based access, MFA, tamper-evident audit log, session revocation; AI on a local model (no data leaves STB)."] },
-      { h: "Reporting, review & exclusions", items: ["Monthly availability & incident report; quarterly service review; change management for updates.", "Excludes issues from STB-side infrastructure / network / third parties or unsupported configurations."] },
+      { h: "Backup, DR & security", items: ["Automated backups (default hourly); recovery objectives **RPO <= 1h**, **RTO <= 4h** (to confirm with your DR plan).", "Role-based access, MFA, tamper-evident audit log, session revocation; AI on a local model (no data leaves your environment)."] },
+      { h: "Reporting, review & exclusions", items: ["Monthly availability & incident report; quarterly service review; change management for updates.", "Excludes issues from your own infrastructure / network / third parties or unsupported configurations."] },
     ],
   },
   ocr: {
@@ -217,7 +217,7 @@ export const eliteFr = {
   docs: {
     title: "Documentation", subtitle: "Guide d'administration, programme de formation et niveau de service de la plateforme",
     tab_admin: "Guide d'administration", tab_training: "Formation", tab_sla: "Niveau de service (SLA)",
-    sla_note: "Conditions proposées, soumises à la validation de la STB ; les valeurs sont indicatives et à confirmer contractuellement.",
+    sla_note: "Conditions proposées, soumises à votre validation ; les valeurs sont indicatives et à confirmer contractuellement.",
     sla_thead: ["Sévérité", "Définition", "Prise en charge", "Résolution"],
     sla_rows: [
       ["S1 — Critique", "Plateforme indisponible / données à risque", "1 heure ouvrée", "4 heures ouvrées"],
@@ -235,17 +235,17 @@ export const eliteFr = {
       { h: "Elite Pack & dépannage", items: ["Activer le pack : `scripts.grant_elite_pack --tenant <slug>`.", "Une page « Service indisponible » = l'application a basculé sur une erreur 5xx/réseau — vérifier la santé et les journaux.", "Le catalogue CVE se met à jour quotidiennement ; déclencher manuellement avec « Sync from NVD »."] },
     ],
     training: [
-      { h: "Objectifs", items: ["Permettre au personnel de la STB d'exploiter la plateforme de façon autonome — les administrateurs pour l'installer, la sécuriser, la sauvegarder et la maintenir ; les équipes risques & conformité pour dérouler le processus GRC de bout en bout."] },
+      { h: "Objectifs", items: ["Permettre à votre personnel d'exploiter la plateforme de façon autonome — les administrateurs pour l'installer, la sécuriser, la sauvegarder et la maintenir ; les équipes risques & conformité pour dérouler le processus GRC de bout en bout."] },
       { h: "Public", items: ["Administrateurs de la plateforme (IT / sécurité opérationnelle)", "Bureau du RSSI, gestionnaires des risques, responsables conformité", "Auditeurs (usage à périmètre assigné)"] },
       { h: "Jour 1 — Fonctionnel", items: ["Visite guidée, rôles & navigation ; actifs & valorisation DIC", "Vulnérabilités, import de scanners, base de connaissances CVE & triage", "Menaces, registre des risques, matrices, scénarios & appétence", "Atelier : construire un scénario de risque et lire son score résiduel/cible"] },
       { h: "Jour 2 — Conformité, gouvernance & administration", items: ["Évaluations de référentiels, écarts, preuves & efficacité des contrôles", "Gouvernance, cycle d'audit, reporting & tableaux de bord, OCR & générateur de documents", "Administration : utilisateurs, MFA & sessions, sauvegardes, durcissement, activations Elite", "Atelier : lancer une évaluation, générer un rapport, effectuer une sauvegarde et un contrôle de préparation"] },
       { h: "Supports & transfert", items: ["Cette documentation + l'aide intégrée + un tenant de formation avec données d'exemple", "Évaluation par scénarios et démonstration du runbook administrateur", "Fenêtre de support de 30 jours après la formation (voir SLA)"] },
     ],
     sla: [
-      { h: "Périmètre & disponibilité", items: ["Exploitation, support et maintenance sur une infrastructure validée par la STB.", "Objectif de disponibilité : **99,5 %** mensuel, hors maintenance planifiée (annoncée au moins 48h à l'avance)."] },
+      { h: "Périmètre & disponibilité", items: ["Exploitation, support et maintenance sur une infrastructure validée par vos soins.", "Objectif de disponibilité : **99,5 %** mensuel, hors maintenance planifiée (annoncée au moins 48h à l'avance)."] },
       { h: "Support & réponse aux incidents", items: [], table: true },
-      { h: "Sauvegarde, PRA & sécurité", items: ["Sauvegardes automatiques (par défaut horaires) ; objectifs de reprise **RPO <= 1h**, **RTO <= 4h** (à confirmer avec le PRA de la STB).", "Accès basé sur les rôles, MFA, journal d'audit inviolable, révocation de session ; IA sur modèle local (aucune donnée ne quitte la STB)."] },
-      { h: "Reporting, revue & exclusions", items: ["Rapport mensuel de disponibilité & incidents ; revue de service trimestrielle ; gestion du changement pour les mises à jour.", "Exclut les problèmes liés à l'infrastructure/réseau de la STB, aux tiers ou aux configurations non supportées."] },
+      { h: "Sauvegarde, PRA & sécurité", items: ["Sauvegardes automatiques (par défaut horaires) ; objectifs de reprise **RPO <= 1h**, **RTO <= 4h** (à confirmer avec votre PRA).", "Accès basé sur les rôles, MFA, journal d'audit inviolable, révocation de session ; IA sur modèle local (aucune donnée ne quitte votre environnement)."] },
+      { h: "Reporting, revue & exclusions", items: ["Rapport mensuel de disponibilité & incidents ; revue de service trimestrielle ; gestion du changement pour les mises à jour.", "Exclut les problèmes liés à votre propre infrastructure/réseau, aux tiers ou aux configurations non supportées."] },
     ],
   },
   ocr: {
@@ -354,7 +354,7 @@ export const eliteAr = {
   docs: {
     title: "التوثيق", subtitle: "دليل الإدارة وبرنامج التدريب ومستوى الخدمة للمنصّة",
     tab_admin: "دليل الإدارة", tab_training: "التدريب", tab_sla: "مستوى الخدمة (SLA)",
-    sla_note: "شروط مقترحة لمراجعة STB؛ القيم إرشادية وتُؤكَّد تعاقديًا.",
+    sla_note: "شروط مقترحة لمراجعتكم؛ القيم إرشادية وتُؤكَّد تعاقديًا.",
     sla_thead: ["الخطورة", "التعريف", "الاستجابة", "الحل"],
     sla_rows: [
       ["S1 — حرجة", "المنصّة متوقفة / بيانات في خطر", "ساعة عمل واحدة", "4 ساعات عمل"],
@@ -372,17 +372,17 @@ export const eliteAr = {
       { h: "Elite Pack واستكشاف الأخطاء", items: ["تفعيل الحزمة: `scripts.grant_elite_pack --tenant <slug>`.", "صفحة «الخدمة غير متاحة» = تراجع التطبيق بسبب خطأ 5xx/شبكة — تحقّق من الصحة والسجلات.", "يُحدَّث فهرس CVE يوميًا؛ شغّله يدويًا عبر «Sync from NVD»."] },
     ],
     training: [
-      { h: "الأهداف", items: ["تمكين موظفي STB من تشغيل المنصّة باستقلالية — المشرفون لتثبيتها وتأمينها ونسخها احتياطيًا وصيانتها؛ فرق المخاطر والامتثال لإدارة سير عمل الحوكمة والمخاطر والامتثال بالكامل."] },
+      { h: "الأهداف", items: ["تمكين موظفيكم من تشغيل المنصّة باستقلالية — المشرفون لتثبيتها وتأمينها ونسخها احتياطيًا وصيانتها؛ فرق المخاطر والامتثال لإدارة سير عمل الحوكمة والمخاطر والامتثال بالكامل."] },
       { h: "الجمهور", items: ["مشرفو المنصّة (تقنية المعلومات / أمن العمليات)", "مكتب RSSI، مديرو المخاطر، مسؤولو الامتثال", "المدقّقون (استخدام ضمن النطاق المُسند)"] },
       { h: "اليوم 1 — الوظيفي", items: ["جولة في المنصّة، الأدوار والتنقّل؛ الأصول وتقييم DIC", "الثغرات، استيراد الماسحات، قاعدة معارف CVE والفرز", "التهديدات، سجل المخاطر، المصفوفات، السيناريوهات والشهية", "تمرين: بناء سيناريو مخاطر وقراءة درجته المتبقية/المستهدفة"] },
       { h: "اليوم 2 — الامتثال والحوكمة والإدارة", items: ["تقييمات الأطر، الفجوات، الأدلة وفعالية الضوابط", "الحوكمة، دورة التدقيق، التقارير ولوحات المعلومات، OCR ومولّد الوثائق", "الإدارة: المستخدمون، MFA والجلسات، النسخ الاحتياطي، التصليب، تفعيلات Elite", "تمرين: تشغيل تقييم، توليد تقرير، إجراء نسخة احتياطية وفحص جاهزية"] },
       { h: "المواد والتسليم", items: ["هذا التوثيق + المساعدة المدمجة + مستأجر تدريب ببيانات نموذجية", "تقييم قائم على السيناريوهات وعرض دليل تشغيل المشرف", "نافذة دعم 30 يومًا بعد التدريب (انظر SLA)"] },
     ],
     sla: [
-      { h: "النطاق والتوافر", items: ["التشغيل والدعم والصيانة على بنية تحتية معتمدة من STB.", "هدف التوافر: **99.5%** شهريًا، باستثناء الصيانة المجدولة (يُعلَن عنها قبل 48 ساعة على الأقل)."] },
+      { h: "النطاق والتوافر", items: ["التشغيل والدعم والصيانة على بنية تحتية معتمدة من قِبلكم.", "هدف التوافر: **99.5%** شهريًا، باستثناء الصيانة المجدولة (يُعلَن عنها قبل 48 ساعة على الأقل)."] },
       { h: "الدعم والاستجابة للحوادث", items: [], table: true },
-      { h: "النسخ الاحتياطي والتعافي والأمان", items: ["نسخ احتياطي آلي (كل ساعة افتراضيًا)؛ أهداف التعافي **RPO <= 1h** و**RTO <= 4h** (تُؤكَّد مع خطة التعافي لدى STB).", "وصول قائم على الأدوار، MFA، سجل تدقيق غير قابل للعبث، إبطال الجلسات؛ الذكاء الاصطناعي على نموذج محلي (لا تغادر أي بيانات STB)."] },
-      { h: "التقارير والمراجعة والاستثناءات", items: ["تقرير شهري للتوافر والحوادث؛ مراجعة خدمة فصلية؛ إدارة التغيير للتحديثات.", "يستثني المشكلات الناجمة عن بنية/شبكة STB أو الأطراف الثالثة أو الإعدادات غير المدعومة."] },
+      { h: "النسخ الاحتياطي والتعافي والأمان", items: ["نسخ احتياطي آلي (كل ساعة افتراضيًا)؛ أهداف التعافي **RPO <= 1h** و**RTO <= 4h** (تُؤكَّد مع خطة التعافي لديكم).", "وصول قائم على الأدوار، MFA، سجل تدقيق غير قابل للعبث، إبطال الجلسات؛ الذكاء الاصطناعي على نموذج محلي (لا تغادر أي بيانات بيئتكم)."] },
+      { h: "التقارير والمراجعة والاستثناءات", items: ["تقرير شهري للتوافر والحوادث؛ مراجعة خدمة فصلية؛ إدارة التغيير للتحديثات.", "يستثني المشكلات الناجمة عن بنيتكم التحتية أو شبكتكم الخاصة أو الأطراف الثالثة أو الإعدادات غير المدعومة."] },
     ],
   },
   ocr: {

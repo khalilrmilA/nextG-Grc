@@ -80,7 +80,7 @@ async def self_test(
     except Exception:  # noqa: BLE001
         pass
     add("P-03", "Platform", "Multi-DB (Oracle 19c / SQL Server 2019)", PENDING,
-        f"active dialect: {dialect}; validate on STB's Oracle/MSSQL", elim=True)
+        f"active dialect: {dialect}; validate on your target Oracle/MSSQL instance", elim=True)
     try:
         bdir = os.path.join(_backend_dir(), "backups")
         snaps = [f for f in os.listdir(bdir)] if os.path.isdir(bdir) else []
@@ -106,7 +106,7 @@ async def self_test(
     add("A-02", "Access", "Multi-factor authentication (TOTP)", PASS, "MFA enrolment available in Settings")
     ldap = bool(getattr(settings, "LDAP_SERVER", "") or getattr(settings, "LDAP_HOST", ""))
     add("A-03", "Access", "AD/LDAP single sign-on", PASS if ldap else PENDING,
-        "LDAP configured" if ldap else "endpoint live; configure LDAP for STB directory", elim=True)
+        "LDAP configured" if ldap else "endpoint live; configure LDAP for your directory", elim=True)
     # tamper-evident chain integrity for this tenant
     try:
         rows = list((await db.execute(
