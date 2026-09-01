@@ -123,6 +123,14 @@ export const eliteEn = {
     searchable_truncated: "Searchable PDF built from the first {{count}} of {{total}} pages.",
     err_searchable: "Could not build the searchable PDF. Please try again.",
   },
+  data: {
+    export_csv: "Export CSV", export_xml: "Export XML", import_csv: "Import CSV", import_xml: "Import XML",
+    imported_count: "{{count}} imported", imported_with_errors: "{{count}} imported, {{errors}} errors",
+    export_failed: "Export failed", import_failed: "Import failed",
+  },
+  columns: {
+    button: "Columns", title: "Show/hide columns", reset: "Reset to default",
+  },
 };
 
 export const eliteFr = {
@@ -245,6 +253,14 @@ export const eliteFr = {
     searchable_truncated: "PDF interrogeable construit à partir des {{count}} premières pages sur {{total}}.",
     err_searchable: "Impossible de construire le PDF interrogeable. Veuillez réessayer.",
   },
+  data: {
+    export_csv: "Exporter CSV", export_xml: "Exporter XML", import_csv: "Importer CSV", import_xml: "Importer XML",
+    imported_count: "{{count}} importé(s)", imported_with_errors: "{{count}} importé(s), {{errors}} erreur(s)",
+    export_failed: "Échec de l'export", import_failed: "Échec de l'import",
+  },
+  columns: {
+    button: "Colonnes", title: "Afficher/masquer les colonnes", reset: "Réinitialiser",
+  },
 };
 
 export const eliteAr = {
@@ -366,5 +382,13 @@ export const eliteAr = {
     text_pdf_hint: "نص نظيف ومعاد تنسيقه في ملف PDF جديد",
     searchable_truncated: "تم بناء PDF القابل للبحث من أول {{count}} صفحات من أصل {{total}}.",
     err_searchable: "تعذّر بناء PDF القابل للبحث. حاول مجددًا.",
+  },
+  data: {
+    export_csv: "تصدير CSV", export_xml: "تصدير XML", import_csv: "استيراد CSV", import_xml: "استيراد XML",
+    imported_count: "تم استيراد {{count}}", imported_with_errors: "تم استيراد {{count}}، مع {{errors}} خطأ",
+    export_failed: "فشل التصدير", import_failed: "فشل الاستيراد",
+  },
+  columns: {
+    button: "الأعمدة", title: "إظهار/إخفاء الأعمدة", reset: "إعادة التعيين",
   },
 };

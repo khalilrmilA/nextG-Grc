@@ -1123,7 +1123,7 @@ export const threatsApi = {
 
 // ─── Risk Scenarios ─────────────────────────
 export const riskScenariosApi = {
-  list: (params?: { treatment?: string }) =>
+  list: (params?: { treatment?: string; sort?: "priority" }) =>
     apiClient.get("/risk-scenarios", { params }).then((r) => r.data),
   get: (id: string) => apiClient.get(`/risk-scenarios/${id}`).then((r) => r.data),
   create: (data: Record<string, unknown>) => apiClient.post("/risk-scenarios", data).then((r) => r.data),
@@ -1204,22 +1204,31 @@ export const webhooksApi = {
   test: (id: string) => apiClient.post(`/webhooks/${id}/test`).then((r) => r.data),
 };
 
-// ─── Data Import/Export ─────────────────────
+// ─── Data Import/Export (CSV + XML — see backend/app/api/v1/endpoints/data_io.py) ───
+export type DataIoFormat = "csv" | "xml";
+
 export const dataApi = {
-  exportCsv: async (module: string) => {
-    const resp = await apiClient.get(`/data/export/${module}`, { responseType: "blob" });
-    const blob = new Blob([resp.data], { type: "text/csv" });
+  exportCsv: async (module: string) => dataApi.exportData(module, "csv"),
+  exportXml: async (module: string) => dataApi.exportData(module, "xml"),
+  exportData: async (module: string, format: DataIoFormat = "csv") => {
+    const resp = await apiClient.get(`/data/export/${module}`, { params: { format }, responseType: "blob" });
+    const mime = format === "xml" ? "application/xml" : "text/csv";
+    const blob = new Blob([resp.data], { type: mime });
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `${module}_export_${new Date().toISOString().split("T")[0]}.csv`;
+    a.download = `${module}_export_${new Date().toISOString().split("T")[0]}.${format}`;
     document.body.appendChild(a); a.click(); document.body.removeChild(a);
     window.URL.revokeObjectURL(url);
   },
-  importCsv: async (module: string, file: File) => {
+  importCsv: async (module: string, file: File) => dataApi.importData(module, file, "csv"),
+  importXml: async (module: string, file: File) => dataApi.importData(module, file, "xml"),
+  importData: async (module: string, file: File, format: DataIoFormat = "csv") => {
     const fd = new FormData();
     fd.append("file", file);
-    return apiClient.post(`/data/import/${module}`, fd, { headers: { "Content-Type": "multipart/form-data" } }).then((r) => r.data);
+    return apiClient
+      .post(`/data/import/${module}`, fd, { params: { format }, headers: { "Content-Type": "multipart/form-data" } })
+      .then((r) => r.data);
   },
 };
 
@@ -1504,6 +1513,18 @@ export const governanceApi = {
   docsList: () => apiClient.get("/governance/documents").then((r) => r.data),
   docsCreate: (data: Record<string, unknown>) => apiClient.post("/governance/documents", data).then((r) => r.data),
   docsDelete: (id: string) => apiClient.delete(`/governance/documents/${id}`),
+
+  // Per-document ACL (M11.3)
+  accessList: (docId: string) => apiClient.get(`/governance/documents/${docId}/access`).then((r) => r.data),
+  accessGrant: (docId: string, data: { user_id?: string | null; role?: string | null; permission: string }) =>
+    apiClient.post(`/governance/documents/${docId}/access`, data).then((r) => r.data),
+  accessRevoke: (docId: string, accessId: string) => apiClient.delete(`/governance/documents/${docId}/access/${accessId}`),
+
+  // Steering committees (M14.6)
+  committeesList: () => apiClient.get("/governance/committees").then((r) => r.data),
+  committeeCreate: (data: Record<string, unknown>) => apiClient.post("/governance/committees", data).then((r) => r.data),
+  committeeUpdate: (id: string, data: Record<string, unknown>) => apiClient.patch(`/governance/committees/${id}`, data).then((r) => r.data),
+  committeeDelete: (id: string) => apiClient.delete(`/governance/committees/${id}`),
 };
 
 // ── Archiving + retention (Elite Pack) ───────────────────────────────────────
