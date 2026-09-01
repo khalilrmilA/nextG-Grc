@@ -700,6 +700,17 @@ export interface RiskTrendPoint {
   high: number;
 }
 
+export interface DashboardWidgetItem {
+  id: string;
+  visible: boolean;
+}
+
+export interface DashboardLayout {
+  dashboard_key: string;
+  widget_config: DashboardWidgetItem[];
+  is_default: boolean;
+}
+
 export const dashboardApi = {
   getSummary: () => apiClient.get<DashboardSummary>("/dashboard/summary").then((r) => r.data),
   getFrameworksOverview: () => apiClient.get("/dashboard/frameworks-overview").then((r) => r.data),
@@ -709,6 +720,13 @@ export const dashboardApi = {
     apiClient.get<{ series: RiskTrendPoint[]; source: string; note: string }>("/dashboard/risk-trend", {
       params: months ? { months } : {},
     }).then((r) => r.data),
+  // Widget personalization (Elite Pack — custom_dashboards). GET always works
+  // (falls back to a sensible default); PUT 402s for non-Elite tenants and is
+  // handled by the global elite-upsell listener.
+  getLayout: (dashboardKey: string = "main") =>
+    apiClient.get<DashboardLayout>("/dashboard/layout", { params: { dashboard_key: dashboardKey } }).then((r) => r.data),
+  saveLayout: (widgetConfig: DashboardWidgetItem[], dashboardKey: string = "main") =>
+    apiClient.put<DashboardLayout>("/dashboard/layout", { widget_config: widgetConfig }, { params: { dashboard_key: dashboardKey } }).then((r) => r.data),
 };
 
 // ─── Subscriptions ───────────────────────────
@@ -1471,6 +1489,10 @@ export const riskTreatmentApi = {
   trackingByResponsible: () => apiClient.get("/risk-treatment/tracking/by-responsible").then((r) => r.data),
   upsert: (data: Record<string, unknown>) => apiClient.post("/risk-treatment", data).then((r) => r.data),
   risks: () => apiClient.get("/risks", { params: { page_size: 200 } }).then((r) => r.data),
+  // M8.2 gap fix: supersede workflow + plan-level version history.
+  supersede: (riskId: string, data: Record<string, unknown>) =>
+    apiClient.post(`/risk-treatment/${riskId}/supersede`, data).then((r) => r.data),
+  versions: (riskId: string) => apiClient.get(`/risk-treatment/${riskId}/versions`).then((r) => r.data),
 };
 
 // ── Control effectiveness evaluations (Elite Pack) ───────────────────────────
@@ -1519,12 +1541,6 @@ export const governanceApi = {
   accessGrant: (docId: string, data: { user_id?: string | null; role?: string | null; permission: string }) =>
     apiClient.post(`/governance/documents/${docId}/access`, data).then((r) => r.data),
   accessRevoke: (docId: string, accessId: string) => apiClient.delete(`/governance/documents/${docId}/access/${accessId}`),
-
-  // Steering committees (M14.6)
-  committeesList: () => apiClient.get("/governance/committees").then((r) => r.data),
-  committeeCreate: (data: Record<string, unknown>) => apiClient.post("/governance/committees", data).then((r) => r.data),
-  committeeUpdate: (id: string, data: Record<string, unknown>) => apiClient.patch(`/governance/committees/${id}`, data).then((r) => r.data),
-  committeeDelete: (id: string) => apiClient.delete(`/governance/committees/${id}`),
 };
 
 // ── Archiving + retention (Elite Pack) ───────────────────────────────────────

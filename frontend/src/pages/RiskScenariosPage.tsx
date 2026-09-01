@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Plus, Search, X, Loader2, Filter, History, GitCommitHorizontal, AlertTriangle } from "lucide-react";
+import { Plus, Search, X, Loader2, Filter, History, GitCommitHorizontal, AlertTriangle, ArrowUpDown } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { riskScenariosApi, scenarioVersionsApi, assetsApi, vulnerabilitiesApi, threatsApi, appliedControlsApi } from "@/api/endpoints";
 import { MultiSelect, type MultiSelectOption as Option } from "@/components/common/MultiSelect";
@@ -213,6 +213,7 @@ const EMPTY_FORM = {
   strength_of_knowledge: "medium",
   justification: "",
   next_review_date: "",
+  regulatory_exposure_weight: 0,
   asset_ids: [] as string[],
   vulnerability_ids: [] as string[],
   threat_ids: [] as string[],
@@ -226,6 +227,7 @@ export default function RiskScenariosPage() {
   const [showModal, setShowModal] = useState(false);
   const [search, setSearch] = useState("");
   const [treatmentFilter, setTreatmentFilter] = useState("");
+  const [sortBy, setSortBy] = useState<"" | "priority">("");
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
@@ -241,6 +243,7 @@ export default function RiskScenariosPage() {
     try {
       const params: any = {};
       if (treatmentFilter) params.treatment = treatmentFilter;
+      if (sortBy) params.sort = sortBy;
       const data = await riskScenariosApi.list(params);
       setItems(Array.isArray(data) ? data : data.items || []);
     } catch {
@@ -273,7 +276,7 @@ export default function RiskScenariosPage() {
 
   useEffect(() => {
     load();
-  }, [treatmentFilter]);
+  }, [treatmentFilter, sortBy]);
 
   useEffect(() => {
     loadOptions();
@@ -345,6 +348,17 @@ export default function RiskScenariosPage() {
             {TREATMENT_OPTIONS.map((tr) => <option key={tr} value={tr}>{tr.charAt(0).toUpperCase() + tr.slice(1)}</option>)}
           </select>
         </div>
+        <div className="flex items-center gap-2">
+          <ArrowUpDown className="w-4 h-4 text-gray-400" />
+          <select
+            value={sortBy}
+            onChange={(e) => setSortBy(e.target.value as "" | "priority")}
+            className="border border-gray-200 rounded-xl text-sm px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+          >
+            <option value="">{t("risk_scenarios.sort_default", "Sort: Newest")}</option>
+            <option value="priority">{t("risk_scenarios.sort_priority", "Sort: Priority")}</option>
+          </select>
+        </div>
       </div>
 
       {/* Table */}
@@ -365,6 +379,7 @@ export default function RiskScenariosPage() {
                 <th className="text-center px-6 py-3 font-medium text-gray-500">{t("risk_scenarios.table_impact")}</th>
                 <th className="text-center px-6 py-3 font-medium text-gray-500">{t("risk_scenarios.table_current_risk")}</th>
                 <th className="text-center px-6 py-3 font-medium text-gray-500">{t("risk_scenarios.table_target_risk")}</th>
+                <th className="text-center px-6 py-3 font-medium text-gray-500">{t("risk_scenarios.table_priority", "Priority")}</th>
                 <th className="text-left px-6 py-3 font-medium text-gray-500">{t("risk_scenarios.table_threat_actor")}</th>
                 <th className="text-left px-6 py-3 font-medium text-gray-500">{t("risk_scenarios.col_knowledge")}</th>
                 <th className="text-left px-6 py-3 font-medium text-gray-500">{t("risk_scenarios.col_linked")}</th>
@@ -396,6 +411,16 @@ export default function RiskScenariosPage() {
                       <span className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold ${RISK_LEVEL_BG[tgtLevel] || "bg-gray-100 text-gray-600"}`}>
                         {tgtLevel}
                       </span>
+                    </td>
+                    <td className="px-6 py-4 text-center">
+                      {item.priority_score != null ? (
+                        <span
+                          title={t("risk_scenarios.priority_hint", "probability x impact, weighted by regulatory exposure")}
+                          className="inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold bg-indigo-100 text-indigo-700"
+                        >
+                          {item.priority_score}
+                        </span>
+                      ) : "-"}
                     </td>
                     <td className="px-6 py-4 text-gray-600">{item.threat_actor || "-"}</td>
                     <td className="px-6 py-4 text-gray-600">{item.strength_of_knowledge?.replace(/_/g, " ") || "-"}</td>
@@ -541,6 +566,22 @@ export default function RiskScenariosPage() {
                   <label className="block text-sm font-medium text-gray-700 mb-1">{t("risk_scenarios.next_review_date_label", "Next review date")}</label>
                   <input type="date" value={form.next_review_date} onChange={(e) => setForm({ ...form, next_review_date: e.target.value })} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
                 </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center justify-between">
+                  <span>{t("risk_scenarios.form_regulatory_exposure_label", "Regulatory exposure weight")}</span>
+                  <span className="text-xs font-normal text-gray-400">{form.regulatory_exposure_weight.toFixed(1)}</span>
+                </label>
+                <input
+                  type="range"
+                  min={0}
+                  max={1}
+                  step={0.1}
+                  value={form.regulatory_exposure_weight}
+                  onChange={(e) => setForm({ ...form, regulatory_exposure_weight: parseFloat(e.target.value) })}
+                  className="w-full accent-blue-600"
+                />
+                <p className="text-xs text-gray-400 mt-1">{t("risk_scenarios.form_regulatory_exposure_hint", "How much regulatory exposure (e.g. PCI-DSS, GDPR, central-bank reporting) should boost this scenario's priority ranking beyond raw probability x impact. 0 = none, 1 = maximum.")}</p>
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">{t("risk_scenarios.form_justification_label")}</label>

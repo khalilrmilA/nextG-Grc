@@ -37,6 +37,7 @@ class ScenarioCreate(BaseModel):
     existing_controls_description: str | None = None; tags: list[str] = []
     appetite_threshold: float | None = None
     next_review_date: str | None = None
+    regulatory_exposure_weight: float | None = None
 
 class ScenarioUpdate(BaseModel):
     name: str | None = None; description: str | None = None; treatment: str | None = None
@@ -51,6 +52,7 @@ class ScenarioUpdate(BaseModel):
     tags: list[str] | None = None
     appetite_threshold: float | None = None
     next_review_date: str | None = None
+    regulatory_exposure_weight: float | None = None
 
 class ScenarioOut(BaseModel):
     id: str; tenant_id: str; name: str; description: str | None; treatment: str
@@ -64,12 +66,37 @@ class ScenarioOut(BaseModel):
     linked_risk_id: str | None = None
     appetite_threshold: float | None = None
     next_review_date: str | None = None
+    regulatory_exposure_weight: float | None = None
+    priority_score: float | None = None
     created_at: datetime; updated_at: datetime
     model_config = {"from_attributes": True}
 
 def _level(definition, prob, impact):
     """Qualitative risk level from the tenant's active matrix (unified with the risk register)."""
     return risk_scoring.score_and_level(definition, prob, impact)[1]
+
+def _clamp01(v: float | None) -> float | None:
+    """Clamp regulatory_exposure_weight to [0.0, 1.0] rather than rejecting an
+    out-of-range value — mirrors Vulnerability.resolve_context_weight's clamp style."""
+    if v is None:
+        return None
+    return max(0.0, min(1.0, v))
+
+def _priority_score(definition, prob, impact, weight: float | None) -> float | None:
+    """M5.3: weighted prioritization criterion on top of the matrix score.
+
+    Business rule (deliberately simple, documented since it's non-obvious):
+    priority_score = matrix_score * (1 + regulatory_exposure_weight). weight=0 (or
+    unset) leaves the score unchanged; weight=1 (max regulatory exposure — e.g. the
+    scenario touches PCI-DSS/GDPR/central-bank-reportable data) doubles it. This lets
+    two scenarios with an identical probability x impact score be ranked apart by
+    regulatory exposure without discarding the underlying matrix score. None if the
+    scenario has no current probability/impact yet (nothing to rank).
+    """
+    score, _ = risk_scoring.score_and_level(definition, prob, impact)
+    if score is None:
+        return None
+    return round(score * (1 + (weight or 0.0)), 2)
 
 def _new_linked_risk(tenant_id: str, s: RiskScenario) -> Risk:
     """RFP rule: auto-consolidate a scenario into the risk register (additive only —
@@ -81,10 +108,12 @@ def _new_linked_risk(tenant_id: str, s: RiskScenario) -> Risk:
     )
 
 def _scenario_score(s: RiskScenario) -> float | None:
-    """Current (inherent, pre-treatment) probability x impact score. Deliberately
-    just the matrix axes multiplied together — a full weighted multi-criteria score
-    (e.g. adding regulatory-exposure weighting) is a materially bigger feature and
-    is explicitly deferred, see the appetite-alert docstring below."""
+    """Current (inherent, pre-treatment) probability x impact score, used for the
+    appetite-breach check below. Deliberately kept as the plain matrix axes product
+    (not the weighted priority_score) so the appetite threshold's semantics stay
+    predictable — appetite is "is the inherent risk itself too high", a different
+    question from "how should this scenario rank against others" (see
+    priority_score / _priority_score for the M5.3 weighted-ranking criterion)."""
     if s.current_probability is not None and s.current_impact is not None:
         return s.current_probability * s.current_impact
     return None
@@ -106,10 +135,10 @@ async def _alert_scenario_over_appetite(db: AsyncSession, tenant_id: str, s: Ris
     distinguishable in the notification feed/filtering — noted here since the task
     allowed either choice.
 
-    Deliberately NOT a weighted multi-criteria engine (e.g. regulatory-exposure
-    weighting on top of probability x impact) — that is a genuinely bigger feature
-    and is out of scope for this pass; only the per-scenario threshold + alert are
-    implemented.
+    Uses the plain probability x impact score (not the weighted priority_score) —
+    see _scenario_score's docstring for why appetite and ranking stay separate
+    concepts even though both now exist (M5.3 added priority_score/
+    regulatory_exposure_weight for ranking; this alert is unchanged by that).
     """
     score = _scenario_score(s)
     created = 0
@@ -161,10 +190,19 @@ async def _auto_snapshot_if_changed(db: AsyncSession, tenant_id: str, s: RiskSce
     ))
 
 @router.get("", response_model=list[ScenarioOut])
-async def list_scenarios(treatment: str | None = None, db: AsyncSession = Depends(get_db), _: User = Depends(get_current_user), tenant_id: str = Depends(get_tenant_id)):
+async def list_scenarios(
+    treatment: str | None = None,
+    sort: str | None = None,
+    db: AsyncSession = Depends(get_db), _: User = Depends(get_current_user), tenant_id: str = Depends(get_tenant_id),
+):
     q = select(RiskScenario).where(RiskScenario.tenant_id == tenant_id)
     if treatment: q = q.where(RiskScenario.treatment == treatment)
-    return [ScenarioOut.model_validate(s) for s in (await db.execute(q.order_by(RiskScenario.created_at.desc()))).scalars().all()]
+    scenarios = list((await db.execute(q.order_by(RiskScenario.created_at.desc()))).scalars().all())
+    if sort == "priority":
+        # M5.3: rank by the weighted priority_score instead of creation order.
+        # Scenarios with no score yet (no current probability/impact) sort last.
+        scenarios.sort(key=lambda s: s.priority_score if s.priority_score is not None else -1.0, reverse=True)
+    return [ScenarioOut.model_validate(s) for s in scenarios]
 
 @router.post("", response_model=ScenarioOut, status_code=201)
 async def create_scenario(body: ScenarioCreate, db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user), tenant_id: str = Depends(get_tenant_id)):
@@ -174,6 +212,7 @@ async def create_scenario(body: ScenarioCreate, db: AsyncSession = Depends(get_d
         await _assert_feature(db, tenant_id, user, "risk_appetite")
 
     definition, _ = await risk_scoring.resolve_matrix(db, tenant_id)
+    reg_weight = _clamp01(body.regulatory_exposure_weight)
     s = RiskScenario(
         tenant_id=tenant_id, name=body.name, description=body.description,
         treatment=body.treatment, threat_ids=body.threat_ids,
@@ -189,6 +228,8 @@ async def create_scenario(body: ScenarioCreate, db: AsyncSession = Depends(get_d
         justification=body.justification, existing_controls_description=body.existing_controls_description,
         tags=body.tags, appetite_threshold=body.appetite_threshold,
         next_review_date=body.next_review_date,
+        regulatory_exposure_weight=reg_weight,
+        priority_score=_priority_score(definition, body.current_probability, body.current_impact, reg_weight),
     )
     db.add(s); await db.flush()
 
@@ -235,12 +276,18 @@ async def update_scenario(sid: str, body: ScenarioUpdate, db: AsyncSession = Dep
     for f in ["name","description","treatment","threat_ids","vulnerability_ids","asset_ids","applied_control_ids",
               "current_probability","current_impact","target_probability","target_impact","strength_of_knowledge",
               "threat_actor","owner_id","estimated_loss_min","estimated_loss_max","estimated_loss_likely",
-              "justification","existing_controls_description","tags","appetite_threshold","next_review_date"]:
+              "justification","existing_controls_description","tags","appetite_threshold","next_review_date",
+              "regulatory_exposure_weight"]:
         v = getattr(body, f, None)
         if v is not None: setattr(s, f, v)
+    if body.regulatory_exposure_weight is not None:
+        s.regulatory_exposure_weight = _clamp01(s.regulatory_exposure_weight)
     definition, _ = await risk_scoring.resolve_matrix(db, tenant_id)
     s.current_risk_level = _level(definition, s.current_probability, s.current_impact)
     s.target_risk_level = _level(definition, s.target_probability, s.target_impact)
+    # M5.3: keep priority_score in sync whenever the score inputs (probability,
+    # impact) or the weight itself change.
+    s.priority_score = _priority_score(definition, s.current_probability, s.current_impact, s.regulatory_exposure_weight)
 
     # RFP rule: keep the linked risk-register entry's likelihood/impact (and
     # matrix-derived severity) in sync with the scenario's current probability/impact.

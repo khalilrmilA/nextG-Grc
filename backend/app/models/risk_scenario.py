@@ -90,3 +90,18 @@ class RiskScenario(Base):
     # scripts/migrate_add_scenario_review_date.py. Alerting: see
     # check_scenario_review_deadlines() in notification_generator.py.
     next_review_date: Mapped[str | None] = mapped_column(String(20), nullable=True)
+
+    # M5.3 (Elite Pack): additional weighted prioritization criterion beyond raw
+    # probability x impact. 0.0-1.0 (0 = no additional regulatory exposure, 1 = max),
+    # matching the existing 0.5-1.5 bounded-multiplier convention used for
+    # Vulnerability.context_weight rather than the 1-5 likelihood/impact scale — this
+    # is a *weight*, not a scale position. New column on an existing table — see
+    # scripts/migrate_add_scenario_priority.py.
+    regulatory_exposure_weight: Mapped[float | None] = mapped_column(Float, nullable=True)
+
+    # Computed (recomputed on every create/update alongside current_risk_level, see
+    # risk_scenarios.py's _priority_score): combines the matrix-derived current score
+    # with regulatory_exposure_weight so scenarios can be ranked by more than raw
+    # probability x impact. Persisted (rather than computed only at read time) so
+    # GET /risk-scenarios?sort=priority can order without recomputing per request.
+    priority_score: Mapped[float | None] = mapped_column(Float, nullable=True)
