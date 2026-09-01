@@ -8,6 +8,11 @@ RFP module 11:
 - M11.3: a real per-user/per-role ACL (``GovernanceDocumentAccess``) layered on
   top of the document-level access_level, for documents that need finer-grained
   permissions than one tenant-wide flag.
+
+RFP module 14:
+- M14.6: steering committee ("comité de pilotage") tracking (``GovernanceCommittee``)
+  — distinct from RACI, which records responsibilities, not governance bodies
+  (gated ``raci_governance``).
 """
 from typing import Annotated
 
@@ -20,7 +25,7 @@ from app.core.database import get_db
 from app.models.user import User, UserRole
 from app.models.governance import (
     RaciAssignment, GovernanceDocument, GovernanceDocumentVersion, GovernanceGroup,
-    GovernanceDocumentAccess,
+    GovernanceDocumentAccess, GovernanceCommittee,
 )
 from app.models.notification import NotificationType
 from app.api.v1.dependencies.auth import get_current_user, get_tenant_id
@@ -639,5 +644,118 @@ async def revoke_document_access(
     if grant is None:
         raise HTTPException(status_code=404, detail="Access grant not found")
     await db.delete(grant)
+    await db.commit()
+    return None
+
+
+# ---------------------------------------------------------------------------
+# Steering committees (M14.6 — "comité de pilotage", distinct from RACI)
+# ---------------------------------------------------------------------------
+_VALID_CADENCE = {"monthly", "quarterly", "annual", "ad_hoc"}
+
+
+class CommitteeIn(BaseModel):
+    name: str
+    description: str | None = None
+    cadence: str = "quarterly"
+    member_ids: list[str] = []
+    linked_policy_ids: list[str] = []
+    linked_document_ids: list[str] = []
+    next_meeting_date: str | None = None
+
+
+class CommitteeUpdate(BaseModel):
+    name: str | None = None
+    description: str | None = None
+    cadence: str | None = None
+    member_ids: list[str] | None = None
+    linked_policy_ids: list[str] | None = None
+    linked_document_ids: list[str] | None = None
+    next_meeting_date: str | None = None
+
+
+class CommitteeOut(BaseModel):
+    id: str
+    name: str
+    description: str | None
+    cadence: str
+    member_ids: list
+    linked_policy_ids: list
+    linked_document_ids: list
+    next_meeting_date: str | None
+    created_by_id: str | None
+    model_config = {"from_attributes": True}
+
+
+@router.get("/committees", response_model=list[CommitteeOut])
+async def list_committees(
+    current_user: Annotated[User, Depends(require_feature("raci_governance"))],
+    tenant_id: Annotated[str, Depends(get_tenant_id)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    result = await db.execute(select(GovernanceCommittee).where(GovernanceCommittee.tenant_id == tenant_id))
+    return list(result.scalars().all())
+
+
+@router.post("/committees", response_model=CommitteeOut, status_code=201)
+async def create_committee(
+    body: CommitteeIn,
+    current_user: Annotated[User, Depends(require_feature("raci_governance"))],
+    tenant_id: Annotated[str, Depends(get_tenant_id)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    if body.cadence not in _VALID_CADENCE:
+        raise HTTPException(status_code=422, detail="cadence must be monthly, quarterly, annual, or ad_hoc")
+    committee = GovernanceCommittee(
+        tenant_id=tenant_id, name=body.name, description=body.description, cadence=body.cadence,
+        member_ids=body.member_ids, linked_policy_ids=body.linked_policy_ids,
+        linked_document_ids=body.linked_document_ids, next_meeting_date=body.next_meeting_date,
+        created_by_id=current_user.id,
+    )
+    db.add(committee)
+    await db.commit()
+    await db.refresh(committee)
+    return committee
+
+
+@router.patch("/committees/{committee_id}", response_model=CommitteeOut)
+async def update_committee(
+    committee_id: str,
+    body: CommitteeUpdate,
+    current_user: Annotated[User, Depends(require_feature("raci_governance"))],
+    tenant_id: Annotated[str, Depends(get_tenant_id)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    result = await db.execute(
+        select(GovernanceCommittee).where(GovernanceCommittee.id == committee_id, GovernanceCommittee.tenant_id == tenant_id)
+    )
+    committee = result.scalar_one_or_none()
+    if committee is None:
+        raise HTTPException(status_code=404, detail="Committee not found")
+    if body.cadence is not None and body.cadence not in _VALID_CADENCE:
+        raise HTTPException(status_code=422, detail="cadence must be monthly, quarterly, annual, or ad_hoc")
+    for f in ["name", "description", "cadence", "member_ids", "linked_policy_ids", "linked_document_ids", "next_meeting_date"]:
+        v = getattr(body, f, None)
+        if v is not None:
+            setattr(committee, f, v)
+    await db.commit()
+    await db.refresh(committee)
+    return committee
+
+
+@router.delete("/committees/{committee_id}", status_code=204)
+async def delete_committee(
+    committee_id: str,
+    current_user: Annotated[User, Depends(require_feature("raci_governance"))],
+    tenant_id: Annotated[str, Depends(get_tenant_id)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    result = await db.execute(
+        select(GovernanceCommittee).where(GovernanceCommittee.id == committee_id, GovernanceCommittee.tenant_id == tenant_id)
+    )
+    committee = result.scalar_one_or_none()
+    if committee is None:
+        raise HTTPException(status_code=404, detail="Committee not found")
+    await db.delete(committee)
     await db.commit()
     return None

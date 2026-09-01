@@ -23,6 +23,7 @@ from app.models.risk import Risk
 from app.models.applied_control import AppliedControl
 from app.models.policy import Policy, PolicyAttestation
 from app.models.audit import Audit, AuditFinding
+from app.models.governance import GovernanceCommittee
 from app.api.v1.dependencies.auth import get_tenant_id
 from app.api.v1.dependencies.features import require_feature
 
@@ -191,6 +192,33 @@ async def controls_dashboard(
     }
 
 
+async def _committee_summary(db: AsyncSession, tenant_id: str) -> dict:
+    """Steering committee tile (M14.6): count + the soonest upcoming meeting.
+
+    ``next_meeting_date`` is a free-text ISO date string (project convention, not a
+    SQL Date column — see other *_date fields across the schema), so the "soonest"
+    pick is done in Python rather than an ORDER BY, skipping unparseable/blank values.
+    """
+    try:
+        result = await db.execute(
+            select(GovernanceCommittee).where(GovernanceCommittee.tenant_id == tenant_id)
+        )
+        committees = result.scalars().all()
+    except Exception:
+        return {"total": 0, "next_meeting": None}
+
+    upcoming = [
+        {"id": c.id, "name": c.name, "next_meeting_date": c.next_meeting_date}
+        for c in committees
+        if c.next_meeting_date
+    ]
+    upcoming.sort(key=lambda c: c["next_meeting_date"])
+    return {
+        "total": len(committees),
+        "next_meeting": upcoming[0] if upcoming else None,
+    }
+
+
 @router.get("/governance")
 async def governance_dashboard(
     current_user: Annotated[User, _Gate],
@@ -204,6 +232,7 @@ async def governance_dashboard(
             db, PolicyAttestation, getattr(PolicyAttestation, "status", PolicyAttestation.id), tenant_id,
             join_model=Policy, join_on=PolicyAttestation.policy_id == Policy.id,
         ),
+        "committees": await _committee_summary(db, tenant_id),
     }
 
 

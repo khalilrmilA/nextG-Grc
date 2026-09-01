@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
-import { Plus, X, Loader2, Crown, Trash2, Users, FileText, Eye, UserPlus, Shield } from "lucide-react";
+import { Plus, X, Loader2, Crown, Trash2, Users, FileText, Eye, UserPlus, Shield, Calendar, Pencil, Landmark } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { governanceApi, usersApi } from "@/api/endpoints";
+import { governanceApi, usersApi, policiesApi } from "@/api/endpoints";
 import { MultiSelect } from "@/components/common/MultiSelect";
 
 const RACI_BADGE: Record<string, string> = {
@@ -15,6 +15,7 @@ const BUILTIN_ROLES = ["tenant_admin", "ciso", "risk_manager", "compliance_manag
 const TYPOLOGIES = ["policy", "charter", "regulation", "minutes", "procedure", "plan"];
 const ACCESS = ["read", "edit", "validate"];
 const DOC_PERMISSIONS = ["view", "edit", "validate"];
+const CADENCES = ["monthly", "quarterly", "annual", "ad_hoc"];
 
 export default function GovernancePage() {
   const { t } = useTranslation();
@@ -22,6 +23,8 @@ export default function GovernancePage() {
   const [docs, setDocs] = useState<any[]>([]);
   const [groups, setGroups] = useState<any[]>([]);
   const [users, setUsers] = useState<any[]>([]);
+  const [committees, setCommittees] = useState<any[]>([]);
+  const [policies, setPolicies] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [raciForm, setRaciForm] = useState({ activity: "", raci: "R", responsible_type: "role", role: "ciso", customRole: "", group_id: "", module: "" });
   const [useCustomRole, setUseCustomRole] = useState(false);
@@ -51,16 +54,27 @@ export default function GovernancePage() {
   const [savingAccess, setSavingAccess] = useState(false);
   const [accessBusy, setAccessBusy] = useState("");
 
+  // Steering committees (M14.6)
+  const [showCommittee, setShowCommittee] = useState(false);
+  const emptyCommittee = { id: "", name: "", description: "", cadence: "quarterly", member_ids: [] as string[], linked_policy_ids: [] as string[], linked_document_ids: [] as string[], next_meeting_date: "" };
+  const [committeeForm, setCommitteeForm] = useState(emptyCommittee);
+  const [savingCommittee, setSavingCommittee] = useState(false);
+
   const knownRoles = Array.from(new Set([...BUILTIN_ROLES, ...raci.filter((r) => r.responsible_type === "role" && r.role).map((r) => r.role)]));
 
   async function load() {
     try {
-      const [r, d, g, u] = await Promise.all([governanceApi.raciList(), governanceApi.docsList(), governanceApi.groupsList(), usersApi.list()]);
+      const [r, d, g, u, c, p] = await Promise.all([
+        governanceApi.raciList(), governanceApi.docsList(), governanceApi.groupsList(), usersApi.list(),
+        governanceApi.committeesList(), policiesApi.list().catch(() => []),
+      ]);
       setRaci(Array.isArray(r) ? r : []);
       setDocs(Array.isArray(d) ? d : []);
       setGroups(Array.isArray(g) ? g : []);
       setUsers(Array.isArray(u) ? u : []);
-    } catch { setRaci([]); setDocs([]); setGroups([]); setUsers([]); } finally { setLoading(false); }
+      setCommittees(Array.isArray(c) ? c : []);
+      setPolicies(Array.isArray(p) ? p : []);
+    } catch { setRaci([]); setDocs([]); setGroups([]); setUsers([]); setCommittees([]); setPolicies([]); } finally { setLoading(false); }
   }
   useEffect(() => { load(); }, []);
 
@@ -171,6 +185,34 @@ export default function GovernancePage() {
     if (g.user_id) return users.find((u) => u.id === g.user_id)?.email || g.user_id;
     return (g.role || "—").replace(/_/g, " ");
   }
+
+  function openNewCommittee() { setCommitteeForm(emptyCommittee); setShowCommittee(true); }
+  function openEditCommittee(c: any) {
+    setCommitteeForm({
+      id: c.id, name: c.name, description: c.description || "", cadence: c.cadence,
+      member_ids: c.member_ids || [], linked_policy_ids: c.linked_policy_ids || [],
+      linked_document_ids: c.linked_document_ids || [], next_meeting_date: c.next_meeting_date || "",
+    });
+    setShowCommittee(true);
+  }
+  async function saveCommittee(e: React.FormEvent) {
+    e.preventDefault();
+    if (!committeeForm.name.trim()) return;
+    setSavingCommittee(true);
+    const payload = {
+      name: committeeForm.name, description: committeeForm.description || null, cadence: committeeForm.cadence,
+      member_ids: committeeForm.member_ids, linked_policy_ids: committeeForm.linked_policy_ids,
+      linked_document_ids: committeeForm.linked_document_ids, next_meeting_date: committeeForm.next_meeting_date || null,
+    };
+    try {
+      if (committeeForm.id) await governanceApi.committeeUpdate(committeeForm.id, payload);
+      else await governanceApi.committeeCreate(payload);
+      setShowCommittee(false);
+      setCommitteeForm(emptyCommittee);
+      load();
+    } catch {} finally { setSavingCommittee(false); }
+  }
+  async function delCommittee(id: string) { setBusy(id); try { await governanceApi.committeeDelete(id); load(); } catch {} finally { setBusy(""); } }
 
   return (
     <div className="p-8 max-w-7xl space-y-6">
@@ -314,6 +356,62 @@ export default function GovernancePage() {
             </table>
           )}
         </div>
+      </div>
+
+      {/* Steering committees (M14.6 — distinct from RACI) */}
+      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 space-y-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Landmark className="w-5 h-5 text-indigo-600" />
+            <h2 className="text-base font-semibold text-gray-900">{t("governance.committees", "Steering committees")}</h2>
+          </div>
+          <button onClick={openNewCommittee} className="inline-flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-xl text-sm font-medium hover:bg-blue-700">
+            <Plus className="w-4 h-4" /> {t("governance.new_committee", "New committee")}
+          </button>
+        </div>
+        {loading ? null : committees.length === 0 ? (
+          <p className="text-sm text-gray-400 py-3">{t("governance.no_committees", "No steering committees yet.")}</p>
+        ) : (
+          <div className="space-y-3">
+            {committees.map((c) => {
+              const linkedPolicies = (c.linked_policy_ids || []).map((id: string) => policies.find((p) => p.id === id)?.title).filter(Boolean);
+              const linkedDocs = (c.linked_document_ids || []).map((id: string) => docs.find((d) => d.id === id)?.title).filter(Boolean);
+              return (
+                <div key={c.id} className="border border-gray-100 rounded-xl p-4 space-y-2">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium text-gray-900">{c.name}</span>
+                        <span className="inline-flex rounded-full px-2 py-0.5 text-xs font-semibold border bg-indigo-50 text-indigo-700 border-indigo-200 capitalize">{(c.cadence || "").replace(/_/g, " ")}</span>
+                      </div>
+                      {c.description && <p className="text-sm text-gray-500 mt-0.5">{c.description}</p>}
+                    </div>
+                    <span className="inline-flex items-center gap-1.5 shrink-0">
+                      <button onClick={() => openEditCommittee(c)} title={t("common.edit", "Edit")} className="text-gray-400 hover:text-blue-600"><Pencil className="w-4 h-4" /></button>
+                      <button onClick={() => delCommittee(c.id)} disabled={busy === c.id} className="text-gray-400 hover:text-red-500 disabled:opacity-50"><Trash2 className="w-4 h-4" /></button>
+                    </span>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2 text-xs text-gray-500">
+                    <span className="inline-flex items-center gap-1"><Users className="w-3.5 h-3.5" /> {(c.member_ids || []).length} {t("governance.members", "members")}</span>
+                    {c.next_meeting_date && (
+                      <span className="inline-flex items-center gap-1"><Calendar className="w-3.5 h-3.5" /> {t("governance.next_meeting", "Next meeting")}: {c.next_meeting_date}</span>
+                    )}
+                  </div>
+                  {(linkedPolicies.length > 0 || linkedDocs.length > 0) && (
+                    <div className="flex flex-wrap gap-1.5 pt-1">
+                      {linkedPolicies.map((title: string, i: number) => (
+                        <span key={`p-${i}`} className="inline-flex items-center rounded-full border border-gray-200 bg-gray-50 px-2 py-0.5 text-xs text-gray-600">{title}</span>
+                      ))}
+                      {linkedDocs.map((title: string, i: number) => (
+                        <span key={`d-${i}`} className="inline-flex items-center rounded-full border border-violet-200 bg-violet-50 px-2 py-0.5 text-xs text-violet-700">{title}</span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       {/* Groups list (shown once at least one group exists, for management) */}
@@ -503,6 +601,77 @@ export default function GovernancePage() {
                 {accessError && accessGrants.length > 0 && <p className="text-xs text-red-500 mt-2">{accessError}</p>}
               </>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Steering committee modal (M14.6) */}
+      {showCommittee && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setShowCommittee(false)} />
+          <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-lg mx-4 p-6 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-lg font-semibold text-gray-900">{committeeForm.id ? t("governance.edit_committee", "Edit committee") : t("governance.new_committee", "New committee")}</h2>
+              <button onClick={() => setShowCommittee(false)} className="text-gray-400 hover:text-gray-600"><X className="w-5 h-5" /></button>
+            </div>
+            <form onSubmit={saveCommittee} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">{t("governance.committee_name", "Committee name")} *</label>
+                <input value={committeeForm.name} onChange={(e) => setCommitteeForm({ ...committeeForm, name: e.target.value })} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">{t("common.description", "Description")}</label>
+                <input value={committeeForm.description} onChange={(e) => setCommitteeForm({ ...committeeForm, description: e.target.value })} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">{t("governance.cadence", "Cadence")}</label>
+                  <select value={committeeForm.cadence} onChange={(e) => setCommitteeForm({ ...committeeForm, cadence: e.target.value })} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    {CADENCES.map((x) => <option key={x} value={x}>{x.replace(/_/g, " ")}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">{t("governance.next_meeting", "Next meeting")}</label>
+                  <input type="date" value={committeeForm.next_meeting_date} onChange={(e) => setCommitteeForm({ ...committeeForm, next_meeting_date: e.target.value })} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">{t("governance.members", "Members")}</label>
+                <MultiSelect
+                  options={users.map((u) => ({ id: u.id, label: `${u.first_name} ${u.last_name} (${u.email})` }))}
+                  selected={committeeForm.member_ids}
+                  onChange={(ids) => setCommitteeForm({ ...committeeForm, member_ids: ids })}
+                  placeholder={t("governance.select_members", "Select members…")}
+                  emptyLabel={t("governance.no_users", "No users found")}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">{t("governance.linked_policies", "Linked policies")}</label>
+                <MultiSelect
+                  options={policies.map((p) => ({ id: p.id, label: p.title }))}
+                  selected={committeeForm.linked_policy_ids}
+                  onChange={(ids) => setCommitteeForm({ ...committeeForm, linked_policy_ids: ids })}
+                  placeholder={t("governance.select_policies", "Select policies…")}
+                  emptyLabel={t("governance.no_policies", "No policies found")}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">{t("governance.linked_documents", "Linked documents")}</label>
+                <MultiSelect
+                  options={docs.map((d) => ({ id: d.id, label: d.title }))}
+                  selected={committeeForm.linked_document_ids}
+                  onChange={(ids) => setCommitteeForm({ ...committeeForm, linked_document_ids: ids })}
+                  placeholder={t("governance.select_documents", "Select documents…")}
+                  emptyLabel={t("governance.no_docs", "No documents yet.")}
+                />
+              </div>
+              <div className="flex justify-end gap-3 pt-2">
+                <button type="button" onClick={() => setShowCommittee(false)} className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800">{t("common.cancel", "Cancel")}</button>
+                <button type="submit" disabled={savingCommittee} className="inline-flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-xl text-sm font-medium hover:bg-blue-700 disabled:opacity-50">
+                  {savingCommittee && <Loader2 className="w-4 h-4 animate-spin" />} {t("common.save", "Save")}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

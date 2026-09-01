@@ -1541,6 +1541,12 @@ export const governanceApi = {
   accessGrant: (docId: string, data: { user_id?: string | null; role?: string | null; permission: string }) =>
     apiClient.post(`/governance/documents/${docId}/access`, data).then((r) => r.data),
   accessRevoke: (docId: string, accessId: string) => apiClient.delete(`/governance/documents/${docId}/access/${accessId}`),
+
+  // Steering committees (M14.6)
+  committeesList: () => apiClient.get("/governance/committees").then((r) => r.data),
+  committeeCreate: (data: Record<string, unknown>) => apiClient.post("/governance/committees", data).then((r) => r.data),
+  committeeUpdate: (id: string, data: Record<string, unknown>) => apiClient.patch(`/governance/committees/${id}`, data).then((r) => r.data),
+  committeeDelete: (id: string) => apiClient.delete(`/governance/committees/${id}`),
 };
 
 // ── Archiving + retention (Elite Pack) ───────────────────────────────────────

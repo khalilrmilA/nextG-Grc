@@ -49,7 +49,7 @@ from app.models.scan_journal import ScanJournal
 from app.models.report_builder import ReportTemplate
 from app.models.governance import (
     RaciAssignment, GovernanceDocument, GovernanceDocumentVersion,
-    GovernanceDocumentAccess,
+    GovernanceDocumentAccess, GovernanceCommittee,
 )
 from app.models.archive import ArchiveRecord, ArchivingRule
 from app.models.scenario_version import RiskScenarioVersion
@@ -90,7 +90,7 @@ __all__ = [
     "AssetValuationHistory", "ScanJournal",
     "ReportTemplate",
     "RaciAssignment", "GovernanceDocument", "GovernanceDocumentVersion",
-    "GovernanceDocumentAccess",
+    "GovernanceDocumentAccess", "GovernanceCommittee",
     "ArchiveRecord", "ArchivingRule",
     "RiskScenarioVersion",
     "ScannerConnector",

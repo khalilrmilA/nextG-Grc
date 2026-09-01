@@ -93,3 +93,26 @@ class GovernanceDocumentAccess(Base):
     role: Mapped[str | None] = mapped_column(String(50), nullable=True)
     permission: Mapped[str] = mapped_column(String(10), nullable=False, default="view")  # view|edit|validate
     granted_by_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+
+
+class GovernanceCommittee(Base):
+    """Steering committee tracking (M14.6 — RFP gap fix), distinct from RACI.
+
+    RACI (``RaciAssignment``) records who is R/A/C/I for an activity; this records
+    the governance *bodies* themselves (e.g. "Comité de pilotage sécurité") — their
+    membership, meeting cadence, and what they oversee (policies/documents) — which
+    the RFP asks for as a separate, explicit artifact.
+    """
+    __tablename__ = "governance_committees"
+
+    tenant_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("tenants.id"), nullable=False, index=True
+    )
+    name: Mapped[str] = mapped_column(String(200), nullable=False)
+    description: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+    cadence: Mapped[str] = mapped_column(String(20), nullable=False, default="quarterly")  # monthly|quarterly|annual|ad_hoc
+    member_ids: Mapped[list] = mapped_column(JSON, default=list)
+    linked_policy_ids: Mapped[list] = mapped_column(JSON, default=list)
+    linked_document_ids: Mapped[list] = mapped_column(JSON, default=list)
+    next_meeting_date: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    created_by_id: Mapped[str | None] = mapped_column(String(36), nullable=True)

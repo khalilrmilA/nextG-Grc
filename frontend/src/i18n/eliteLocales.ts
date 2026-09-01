@@ -41,6 +41,10 @@ export const eliteEn = {
     manage_access: "Manage access", by_user: "User", by_role: "By role", select_user: "Select a user…", grant: "Grant",
     no_grants: "No explicit grants yet — falls back to the document's default access level.",
     access_denied: "You don't have permission to manage access on this document.", access_save_error: "Could not grant access.",
+    committees: "Steering committees", new_committee: "New committee", edit_committee: "Edit committee", committee_name: "Committee name",
+    no_committees: "No steering committees yet.", cadence: "Cadence", next_meeting: "Next meeting",
+    linked_policies: "Linked policies", select_policies: "Select policies…", no_policies: "No policies found",
+    linked_documents: "Linked documents", select_documents: "Select documents…",
   },
   archiving: {
     title: "Archiving & Retention", elite: "Elite Pack", subtitle: "Snapshot records with a retention window, consult without restoring, and export the archive",
@@ -174,6 +178,10 @@ export const eliteFr = {
     manage_access: "Gérer les accès", by_user: "Utilisateur", by_role: "Par rôle", select_user: "Choisir un utilisateur…", grant: "Accorder",
     no_grants: "Aucun accès explicite pour le moment — le niveau d'accès par défaut du document s'applique.",
     access_denied: "Vous n'avez pas la permission de gérer les accès de ce document.", access_save_error: "Impossible d'accorder l'accès.",
+    committees: "Comités de pilotage", new_committee: "Nouveau comité", edit_committee: "Modifier le comité", committee_name: "Nom du comité",
+    no_committees: "Aucun comité de pilotage pour le moment.", cadence: "Fréquence", next_meeting: "Prochaine réunion",
+    linked_policies: "Politiques liées", select_policies: "Choisir des politiques…", no_policies: "Aucune politique trouvée",
+    linked_documents: "Documents liés", select_documents: "Choisir des documents…",
   },
   archiving: {
     title: "Archivage et rétention", elite: "Elite Pack", subtitle: "Archivez des enregistrements avec une durée de rétention, consultez sans restaurer, et exportez l'archive",
@@ -307,6 +315,10 @@ export const eliteAr = {
     manage_access: "إدارة الوصول", by_user: "مستخدم", by_role: "حسب الدور", select_user: "اختر مستخدمًا…", grant: "منح",
     no_grants: "لا توجد أذونات صريحة بعد — يُطبَّق مستوى الوصول الافتراضي للوثيقة.",
     access_denied: "لا تملك صلاحية إدارة الوصول لهذه الوثيقة.", access_save_error: "تعذّر منح الوصول.",
+    committees: "لجان التوجيه", new_committee: "لجنة جديدة", edit_committee: "تعديل اللجنة", committee_name: "اسم اللجنة",
+    no_committees: "لا توجد لجان توجيه بعد.", cadence: "الدورية", next_meeting: "الاجتماع القادم",
+    linked_policies: "السياسات المرتبطة", select_policies: "اختر سياسات…", no_policies: "لا توجد سياسات",
+    linked_documents: "الوثائق المرتبطة", select_documents: "اختر وثائق…",
   },
   archiving: {
     title: "الأرشفة والاحتفاظ", elite: "Elite Pack", subtitle: "أرشف السجلات بمدة احتفاظ، واطّلع دون استعادة، وصدّر الأرشيف",
