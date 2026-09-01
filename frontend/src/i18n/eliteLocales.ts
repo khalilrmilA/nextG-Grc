@@ -38,6 +38,9 @@ export const eliteEn = {
     title: "Governance", elite: "Elite Pack", subtitle: "RACI responsibility matrix and the governance document repository",
     raci: "RACI matrix", activity: "Activity / decision", module: "Module", add: "Add", responsible: "Responsible", no_raci: "No RACI assignments yet.",
     documents: "Document repository", new_doc: "New document", no_docs: "No documents yet.", doc_title: "Title", typology: "Typology", access: "Access", version: "Version",
+    manage_access: "Manage access", by_user: "User", by_role: "By role", select_user: "Select a user…", grant: "Grant",
+    no_grants: "No explicit grants yet — falls back to the document's default access level.",
+    access_denied: "You don't have permission to manage access on this document.", access_save_error: "Could not grant access.",
   },
   archiving: {
     title: "Archiving & Retention", elite: "Elite Pack", subtitle: "Snapshot records with a retention window, consult without restoring, and export the archive",
@@ -168,6 +171,9 @@ export const eliteFr = {
     title: "Gouvernance", elite: "Elite Pack", subtitle: "Matrice de responsabilités RACI et référentiel documentaire de gouvernance",
     raci: "Matrice RACI", activity: "Activité / décision", module: "Module", add: "Ajouter", responsible: "Responsable", no_raci: "Aucune affectation RACI.",
     documents: "Référentiel documentaire", new_doc: "Nouveau document", no_docs: "Aucun document.", doc_title: "Titre", typology: "Typologie", access: "Accès", version: "Version",
+    manage_access: "Gérer les accès", by_user: "Utilisateur", by_role: "Par rôle", select_user: "Choisir un utilisateur…", grant: "Accorder",
+    no_grants: "Aucun accès explicite pour le moment — le niveau d'accès par défaut du document s'applique.",
+    access_denied: "Vous n'avez pas la permission de gérer les accès de ce document.", access_save_error: "Impossible d'accorder l'accès.",
   },
   archiving: {
     title: "Archivage et rétention", elite: "Elite Pack", subtitle: "Archivez des enregistrements avec une durée de rétention, consultez sans restaurer, et exportez l'archive",
@@ -298,6 +304,9 @@ export const eliteAr = {
     title: "الحوكمة", elite: "Elite Pack", subtitle: "مصفوفة مسؤوليات RACI ومستودع وثائق الحوكمة",
     raci: "مصفوفة RACI", activity: "النشاط / القرار", module: "الوحدة", add: "إضافة", responsible: "المسؤول", no_raci: "لا توجد تعيينات RACI بعد.",
     documents: "مستودع الوثائق", new_doc: "وثيقة جديدة", no_docs: "لا توجد وثائق بعد.", doc_title: "العنوان", typology: "التصنيف", access: "الوصول", version: "الإصدار",
+    manage_access: "إدارة الوصول", by_user: "مستخدم", by_role: "حسب الدور", select_user: "اختر مستخدمًا…", grant: "منح",
+    no_grants: "لا توجد أذونات صريحة بعد — يُطبَّق مستوى الوصول الافتراضي للوثيقة.",
+    access_denied: "لا تملك صلاحية إدارة الوصول لهذه الوثيقة.", access_save_error: "تعذّر منح الوصول.",
   },
   archiving: {
     title: "الأرشفة والاحتفاظ", elite: "Elite Pack", subtitle: "أرشف السجلات بمدة احتفاظ، واطّلع دون استعادة، وصدّر الأرشيف",

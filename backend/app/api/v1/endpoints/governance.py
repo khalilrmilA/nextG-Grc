@@ -5,6 +5,9 @@ RFP module 11:
 - Unified document repository with typology/module/entity classification,
   version control that archives previous versions, and a per-document access
   level (read/edit/validate) (gated ``document_repository``).
+- M11.3: a real per-user/per-role ACL (``GovernanceDocumentAccess``) layered on
+  top of the document-level access_level, for documents that need finer-grained
+  permissions than one tenant-wide flag.
 """
 from typing import Annotated
 
@@ -15,7 +18,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.models.user import User, UserRole
-from app.models.governance import RaciAssignment, GovernanceDocument, GovernanceDocumentVersion, GovernanceGroup
+from app.models.governance import (
+    RaciAssignment, GovernanceDocument, GovernanceDocumentVersion, GovernanceGroup,
+    GovernanceDocumentAccess,
+)
 from app.models.notification import NotificationType
 from app.api.v1.dependencies.auth import get_current_user, get_tenant_id
 from app.api.v1.dependencies.features import require_feature
@@ -360,6 +366,55 @@ class DocumentVersionOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
+_VALID_DOC_PERMISSIONS = {"view", "edit", "validate"}
+_DOC_WRITE_PERMISSIONS = {"edit", "validate"}
+
+
+async def _document_acl_rows(db: AsyncSession, document_id: str, tenant_id: str) -> list[GovernanceDocumentAccess]:
+    result = await db.execute(
+        select(GovernanceDocumentAccess).where(
+            GovernanceDocumentAccess.document_id == document_id,
+            GovernanceDocumentAccess.tenant_id == tenant_id,
+        )
+    )
+    return list(result.scalars().all())
+
+
+def _is_document_owner_or_elevated(doc: GovernanceDocument, current_user: User) -> bool:
+    is_owner = doc.created_by_id is not None and doc.created_by_id == current_user.id
+    is_elevated = current_user.role in _DOCUMENT_ELEVATED_ROLES
+    return is_owner or is_elevated
+
+
+async def _can_write_document(db: AsyncSession, doc: GovernanceDocument, current_user: User, tenant_id: str) -> bool:
+    """True if ``current_user`` may modify ``doc`` (M11.3 — per-document ACL).
+
+    The document's creator and elevated governance roles (tenant admin/CISO/super
+    admin) can always write — this preserves the pre-ACL baseline so those roles
+    never regress. Otherwise: if the document has explicit ``GovernanceDocumentAccess``
+    rows, write access is governed entirely by them (a real per-user/per-role
+    permission list — grant an "edit" or "validate" row to unlock writes for that
+    user/role). With no ACL rows at all, fall back to the legacy ``access_level``
+    behavior (``read`` == locked to everyone but owner/elevated; ``edit``/``validate``
+    == open to every tenant member) so existing documents keep working unchanged.
+    """
+    if _is_document_owner_or_elevated(doc, current_user):
+        return True
+
+    grants = await _document_acl_rows(db, doc.id, tenant_id)
+    if grants:
+        for g in grants:
+            if g.permission not in _DOC_WRITE_PERMISSIONS:
+                continue
+            if g.user_id and g.user_id == current_user.id:
+                return True
+            if g.role and g.role == current_user.role:
+                return True
+        return False
+
+    return doc.access_level != "read"
+
+
 async def _get_doc(db: AsyncSession, doc_id: str, tenant_id: str) -> GovernanceDocument:
     result = await db.execute(
         select(GovernanceDocument).where(
@@ -429,24 +484,14 @@ async def update_document(
 ):
     doc = await _get_doc(db, doc_id, tenant_id)
 
-    # Per-document access enforcement (RFP gap): a document flagged access_level="read"
-    # is read-only — reject the update unless the caller is the document's
-    # creator/owner or holds an elevated governance role (tenant admin/CISO).
-    #
-    # LIMITATION (documented, not built): access_level is a single tenant-wide field
-    # on GovernanceDocument, not a per-user ACL — the schema has no table recording
-    # "user X has edit rights on document Y". So this enforces "read-only for
-    # everyone except the owner/elevated roles", which is the most faithful
-    # approximation of "per-document per-user access" the current schema supports.
-    # True per-user grants (e.g. "read" for user A, "edit" for user B on the same
-    # document) would need a new document_access_grants(document_id, user_id, level)
-    # table — deliberately not added here, flagged for a future iteration.
-    is_owner = doc.created_by_id is not None and doc.created_by_id == current_user.id
-    is_elevated = current_user.role in _DOCUMENT_ELEVATED_ROLES
-    if doc.access_level == "read" and not is_owner and not is_elevated:
+    # Per-document access enforcement (M11.3): a real per-user/per-role ACL
+    # (GovernanceDocumentAccess) governs writes when grants exist for this document;
+    # otherwise the legacy access_level="read" behavior applies. See
+    # _can_write_document for the full precedence rules.
+    if not await _can_write_document(db, doc, current_user, tenant_id):
         raise HTTPException(
             status_code=403,
-            detail="This document is read-only; only its owner or a CISO/tenant admin can modify it",
+            detail="You do not have edit access to this document",
         )
 
     if body.access_level is not None and body.access_level not in _VALID_ACCESS:
@@ -497,5 +542,102 @@ async def delete_document(
 ):
     doc = await _get_doc(db, doc_id, tenant_id)
     await db.delete(doc)
+    await db.commit()
+    return None
+
+
+# ---------------------------------------------------------------------------
+# Document access (M11.3 — per-user/per-role ACL)
+# ---------------------------------------------------------------------------
+class DocumentAccessIn(BaseModel):
+    user_id: str | None = None
+    role: str | None = None            # free text — mirrors RaciAssignment.role
+    permission: str = "view"           # view | edit | validate
+
+
+class DocumentAccessOut(BaseModel):
+    id: str
+    document_id: str
+    user_id: str | None
+    role: str | None
+    permission: str
+    granted_by_id: str | None
+    model_config = {"from_attributes": True}
+
+
+@router.get("/documents/{doc_id}/access", response_model=list[DocumentAccessOut])
+async def list_document_access(
+    doc_id: str,
+    current_user: Annotated[User, Depends(require_feature("document_repository"))],
+    tenant_id: Annotated[str, Depends(get_tenant_id)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    doc = await _get_doc(db, doc_id, tenant_id)
+    if not _is_document_owner_or_elevated(doc, current_user):
+        raise HTTPException(
+            status_code=403,
+            detail="Only the document's owner or a CISO/tenant admin can view its access list",
+        )
+    return await _document_acl_rows(db, doc.id, tenant_id)
+
+
+@router.post("/documents/{doc_id}/access", response_model=DocumentAccessOut, status_code=201)
+async def add_document_access(
+    doc_id: str,
+    body: DocumentAccessIn,
+    current_user: Annotated[User, Depends(require_feature("document_repository"))],
+    tenant_id: Annotated[str, Depends(get_tenant_id)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    doc = await _get_doc(db, doc_id, tenant_id)
+    if not _is_document_owner_or_elevated(doc, current_user):
+        raise HTTPException(
+            status_code=403,
+            detail="Only the document's owner or a CISO/tenant admin can grant access",
+        )
+    if bool(body.user_id) == bool(body.role):
+        raise HTTPException(status_code=422, detail="Set exactly one of user_id or role")
+    if body.permission not in _VALID_DOC_PERMISSIONS:
+        raise HTTPException(status_code=422, detail="permission must be view, edit, or validate")
+    if body.user_id:
+        result = await db.execute(select(User).where(User.id == body.user_id, User.tenant_id == tenant_id))
+        if result.scalar_one_or_none() is None:
+            raise HTTPException(status_code=404, detail="User not found in this tenant")
+
+    grant = GovernanceDocumentAccess(
+        tenant_id=tenant_id, document_id=doc.id, user_id=body.user_id, role=body.role,
+        permission=body.permission, granted_by_id=current_user.id,
+    )
+    db.add(grant)
+    await db.commit()
+    await db.refresh(grant)
+    return grant
+
+
+@router.delete("/documents/{doc_id}/access/{access_id}", status_code=204)
+async def revoke_document_access(
+    doc_id: str,
+    access_id: str,
+    current_user: Annotated[User, Depends(require_feature("document_repository"))],
+    tenant_id: Annotated[str, Depends(get_tenant_id)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    doc = await _get_doc(db, doc_id, tenant_id)
+    if not _is_document_owner_or_elevated(doc, current_user):
+        raise HTTPException(
+            status_code=403,
+            detail="Only the document's owner or a CISO/tenant admin can revoke access",
+        )
+    result = await db.execute(
+        select(GovernanceDocumentAccess).where(
+            GovernanceDocumentAccess.id == access_id,
+            GovernanceDocumentAccess.document_id == doc_id,
+            GovernanceDocumentAccess.tenant_id == tenant_id,
+        )
+    )
+    grant = result.scalar_one_or_none()
+    if grant is None:
+        raise HTTPException(status_code=404, detail="Access grant not found")
+    await db.delete(grant)
     await db.commit()
     return None

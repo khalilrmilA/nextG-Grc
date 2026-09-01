@@ -65,3 +65,31 @@ class GovernanceDocumentVersion(Base):
     content: Mapped[str | None] = mapped_column(Text, nullable=True)
     change_summary: Mapped[str | None] = mapped_column(String(500), nullable=True)
     authored_by_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+
+
+class GovernanceDocumentAccess(Base):
+    """Per-document ACL (M11.3 — RFP gap fix).
+
+    ``GovernanceDocument.access_level`` is a single tenant-wide read/edit/validate
+    flag — it cannot express "user A gets edit, user B gets view-only on the same
+    document". This table adds real per-user/per-role grants on top of it.
+
+    Exactly one of ``user_id``/``role`` is set per row (validated at the API layer):
+    ``user_id`` targets one person, ``role`` grants every member currently holding
+    that role (free-text, same convention as ``RaciAssignment.role`` — custom roles
+    supported as-is). When a document has no rows here, callers fall back to the
+    legacy ``access_level`` behavior — additive only, existing documents are
+    unaffected until an explicit grant is added.
+    """
+    __tablename__ = "governance_document_access"
+
+    tenant_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("tenants.id"), nullable=False, index=True
+    )
+    document_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("governance_documents.id"), nullable=False, index=True
+    )
+    user_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    role: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    permission: Mapped[str] = mapped_column(String(10), nullable=False, default="view")  # view|edit|validate
+    granted_by_id: Mapped[str | None] = mapped_column(String(36), nullable=True)

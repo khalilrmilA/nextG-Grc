@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { Plus, Search, X, Loader2, Filter, AlertTriangle, ShieldAlert, Clock, Flame } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { incidentsApi, vulnerabilitiesApi } from "@/api/endpoints";
+import { incidentsApi, vulnerabilitiesApi, assetsApi } from "@/api/endpoints";
 import { MultiSelect } from "@/components/common/MultiSelect";
 
 const SEV_BADGE: Record<string, string> = {
@@ -40,18 +40,24 @@ export default function IncidentsPage() {
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
-  const [form, setForm] = useState({
+  const emptyForm = {
     title: "",
     description: "",
     category: "other",
     severity: "medium",
     breach_notification_required: false,
     linked_vulnerabilities: [] as string[],
-  });
+    // M2.4 gap fix: real Asset FK links, alongside the free-text field below.
+    affected_asset_ids: [] as string[],
+    affected_systems_text: "",
+  };
+  const [form, setForm] = useState({ ...emptyForm });
   const [vulnOptions, setVulnOptions] = useState<any[]>([]);
+  const [assetOptions, setAssetOptions] = useState<any[]>([]);
 
   useEffect(() => {
     vulnerabilitiesApi.list().then((data: any) => setVulnOptions(Array.isArray(data) ? data : data.items || [])).catch(() => setVulnOptions([]));
+    assetsApi.list().then((data: any) => setAssetOptions(Array.isArray(data) ? data : data.items || [])).catch(() => setAssetOptions([]));
   }, []);
 
   async function load() {
@@ -86,9 +92,15 @@ export default function IncidentsPage() {
     setSubmitting(true);
     setError("");
     try {
-      await incidentsApi.create(form);
+      const { affected_systems_text, ...rest } = form;
+      await incidentsApi.create({
+        ...rest,
+        // Free-text field stays a plain comma-separated list -> array, same
+        // shape the backend already expects for affected_systems.
+        affected_systems: affected_systems_text.split(",").map((s) => s.trim()).filter(Boolean),
+      });
       setShowModal(false);
-      setForm({ title: "", description: "", category: "other", severity: "medium", breach_notification_required: false, linked_vulnerabilities: [] });
+      setForm({ ...emptyForm });
       setLoading(true);
       load();
       loadStats();
@@ -251,6 +263,26 @@ export default function IncidentsPage() {
                   placeholder={t("incidents.select_vulnerabilities", "Select vulnerabilities…")}
                   emptyLabel={t("incidents.no_vulnerabilities", "No vulnerabilities found")}
                 />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">{t("incidents.form_linked_assets", "Linked assets")}</label>
+                <MultiSelect
+                  options={assetOptions.map((a) => ({ id: a.id, label: a.name || a.id }))}
+                  selected={form.affected_asset_ids}
+                  onChange={(ids) => setForm({ ...form, affected_asset_ids: ids })}
+                  placeholder={t("incidents.select_assets", "Select affected asset(s)…")}
+                  emptyLabel={t("incidents.no_assets_found", "No assets found")}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">{t("incidents.form_affected_systems", "Affected systems (free text)")}</label>
+                <input
+                  value={form.affected_systems_text}
+                  onChange={(e) => setForm({ ...form, affected_systems_text: e.target.value })}
+                  placeholder={t("incidents.affected_systems_placeholder", "e.g. web-server-01, payment-gateway")}
+                  className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+                <p className="mt-1 text-xs text-gray-400">{t("incidents.affected_systems_hint", "Comma-separated. Use \"Linked assets\" above for systems already in the asset inventory.")}</p>
               </div>
               <div className="flex items-center gap-2">
                 <input type="checkbox" id="breach" checked={form.breach_notification_required} onChange={(e) => setForm({ ...form, breach_notification_required: e.target.checked })} className="rounded border-gray-300" />

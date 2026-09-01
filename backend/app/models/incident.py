@@ -54,6 +54,13 @@ class Incident(Base):
 
     # Impact
     affected_systems: Mapped[list] = mapped_column(JSON, default=list)
+    # RFP gap fix (M2.4): real Asset FK links, alongside the free-text
+    # affected_systems above (kept for backward compat / free-text notes).
+    # Each id is validated against this tenant's Asset table on create/update —
+    # see assert_assets_in_tenant() in incidents.py, mirroring the identical
+    # affected_assets pattern already used by vulnerabilities.py. New column —
+    # see backend/scripts/migrate_add_incident_asset_links.py.
+    affected_asset_ids: Mapped[list] = mapped_column(JSON, default=list, server_default="[]")
     affected_users_count: Mapped[int | None] = mapped_column(nullable=True)
     data_types_affected: Mapped[list] = mapped_column(JSON, default=list)  # PII, PHI, PCI, etc.
     business_impact: Mapped[str | None] = mapped_column(Text, nullable=True)

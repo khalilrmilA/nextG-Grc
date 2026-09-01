@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Plus, X, Loader2, Crown, Trash2, Users, FileText, Eye, UserPlus } from "lucide-react";
+import { Plus, X, Loader2, Crown, Trash2, Users, FileText, Eye, UserPlus, Shield } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { governanceApi, usersApi } from "@/api/endpoints";
 import { MultiSelect } from "@/components/common/MultiSelect";
@@ -14,6 +14,7 @@ const RACI_LABEL: Record<string, string> = { R: "Responsible", A: "Accountable",
 const BUILTIN_ROLES = ["tenant_admin", "ciso", "risk_manager", "compliance_manager", "control_owner", "auditor", "policy_manager"];
 const TYPOLOGIES = ["policy", "charter", "regulation", "minutes", "procedure", "plan"];
 const ACCESS = ["read", "edit", "validate"];
+const DOC_PERMISSIONS = ["view", "edit", "validate"];
 
 export default function GovernancePage() {
   const { t } = useTranslation();
@@ -39,6 +40,16 @@ export default function GovernancePage() {
   const [showGroup, setShowGroup] = useState(false);
   const [groupForm, setGroupForm] = useState({ name: "", description: "", member_ids: [] as string[] });
   const [savingGroup, setSavingGroup] = useState(false);
+
+  // Manage-access modal (M11.3 — per-document ACL)
+  const [accessDoc, setAccessDoc] = useState<any | null>(null);
+  const [accessGrants, setAccessGrants] = useState<any[]>([]);
+  const [loadingAccess, setLoadingAccess] = useState(false);
+  const [accessError, setAccessError] = useState("");
+  const [accessTarget, setAccessTarget] = useState<"user" | "role">("user");
+  const [accessForm, setAccessForm] = useState({ user_id: "", role: "ciso", permission: "view" });
+  const [savingAccess, setSavingAccess] = useState(false);
+  const [accessBusy, setAccessBusy] = useState("");
 
   const knownRoles = Array.from(new Set([...BUILTIN_ROLES, ...raci.filter((r) => r.responsible_type === "role" && r.role).map((r) => r.role)]));
 
@@ -111,6 +122,55 @@ export default function GovernancePage() {
     } catch {} finally { setSavingDoc(false); }
   }
   async function delDoc(id: string) { setBusy(id); try { await governanceApi.docsDelete(id); load(); } catch {} finally { setBusy(""); } }
+
+  async function openAccess(doc: any) {
+    setAccessDoc(doc);
+    setAccessError("");
+    setAccessForm({ user_id: "", role: "ciso", permission: "view" });
+    setLoadingAccess(true);
+    try {
+      setAccessGrants(await governanceApi.accessList(doc.id));
+    } catch {
+      setAccessGrants([]);
+      setAccessError(t("governance.access_denied", "You don't have permission to manage access on this document."));
+    } finally {
+      setLoadingAccess(false);
+    }
+  }
+  function closeAccess() { setAccessDoc(null); setAccessGrants([]); setAccessError(""); }
+
+  async function addAccess(e: React.FormEvent) {
+    e.preventDefault();
+    if (!accessDoc) return;
+    if (accessTarget === "user" && !accessForm.user_id) return;
+    setSavingAccess(true);
+    setAccessError("");
+    try {
+      await governanceApi.accessGrant(accessDoc.id, {
+        user_id: accessTarget === "user" ? accessForm.user_id : null,
+        role: accessTarget === "role" ? accessForm.role : null,
+        permission: accessForm.permission,
+      });
+      setAccessGrants(await governanceApi.accessList(accessDoc.id));
+      setAccessForm({ user_id: "", role: "ciso", permission: "view" });
+    } catch {
+      setAccessError(t("governance.access_save_error", "Could not grant access."));
+    } finally {
+      setSavingAccess(false);
+    }
+  }
+  async function revokeAccess(id: string) {
+    if (!accessDoc) return;
+    setAccessBusy(id);
+    try {
+      await governanceApi.accessRevoke(accessDoc.id, id);
+      setAccessGrants(await governanceApi.accessList(accessDoc.id));
+    } catch {} finally { setAccessBusy(""); }
+  }
+  function accessSubjectLabel(g: any): string {
+    if (g.user_id) return users.find((u) => u.id === g.user_id)?.email || g.user_id;
+    return (g.role || "—").replace(/_/g, " ");
+  }
 
   return (
     <div className="p-8 max-w-7xl space-y-6">
@@ -242,7 +302,12 @@ export default function GovernancePage() {
                     <td className="px-4 py-2.5 text-gray-600 capitalize">{d.typology}</td>
                     <td className="px-4 py-2.5"><span className="inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold border bg-gray-100 text-gray-600 capitalize">{d.access_level}</span></td>
                     <td className="px-4 py-2.5 text-gray-500 tabular-nums">v{d.current_version}</td>
-                    <td className="px-4 py-2.5 text-right"><button onClick={() => delDoc(d.id)} disabled={busy === d.id} className="text-gray-400 hover:text-red-500 disabled:opacity-50"><Trash2 className="w-4 h-4" /></button></td>
+                    <td className="px-4 py-2.5 text-right">
+                      <span className="inline-flex items-center gap-2">
+                        <button onClick={() => openAccess(d)} title={t("governance.manage_access", "Manage access")} className="text-gray-400 hover:text-blue-600"><Shield className="w-4 h-4" /></button>
+                        <button onClick={() => delDoc(d.id)} disabled={busy === d.id} className="text-gray-400 hover:text-red-500 disabled:opacity-50"><Trash2 className="w-4 h-4" /></button>
+                      </span>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -377,6 +442,67 @@ export default function GovernancePage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Manage access modal (M11.3 — per-document ACL) */}
+      {accessDoc && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={closeAccess} />
+          <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-lg mx-4 p-6">
+            <div className="flex items-center justify-between mb-2">
+              <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2"><Shield className="w-5 h-5 text-blue-600" /> {t("governance.manage_access", "Manage access")}</h2>
+              <button onClick={closeAccess} className="text-gray-400 hover:text-gray-600"><X className="w-5 h-5" /></button>
+            </div>
+            <p className="text-sm text-gray-500 mb-4">{accessDoc.title}</p>
+
+            {loadingAccess ? (
+              <div className="flex items-center justify-center py-8"><Loader2 className="w-5 h-5 animate-spin text-blue-500" /></div>
+            ) : accessError && accessGrants.length === 0 ? (
+              <p className="text-sm text-red-500 py-3">{accessError}</p>
+            ) : (
+              <>
+                <ul className="space-y-2 max-h-48 overflow-y-auto mb-4">
+                  {accessGrants.length === 0 ? (
+                    <p className="text-sm text-gray-400 py-2">{t("governance.no_grants", "No explicit grants yet — falls back to the document's default access level.")}</p>
+                  ) : accessGrants.map((g) => (
+                    <li key={g.id} className="flex items-center justify-between border border-gray-100 rounded-xl px-3 py-2 text-sm">
+                      <span className="flex items-center gap-2 text-gray-800 capitalize">
+                        {g.user_id ? <Users className="w-3.5 h-3.5 text-gray-400" /> : <UserPlus className="w-3.5 h-3.5 text-gray-400" />}
+                        {accessSubjectLabel(g)}
+                        <span className="inline-flex rounded-full px-2 py-0.5 text-xs font-semibold border bg-gray-100 text-gray-600">{g.permission}</span>
+                      </span>
+                      <button onClick={() => revokeAccess(g.id)} disabled={accessBusy === g.id} className="text-gray-400 hover:text-red-500 disabled:opacity-50"><Trash2 className="w-3.5 h-3.5" /></button>
+                    </li>
+                  ))}
+                </ul>
+
+                <form onSubmit={addAccess} className="flex flex-wrap items-end gap-2 border-t border-gray-100 pt-4">
+                  <select value={accessTarget} onChange={(e) => setAccessTarget(e.target.value as "user" | "role")} className="border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    <option value="user">{t("governance.by_user", "User")}</option>
+                    <option value="role">{t("governance.by_role", "By role")}</option>
+                  </select>
+                  {accessTarget === "user" ? (
+                    <select value={accessForm.user_id} onChange={(e) => setAccessForm({ ...accessForm, user_id: e.target.value })} className="flex-1 min-w-[160px] border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                      <option value="">{t("governance.select_user", "Select a user…")}</option>
+                      {users.map((u) => <option key={u.id} value={u.id}>{u.first_name} {u.last_name} ({u.email})</option>)}
+                    </select>
+                  ) : (
+                    <select value={accessForm.role} onChange={(e) => setAccessForm({ ...accessForm, role: e.target.value })} className="flex-1 min-w-[160px] border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                      {knownRoles.map((r) => <option key={r} value={r}>{r.replace(/_/g, " ")}</option>)}
+                    </select>
+                  )}
+                  <select value={accessForm.permission} onChange={(e) => setAccessForm({ ...accessForm, permission: e.target.value })} className="border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    {DOC_PERMISSIONS.map((x) => <option key={x} value={x}>{x}</option>)}
+                  </select>
+                  <button type="submit" disabled={savingAccess} className="inline-flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-xl text-sm font-medium hover:bg-blue-700 disabled:opacity-50">
+                    {savingAccess ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />} {t("governance.grant", "Grant")}
+                  </button>
+                </form>
+                {accessError && accessGrants.length > 0 && <p className="text-xs text-red-500 mt-2">{accessError}</p>}
+              </>
+            )}
           </div>
         </div>
       )}

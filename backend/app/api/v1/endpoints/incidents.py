@@ -1,11 +1,20 @@
-"""Incident Management — track, investigate, and resolve security incidents."""
+"""Incident Management — track, investigate, and resolve security incidents.
+
+Elite Pack (RFP gap fix M2.4): ``affected_asset_ids`` is a validated FK-style
+link to real tenant Assets, alongside the pre-existing free-text
+``affected_systems`` (kept for backward compat / free-text notes). Each id is
+checked against this tenant's Asset table on create/update — same IDOR-safe
+pattern as vulnerabilities.py's ``affected_assets`` (see
+app/core/security_utils.py's ``assert_assets_in_tenant``).
+"""
 from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
+from app.core.security_utils import assert_assets_in_tenant
 from app.api.v1.dependencies.auth import get_current_user, get_tenant_id
 from app.models.user import User
 from app.models.incident import Incident, IncidentSeverity, IncidentStatus, IncidentCategory
@@ -21,6 +30,10 @@ class IncidentCreate(BaseModel):
     assigned_to_id: str | None = None
     detected_at: str | None = None
     affected_systems: list[str] = []
+    # RFP gap fix (M2.4): real Asset ids, validated tenant-scoped in create_incident()
+    # below. Optional — unlike vulnerabilities.py's affected_assets, an incident isn't
+    # required to already have a linked asset at report time.
+    affected_asset_ids: list[str] = []
     affected_users_count: int | None = None
     data_types_affected: list[str] = []
     breach_notification_required: bool = False
@@ -41,6 +54,7 @@ class IncidentUpdate(BaseModel):
     contained_at: str | None = None
     resolved_at: str | None = None
     affected_systems: list[str] | None = None
+    affected_asset_ids: list[str] | None = None
     affected_users_count: int | None = None
     data_types_affected: list[str] | None = None
     business_impact: str | None = None
@@ -63,7 +77,7 @@ class IncidentOut(BaseModel):
     category: str; severity: str; status: str
     reporter_id: str | None; assigned_to_id: str | None
     detected_at: str | None; contained_at: str | None; resolved_at: str | None
-    affected_systems: list; affected_users_count: int | None
+    affected_systems: list; affected_asset_ids: list = []; affected_users_count: int | None
     data_types_affected: list; business_impact: str | None
     financial_impact: float | None; root_cause: str | None
     containment_actions: str | None; remediation_actions: str | None
@@ -73,6 +87,12 @@ class IncidentOut(BaseModel):
     linked_risks: list; linked_controls: list; linked_vendors: list; linked_vulnerabilities: list; tags: list
     created_at: datetime; updated_at: datetime
     model_config = {"from_attributes": True}
+
+    @field_validator("affected_asset_ids", mode="before")
+    @classmethod
+    def _default_asset_list(cls, v):
+        # Rows written before the migration have this column as NULL, not [].
+        return v or []
 
 class IncidentStats(BaseModel):
     total: int; open: int; investigating: int; contained: int; resolved: int; closed: int
@@ -124,12 +144,18 @@ async def create_incident(
     body: IncidentCreate, db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user), tenant_id: str = Depends(get_tenant_id),
 ):
+    # RFP gap fix (M2.4): each affected-asset id must resolve to a real Asset
+    # owned by this tenant (422 listing whichever ids don't) — closes the same
+    # cross-tenant IDOR that assert_assets_in_tenant already closes for
+    # vulnerabilities.py's affected_assets. Pass-through if the list is empty.
+    await assert_assets_in_tenant(db, body.affected_asset_ids, tenant_id, field_name="affected_asset_ids")
     inc = Incident(
         tenant_id=tenant_id, title=body.title, description=body.description,
         category=IncidentCategory(body.category), severity=IncidentSeverity(body.severity),
         reporter_id=user.id, assigned_to_id=body.assigned_to_id,
         detected_at=body.detected_at or datetime.utcnow().isoformat(),
-        affected_systems=body.affected_systems, affected_users_count=body.affected_users_count,
+        affected_systems=body.affected_systems, affected_asset_ids=body.affected_asset_ids,
+        affected_users_count=body.affected_users_count,
         data_types_affected=body.data_types_affected,
         breach_notification_required=body.breach_notification_required,
         linked_risks=body.linked_risks, linked_controls=body.linked_controls,
@@ -150,8 +176,10 @@ async def update_incident(iid: str, body: IncidentUpdate, db: AsyncSession = Dep
     r = await db.execute(select(Incident).where(Incident.id == iid, Incident.tenant_id == tenant_id))
     inc = r.scalar_one_or_none()
     if not inc: raise HTTPException(404, "Incident not found")
+    if body.affected_asset_ids is not None:
+        await assert_assets_in_tenant(db, body.affected_asset_ids, tenant_id, field_name="affected_asset_ids")
     for f in ["title","description","assigned_to_id","detected_at","contained_at","resolved_at",
-              "affected_systems","affected_users_count","data_types_affected","business_impact",
+              "affected_systems","affected_asset_ids","affected_users_count","data_types_affected","business_impact",
               "financial_impact","root_cause","containment_actions","remediation_actions",
               "lessons_learned","post_mortem_url","breach_notification_required","notification_sent_at",
               "linked_risks","linked_controls","linked_vendors","linked_vulnerabilities","tags"]:
