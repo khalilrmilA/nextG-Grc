@@ -1,4 +1,4 @@
-export type UserRole = "super_admin" | "tenant_admin" | "ciso" | "risk_manager" | "compliance_manager" | "auditor" | "policy_manager" | "vendor_manager" | "control_owner" | "viewer";
+export type UserRole = "super_admin" | "tenant_admin" | "ciso" | "risk_manager" | "compliance_manager" | "auditor" | "policy_manager" | "vendor_manager" | "control_owner" | "business_owner" | "security_analyst" | "executive" | "viewer";
 export type PlanTier = "free_trial" | "starter" | "professional" | "enterprise" | "elite";
 
 export interface AuthUser {

@@ -39,6 +39,9 @@ export type UserRole =
   | "policy_manager"
   | "vendor_manager"
   | "control_owner"
+  | "business_owner"
+  | "security_analyst"
+  | "executive"
   | "viewer";
 
 export interface AuthTokens {

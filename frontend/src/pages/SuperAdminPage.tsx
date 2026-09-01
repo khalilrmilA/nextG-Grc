@@ -203,6 +203,9 @@ const CREATE_ROLE_OPTIONS: { value: string; label: string }[] = [
   { value: "policy_manager",     label: "Policy Manager"     },
   { value: "vendor_manager",     label: "Vendor Manager"     },
   { value: "control_owner",      label: "Control Owner"      },
+  { value: "business_owner",     label: "Business Owner"     },
+  { value: "security_analyst",   label: "Security Analyst"   },
+  { value: "executive",          label: "Executive (Direction Générale)" },
   { value: "auditor",            label: "Auditor"            },
   { value: "viewer",             label: "Viewer"             },
 ];
@@ -536,6 +539,9 @@ function UsersTab() {
                         <option value="policy_manager">Policy Manager</option>
                         <option value="vendor_manager">Vendor Manager</option>
                         <option value="control_owner">Control Owner</option>
+                        <option value="business_owner">Business Owner</option>
+                        <option value="security_analyst">Security Analyst</option>
+                        <option value="executive">Executive (Direction Générale)</option>
                         <option value="auditor">Auditor</option>
                         <option value="viewer">Viewer</option>
                       </select>

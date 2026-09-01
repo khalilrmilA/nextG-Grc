@@ -20,11 +20,14 @@ const ROLE_COLORS: Record<string, string> = {
   policy_manager:     "bg-orange-100 text-orange-700 border-orange-200",
   vendor_manager:     "bg-cyan-100 text-cyan-700 border-cyan-200",
   control_owner:      "bg-pink-100 text-pink-700 border-pink-200",
+  business_owner:     "bg-lime-100 text-lime-700 border-lime-200",
+  security_analyst:   "bg-rose-100 text-rose-700 border-rose-200",
+  executive:          "bg-slate-100 text-slate-700 border-slate-200",
   auditor:            "bg-indigo-100 text-indigo-700 border-indigo-200",
   viewer:             "bg-gray-100 text-gray-600 border-gray-200",
 };
 
-const ROLE_VALUES = ["ciso", "risk_manager", "compliance_manager", "policy_manager", "vendor_manager", "control_owner", "auditor", "viewer"];
+const ROLE_VALUES = ["ciso", "risk_manager", "compliance_manager", "policy_manager", "vendor_manager", "control_owner", "business_owner", "security_analyst", "executive", "auditor", "viewer"];
 
 function RoleBadge({ role }: { role: string }) {
   const { t } = useTranslation();
