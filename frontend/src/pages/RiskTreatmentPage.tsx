@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
-import { Plus, X, Loader2, Crown, ShieldCheck, AlertTriangle, Clock, ChevronDown, ChevronRight, Users, List } from "lucide-react";
+import { Plus, X, Loader2, Crown, ShieldCheck, AlertTriangle, Clock, ChevronDown, ChevronRight, Users, List, RefreshCw, History } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { riskTreatmentApi, riskScenariosApi, usersApi } from "@/api/endpoints";
 import { MultiSelect } from "@/components/common/MultiSelect";
@@ -24,6 +24,10 @@ type TrackingRow = {
 type ResponsibleGroup = {
   owner_id: string | null; total: number; overdue: number; at_risk: number; over_budget: number;
   avg_progress: number; treatments: TrackingRow[];
+};
+type TreatmentVersion = {
+  id: string; risk_id: string; treatment_id: string; version_number: number;
+  snapshot: Record<string, any>; change_summary: string | null; created_by_id: string | null; created_at: string;
 };
 
 export default function RiskTreatmentPage() {
@@ -53,6 +57,30 @@ export default function RiskTreatmentPage() {
     linked_scenario_ids: [] as string[],
   };
   const [form, setForm] = useState({ ...emptyForm });
+
+  // M8.2 gap fix: supersede workflow (a meaningfully new plan, distinct from a
+  // plain edit — requires a change_summary) + plan-level version history.
+  const emptySupersedeForm = {
+    treatment_option: "mitigate",
+    description: "",
+    due_date: "",
+    progress_percentage: 0,
+    estimated_cost: "",
+    transfer_to: "",
+    acceptance_justification: "",
+    linked_scenario_ids: [] as string[],
+    change_summary: "",
+  };
+  const [supersedeModal, setSupersedeModal] = useState(false);
+  const [supersedeTarget, setSupersedeTarget] = useState<any>(null);
+  const [supersedeForm, setSupersedeForm] = useState({ ...emptySupersedeForm });
+  const [supersedeError, setSupersedeError] = useState("");
+  const [supersedeSubmitting, setSupersedeSubmitting] = useState(false);
+
+  const [historyModal, setHistoryModal] = useState(false);
+  const [historyRisk, setHistoryRisk] = useState<{ id: string; title: string } | null>(null);
+  const [historyVersions, setHistoryVersions] = useState<TreatmentVersion[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
 
   async function load() {
     try {
@@ -108,6 +136,13 @@ export default function RiskTreatmentPage() {
     return pool.map((s) => ({ id: s.id, label: scenarioLabel(s) }));
   }, [scenarios, form.risk_id]);
 
+  // Same scoping, for the supersede modal's fixed (non-selectable) risk.
+  const supersedeScenarioOptions = useMemo(() => {
+    const riskId = supersedeTarget?.risk_id;
+    const pool = riskId ? scenarios.filter((s) => s.linked_risk_id === riskId) : scenarios;
+    return pool.map((s) => ({ id: s.id, label: scenarioLabel(s) }));
+  }, [scenarios, supersedeTarget]);
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!form.risk_id) { setError(t("treatment.error_risk_required", "Select a risk")); return; }
@@ -135,6 +170,72 @@ export default function RiskTreatmentPage() {
       setError(err?.response?.data?.detail || t("treatment.error_save", "Could not save treatment"));
     } finally {
       setSubmitting(false);
+    }
+  }
+
+  function openSupersede(tr: any) {
+    setSupersedeTarget(tr);
+    setSupersedeForm({
+      treatment_option: tr.treatment_option || "mitigate",
+      description: tr.description || "",
+      due_date: tr.due_date || "",
+      progress_percentage: tr.progress_percentage || 0,
+      estimated_cost: tr.estimated_cost != null ? String(tr.estimated_cost) : "",
+      transfer_to: tr.transfer_to || "",
+      acceptance_justification: tr.acceptance_justification || "",
+      linked_scenario_ids: tr.linked_scenario_ids || [],
+      change_summary: "",
+    });
+    setSupersedeError("");
+    setSupersedeModal(true);
+  }
+
+  async function handleSupersedeSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!supersedeTarget) return;
+    if (!supersedeForm.change_summary.trim()) {
+      setSupersedeError(t("treatment.error_change_summary", "Describe what changed in this new plan"));
+      return;
+    }
+    if (supersedeForm.treatment_option === "accept" && !supersedeForm.acceptance_justification.trim()) {
+      setSupersedeError(t("treatment.error_justification", "Acceptance requires a justification"));
+      return;
+    }
+    setSupersedeSubmitting(true); setSupersedeError("");
+    try {
+      await riskTreatmentApi.supersede(supersedeTarget.risk_id, {
+        treatment_option: supersedeForm.treatment_option,
+        description: supersedeForm.description || null,
+        due_date: supersedeForm.due_date || null,
+        progress_percentage: Number(supersedeForm.progress_percentage) || 0,
+        estimated_cost: supersedeForm.estimated_cost ? Number(supersedeForm.estimated_cost) : null,
+        transfer_to: supersedeForm.transfer_to || null,
+        acceptance_justification: supersedeForm.acceptance_justification || null,
+        linked_scenario_ids: supersedeForm.linked_scenario_ids,
+        change_summary: supersedeForm.change_summary,
+      });
+      setSupersedeModal(false);
+      setSupersedeTarget(null);
+      setLoading(true);
+      load();
+    } catch (err: any) {
+      setSupersedeError(err?.response?.data?.detail || t("treatment.error_save", "Could not save treatment"));
+    } finally {
+      setSupersedeSubmitting(false);
+    }
+  }
+
+  async function openHistory(tr: any) {
+    setHistoryRisk({ id: tr.risk_id, title: riskTitle(tr.risk_id) });
+    setHistoryModal(true);
+    setHistoryLoading(true);
+    try {
+      const v = await riskTreatmentApi.versions(tr.risk_id);
+      setHistoryVersions(Array.isArray(v) ? v : []);
+    } catch {
+      setHistoryVersions([]);
+    } finally {
+      setHistoryLoading(false);
     }
   }
 
@@ -205,6 +306,7 @@ export default function RiskTreatmentPage() {
                     <th className="text-left px-6 py-3 font-medium text-gray-500">{t("treatment.col_due", "Due")}</th>
                     <th className="text-left px-6 py-3 font-medium text-gray-500">{t("treatment.col_cost", "Est. cost")}</th>
                     <th className="text-left px-6 py-3 font-medium text-gray-500">{t("treatment.col_scenarios", "Linked scenarios")}</th>
+                    <th className="text-left px-6 py-3 font-medium text-gray-500">{t("treatment.col_actions", "Actions")}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -228,6 +330,26 @@ export default function RiskTreatmentPage() {
                             ))}
                           </div>
                         ) : <span className="text-gray-300">—</span>}
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => openSupersede(tr)}
+                            title={t("treatment.supersede", "Supersede / Update plan")}
+                            className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                          >
+                            <RefreshCw className="w-3.5 h-3.5" /> {t("treatment.supersede_short", "Supersede")}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => openHistory(tr)}
+                            title={t("treatment.history", "Version history")}
+                            className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium text-gray-500 hover:bg-gray-100 rounded-lg transition-colors"
+                          >
+                            <History className="w-3.5 h-3.5" /> {t("treatment.history_short", "History")}
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -385,6 +507,127 @@ export default function RiskTreatmentPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Supersede Modal (M8.2 gap fix) — a meaningfully new plan for a risk that
+          already has one, distinct from a plain edit: requires change_summary,
+          and archives the prior plan into version history before overwriting it. */}
+      {supersedeModal && supersedeTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setSupersedeModal(false)} />
+          <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-lg mx-4 p-6 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between mb-2">
+              <h2 className="text-lg font-semibold text-gray-900">{t("treatment.supersede", "Supersede / Update plan")}</h2>
+              <button onClick={() => setSupersedeModal(false)} className="text-gray-400 hover:text-gray-600"><X className="w-5 h-5" /></button>
+            </div>
+            <p className="text-sm text-gray-500 mb-6">{t("treatment.supersede_for", "For risk:")} <span className="font-medium text-gray-800">{riskTitle(supersedeTarget.risk_id)}</span></p>
+            {supersedeError && <div className="mb-4 p-3 bg-red-50 text-red-700 rounded-xl text-sm">{supersedeError}</div>}
+            <form onSubmit={handleSupersedeSubmit} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">{t("treatment.change_summary", "What changed in this new plan?")} *</label>
+                <textarea
+                  value={supersedeForm.change_summary}
+                  onChange={(e) => setSupersedeForm({ ...supersedeForm, change_summary: e.target.value })}
+                  rows={2}
+                  placeholder={t("treatment.change_summary_placeholder", "e.g. Revised budget after vendor quote, new completion date…")}
+                  className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">{t("treatment.linked_scenarios", "Linked risk scenarios")}</label>
+                <MultiSelect
+                  options={supersedeScenarioOptions}
+                  selected={supersedeForm.linked_scenario_ids}
+                  onChange={(ids) => setSupersedeForm({ ...supersedeForm, linked_scenario_ids: ids })}
+                  placeholder={t("treatment.select_scenarios", "Select scenario(s)…")}
+                  emptyLabel={t("treatment.no_scenarios", "No scenarios for this risk")}
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">{t("treatment.col_option", "Option")}</label>
+                  <select value={supersedeForm.treatment_option} onChange={(e) => setSupersedeForm({ ...supersedeForm, treatment_option: e.target.value })} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    {OPTIONS.map((o) => <option key={o} value={o}>{o}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">{t("treatment.col_due", "Due date")}</label>
+                  <input type="date" value={supersedeForm.due_date} onChange={(e) => setSupersedeForm({ ...supersedeForm, due_date: e.target.value })} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">{t("common.description", "Description")}</label>
+                <textarea value={supersedeForm.description} onChange={(e) => setSupersedeForm({ ...supersedeForm, description: e.target.value })} rows={2} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">{t("treatment.progress", "Progress %")}</label>
+                  <input type="number" min={0} max={100} value={supersedeForm.progress_percentage} onChange={(e) => setSupersedeForm({ ...supersedeForm, progress_percentage: parseInt(e.target.value) || 0 })} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">{t("treatment.cost", "Est. cost ($)")}</label>
+                  <input type="number" min={0} value={supersedeForm.estimated_cost} onChange={(e) => setSupersedeForm({ ...supersedeForm, estimated_cost: e.target.value })} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                </div>
+              </div>
+              {supersedeForm.treatment_option === "transfer" && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">{t("treatment.transfer_to", "Transfer to")}</label>
+                  <input value={supersedeForm.transfer_to} onChange={(e) => setSupersedeForm({ ...supersedeForm, transfer_to: e.target.value })} placeholder="e.g. Cyber insurance policy #…" className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                </div>
+              )}
+              {supersedeForm.treatment_option === "accept" && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">{t("treatment.justification", "Acceptance justification")} *</label>
+                  <textarea value={supersedeForm.acceptance_justification} onChange={(e) => setSupersedeForm({ ...supersedeForm, acceptance_justification: e.target.value })} rows={2} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                </div>
+              )}
+              <div className="flex justify-end gap-3 pt-2">
+                <button type="button" onClick={() => setSupersedeModal(false)} className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800">{t("common.cancel", "Cancel")}</button>
+                <button type="submit" disabled={supersedeSubmitting} className="inline-flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-xl text-sm font-medium hover:bg-blue-700 disabled:opacity-50">
+                  {supersedeSubmitting && <Loader2 className="w-4 h-4 animate-spin" />} {t("treatment.supersede_short", "Supersede")}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Version History Modal (M8.2 gap fix) */}
+      {historyModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setHistoryModal(false)} />
+          <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-lg mx-4 p-6 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between mb-2">
+              <h2 className="text-lg font-semibold text-gray-900">{t("treatment.history", "Version history")}</h2>
+              <button onClick={() => setHistoryModal(false)} className="text-gray-400 hover:text-gray-600"><X className="w-5 h-5" /></button>
+            </div>
+            {historyRisk && <p className="text-sm text-gray-500 mb-6">{t("treatment.supersede_for", "For risk:")} <span className="font-medium text-gray-800">{historyRisk.title}</span></p>}
+            {historyLoading ? (
+              <div className="flex items-center justify-center py-12"><Loader2 className="w-6 h-6 animate-spin text-blue-500" /></div>
+            ) : historyVersions.length === 0 ? (
+              <div className="text-center py-12 text-gray-400">{t("treatment.no_history", "No superseded versions yet — this plan hasn't been revised.")}</div>
+            ) : (
+              <ol className="relative border-s border-gray-200 space-y-6 ps-4">
+                {historyVersions.map((v) => (
+                  <li key={v.id} className="ms-2">
+                    <span className="absolute -start-[5px] mt-1.5 w-2.5 h-2.5 rounded-full bg-blue-500" />
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-xs font-semibold text-gray-900">{t("treatment.version_n", "Version {{n}}", { n: v.version_number })}</span>
+                      <span className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-semibold border ${OPTION_BADGE[v.snapshot?.treatment_option] || "bg-gray-100 text-gray-600"}`}>{v.snapshot?.treatment_option}</span>
+                      <span className="text-[11px] text-gray-400">{new Date(v.created_at).toLocaleString()}</span>
+                    </div>
+                    {v.change_summary && <p className="text-sm text-gray-700 mt-1">{v.change_summary}</p>}
+                    <div className="mt-1.5 flex flex-wrap gap-x-4 gap-y-0.5 text-xs text-gray-500">
+                      <span>{t("treatment.col_progress", "Progress")}: {v.snapshot?.progress_percentage ?? 0}%</span>
+                      <span>{t("treatment.col_due", "Due")}: {v.snapshot?.due_date || "—"}</span>
+                      <span>{t("treatment.col_cost", "Est. cost")}: {v.snapshot?.estimated_cost != null ? `$${v.snapshot.estimated_cost}` : "—"}</span>
+                    </div>
+                  </li>
+                ))}
+              </ol>
+            )}
           </div>
         </div>
       )}

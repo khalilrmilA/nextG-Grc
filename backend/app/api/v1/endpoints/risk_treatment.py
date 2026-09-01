@@ -15,25 +15,56 @@ because SQLite can't drop an inline column UNIQUE constraint without a full
 table rebuild, which is too risky to run against a database backing live
 production data — see the RiskTreatment model docstring (app/models/risk.py)
 and the `fix(treatment-refinement)` commit message for the full reasoning.
+
+M8.2 gap fix (RFP module 8): "no supersede workflow for submitting a new plan
+for an already-planned risk, and no plan-level version history". Since
+risk_id stays unique (the row is updated in place, never replaced), a plain
+PATCH silently loses the prior plan's values. POST /{risk_id}/supersede
+snapshots the CURRENT row into RiskTreatmentVersion (app/models/
+risk_treatment_version.py — mirrors the RiskScenarioVersion pattern in
+scenario_versions.py) before applying the new submitted fields in place, and
+requires a `change_summary` justification (distinct from a plain PATCH, which
+stays available for minor edits like a progress-percentage bump).
+GET /{risk_id}/versions lists that history, newest first.
 """
-from datetime import date
+from datetime import date, datetime
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, field_validator
-from sqlalchemy import select
+from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.models.user import User
 from app.models.risk import Risk, RiskTreatment, RiskTreatmentOption
 from app.models.risk_scenario import RiskScenario, ScenarioTreatment
+from app.models.risk_treatment_version import RiskTreatmentVersion
 from app.api.v1.dependencies.auth import get_tenant_id
 from app.api.v1.dependencies.features import require_feature
 
 router = APIRouter()
 
 _GATE = require_feature("risk_treatment_plans")
+
+# Fields snapshotted into RiskTreatmentVersion whenever a plan is superseded —
+# mirrors risk_scenarios' _SNAPSHOT_FIELDS pattern (scenario_versions.py).
+_SNAPSHOT_FIELDS = [
+    "treatment_option", "description", "due_date", "start_date", "owner_id",
+    "progress_percentage", "estimated_cost", "actual_cost", "priority",
+    "transfer_to", "acceptance_justification", "linked_scenario_ids",
+]
+
+
+def _json_safe(value):
+    if isinstance(value, (list, dict, str, int, float, bool)) or value is None:
+        return value
+    # Enum members (e.g. RiskTreatmentOption) -> their plain value.
+    return getattr(value, "value", str(value))
+
+
+def _snapshot_treatment(t: RiskTreatment) -> dict:
+    return {f: _json_safe(getattr(t, f, None)) for f in _SNAPSHOT_FIELDS}
 
 
 class TreatmentIn(BaseModel):
@@ -89,6 +120,39 @@ class TreatmentOut(BaseModel):
     def _default_scenario_list(cls, v):
         # Rows written before the migration have this column as NULL, not [].
         return v or []
+
+
+class SupersedeIn(BaseModel):
+    """New plan submitted to replace the risk's current treatment plan.
+
+    Same fields as TreatmentIn (minus risk_id, which comes from the path) plus
+    a required `change_summary` — the M8.2 gap explicitly wants a meaningfully
+    new plan distinguished from a plain PATCH edit.
+    """
+    treatment_option: RiskTreatmentOption
+    description: str | None = None
+    due_date: str | None = None
+    start_date: str | None = None
+    owner_id: str | None = None
+    progress_percentage: int = 0
+    estimated_cost: float | None = None
+    actual_cost: float | None = None
+    transfer_to: str | None = None
+    acceptance_justification: str | None = None
+    linked_scenario_ids: list[str] = []
+    change_summary: str
+
+
+class VersionOut(BaseModel):
+    id: str
+    risk_id: str
+    treatment_id: str
+    version_number: int
+    snapshot: dict
+    change_summary: str | None
+    created_by_id: str | None
+    created_at: datetime
+    model_config = {"from_attributes": True}
 
 
 class TrackingRow(BaseModel):
@@ -349,6 +413,82 @@ async def patch_treatment(
     await db.commit()
     await db.refresh(treatment)
     return treatment
+
+
+@router.post("/{risk_id}/supersede", response_model=TreatmentOut)
+async def supersede_treatment(
+    risk_id: str,
+    body: SupersedeIn,
+    current_user: Annotated[User, Depends(_GATE)],
+    tenant_id: Annotated[str, Depends(get_tenant_id)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    """Submit a meaningfully new treatment plan for a risk that already has one.
+
+    M8.2 gap fix: risk_treatments.risk_id stays unique (see module docstring),
+    so this snapshots the CURRENT plan's field values into RiskTreatmentVersion
+    — preserving them instead of letting them be silently overwritten — then
+    updates the existing row in place with the newly submitted fields. Requires
+    an existing plan (404 otherwise — use POST "" to create the first plan for
+    a risk) and a non-empty `change_summary`, which is what distinguishes this
+    from a plain PATCH (still available for minor edits).
+    """
+    if not (body.change_summary and body.change_summary.strip()):
+        raise HTTPException(status_code=422, detail="A change_summary is required to supersede a treatment plan.")
+    risk = await _risk_in_tenant(risk_id, tenant_id, db)
+    treatment = (await db.execute(
+        select(RiskTreatment).where(RiskTreatment.risk_id == risk_id)
+    )).scalar_one_or_none()
+    if treatment is None:
+        raise HTTPException(
+            status_code=404,
+            detail="No existing treatment plan for this risk — use POST /risk-treatment to create one.",
+        )
+    _require_justification(body.treatment_option, body.acceptance_justification)
+    await _assert_scenarios_in_tenant(body.linked_scenario_ids, tenant_id, db)
+
+    # Snapshot the CURRENT (soon-to-be-overwritten) plan before mutating it.
+    count = (await db.execute(
+        select(func.count()).select_from(RiskTreatmentVersion)
+        .where(RiskTreatmentVersion.risk_id == risk_id)
+    )).scalar() or 0
+    db.add(RiskTreatmentVersion(
+        risk_id=risk_id, treatment_id=treatment.id, version_number=int(count) + 1,
+        snapshot=_snapshot_treatment(treatment), change_summary=body.change_summary.strip(),
+        created_by_id=current_user.id,
+    ))
+
+    # Apply the newly submitted fields to the existing (unique-per-risk) row.
+    data = body.model_dump(exclude={"change_summary"})
+    for k, v in data.items():
+        setattr(treatment, k, v)
+    treatment.priority = _derive_treatment_priority(risk)
+
+    await db.commit()
+    await db.refresh(treatment)
+    return treatment
+
+
+@router.get("/{risk_id}/versions", response_model=list[VersionOut])
+async def list_treatment_versions(
+    risk_id: str,
+    current_user: Annotated[User, Depends(_GATE)],
+    tenant_id: Annotated[str, Depends(get_tenant_id)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    """Newest-first version history of superseded treatment plans for a risk.
+
+    Tenant-scoped through the parent Risk row (via _risk_in_tenant) rather than
+    trusting a bare risk_id — a 404 here means the risk doesn't exist or
+    doesn't belong to this tenant, so another tenant's history can't leak.
+    """
+    await _risk_in_tenant(risk_id, tenant_id, db)
+    rows = (await db.execute(
+        select(RiskTreatmentVersion)
+        .where(RiskTreatmentVersion.risk_id == risk_id)
+        .order_by(RiskTreatmentVersion.version_number.desc())
+    )).scalars().all()
+    return list(rows)
 
 
 class UntreatedScenarioOut(BaseModel):
