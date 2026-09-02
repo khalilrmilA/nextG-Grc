@@ -18,7 +18,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
-from sqlalchemy import select
+from sqlalchemy import select, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
@@ -546,6 +546,27 @@ async def delete_document(
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
     doc = await _get_doc(db, doc_id, tenant_id)
+    # Deletion is the most destructive write on a document, so it is at least as
+    # restricted as managing its ACL: only the creator or an elevated governance
+    # role may delete. Without this, a user denied edit access by the per-document
+    # ACL (or by access_level="read") could still destroy the document outright.
+    if not _is_document_owner_or_elevated(doc, current_user):
+        raise HTTPException(
+            status_code=403,
+            detail="Only the document's owner or a CISO/tenant admin can delete this document",
+        )
+    # Remove dependent rows in the same transaction: the FKs carry no ON DELETE
+    # cascade, so on FK-enforcing databases (PostgreSQL/Oracle/MSSQL) leaving them
+    # would raise an IntegrityError, and on SQLite they would linger as orphans.
+    await db.execute(
+        delete(GovernanceDocumentAccess).where(
+            GovernanceDocumentAccess.document_id == doc.id,
+            GovernanceDocumentAccess.tenant_id == tenant_id,
+        )
+    )
+    await db.execute(
+        delete(GovernanceDocumentVersion).where(GovernanceDocumentVersion.document_id == doc.id)
+    )
     await db.delete(doc)
     await db.commit()
     return None

@@ -857,7 +857,12 @@ async def ciso_review_contract(
     contract_id: str,
     body: CisoReviewRequest,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_roles(UserRole.VENDOR_MANAGER, UserRole.CISO)),
+    # CISO-only on purpose (tenant_admin/super_admin auto-pass in require_roles):
+    # this is the maker-checker step between upload and send-to-vendor. Letting
+    # VENDOR_MANAGER approve here would let the same account that uploads a
+    # contract self-approve it and satisfy the "must be approved by CISO" gate in
+    # send_contract_to_vendor.
+    current_user: User = Depends(require_roles(UserRole.CISO)),
     tenant_id: str = Depends(get_tenant_id),
 ):
     """CISO approves or rejects a contract after review."""
