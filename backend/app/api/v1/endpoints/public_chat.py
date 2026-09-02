@@ -2,18 +2,34 @@
 Public support chatbot endpoint — no authentication required.
 Restricted to GRCEye platform questions and general GRC topics only.
 Rate-limited by IP using a simple in-memory sliding window.
+
+Built on the shared AI foundation (app.services.ai_prompts / ai_provider / ai_locale):
+the expert `public_support` system prompt owns the product-facts grounding, the
+refusal rules and the visitor-facing tone (app.services.ai_prompts.SUPPORT_CORE /
+PRODUCT_FACTS) — this route no longer keeps its own copy of any of that, and no
+longer pre-filters visitor text with an English-only keyword blocklist (that
+blocklist used to reject legitimate questions such as "do you support penetration
+testing / vulnerability management?" or "which AI model do you use?"; the system
+prompt's own, more precise refusal criteria replace it). The reply language follows
+the visitor's own message, then the request body, then Accept-Language (see
+`public_support_chat`). Calls go through `ai_provider.ai_stream_sse`, so the SSE
+stream carries tuned decoding, correct timeout handling, honest truncated/empty
+error frames and localised (en/fr/ar) error text instead of a silent empty bubble.
 """
-import json
-import asyncio
+import logging
 import time
 from collections import defaultdict
-from collections.abc import AsyncGenerator
-from fastapi import APIRouter, HTTPException, Request
+from typing import Annotated
+
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
-import httpx
 
-from app.core.config import settings
+from app.core.security_utils import sanitize_for_prompt
+from app.services import ai_prompts, ai_provider
+from app.services.ai_locale import get_request_language, guess_language, normalize_language
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -36,120 +52,6 @@ def _check_rate_limit(ip: str) -> None:
     _rate_store[ip].append(now)
 
 
-# ── System prompt ─────────────────────────────────────────────────────────────
-
-SUPPORT_SYSTEM_PROMPT = """You are GRCEye Support, a friendly and professional support assistant for the GRCEye platform.
-
-You help visitors understand and use GRCEye — a GRC (Governance, Risk & Compliance) SaaS platform.
-
-== WHAT YOU CAN ANSWER ==
-
-1. GRCEye platform questions:
-   - Features: Risk Management, Compliance, Audit Management, Policy Management, Vendor Risk (TPRM), AI capabilities, Reporting
-   - Modules: how they work, what they do, how to use them
-   - Frameworks: ISO 27001, SOC 2, GDPR, PCI DSS, HIPAA, NIST CSF, NIST 800-53, CIS Controls, DORA, NIS2, AI Act, and 64+ more
-   - Roles: CISO, Risk Manager, Compliance Manager, Auditor, Policy Manager, and the other 9 built-in roles
-   - Getting started, trial, onboarding
-   - Trust Center, reports, dashboards, evidence collection
-   - AI features: document generator (29 types), contract review, vendor prescreening, gap analysis
-
-2. General GRC topics:
-   - Risk management concepts, frameworks, methodologies
-   - Compliance program design
-   - Audit best practices
-   - Policy lifecycle and attestation
-   - Vendor risk / third-party risk management
-   - Information security governance
-   - Regulatory requirements (GDPR, HIPAA, DORA, NIS2, PCI DSS, etc.)
-
-== WHAT YOU MUST REFUSE ==
-
-You must NEVER answer questions about:
-- Programming, code, software development, or coding languages
-- How AI models are built, trained, or how they work internally
-- API keys, API tokens, API endpoints, authentication secrets, or credentials
-- The website's source code, backend architecture, or database structure
-- Any technical implementation details of how GRCEye is built
-- Hacking, exploits, vulnerabilities in software systems
-- Topics completely unrelated to GRC (cooking, sports, entertainment, etc.)
-
-If someone asks about restricted topics, respond politely:
-"I can only help with GRC topics and GRCEye platform questions. For technical or developer questions, please contact our support team at support@grceye.io."
-
-== TONE ==
-- Friendly, concise, and professional
-- Use bullet points for lists
-- Keep responses focused — don't over-explain
-- Always offer to help with something else at the end if the question was short
-"""
-
-# ── Blocked keywords (client-side backup — server-side enforcement) ────────────
-BLOCKED_PATTERNS = [
-    "api key", "api token", "secret key", "source code", "how does the ai work",
-    "how is it built", "what model", "which model", "openai", "anthropic",
-    "gpt", "llm", "training data", "python code", "javascript", "sql injection",
-    "backend", "database schema", "endpoint url", "how to hack",
-]
-
-
-def _is_blocked(text: str) -> bool:
-    lower = text.lower()
-    return any(p in lower for p in BLOCKED_PATTERNS)
-
-
-# ── SSE streaming helper ───────────────────────────────────────────────────────
-
-_SSE_DONE = "data: [DONE]\n\n"
-_SSE_MEDIA_TYPE = "text/event-stream"
-_SSE_HEADERS = {"Cache-Control": "no-cache", "X-Accel-Buffering": "no"}
-
-
-async def _support_sse_generator(messages: list[dict]) -> AsyncGenerator[str, None]:
-    base_url = settings.OLLAMA_BASE_URL.rstrip("/")
-    url = f"{base_url}/api/chat"
-    model = settings.OLLAMA_CHAT_MODEL
-
-    payload = {
-        "model": model,
-        "stream": True,
-        "messages": [{"role": "system", "content": SUPPORT_SYSTEM_PROMPT}, *messages],
-    }
-
-    try:
-        async with httpx.AsyncClient(timeout=120.0) as client:
-            async with client.stream("POST", url, json=payload) as response:
-                if response.status_code != 200:
-                    body = await response.aread()
-                    yield f"data: {json.dumps({'error': 'AI service unavailable. Please try again later.'})}\n\n"
-                    yield _SSE_DONE
-                    return
-
-                async for line in response.aiter_lines():
-                    if not line:
-                        continue
-                    try:
-                        chunk = json.loads(line)
-                    except json.JSONDecodeError:
-                        continue
-                    token = chunk.get("message", {}).get("content", "")
-                    if token:
-                        yield f"data: {json.dumps({'token': token})}\n\n"
-                    if chunk.get("done"):
-                        break
-
-        yield _SSE_DONE
-
-    except httpx.ConnectError:
-        yield f"data: {json.dumps({'error': 'Support chat is temporarily unavailable. Please email support@grceye.io.'})}\n\n"
-        yield _SSE_DONE
-    except asyncio.TimeoutError:
-        yield f"data: {json.dumps({'error': 'Response timed out. Please try a shorter question.'})}\n\n"
-        yield _SSE_DONE
-    except Exception as exc:
-        yield f"data: {json.dumps({'error': 'Something went wrong. Please try again.'})}\n\n"
-        yield _SSE_DONE
-
-
 # ── Schema ─────────────────────────────────────────────────────────────────────
 
 class SupportMessage(BaseModel):
@@ -159,39 +61,108 @@ class SupportMessage(BaseModel):
 
 class SupportChatRequest(BaseModel):
     messages: list[SupportMessage]
+    # Additive: "en" | "fr" | "ar". The widget does not send this today — when
+    # absent, the language is guessed from the visitor's latest message and
+    # otherwise taken from Accept-Language (see public_support_chat).
+    language: str | None = None
+
+
+# ── Chat turn hygiene ────────────────────────────────────────────────────────
+# Mirrors ai.py:_chat_turns (the authenticated in-app assistant) for the same
+# reasons; kept as a local, private helper because ai.py is a sibling endpoint
+# module, not one of the foundation services this file may reach into.
+_CHAT_MAX_TURNS = 30       # conversation window forwarded to the model
+_CHAT_MAX_CHARS = 4_000    # per-turn cap (control characters stripped) — a public
+                           # support question never needs the in-app assistant's budget
+_MAX_INCOMING_MESSAGES = 40  # hard cap before any processing (abuse guard)
+
+
+def _support_chat_turns(messages: list[SupportMessage]) -> list[dict]:
+    """Client conversation history -> provider turns.
+
+    Roles are restricted to user/assistant (a client-sent "system" turn would sit
+    after the server system prompt and try to override it — the old code accepted
+    any string here), control characters are stripped and each turn is length-
+    capped, the window is limited to the most recent turns, and the history is
+    trimmed to open with a user turn (this also drops the widget's own localized
+    "welcome" assistant message, which used to be forwarded to the model as real
+    conversation history). Turns are deliberately NOT wrapped with
+    delimit_untrusted: the foundation passes chat turns as-is because the user's
+    question IS the instruction to answer; SUPPORT_CORE carries the
+    data-not-instructions rule for the BEGIN/END delimited blocks it may show
+    elsewhere in the system prompt.
+    """
+    turns: list[dict] = []
+    for m in messages:
+        role = (m.role or "").strip().lower()
+        if role not in ("user", "assistant"):
+            continue
+        content = sanitize_for_prompt(m.content, max_len=_CHAT_MAX_CHARS)
+        if content.strip():
+            turns.append({"role": role, "content": content})
+    turns = turns[-_CHAT_MAX_TURNS:]
+    while turns and turns[0]["role"] != "user":
+        turns.pop(0)
+    return turns
 
 
 # ── Endpoint ───────────────────────────────────────────────────────────────────
 
 @router.post("/support-chat")
-async def public_support_chat(request: Request, body: SupportChatRequest):
+async def public_support_chat(
+    request: Request,
+    body: SupportChatRequest,
+    header_lang: Annotated[str, Depends(get_request_language)],
+):
     """
-    Public support chatbot — no auth required.
-    Restricted to GRCEye + GRC topics. Rate-limited to 20 req/10 min per IP.
+    Public support chatbot — no auth required (foundation task `public_support`).
+
+    Restricted to GRCEye + GRC topics by the `public_support` system prompt's own
+    refusal rules (source code / credentials / API keys / internal architecture /
+    off-topic), not by a keyword blocklist. Rate-limited to 20 req/10 min per IP.
     """
     # Rate limit by client IP
     client_ip = request.client.host if request.client else "unknown"
     _check_rate_limit(client_ip)
 
-    # Validate message count (max 20 turns to prevent abuse)
-    if len(body.messages) > 40:
+    # Validate message count (max 40 messages to prevent abuse)
+    if len(body.messages) > _MAX_INCOMING_MESSAGES:
         raise HTTPException(status_code=400, detail="Conversation too long. Please start a new chat.")
 
-    # Server-side content filter on the last user message
-    last_user = next(
-        (m.content for m in reversed(body.messages) if m.role == "user"), ""
-    )
-    if _is_blocked(last_user):
-        async def _refused() -> AsyncGenerator[str, None]:
-            msg = "I can only help with GRC topics and GRCEye platform questions. For technical or developer questions, please contact our team at support@grceye.io."
-            yield f"data: {json.dumps({'token': msg})}\n\n"
-            yield _SSE_DONE
-        return StreamingResponse(_refused(), media_type=_SSE_MEDIA_TYPE, headers=_SSE_HEADERS)
+    turns = _support_chat_turns(body.messages)
+    if not turns:
+        raise HTTPException(status_code=422, detail="No message to answer.")
 
-    messages = [{"role": m.role, "content": m.content} for m in body.messages]
+    last_user = next((t["content"] for t in reversed(turns) if t["role"] == "user"), "")
+    lang = normalize_language(body.language) or guess_language(last_user) or header_lang
+
+    # Public + unauthenticated: there is no tenant to resolve a bring-your-own-AI
+    # endpoint for, so the deployment default is used directly (still honours
+    # AI_PROVIDER/AI_BASE_URL/AI_MODEL/AI_CA_BUNDLE when the deployment sets them —
+    # the old code always spoke raw Ollama and ignored those settings entirely).
+    cfg = ai_provider.env_ai_config()
+
+    try:
+        system_prompt = ai_prompts.system_prompt("public_support", lang=lang)
+    except ai_prompts.PromptError:
+        logger.exception("prompt composition failed (task=public_support)")
+        raise HTTPException(status_code=424, detail=ai_provider.failure_message("bad_config", lang))
+
+    # Reachability check BEFORE the StreamingResponse is returned, so an outage
+    # becomes an HTTP error (the widget's `!resp.ok` branch) instead of an error
+    # frame glued into the stream. 424, never 5xx: client.ts redirects the whole
+    # SPA to /service-down on any >=500.
+    try:
+        await ai_provider.preflight(cfg)
+    except ai_provider.AICallError as exc:
+        raise HTTPException(status_code=424, detail=exc.user_message(lang))
+
+    defaults = ai_prompts.task_defaults("public_support")
+    decode = ai_provider.decoding(defaults["preset"], temperature=defaults["temperature"])
+    msgs = [{"role": "system", "content": system_prompt}, *turns]
 
     return StreamingResponse(
-        _support_sse_generator(messages),
-        media_type=_SSE_MEDIA_TYPE,
-        headers=_SSE_HEADERS,
+        ai_provider.ai_stream_sse(msgs, lang=lang, cfg=cfg, task="public.support_chat", **decode),
+        media_type=ai_provider.SSE_MEDIA_TYPE,
+        headers=ai_provider.SSE_HEADERS,
     )
