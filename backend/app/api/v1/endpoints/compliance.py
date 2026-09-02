@@ -1,12 +1,17 @@
-"""Compliance assessment endpoints — full implementation."""
-import asyncio
-import json
+"""Compliance assessment endpoints — full implementation.
+
+AI sites in this file (both on the shared AI foundation under ``app.services``):
+  * ``_run_analysis_background`` — document set × framework controls
+    (``ai_chunking.assess_controls_over_document`` + the ``control_assessment`` prompt);
+  * ``_detect_clauses_background`` — document → clause tags + summary
+    (``ai_structured`` + the ``clause_coverage`` prompt, chunked with ``map_reduce``).
+"""
+import logging
 import re
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
-import requests
 from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, UploadFile, status
 from pydantic import BaseModel
 from sqlalchemy import func, or_, select, update as sa_update
@@ -15,8 +20,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.v1.dependencies.auth import get_current_user, get_tenant_id, require_roles
 from app.api.v1.dependencies.pagination import PaginationParams
 from app.core.config import settings
-from app.core.database import get_db
-from app.core.security_utils import sanitize_for_prompt, verify_file_signature
+from app.core.database import AsyncSessionLocal, get_db
+from app.core.security_utils import verify_file_signature
 from app.models.compliance import (
     AssessmentStatus,
     ComplianceAssessment,
@@ -27,11 +32,14 @@ from app.models.compliance import (
     EvidenceType,
     UploadedDocument,
 )
-from app.models.framework import Framework, FrameworkControl
+from app.models.framework import ControlRequirement, Framework, FrameworkControl
 from app.models.mandatory_document import MandatoryDocument
 from app.models.tenant import Tenant
 from app.models.action_item import ActionItem, ActionItemPriority, ActionItemStatus
 from app.models.user import User, UserRole
+from app.services import ai_chunking, ai_prompts, ai_provider
+from app.services.ai_locale import get_request_language, normalize_language
+from app.services.ai_structured import ai_structured, coerce_shape, extract_json, validate_against
 
 router = APIRouter()
 
@@ -220,167 +228,559 @@ def _build_doc_filename(
     return f"{norme}_document_{date_str}{ext}"
 
 
-def _extract_text(file_path: str, content_type: str) -> str:
-    """Extract plain text from PDF, DOCX, or TXT files."""
-    ct = (content_type or "").lower()
+logger = logging.getLogger(__name__)
+
+
+# ─── AI foundation: language-aware platform copy ──────────────────────────────
+# Free text the PLATFORM writes into AI results (defaults, prefixes, labels) must
+# follow the UI language exactly like the model's own prose. Model output itself is
+# localised by ai_prompts.system_prompt(lang=...); these strings cover what we add.
+
+_L10N: dict[str, dict[str, str]] = {
+    "en": {
+        "no_text": ("No text could be extracted from the uploaded documents. Scanned PDFs need OCR "
+                    "(Document Capture) and spreadsheets need a text export before analysis."),
+        "no_evidence": "No evidence found in the uploaded documents.",
+        "evidence": "Evidence",
+        "requirement": "Requirement applied",
+        "note": "Note",
+        "not_analysed": "AI analysis did not return a verdict for this control; assess it manually.",
+        "gap_default": "The uploaded documents do not evidence \"{title}\" ({control_id}).",
+        "evidence_gap": "Evidence gap:",
+        "remediation_default": ("Provide evidence for \"{title}\" ({control_id}): the policy or standard that "
+                                "defines it, the owner, the procedure and the records showing it operates — "
+                                "or implement it per the framework guidance."),
+        "partial": ("Partial analysis: {n} of {total} control(s) received no AI verdict this run — {new} newly "
+                    "marked \"not started\", {preserved} kept at their previous status, not re-verified this run."),
+        "mostly_failed": "AI analysis produced verdicts for only {n} of {total} controls; the previous results were kept.",
+        "clause_failed": "AI clause detection failed for this document.",
+        "clause_too_large": ("This document is too large to tag with AI clause detection in one job ({n} parts, "
+                             "limit {limit}). Split it into smaller files, or rely on the manual checklist."),
+        "clause_partial": "AI clause detection could not process {n} of {total} part(s) of this document; results may be incomplete.",
+        "locate_failed": ("AI analysis could not search every part of the uploaded documents for evidence (a "
+                          "retrieval step failed); the previous results were kept. Retry the analysis."),
+    },
+    "fr": {
+        "no_text": ("Aucun texte n'a pu être extrait des documents téléversés. Les PDF scannés nécessitent une OCR "
+                    "(Capture de documents) et les tableurs un export texte avant l'analyse."),
+        "no_evidence": "Aucune preuve trouvée dans les documents téléversés.",
+        "evidence": "Preuve",
+        "requirement": "Exigence appliquée",
+        "note": "Remarque",
+        "not_analysed": "L'analyse IA n'a renvoyé aucun verdict pour ce contrôle ; évaluez-le manuellement.",
+        "gap_default": "Les documents téléversés n'apportent pas de preuve pour « {title} » ({control_id}).",
+        "evidence_gap": "Écart de preuve :",
+        "remediation_default": ("Fournir des preuves pour « {title} » ({control_id}) : la politique ou norme qui le "
+                                "définit, le responsable, la procédure et les enregistrements montrant son "
+                                "fonctionnement — ou le mettre en œuvre selon les recommandations du référentiel."),
+        "partial": ("Analyse partielle : {n} contrôle(s) sur {total} n'ont reçu aucun verdict IA lors de cette "
+                    "exécution — {new} nouvellement marqué(s) « non démarré(s) », {preserved} conservé(s) à leur "
+                    "statut précédent, non revérifié(s) lors de cette exécution."),
+        "mostly_failed": "L'analyse IA n'a produit des verdicts que pour {n} contrôles sur {total} ; les résultats précédents ont été conservés.",
+        "clause_failed": "La détection IA des clauses a échoué pour ce document.",
+        "clause_too_large": ("Ce document est trop volumineux pour être analysé en une seule fois par la détection "
+                             "IA des clauses ({n} parties, limite {limit}). Scindez-le en fichiers plus petits, ou "
+                             "utilisez la checklist manuelle."),
+        "clause_partial": "La détection IA des clauses n'a pas pu traiter {n} partie(s) sur {total} de ce document ; les résultats peuvent être incomplets.",
+        "locate_failed": ("L'analyse IA n'a pas pu rechercher des preuves dans toutes les parties des documents "
+                          "téléversés (une étape de recherche a échoué) ; les résultats précédents ont été conservés. "
+                          "Relancez l'analyse."),
+    },
+    "ar": {
+        "no_text": ("تعذر استخراج أي نص من المستندات المرفوعة. تحتاج ملفات PDF الممسوحة ضوئيًا إلى التعرف الضوئي على "
+                    "الحروف (التقاط المستندات) وتحتاج جداول البيانات إلى تصدير نصي قبل التحليل."),
+        "no_evidence": "لم يُعثر على أي دليل في المستندات المرفوعة.",
+        "evidence": "الدليل",
+        "requirement": "المتطلب المطبَّق",
+        "note": "ملاحظة",
+        "not_analysed": "لم يُرجع تحليل الذكاء الاصطناعي أي حكم لهذا الضابط؛ يرجى تقييمه يدويًا.",
+        "gap_default": "لا تقدم المستندات المرفوعة دليلًا على \"{title}\" ({control_id}).",
+        "evidence_gap": "فجوة في الأدلة:",
+        "remediation_default": ("قدّم أدلة على \"{title}\" ({control_id}): السياسة أو المعيار الذي يحدده، والمسؤول، "
+                                "والإجراء والسجلات التي تُظهر تطبيقه — أو طبّقه وفق إرشادات الإطار."),
+        "partial": ("تحليل جزئي: {n} من أصل {total} ضابطًا لم يتلقَّ أي حكم من الذكاء الاصطناعي في هذا التشغيل — "
+                    "تم تصنيف {new} حديثًا بحالة \"لم يبدأ\"، وتم الاحتفاظ بحالة {preserved} على وضعها السابق "
+                    "دون إعادة التحقق منها في هذا التشغيل."),
+        "mostly_failed": "أنتج تحليل الذكاء الاصطناعي أحكامًا لـ {n} فقط من أصل {total} ضابطًا؛ تم الاحتفاظ بالنتائج السابقة.",
+        "clause_failed": "فشل اكتشاف البنود بالذكاء الاصطناعي لهذا المستند.",
+        "clause_too_large": ("هذا المستند كبير جدًا لتحليله دفعة واحدة عبر اكتشاف البنود بالذكاء الاصطناعي ({n} جزءًا، "
+                             "والحد الأقصى {limit}). قسّمه إلى ملفات أصغر، أو استخدم القائمة المرجعية اليدوية."),
+        "clause_partial": "تعذر على اكتشاف البنود بالذكاء الاصطناعي معالجة {n} من أصل {total} جزءًا من هذا المستند؛ قد تكون النتائج غير مكتملة.",
+        "locate_failed": ("تعذر على تحليل الذكاء الاصطناعي البحث عن الأدلة في جميع أجزاء المستندات المرفوعة (فشلت "
+                          "خطوة استرجاع)؛ تم الاحتفاظ بالنتائج السابقة. أعد تشغيل التحليل."),
+    },
+}
+
+
+def _t(lang: str, key: str, **fmt) -> str:
+    """Platform-authored sentence in the resolved UI language (en/fr/ar; English fallback)."""
+    table = _L10N.get(normalize_language(lang) or "en") or _L10N["en"]
+    text = table.get(key) or _L10N["en"][key]
+    return text.format(**fmt) if fmt else text
+
+
+# ─── Text extraction (whole text, never truncated; chunking happens at analysis time) ──
+
+_PLAIN_TEXT_SUFFIXES = (".txt", ".md", ".csv", ".json", ".xml", ".html", ".htm")
+
+
+def _extract_xlsx(file_path: str) -> str:
+    """Sheet-by-sheet, row-by-row text for an OOXML workbook (cell values, formulas evaluated)."""
+    from openpyxl import load_workbook
+
+    wb = load_workbook(file_path, read_only=True, data_only=True)
     try:
-        if "pdf" in ct or file_path.endswith(".pdf"):
+        parts: list[str] = []
+        for ws in wb.worksheets:
+            parts.append(f"=== Sheet: {ws.title} ===")
+            for row in ws.iter_rows(values_only=True):
+                cells = ["" if v is None else str(v).strip() for v in row]
+                if any(cells):
+                    parts.append(" | ".join(cells).rstrip(" |"))
+        return "\n".join(parts)
+    finally:
+        wb.close()
+
+
+def _extract_xls(file_path: str) -> str:
+    """Legacy BIFF workbook: needs xlrd, which is optional. Without it the document has no
+    text (the analysis pre-check tells the user), instead of the old binary garbage."""
+    try:
+        import xlrd  # type: ignore[import-not-found]
+    except ImportError:
+        logger.info("xlrd is not installed; no text extracted from legacy .xls file %s", file_path)
+        return ""
+    book = xlrd.open_workbook(file_path)
+    parts: list[str] = []
+    for sheet in book.sheets():
+        parts.append(f"=== Sheet: {sheet.name} ===")
+        for r in range(sheet.nrows):
+            cells = [str(c).strip() for c in sheet.row_values(r)]
+            if any(cells):
+                parts.append(" | ".join(cells).rstrip(" |"))
+    return "\n".join(parts)
+
+
+def _extract_text(file_path: str, content_type: str) -> str:
+    """Extract the WHOLE plain text of an uploaded document.
+
+    PDF   text layer per page, joined with ``[[PAGE n]]`` markers so chunking cuts on page
+          breaks and evidence citations can name pages; an image-only (scanned) PDF yields ""
+          (OCR lives in Document Capture) instead of silently analysing nothing.
+    DOCX  paragraphs AND table rows (tables were ignored before).
+    XLSX  every sheet, row by row (was read as binary garbage before).
+    XLS   via xlrd when available, else "".
+    TXT   decoded as UTF-8; binary-looking content yields "".
+    Never raises; failures are logged and yield "".
+    """
+    ct = (content_type or "").lower()
+    name = (file_path or "").lower()
+    try:
+        if "pdf" in ct or name.endswith(".pdf"):
             from pypdf import PdfReader
-            reader = PdfReader(file_path)
-            return "\n".join(page.extract_text() or "" for page in reader.pages)
-        if "docx" in ct or "word" in ct or file_path.endswith(".docx"):
+
+            pages = [(page.extract_text() or "") for page in PdfReader(file_path).pages]
+            if not any(p.strip() for p in pages):
+                return ""
+            return ai_chunking.page_marked_text(pages) if len(pages) > 1 else pages[0].strip()
+        if "docx" in ct or "word" in ct or name.endswith(".docx"):
             from docx import Document as DocxDocument
-            doc = DocxDocument(file_path)
-            return "\n".join(p.text for p in doc.paragraphs)
-        return Path(file_path).read_text(encoding="utf-8", errors="ignore")
-    except Exception:
+
+            document = DocxDocument(file_path)
+            parts = [p.text for p in document.paragraphs if p.text and p.text.strip()]
+            for table in document.tables:
+                for row in table.rows:
+                    cells = [c.text.strip() for c in row.cells]
+                    if any(cells):
+                        parts.append(" | ".join(cells))
+            return "\n".join(parts)
+        if "spreadsheetml" in ct or name.endswith(".xlsx"):
+            return _extract_xlsx(file_path)
+        if "ms-excel" in ct or name.endswith(".xls"):
+            return _extract_xls(file_path)
+        if ct.startswith("text/") or name.endswith(_PLAIN_TEXT_SUFFIXES) or not ct:
+            raw = Path(file_path).read_bytes()
+            if b"\x00" in raw[:4096]:
+                return ""
+            return raw.decode("utf-8", errors="ignore")
+        return ""
+    except Exception:  # noqa: BLE001 — extraction must never break an upload
+        logger.warning("text extraction failed for %s (%s)", file_path, ct, exc_info=True)
         return ""
 
 
-def _parse_ollama_json(content: str) -> list[dict]:
-    """Parse JSON array from Ollama response, handling markdown fences."""
-    content = content.strip()
-    if "```" in content:
-        for part in content.split("```"):
-            clean = part.strip().lstrip("json").strip()
-            if clean.startswith("["):
-                content = clean
-                break
+# ─── AI site 1: document set × framework controls (control_assessment task) ──────
+
+#: Model verdict -> ControlStatus. Source of truth is the foundation's mapping;
+#: ``insufficient_evidence`` scores as not evidenced, and the notes/gap say so explicitly.
+_VERDICT_STATUS: dict[str, ControlStatus] = {
+    verdict: ControlStatus(value) for verdict, value in ai_prompts.VERDICT_TO_CONTROL_STATUS.items()
+}
+
+
+def _build_control_specs(
+    controls: list, reqs_by_control: dict[str, list],
+) -> tuple[list[ai_chunking.ControlSpec], dict[str, list]]:
+    """ORM controls -> ``ControlSpec`` list for the assessor, plus ``spec id -> [FrameworkControl]``.
+
+    The assessor requires unique, non-empty identifiers. Rows sharing one identifier
+    (possible in cloned/custom frameworks) are judged once and receive the same verdict;
+    a row with no identifier gets a positional one so it is still assessed.
+    """
+    specs: list[ai_chunking.ControlSpec] = []
+    by_key: dict[str, list] = {}
+    for idx, control in enumerate(controls):
+        spec = ai_chunking.control_spec_from_model(control, reqs_by_control.get(control.id, []))
+        key = spec.control_id or f"CTRL-{idx + 1}"
+        spec.control_id = key
+        rows = by_key.setdefault(key, [])
+        if rows:
+            logger.warning("framework control identifier %r appears more than once; rows share one verdict", key)
+        else:
+            specs.append(spec)
+        rows.append(control)
+    return specs, by_key
+
+
+def _framework_label_text(name: str | None, version: str | None, short: str | None) -> str:
+    """Clean, single-line "Name Version (Short)" display string built from raw framework fields.
+
+    NOT platform-trusted: Framework.name/version/short_name are tenant-editable free text (a
+    tenant can clone a built-in framework via POST /frameworks/{id}/clone then PATCH the clone
+    to any text). ``clean_field()`` only makes the value single-line and length-capped — it does
+    NOT fence it or mark it as data-not-instructions. Callers MUST run the result through
+    ``ai_provider.delimit_untrusted(..., "FRAMEWORK NAME")`` before it reaches a prompt; never
+    pass it as ``ai_prompts.system_prompt``'s ``extra_context`` (or ai_chunking's
+    ``assess_controls_over_document(framework_label=...)``, whose internal per-batch renderers
+    apply a naive 200-char slice that would cut a delimiting fence in half and leave it
+    unclosed) without delimiting it first."""
+    n = ai_provider.clean_field(name, 120)
+    v = ai_provider.clean_field(version, 40)
+    s = ai_provider.clean_field(short, 40)
+    label = " ".join(x for x in (n, v) if x)
+    return f"{label} ({s})" if s else label
+
+
+def _framework_label(framework: Framework | None) -> str:
+    if framework is None:
+        return ""
+    return _framework_label_text(framework.name, framework.version, framework.short_name)
+
+
+def _analysis_context(
+    tenant: Tenant | None, assessment: ComplianceAssessment, framework: Framework | None = None,
+) -> str | None:
+    """Framework label + organisation profile (short platform fields) + the user-authored scope
+    statement — all three delimited as untrusted third-party data. Framework.name/version/
+    short_name (see ``_framework_label_text``) and tenant.name/industry/country/org_size are
+    tenant-editable, not platform-trusted facts, and this string lands verbatim, ahead of the
+    (also fenced) document text, in every judge/locate prompt for every control on the tenant;
+    clean_field() alone (single-line, length-capped) does not neutralise fence look-alikes or
+    mark the text as data-not-instructions the way delimit_untrusted() does. This is the ONLY
+    channel the framework label reaches ``assess_controls_over_document`` through — the call
+    site passes ``framework_label=""`` so the tenant-controlled name never reaches the
+    unfenced/unbounded ``extra_context`` CONTEXT header or the 200-char-truncated per-batch
+    "- Framework: %s" line that function renders internally."""
+    fw_label = _framework_label(framework)
+    facts: list[str] = []
+    if tenant is not None:
+        org = ai_provider.clean_field(tenant.name, 120)
+        if org:
+            facts.append(f"Organisation: {org}")
+        for label, value in (("industry", tenant.industry), ("country", tenant.country), ("size", tenant.org_size)):
+            clean = ai_provider.clean_field(value, 60)
+            if clean:
+                facts.append(f"{label}: {clean}")
+    lines: list[str] = []
+    if fw_label:
+        lines.append(ai_provider.delimit_untrusted(fw_label, "FRAMEWORK NAME", max_len=len(fw_label) + 1))
+    facts_line = "; ".join(facts)
+    if facts_line:
+        lines.append(ai_provider.delimit_untrusted(facts_line, "ORG PROFILE", max_len=len(facts_line) + 1))
+    scope = (assessment.scope_description or "").strip()
+    if scope:
+        # ai_chunking's _context_text hard-caps the WHOLE context string at 1500 chars with a
+        # plain slice (not fence-aware), so the fences here must never together exceed that or a
+        # closing "<<<END ...>>>" marker gets truncated. Budget what's left after the FRAMEWORK
+        # NAME + ORG PROFILE blocks above (220 = a fence's own overhead + a safety margin),
+        # capped to the original 1000-char allowance for a scope statement (a paragraph, not a
+        # document).
+        used = len("\n".join(lines)) + 1 if lines else 0
+        cap = max(200, min(1000, 1500 - used - 220))
+        lines.append(ai_provider.delimit_untrusted(scope[:cap], "SCOPE STATEMENT", max_len=cap + 1))
+    return "\n".join(lines) or None
+
+
+def _implementation_notes(v: ai_chunking.ControlVerdict, lang: str) -> str:
+    """What the CISO (and an external auditor) reads under "AI assessment": the model's
+    explanation, the requirement it applied, every VERIFIED quotation with its source, and the
+    post-check notes (downgrades, dropped quotes) so nothing is hidden."""
+    parts: list[str] = []
+    if v.verdict == "insufficient_evidence":
+        parts.append(_t(lang, "no_evidence"))
+    rationale = " ".join((v.rationale or "").split())
+    if rationale:
+        parts.append(rationale)
+    requirement = " ".join((v.requirement_applied or "").split())
+    if requirement:
+        parts.append(f"{_t(lang, 'requirement')}: {requirement}")
+    for quote in v.evidence:
+        text = " ".join((quote.quote or "").split())
+        if not quote.located or not text:
+            continue
+        where = quote.source or "document"
+        if quote.label:
+            where += f", {quote.label}"
+        parts.append(f'{_t(lang, "evidence")} ({where}): "{text}"')
+    notes = list(dict.fromkeys(w.strip() for w in (v.warnings or ()) if w and w.strip()))
+    if notes:
+        parts.append(f"{_t(lang, 'note')}: " + "; ".join(notes))
+    return "\n".join(parts)
+
+
+def _gap_severity(v: ai_chunking.ControlVerdict, ctrl_status: ControlStatus, has_must: bool) -> str:
+    """The model's rubric-based severity when it gave one, else the platform's must-based rule."""
+    if v.gap_severity in ai_chunking.GAP_SEVERITIES:
+        return v.gap_severity
+    if v.verdict == "insufficient_evidence":
+        return "medium" if has_must else "low"
+    if ctrl_status == ControlStatus.NOT_IMPLEMENTED:
+        return "high" if has_must else "medium"
+    return "medium" if has_must else "low"
+
+
+def _gap_priority(severity: str, is_blocker: bool) -> int:
+    """remediation_priority values stay in {90, 60, 50, 30}: list_action_plan maps them to
+    ActionItem priorities critical/high/medium/low."""
+    if is_blocker or severity == "critical":
+        return 90
+    if severity == "high":
+        return 60
+    if severity == "medium":
+        return 50
+    return 30
+
+
+async def _mark_analysis_failed(db: AsyncSession, assessment: ComplianceAssessment, detail: str) -> None:
+    """Explicit failure state the SPA shows (analyze-status: status="failed", error=...).
+    Called before any result row was touched, so the previous results stay intact."""
+    assessment.ai_analysis_status = "failed"
+    assessment.ai_analysis_error = (detail or "AI analysis failed.")[:500]
+    await db.commit()
+
+
+# ─── AI site 2: document → framework clause tags + factual summary (clause_coverage task) ──
+
+
+class _ClauseStepFailed(Exception):
+    """One chunk of the clause-coverage job produced no usable result (carries the AiResult)."""
+
+    def __init__(self, res) -> None:
+        self.res = res
+        super().__init__(res.failure_detail() or "The AI request failed.")
+
+
+def _salvage_clause_reply(res, schema: dict) -> dict | None:
+    """Schema-valid data from a reply that failed ONLY the allow-list consistency check after
+    the repair turn. The stray identifiers are dropped deterministically by the caller (with a
+    log line) rather than losing every valid tag in the chunk. Anything else stays a failure."""
+    if res.ok or res.kind != "validation" or not res.raw:
+        return None
     try:
-        return json.loads(content)
-    except json.JSONDecodeError:
-        match = re.search(r"\[.*\]", content, re.DOTALL)
-        if match:
+        parsed = coerce_shape(extract_json(res.raw), schema)
+        ok, _err, data = validate_against(parsed, schema)
+    except Exception:  # noqa: BLE001 — a salvage attempt must never raise
+        return None
+    return data if ok and isinstance(data, dict) else None
+
+
+async def _detect_clauses_background(
+    doc_id: str,
+    doc_text: str,
+    *,
+    framework_id: str,
+    framework_name: str,
+    framework_version: str,
+    framework_short_name: str,
+    doc_name: str,
+    checklist_item: str,
+    expected_clause: str,
+    lang: str,
+    user_id: str | None,
+    tenant_id: str | None,
+) -> None:
+    """Tag an uploaded document with the clauses of the ASSESSMENT'S framework it addresses and
+    store a factual summary (``UploadedDocument.clause_refs`` / ``ai_analysis_summary``).
+
+    Whole text, chunked (never ``[:6000]``); one ``clause_coverage`` call per chunk with the
+    framework's real control identifiers as the allow-list; every returned identifier is
+    resolved against that list and every quotation is verified against the chunk text.
+    Only "addresses" entries become tags ("mentions" = a heading or reference, not a practice).
+    A failure is surfaced in the document's summary in the UI language — never left
+    indistinguishable from "no clauses apply".
+    """
+    lang = normalize_language(lang) or "en"
+    refs: list[str] = []
+    summary: str | None = None
+    try:
+        async with AsyncSessionLocal() as db:
+            rows = (await db.execute(
+                select(FrameworkControl.control_id)
+                .where(FrameworkControl.framework_id == framework_id)
+                .order_by(FrameworkControl.sort_order)
+            )).scalars().all()
+        allowed = list(dict.fromkeys(str(r).strip() for r in rows if r and str(r).strip()))
+        if not allowed:
+            logger.info("clause detection skipped for document %s: framework %s has no controls", doc_id, framework_id)
+            return
+        chunks = ai_chunking.chunk_documents([(doc_name, doc_text)])
+        if not chunks:
+            return
+        # Job-size guard: an unbounded chunk count (one ai_structured call each, up to 2 model
+        # calls with the repair turn) would spend hours of background work per upload and starve
+        # the foreground control-assessment job on the same worker (AI_MAX_PARALLEL_CALLS). Widen
+        # the window once like the assessor does (ai_chunking.assess_controls_over_document), then
+        # refuse honestly instead of running unbounded.
+        max_calls = max(2, int(getattr(settings, "AI_MAX_CALLS_PER_JOB", 60) or 60) // 2)
+        if len(chunks) > max_calls:
+            chunks = ai_chunking.chunk_documents([(doc_name, doc_text)], ai_chunking.MAX_CHUNK_TOKENS)
+        if len(chunks) > max_calls:
+            logger.info("clause detection skipped for document %s: %d chunks exceeds the per-job guard (%d)",
+                        doc_id, len(chunks), max_calls)
+            summary = _t(lang, "clause_too_large", n=len(chunks), limit=max_calls)
             try:
-                return json.loads(match.group())
-            except json.JSONDecodeError:
-                pass
-    return []
+                async with AsyncSessionLocal() as guard_db:
+                    doc = await guard_db.get(UploadedDocument, doc_id)
+                    if doc is not None:
+                        doc.clause_refs = refs                 # []
+                        doc.ai_analysis_summary = summary[:2000]
+                        await guard_db.commit()
+            except Exception:  # noqa: BLE001
+                logger.exception("clause detection: could not store the result for document %s", doc_id)
+            return
 
+        task = "clause_coverage"
+        # Framework.name/version/short_name are tenant-editable free text (see
+        # _framework_label_text) — never pass the raw label as `extra_context` (system_prompt
+        # appends it verbatim under the "rely on them, never contradict them" CONTEXT header).
+        # Delimit it as untrusted data; the sentence framing stays outside the fence.
+        fw_label = _framework_label_text(framework_name, framework_version, framework_short_name)
+        context = (
+            "Framework under assessment:\n"
+            + ai_provider.delimit_untrusted(fw_label, "FRAMEWORK NAME", max_len=len(fw_label) + 1)
+        ) if fw_label else None
+        system = ai_prompts.system_prompt(task, lang=lang, extra_context=context)
+        schema = ai_prompts.task_schema(task)
+        defaults = ai_prompts.task_defaults(task)
+        decoding = ai_provider.decoding(defaults["preset"], temperature=defaults["temperature"])
+        resolver = ai_chunking.build_id_resolver(allowed)
+        allowed_block = ", ".join(allowed)
+        position = {cid: i for i, cid in enumerate(allowed)}
+        failures: list = []
 
-def _call_ollama_batch(doc_text: str, controls: list, model: str) -> list[dict]:
-    """Synchronous Ollama call for one batch of controls. Runs in thread pool."""
-    doc_excerpt = doc_text[:8000]
+        def check(data):
+            return ai_prompts.consistency_issues(task, data, allowed_values=allowed)
 
-    controls_list = "\n".join(
-        f"- [{c.control_id}] {c.title}: {(c.description or '')[:200]}"
-        for c in controls
-    )
+        async def one(chunk: ai_chunking.Chunk):
+            # framework_name/framework_version are tenant-editable free text (see
+            # _framework_label_text) landing in the "FRAMEWORK: ..." line of this user turn —
+            # delimit each as untrusted data rather than interpolating clean_field()'s plain,
+            # unfenced value directly (clean_field only makes it single-line and length-capped).
+            fw_name_clean = ai_provider.clean_field(framework_name, 120) or "not stated"
+            fw_version_clean = ai_provider.clean_field(framework_version, 40) or "not stated"
+            user = ai_prompts.render_user_prompt(
+                task,
+                framework_name=ai_provider.delimit_untrusted(fw_name_clean, "FRAMEWORK NAME", max_len=len(fw_name_clean) + 1),
+                framework_version=ai_provider.delimit_untrusted(fw_version_clean, "FRAMEWORK VERSION", max_len=len(fw_version_clean) + 1),
+                # doc_name is always the server-generated display filename (never the raw
+                # upload filename) — see upload_document's background_tasks.add_task call.
+                doc_name=ai_provider.clean_field(doc_name, 150) or "document",
+                chunk_index=chunk.index,
+                chunk_total=chunk.total,
+                checklist_item=ai_provider.clean_field(checklist_item, 150) or "not specified",
+                expected_clause=ai_provider.clean_field(expected_clause, 60) or "not specified",
+                id_count=len(allowed),
+                allowed_ids=allowed_block,
+                document_block=ai_provider.delimit_untrusted(chunk.text, "DOCUMENT", max_len=len(chunk.text) + 1),
+            )
+            res = await ai_structured(
+                [{"role": "system", "content": system}, {"role": "user", "content": user}],
+                schema,
+                schema_in_prompt=False,          # ai_prompts.system_prompt already carries the schema
+                check=check,
+                partial_items="covered",
+                user_id=user_id,
+                tenant_id=tenant_id,
+                task="compliance.clause_coverage",
+                **decoding,
+            )
+            data = res.data if res.ok else _salvage_clause_reply(res, schema)
+            if data is None:
+                failures.append(res)
+                raise _ClauseStepFailed(res)
+            if not res.ok:
+                logger.info("clause detection %s part %d: kept schema-valid reply after allow-list check failed (%s)",
+                            doc_id, chunk.index, res.failure_detail()[:200])
+            return chunk, data
 
-    prompt = (
-        "You are a compliance analyst. Analyze whether the following organizational "
-        "document(s) provide evidence of implementing the listed compliance controls.\n\n"
-        f"DOCUMENT CONTENT:\n---\n{doc_excerpt}\n---\n\n"
-        f"CONTROLS TO EVALUATE:\n{controls_list}\n\n"
-        "For each control respond with a JSON array. Each element MUST have:\n"
-        '- "control_id": the exact control ID shown in brackets\n'
-        '- "verdict": one of ["compliant", "partial", "not_covered", "not_applicable"]\n'
-        '- "confidence": float 0.0-1.0\n'
-        '- "explanation": one sentence max 100 words\n'
-        '- "gap_description": describe what is missing if not_covered/partial, else null\n\n'
-        "Respond ONLY with a valid JSON array. No markdown, no text outside the JSON."
-    )
+        results = await ai_chunking.map_reduce(chunks, one, list, allow_partial=True)
 
-    payload = {
-        "model": model,
-        "messages": [{"role": "user", "content": prompt}],
-        "stream": False,
-        "options": {"temperature": 0.1, "top_p": 0.95},
-        "format": "json",
-    }
+        seen: set[str] = set()
+        mentions = dropped_ids = dropped_quotes = 0
+        failed_chunks = 0
+        for entry in results:
+            if isinstance(entry, ai_chunking.MapFailure):
+                # Counted from ``results`` itself (not the ``failures`` list ``one()`` fills) so a
+                # chunk failing for any reason — including one that never reached the
+                # ``_ClauseStepFailed`` branch — is still reflected, never silently dropped.
+                failed_chunks += 1
+                continue
+            chunk, data = entry
+            if summary is None:
+                text = " ".join(str(data.get("summary") or "").split())
+                summary = text or None
+            for item in data.get("covered") or []:
+                if not isinstance(item, dict):
+                    continue
+                cid = resolver(item.get("control_id"))
+                if cid is None:
+                    dropped_ids += 1
+                    continue
+                quote = str(item.get("quote") or "").strip()
+                if quote and not ai_chunking.quote_in_text(quote, chunk.text):
+                    dropped_quotes += 1
+                    continue
+                if item.get("strength") != "addresses":
+                    mentions += 1
+                    continue
+                if cid not in seen:
+                    seen.add(cid)
+                    refs.append(cid)
+        refs.sort(key=lambda cid: position.get(cid, len(position)))
+        if failed_chunks and failed_chunks >= len(chunks):
+            # Every chunk failed: nothing usable came back — honest, localised; clause_refs stay [].
+            summary = failures[0].user_message(lang) if failures else _t(lang, "clause_failed")
+        elif failed_chunks:
+            # Some chunks failed: keep what the rest found, but say so — a partial summary must
+            # never read as "that part of the document addresses nothing".
+            note = _t(lang, "clause_partial", n=failed_chunks, total=len(chunks))
+            summary = f"{summary} {note}".strip() if summary else note
+        logger.info("clause detection %s: chunks=%d failed=%d tags=%d mentions=%d dropped_ids=%d dropped_quotes=%d",
+                    doc_id, len(chunks), failed_chunks, len(refs), mentions, dropped_ids, dropped_quotes)
+    except Exception:  # noqa: BLE001 — a background job must report, never crash silently
+        logger.exception("clause detection failed for document %s", doc_id)
+        summary = summary or _t(lang, "clause_failed")
 
     try:
-        resp = requests.post(
-            f"{settings.OLLAMA_BASE_URL}/api/chat",
-            json=payload,
-            timeout=(30, 300),
-        )
-        resp.raise_for_status()
-        content = resp.json().get("message", {}).get("content", "[]")
-        return _parse_ollama_json(content)
-    except Exception:
-        return [
-            {
-                "control_id": c.control_id,
-                "verdict": "not_covered",
-                "confidence": 0.0,
-                "explanation": "Analysis failed — manual review required.",
-                "gap_description": "Analysis could not be completed for this control.",
-            }
-            for c in controls
-        ]
-
-
-async def _run_batch_analysis(doc_text: str, controls: list, model: str) -> list[dict]:
-    """Run analysis across all controls in batches."""
-    batch_size = settings.OLLAMA_ANALYSIS_BATCH_SIZE
-    all_results: list[dict] = []
-    loop = asyncio.get_event_loop()
-    for i in range(0, len(controls), batch_size):
-        batch = controls[i: i + batch_size]
-        results = await loop.run_in_executor(None, _call_ollama_batch, doc_text, batch, model)
-        all_results.extend(results)
-    return all_results
-
-
-_CLAUSE_DETECTION_PROMPT = """\
-You are an ISO 27001:2022 expert. Given the document text below, identify which ISO 27001:2022
-clauses and Annex A controls the document covers. Return ONLY a JSON array of clause references
-(e.g. ["4.3", "5.2", "6.1.3", "A.5.1", "A.8.7"]). Return an empty array [] if none apply.
-Document text (excerpt):
-{excerpt}"""
-
-
-def _detect_clauses_sync(doc_text: str, doc_id: str, db_url: str) -> None:
-    """Synchronous worker: call Ollama to detect clauses, then update the DB record."""
-    excerpt = doc_text[:6000]
-    payload = {
-        "model": getattr(settings, "OLLAMA_CHAT_MODEL", "llama3.1:8b"),
-        "stream": False,
-        "messages": [{"role": "user", "content": _CLAUSE_DETECTION_PROMPT.format(excerpt=excerpt)}],
-    }
-    try:
-        resp = requests.post(
-            f"{settings.OLLAMA_BASE_URL}/api/chat",
-            json=payload,
-            timeout=(30, 120),
-        )
-        if resp.status_code != 200:
-            return
-        raw = resp.json().get("message", {}).get("content", "[]")
-        # Strip markdown fences
-        raw = re.sub(r"^```[a-z]*\n?", "", raw.strip(), flags=re.MULTILINE)
-        raw = re.sub(r"\n?```$", "", raw.strip())
-        clauses = json.loads(raw)
-        if not isinstance(clauses, list):
-            return
+        async with AsyncSessionLocal() as db:
+            doc = await db.get(UploadedDocument, doc_id)
+            if doc is not None:
+                doc.clause_refs = refs
+                if summary:
+                    doc.ai_analysis_summary = summary[:2000]
+                await db.commit()
     except Exception:  # noqa: BLE001
-        return
-
-    # Write back to DB synchronously (separate sync connection)
-    import sqlalchemy
-    from sqlalchemy.orm import Session
-
-    engine = sqlalchemy.create_engine(db_url.replace("+aiosqlite", "").replace("+asyncpg", ""))
-    with Session(engine) as session:
-        doc = session.get(UploadedDocument, doc_id)
-        if doc:
-            doc.clause_refs = clauses
-            session.commit()
-    engine.dispose()
-
-
-def _schedule_clause_detection(doc_id: str, doc_text: str) -> None:
-    """Spawn a background thread to detect clauses without blocking the response."""
-    import threading
-
-    db_url = settings.DATABASE_URL
-    t = threading.Thread(
-        target=_detect_clauses_sync,
-        args=(doc_text, doc_id, db_url),
-        daemon=True,
-    )
-    t.start()
+        logger.exception("clause detection: could not store the result for document %s", doc_id)
 
 
 async def _compute_cross_framework_coverage(
@@ -510,6 +910,7 @@ async def _build_assessment_detail(
             status=ca.status,
             notes=ca.notes,
             implementation_notes=ca.implementation_notes,
+            not_applicable_justification=ca.not_applicable_justification,
             ai_confidence=ca.ai_confidence,
             cross_framework_coverage=(
                 controls_map[ca.control_id].mapped_controls
@@ -786,6 +1187,7 @@ async def upload_document(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_roles(UserRole.CISO)),
     tenant_id: str = Depends(get_tenant_id),
+    lang: str = Depends(get_request_language),
 ) -> UploadedDocumentResponse:
     """Upload a document to an assessment for compliance analysis."""
     assessment_result = await db.execute(
@@ -865,11 +1267,13 @@ async def upload_document(
     # Auto-update matching control statuses when a checklist document is uploaded.
     # A document uploaded for clause "4.1" automatically promotes any not_started or
     # not_implemented controls under clause "4.1", "4.1.1", "4.1.2", etc.
+    checklist_md: MandatoryDocument | None = None
     if document_type_key:
         md_result = await db.execute(
             select(MandatoryDocument).where(MandatoryDocument.document_type_key == document_type_key)
         )
         md = md_result.scalar_one_or_none()
+        checklist_md = md
         if md and md.clause_ref:
             clause_ref = md.clause_ref
             ctrl_result = await db.execute(
@@ -896,9 +1300,27 @@ async def upload_document(
                     .values(status=ControlStatus.PARTIALLY_IMPLEMENTED)
                 )
 
-    # Fire-and-forget: detect which ISO 27001 clauses this document covers
-    if extracted:
-        background_tasks.add_task(_schedule_clause_detection, doc.id, extracted)
+    # Background: tag the document with the clauses of THIS assessment's framework it addresses
+    # and store a factual summary (whole text, chunked; failures surface in the summary).
+    if extracted.strip():
+        background_tasks.add_task(
+            _detect_clauses_background,
+            doc.id,
+            extracted,
+            framework_id=assessment.framework_id,
+            framework_name=fw_obj.name if fw_obj else "",
+            framework_version=fw_obj.version if fw_obj else "",
+            framework_short_name=fw_short,
+            # The server-generated display name, never the raw upload filename (fully
+            # attacker-controlled and rendered unfenced in the clause_coverage user template's
+            # "DOCUMENT: ..." line) — matches _run_analysis_background's document naming.
+            doc_name=display_name,
+            checklist_item=checklist_md.document_name if checklist_md else "",
+            expected_clause=checklist_md.clause_ref if checklist_md else "",
+            lang=lang,
+            user_id=current_user.id,
+            tenant_id=tenant_id,
+        )
 
     return UploadedDocumentResponse(
         id=doc.id,
@@ -911,11 +1333,19 @@ async def upload_document(
     )
 
 
-async def _run_analysis_background(assessment_id: str, tenant_id: str, user_id: str) -> None:
-    """Background worker — runs the full AI analysis with its own DB session."""
-    from app.core.database import AsyncSessionLocal
-    from app.models.framework import ControlRequirement
+async def _run_analysis_background(assessment_id: str, tenant_id: str, user_id: str, lang: str = "en") -> None:
+    """Background worker — runs the full AI analysis with its own DB session.
 
+    Foundation path: the WHOLE text of every uploaded document × every framework control goes
+    through ``ai_chunking.assess_controls_over_document`` (expert ``control_assessment`` prompt,
+    chunking instead of truncation, verified quotations, schema validation with one repair
+    turn, deterministic decoding, explanations in the UI language). The AI phase runs BEFORE
+    the previous results are deleted: a failed run leaves the last good results in place and
+    reports ``ai_analysis_status="failed"`` with an explicit, localised error. Controls the
+    model returned no valid verdict for are recorded as ``not_started`` with an explicit note —
+    never as a default verdict.
+    """
+    lang = normalize_language(lang) or "en"
     async with AsyncSessionLocal() as db:
         try:
             result = await db.execute(
@@ -928,11 +1358,19 @@ async def _run_analysis_background(assessment_id: str, tenant_id: str, user_id: 
             if not assessment:
                 return
 
+            framework = (await db.execute(
+                select(Framework).where(Framework.id == assessment.framework_id)
+            )).scalar_one_or_none()
+            tenant = (await db.execute(select(Tenant).where(Tenant.id == tenant_id))).scalar_one_or_none()
+
             docs_result = await db.execute(
                 select(UploadedDocument).where(UploadedDocument.assessment_id == assessment_id)
             )
             docs = docs_result.scalars().all()
-            doc_text = "\n\n---\n\n".join(d.extracted_text or "" for d in docs).strip()
+            documents = [
+                (d.file_name or f"document {i}", d.extracted_text or "")
+                for i, d in enumerate(docs, start=1)
+            ]
 
             ctrl_result = await db.execute(
                 select(FrameworkControl)
@@ -941,113 +1379,227 @@ async def _run_analysis_background(assessment_id: str, tenant_id: str, user_id: 
             )
             controls = ctrl_result.scalars().all()
 
-            # Clear previous results
+            reqs_by_control: dict[str, list[ControlRequirement]] = {}
+            if controls:
+                req_result = await db.execute(
+                    select(ControlRequirement).where(
+                        ControlRequirement.control_id.in_([c.id for c in controls])
+                    )
+                )
+                for r in req_result.scalars().all():
+                    reqs_by_control.setdefault(r.control_id, []).append(r)
+            req_levels: dict[str, list[str]] = {
+                cid: [r.requirement_level for r in rows] for cid, rows in reqs_by_control.items()
+            }
+
+            specs, by_key = _build_control_specs(controls, reqs_by_control)
+
+            # ── AI phase (nothing has been deleted yet) ──────────────────────────────
+            res = await ai_chunking.assess_controls_over_document(
+                documents,
+                specs,
+                lang=lang,
+                # Never the tenant-editable framework label here: ai_chunking treats
+                # framework_label as trusted (unfenced ``extra_context`` under the "rely on
+                # them" system CONTEXT header, plus a naively 200-char-truncated per-batch
+                # line) — see _analysis_context's docstring. The framework name still reaches
+                # the model, properly delimited, via `context` below.
+                framework_label="",
+                context=_analysis_context(tenant, assessment, framework),
+                user_id=user_id,
+                tenant_id=tenant_id,
+                allow_partial=True,
+            )
+            if not res.ok:
+                logger.warning("compliance analysis %s failed: %s", assessment_id, res.failure_detail())
+                await _mark_analysis_failed(db, assessment, f"{res.user_message(lang)} [{res.failure_detail()}]")
+                return
+
+            run = res.data
+            logger.info(
+                "compliance analysis %s: mode=%s chunks=%d calls=%d verdicts=%d missing=%d failures=%d warnings=%d",
+                assessment_id, run.mode, run.chunks, run.calls, len(run.verdicts), len(run.missing_ids),
+                len(run.failures), len(run.warnings),
+            )
+            for note in run.warnings[:50]:
+                logger.info("compliance analysis %s: %s", assessment_id, note)
+
+            # A failed locator call (locate_then_judge mode: any multi-chunk document set) leaves
+            # the judge an EMPTY evidence packet for every control in that slice; the judge then
+            # honestly reports "insufficient_evidence" — a real verdict, indistinguishable
+            # downstream from "we searched thoroughly and found nothing". Persisting it would
+            # silently reintroduce a default-failure verdict (not_implemented + an "Evidence gap:"
+            # ComplianceGap) for controls that were never actually searched. compliance.py cannot
+            # tell, from the verdict alone, which controls were tainted this way — so when any
+            # locate call failed, the whole run is treated as failed instead: previous results stay.
+            if run.mode == "locate_then_judge" and any(f.startswith("locate ") for f in run.failures):
+                logger.warning("compliance analysis %s: %d locate failure(s), refusing to persist tainted verdicts",
+                                assessment_id, sum(1 for f in run.failures if f.startswith("locate ")))
+                detail = _t(lang, "locate_failed") + " " + "; ".join(run.failures)
+                await _mark_analysis_failed(db, assessment, detail)
+                return
+
+            if len(run.verdicts) * 2 < len(specs):
+                # A run that could not judge even half the framework must not replace a good one.
+                detail = _t(lang, "mostly_failed", n=len(run.verdicts), total=len(specs))
+                if run.failures:
+                    detail += " " + "; ".join(run.failures)
+                await _mark_analysis_failed(db, assessment, detail)
+                return
+
+            # Controls with no valid verdict this run (missing_ids, or — defensively — a verdict
+            # string the platform's mapping doesn't recognise): resolved to the FrameworkControl
+            # rows they cover so the persistence step below can leave any PREVIOUS result alone
+            # instead of overwriting it with a "not started" placeholder just because this one run
+            # could not judge it.
+            missing_control_ids: set[str] = set()
+            for key, rows in by_key.items():
+                v = run.verdicts.get(key)
+                if v is None or _VERDICT_STATUS.get(v.verdict) is None:
+                    missing_control_ids.update(control.id for control in rows)
+
+            # ── Clear previous results ───────────────────────────────────────────────
+            # Controls in ``missing_control_ids`` keep their previous ControlAssessment / Evidence /
+            # ComplianceGap rows untouched — only controls this run actually produced a verdict for
+            # (or controls whose old row no longer matches any current framework control) are
+            # replaced.
             old_cas = (await db.execute(
                 select(ControlAssessment).where(ControlAssessment.assessment_id == assessment_id)
             )).scalars().all()
-            old_ca_ids = [ca.id for ca in old_cas]
+            old_cas_by_control_id: dict[str, ControlAssessment] = {ca.control_id: ca for ca in old_cas}
+            cas_to_replace = [ca for ca in old_cas if ca.control_id not in missing_control_ids]
+            cas_to_replace_ids = [ca.id for ca in cas_to_replace]
             # Delete Evidence rows first — control_assessment_id is NOT NULL so
             # SQLAlchemy cannot null it out when the parent ControlAssessment is deleted.
-            if old_ca_ids:
+            if cas_to_replace_ids:
                 old_evidence = (await db.execute(
-                    select(Evidence).where(Evidence.control_assessment_id.in_(old_ca_ids))
+                    select(Evidence).where(Evidence.control_assessment_id.in_(cas_to_replace_ids))
                 )).scalars().all()
                 for ev in old_evidence:
                     await db.delete(ev)
                 await db.flush()
-            for ca in old_cas:
+            for ca in cas_to_replace:
                 await db.delete(ca)
             old_gaps = (await db.execute(
                 select(ComplianceGap).where(ComplianceGap.assessment_id == assessment_id)
             )).scalars().all()
-            old_gap_ids = [g.id for g in old_gaps]
+            gaps_to_replace = [g for g in old_gaps if g.control_id not in missing_control_ids]
+            gaps_to_replace_ids = [g.id for g in gaps_to_replace]
             # Remove stale ActionItems linked to these gaps so auto-sync recreates them
-            if old_gap_ids:
+            if gaps_to_replace_ids:
                 stale_items = (await db.execute(
-                    select(ActionItem).where(ActionItem.gap_id.in_(old_gap_ids))
+                    select(ActionItem).where(ActionItem.gap_id.in_(gaps_to_replace_ids))
                 )).scalars().all()
                 for si in stale_items:
                     await db.delete(si)
-            for gap in old_gaps:
+            for gap in gaps_to_replace:
                 await db.delete(gap)
             await db.flush()
 
-            model = settings.OLLAMA_CHAT_MODEL
-            verdicts = await _run_batch_analysis(doc_text, controls, model)
+            # ── Persist verdicts ─────────────────────────────────────────────────────
+            # Two disjoint outcomes for a missing-verdict control, tracked by spec key (same
+            # unit as `run.missing_ids` / `total=len(specs)` below) so the "partial analysis"
+            # warning can honestly say which happened instead of claiming every one of them was
+            # reset to "not started" — a key with mixed rows (duplicate framework identifiers,
+            # see _build_control_specs) counts as "preserved" if ANY of its rows already had a
+            # prior result, since that is the case a reader most needs to be warned about.
+            newly_not_started_keys: set[str] = set()
+            preserved_keys: set[str] = set()
+            for key, rows in by_key.items():
+                v = run.verdicts.get(key)
+                for control in rows:
+                    ctrl_status = _VERDICT_STATUS.get(v.verdict) if v is not None else None
+                    if v is None or ctrl_status is None:
+                        if control.id in old_cas_by_control_id:
+                            # Kept untouched above: never overwrite a known result with a
+                            # placeholder just because this run could not judge it again.
+                            preserved_keys.add(key)
+                            continue
+                        # First-time assessment of this control: explicit "analysis_failed"
+                        # outcome — no verdict, no confidence, no gap.
+                        newly_not_started_keys.add(key)
+                        db.add(ControlAssessment(
+                            assessment_id=assessment_id,
+                            control_id=control.id,
+                            status=ControlStatus.NOT_STARTED,
+                            ai_confidence=None,
+                            implementation_notes=_t(lang, "not_analysed"),
+                        ))
+                        continue
 
-            verdict_map = {
-                "compliant": ControlStatus.IMPLEMENTED,
-                "partial": ControlStatus.PARTIALLY_IMPLEMENTED,
-                "not_covered": ControlStatus.NOT_IMPLEMENTED,
-                "not_applicable": ControlStatus.NOT_APPLICABLE,
-            }
-            verdict_by_cid: dict[str, dict] = {v.get("control_id", ""): v for v in verdicts}
-
-            req_result = await db.execute(
-                select(ControlRequirement).where(
-                    ControlRequirement.control_id.in_([c.id for c in controls])
-                )
-            )
-            req_levels: dict[str, list[str]] = {}
-            for r in req_result.scalars().all():
-                req_levels.setdefault(r.control_id, []).append(r.requirement_level)
-
-            implemented = partial = not_applicable = 0
-
-            for control in controls:
-                v = verdict_by_cid.get(control.control_id, {})
-                verdict_str = v.get("verdict", "not_covered")
-                ctrl_status = verdict_map.get(verdict_str, ControlStatus.NOT_IMPLEMENTED)
-
-                db.add(ControlAssessment(
-                    assessment_id=assessment_id,
-                    control_id=control.id,
-                    status=ctrl_status,
-                    ai_confidence=float(v.get("confidence", 0.0)),
-                    implementation_notes=v.get("explanation"),
-                ))
-
-                if ctrl_status == ControlStatus.IMPLEMENTED:
-                    implemented += 1
-                elif ctrl_status == ControlStatus.PARTIALLY_IMPLEMENTED:
-                    partial += 1
-                elif ctrl_status == ControlStatus.NOT_APPLICABLE:
-                    not_applicable += 1
-
-                if ctrl_status in (ControlStatus.NOT_IMPLEMENTED, ControlStatus.PARTIALLY_IMPLEMENTED):
-                    gap_desc = v.get("gap_description") or f"{control.title} is not adequately addressed."
-                    levels = req_levels.get(control.id, [])
-                    has_must = "must" in levels
-                    is_blocker = ctrl_status == ControlStatus.NOT_IMPLEMENTED and has_must
-                    if is_blocker:
-                        severity, priority = "high", 90
-                    elif ctrl_status == ControlStatus.NOT_IMPLEMENTED:
-                        severity, priority = "medium", 60
-                    elif has_must:
-                        severity, priority = "medium", 50
-                    else:
-                        severity, priority = "low", 30
-                    db.add(ComplianceGap(
+                    db.add(ControlAssessment(
                         assessment_id=assessment_id,
                         control_id=control.id,
-                        gap_description=gap_desc,
-                        severity=severity,
-                        remediation_steps=f"Implement {control.title} per framework guidance.",
-                        is_certification_blocker=is_blocker,
-                        remediation_priority=priority,
+                        status=ctrl_status,
+                        ai_confidence=round(max(0.0, min(1.0, float(v.confidence))), 3),
+                        implementation_notes=_implementation_notes(v, lang) or None,
+                        not_applicable_justification=(
+                            (v.not_applicable_justification or "").strip() or None
+                            if ctrl_status == ControlStatus.NOT_APPLICABLE else None
+                        ),
                     ))
 
+                    if ctrl_status in (ControlStatus.NOT_IMPLEMENTED, ControlStatus.PARTIALLY_IMPLEMENTED):
+                        identifier = control.control_id or key
+                        gap_desc = " ".join((v.gap_description or "").split()) or _t(
+                            lang, "gap_default", title=control.title, control_id=identifier)
+                        if v.verdict == "insufficient_evidence":
+                            gap_desc = f"{_t(lang, 'evidence_gap')} {gap_desc}"
+                        has_must = "must" in req_levels.get(control.id, [])
+                        # Only a verdict that the control is genuinely NOT in place blocks certification;
+                        # "no evidence seen" is a gap to evidence, flagged in the description instead.
+                        is_blocker = v.verdict == "not_implemented" and has_must
+                        severity = _gap_severity(v, ctrl_status, has_must)
+                        remediation = (v.remediation or "").strip() or _t(
+                            lang, "remediation_default", title=control.title, control_id=identifier)
+                        db.add(ComplianceGap(
+                            assessment_id=assessment_id,
+                            control_id=control.id,
+                            gap_description=gap_desc,
+                            severity=severity,
+                            remediation_steps=remediation,
+                            is_certification_blocker=is_blocker,
+                            remediation_priority=_gap_priority(severity, is_blocker),
+                        ))
+
+            await db.flush()
+
+            # Score from the final persisted state, so controls preserved above (untouched by this
+            # run) still count under their real status instead of dropping out of the calculation —
+            # matching how update_control_assessment recomputes the score after a manual edit.
+            all_cas = (await db.execute(
+                select(ControlAssessment).where(ControlAssessment.assessment_id == assessment_id)
+            )).scalars().all()
+            implemented = sum(1 for c in all_cas if c.status == ControlStatus.IMPLEMENTED)
+            partial = sum(1 for c in all_cas if c.status == ControlStatus.PARTIALLY_IMPLEMENTED)
+            not_applicable = sum(1 for c in all_cas if c.status == ControlStatus.NOT_APPLICABLE)
             total = len(controls)
             scoreable = total - not_applicable
             score = round((implemented + partial * 0.5) / scoreable * 100, 1) if scoreable > 0 else 0.0
 
+            warning: str | None = None
+            if run.missing_ids or run.failures:
+                # Honest split of "no AI verdict this run": some controls had no prior result and
+                # were reset to "not started" (newly_not_started_keys); others already had a
+                # ControlAssessment from an earlier run and were left exactly as they were
+                # (preserved_keys) — still showing whatever status/confidence that earlier run
+                # gave them, NOT re-verified against the current document set. A control counted
+                # in both (duplicate framework identifier, one row new, one row preserved) is
+                # reported as preserved — the more cautionary of the two.
+                preserved_n = len(preserved_keys)
+                new_n = len(newly_not_started_keys - preserved_keys)
+                warning = _t(lang, "partial", n=preserved_n + new_n, total=len(specs), new=new_n, preserved=preserved_n)
+                if run.failures:
+                    warning += " " + "; ".join(run.failures)
+
             assessment.compliance_score = score
             assessment.status = AssessmentStatus.IN_PROGRESS
             assessment.ai_analysis_status = "completed"
-            assessment.ai_analysis_error = None
+            assessment.ai_analysis_error = warning[:500] if warning else None
             await db.commit()
 
         except Exception as exc:
+            logger.exception("compliance analysis %s crashed", assessment_id)
             try:
                 async with AsyncSessionLocal() as err_db:
                     err_result = await err_db.execute(
@@ -1056,7 +1608,7 @@ async def _run_analysis_background(assessment_id: str, tenant_id: str, user_id: 
                     a = err_result.scalar_one_or_none()
                     if a:
                         a.ai_analysis_status = "failed"
-                        a.ai_analysis_error = str(exc)[:500]
+                        a.ai_analysis_error = f"{type(exc).__name__}: {str(exc)[:400]}"[:500]
                         await err_db.commit()
             except Exception:
                 pass
@@ -1069,8 +1621,13 @@ async def analyze_assessment(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_roles(UserRole.CISO)),
     tenant_id: str = Depends(get_tenant_id),
+    lang: str = Depends(get_request_language),
 ) -> dict:
-    """Start AI analysis as a background job — returns 202 immediately."""
+    """Start AI analysis as a background job — returns 202 immediately.
+
+    The language of the model's explanations follows the request's Accept-Language
+    (the SPA sends the UI language); it is resolved here and handed to the job.
+    """
     result = await db.execute(
         select(ComplianceAssessment).where(
             ComplianceAssessment.id == assessment_id,
@@ -1087,14 +1644,18 @@ async def analyze_assessment(
     docs_result = await db.execute(
         select(UploadedDocument).where(UploadedDocument.assessment_id == assessment_id)
     )
-    if not docs_result.scalars().all():
+    docs = docs_result.scalars().all()
+    if not docs:
         raise HTTPException(status_code=400, detail="No documents uploaded. Upload at least one document first.")
+    if not any((d.extracted_text or "").strip() for d in docs):
+        # Analysing an empty text used to silently mark every control not covered.
+        raise HTTPException(status_code=400, detail=_t(lang, "no_text"))
 
     assessment.ai_analysis_status = "running"
     assessment.ai_analysis_error = None
     await db.commit()
 
-    background_tasks.add_task(_run_analysis_background, assessment_id, tenant_id, current_user.id)
+    background_tasks.add_task(_run_analysis_background, assessment_id, tenant_id, current_user.id, lang)
 
     return {"status": "running", "message": "Analysis started"}
 
