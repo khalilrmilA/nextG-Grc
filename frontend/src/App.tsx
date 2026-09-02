@@ -132,6 +132,7 @@ const ROUTE_ROLES: Record<string, string[]> = {
   "/threats":             [...CISO_AND_ADMIN, "risk_manager", "compliance_manager", "control_owner", "business_owner", "security_analyst", "viewer", "executive"],
   "/regulatory":          [...CISO_AND_ADMIN, "compliance_manager", "policy_manager", "viewer", "executive"],
   "/webhooks":            [...ADMIN_ROLES],
+  "/system-check":        [...ADMIN_ROLES],
 };
 
 function RoleRoute({ path, children }: { readonly path: string; readonly children: React.ReactNode }) {
@@ -204,7 +205,7 @@ export default function App() {
         <Route path="cve" element={<CvePage />} />
         <Route path="mfa-setup" element={<MfaSetupPage />} />
         <Route path="ocr" element={<OcrCapturePage />} />
-        <Route path="system-check" element={<SystemCheckPage />} />
+        <Route path="system-check" element={<RoleRoute path="/system-check"><SystemCheckPage /></RoleRoute>} />
         <Route path="documentation" element={<DocumentationPage />} />
         <Route path="risks" element={<RoleRoute path="/risks"><PrivateRoute requiredModule="risks"><RisksPage /></PrivateRoute></RoleRoute>} />
         <Route path="risk-cartography" element={<RoleRoute path="/risk-cartography"><PrivateRoute requiredModule="risks"><RiskCartographyPage /></PrivateRoute></RoleRoute>} />

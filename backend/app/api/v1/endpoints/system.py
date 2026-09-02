@@ -2,7 +2,7 @@
 
 Surfaces the acceptance test inside the platform (see the 'System Check' page). Every
 check runs against the real running system; each is isolated so one failure never breaks
-the report. Admin/CISO only.
+the report. Restricted to the tenant owner (tenant_admin); super_admin always passes too.
 """
 import os
 from datetime import datetime, timezone
@@ -15,8 +15,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.core.config import settings, is_production
-from app.api.v1.dependencies import get_current_user, get_tenant_id
-from app.models.user import User
+from app.api.v1.dependencies import get_tenant_id, require_roles
+from app.models.user import User, UserRole
 
 router = APIRouter()
 
@@ -47,7 +47,7 @@ def _backend_dir() -> str:
 
 @router.get("/self-test", response_model=SelfTest)
 async def self_test(
-    current_user: Annotated[User, Depends(get_current_user)],
+    current_user: Annotated[User, Depends(require_roles(UserRole.TENANT_ADMIN))],
     tenant_id: Annotated[str, Depends(get_tenant_id)],
     db: AsyncSession = Depends(get_db),
 ):
