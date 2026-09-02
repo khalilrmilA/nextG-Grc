@@ -2,8 +2,21 @@
  * Axios API client with JWT token management and automatic refresh.
  */
 import axios, { AxiosInstance, InternalAxiosRequestConfig } from "axios";
+import i18n from "../i18n";
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:8000/api/v1";
+
+/** Current UI language as a 2-letter code the backend can act on (en | fr | ar). */
+function currentUiLanguage(): string {
+  try {
+    const raw = (i18n?.language || "en").toLowerCase();
+    if (raw.startsWith("fr")) return "fr";
+    if (raw.startsWith("ar")) return "ar";
+    return "en";
+  } catch {
+    return "en";
+  }
+}
 
 class ApiClient {
   private client: AxiosInstance;
@@ -66,6 +79,12 @@ class ApiClient {
         const { access } = this.getTokens();
         if (access && config.headers) {
           config.headers.Authorization = `Bearer ${access}`;
+        }
+        // Tell the backend which UI language the user is in so AI-generated
+        // text (analyses, policies, chat) can be returned in that language.
+        // Accept-Language is a CORS-safelisted header, so no preflight impact.
+        if (config.headers) {
+          config.headers["Accept-Language"] = currentUiLanguage();
         }
 
         // Viewer role = read-only — block all mutating requests client-side.
