@@ -20,6 +20,7 @@ from app.services.vuln_scanner_scheduler import start_vuln_scanner_scheduler
 from app.services.audit_recurrence_scheduler import start_audit_recurrence_scheduler
 from app.services.archiving_engine import start_archiving_scheduler
 from app.services.risk_snapshot_scheduler import start_risk_snapshot_scheduler
+from app.services.license_phone_home import start_license_phone_home
 from app.core.activity_middleware import ActivityLogMiddleware
 from app.core.license_middleware import LicenseEnforcementMiddleware
 from app.core.security_middleware import SecurityHeadersMiddleware
@@ -55,7 +56,9 @@ async def lifespan(application: FastAPI):
     # audit recurrence hourly poll — spawns the next cycle of a closed recurring audit;
     # archiving rules 5m poll — auto-archives records matching an enabled ArchivingRule;
     # risk snapshot hourly poll — writes at most one open-risk-by-severity row per
-    # tenant per UTC day, feeding GET /dashboard/risk-trend's real history series)
+    # tenant per UTC day, feeding GET /dashboard/risk-trend's real history series;
+    # license phone-home 12h poll — asks the vendor license server whether this
+    # appliance's activated key was revoked; no-op unless licensed + LICENSE_SERVER_URL set)
     _scheduler_task = asyncio.create_task(start_threat_scheduler())
     _report_task = asyncio.create_task(start_report_scheduler())
     _cve_task = asyncio.create_task(start_cve_auto_sync())
@@ -63,6 +66,7 @@ async def lifespan(application: FastAPI):
     _audit_recurrence_task = asyncio.create_task(start_audit_recurrence_scheduler())
     _archiving_task = asyncio.create_task(start_archiving_scheduler())
     _risk_snapshot_task = asyncio.create_task(start_risk_snapshot_scheduler())
+    _license_phone_home_task = asyncio.create_task(start_license_phone_home())
 
     yield
 
@@ -74,7 +78,8 @@ async def lifespan(application: FastAPI):
     _audit_recurrence_task.cancel()
     _archiving_task.cancel()
     _risk_snapshot_task.cancel()
-    for _task in (_scheduler_task, _report_task, _cve_task, _vuln_scanner_task, _audit_recurrence_task, _archiving_task, _risk_snapshot_task):
+    _license_phone_home_task.cancel()
+    for _task in (_scheduler_task, _report_task, _cve_task, _vuln_scanner_task, _audit_recurrence_task, _archiving_task, _risk_snapshot_task, _license_phone_home_task):
         try:
             await _task
         except asyncio.CancelledError:

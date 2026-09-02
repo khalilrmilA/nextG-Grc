@@ -69,6 +69,25 @@ def sign_license(payload: dict, private_key_b64: str) -> str:
     return f"{_b64url_encode(payload_bytes)}.{_b64url_encode(signature)}"
 
 
+def parse_lid(key: str) -> str | None:
+    """Best-effort extraction of the `lid` from a key's payload, unverified.
+
+    For callers that only need to look a key up (e.g. the vendor's
+    POST /api/v1/licenses/verify, which authenticates by exact-matching the
+    submitted key against its own stored record rather than by checking a
+    signature it has no reason to hold a public key for). Returns None on any
+    malformed input instead of raising — this is a lookup hint, not a trust
+    decision.
+    """
+    try:
+        payload_part = key.strip().split(".")[0]
+        payload = json.loads(_b64url_decode(payload_part))
+        lid = payload.get("lid")
+        return lid if isinstance(lid, str) else None
+    except Exception:
+        return None
+
+
 def verify_license(key: str, public_key_b64: str) -> dict:
     """Verify a license key and return its payload dict.
 

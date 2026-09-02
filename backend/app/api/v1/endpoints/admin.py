@@ -745,6 +745,7 @@ class IssuedLicenseResponse(BaseModel):
     issued_at: str
     expires_at: str
     notes: str | None
+    status: str
 
     model_config = {"from_attributes": True}
 
@@ -801,6 +802,7 @@ async def issue_license(
         issued_at=lic.issued_at,
         expires_at=lic.expires_at,
         notes=lic.notes,
+        status=lic.status,
     )
 
 
@@ -814,3 +816,40 @@ async def list_licenses(
         select(IssuedLicense).order_by(IssuedLicense.created_at.desc())
     )
     return result.scalars().all()
+
+
+async def _set_license_status(
+    license_id: str, new_status: str, db: AsyncSession, current_user: User
+) -> IssuedLicense:
+    lic = await db.get(IssuedLicense, license_id)
+    if lic is None:
+        raise HTTPException(status_code=404, detail="License not found")
+    lic.status = new_status
+    await db.flush()
+    logger.info("super-admin %s set license %s (%s) to status=%s",
+                current_user.email, lic.lid, lic.customer_name, new_status)
+    return lic
+
+
+@router.post("/licenses/{license_id}/revoke", response_model=IssuedLicenseResponse)
+async def revoke_license(
+    license_id: str,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: Annotated[User, Depends(_require_super_admin())],
+):
+    """Revoke a license. Appliances phoning home (POST /api/v1/licenses/verify)
+    will pick this up on their next check-in and lock themselves out; nothing
+    here reaches out to the client — it's pull, not push."""
+    lic = await _set_license_status(license_id, "revoked", db, current_user)
+    return lic
+
+
+@router.post("/licenses/{license_id}/reactivate", response_model=IssuedLicenseResponse)
+async def reactivate_license(
+    license_id: str,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: Annotated[User, Depends(_require_super_admin())],
+):
+    """Undo a revocation."""
+    lic = await _set_license_status(license_id, "active", db, current_user)
+    return lic

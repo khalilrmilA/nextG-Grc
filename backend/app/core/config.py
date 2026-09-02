@@ -119,6 +119,18 @@ class Settings(BaseSettings):
     # A private CA bundle, for customers behind an inspecting proxy.
     AI_CA_BUNDLE: str = ""
 
+    # Shared AI foundation (ai_provider / ai_chunking / ai_structured). Every reader
+    # uses getattr(settings, name, <same default>), so these are tuning knobs, never
+    # required — but they must be declared here: Settings has extra="ignore", so an
+    # env / .env value for an undeclared key would silently never reach a reader.
+    AI_MAX_PARALLEL_CALLS: int = 2     # per uvicorn worker (2 workers => at most 4 concurrent non-streaming model calls); used by E's semaphore, C's map_reduce, E's gather_limited
+    AI_NUM_CTX: int = 0                # 0 = use the built-in defaults (32768 in DECODING presets and in C); >0 overrides num_ctx everywhere (small local/BYO GPUs)
+    AI_THINK_ENABLED: bool = True      # False drops `think` from presets (non-reasoning BYO models)
+    AI_LOG_PROMPTS: bool = False       # debug-log prompt messages / raw replies (never on in prod: real client data)
+    AI_CHUNK_TOKENS: int = 6000        # C: chunk size in estimated tokens
+    AI_MAX_CALLS_PER_JOB: int = 60     # C: job-size guard
+    AI_ANALYSIS_TIMEOUT_S: float = 240.0  # C: per-call read budget for analysis jobs
+
     # Threat Intelligence
     OPENSOURCEMALWARE: str = ""   # opensourcemalware.com API key
 
@@ -131,10 +143,12 @@ class Settings(BaseSettings):
     LICENSE_PUBLIC_KEY: str = ""    # base64 of the 32-byte raw public key — client installs
     LICENSE_ENFORCEMENT: bool = False
     # Optional. Base URL of the vendor licence server used by online activation
-    # (POST /license/activate-online). Empty means offline activation only, which
-    # is the correct setting for air-gapped deployments. Nothing contacts this
-    # URL unless an administrator activates a licence by hand.
+    # (POST /license/activate-online) and by the phone-home scheduler (see
+    # services/license_phone_home.py). Empty means offline-only, which is the
+    # correct setting for air-gapped deployments — nothing contacts this URL
+    # unless it's set.
     LICENSE_SERVER_URL: str = ""
+    LICENSE_PHONE_HOME_INTERVAL_HOURS: int = 12
 
 
 _INSECURE_SECRETS = {

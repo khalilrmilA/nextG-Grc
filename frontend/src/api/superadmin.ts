@@ -122,6 +122,7 @@ export interface IssuedLicense {
   issued_at: string;
   expires_at: string;
   notes: string | null;
+  status: "active" | "revoked";
 }
 
 export const superAdminLicensesApi = {
@@ -130,6 +131,12 @@ export const superAdminLicensesApi = {
 
   create: (data: { customer_name: string; contact_email: string; duration_days: number; plan: string; notes?: string | null }) =>
     apiClient.post<IssuedLicense>("/admin/licenses", data).then((r) => r.data),
+
+  revoke: (id: string) =>
+    apiClient.post<IssuedLicense>(`/admin/licenses/${id}/revoke`).then((r) => r.data),
+
+  reactivate: (id: string) =>
+    apiClient.post<IssuedLicense>(`/admin/licenses/${id}/reactivate`).then((r) => r.data),
 };
 
 export const superAdminAiAccessApi = {

@@ -23,6 +23,9 @@ class IssuedLicense(Base):
     expires_at: Mapped[str] = mapped_column(String(30), nullable=False)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_by: Mapped[str] = mapped_column(String(255), nullable=False)  # super admin email
+    status: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="active", server_default="active"
+    )  # "active" | "revoked" — checked by POST /api/v1/licenses/verify
 
 
 class LicenseActivation(Base):

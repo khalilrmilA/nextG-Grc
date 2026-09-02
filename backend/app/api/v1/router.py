@@ -39,6 +39,7 @@ from app.api.v1.endpoints import (
     public_contact,
     support,
     license,
+    license_server,
     mfa,
     control_evaluation,
     asset_graph,
@@ -96,6 +97,7 @@ api_router.include_router(public_chat.router, prefix="/public", tags=["Public Su
 api_router.include_router(public_contact.router, prefix="/public", tags=["Public Contact Form"])
 api_router.include_router(support.router, prefix="/support/tickets", tags=["Support Tickets"])
 api_router.include_router(license.router, prefix="/license", tags=["License"])
+api_router.include_router(license_server.router, prefix="/licenses", tags=["License Server"])
 api_router.include_router(mfa.router, prefix="/mfa", tags=["MFA (Elite Pack)"])
 api_router.include_router(control_evaluation.router, prefix="/control-evaluations", tags=["Control Effectiveness (Elite Pack)"])
 api_router.include_router(asset_graph.router, prefix="/asset-graph", tags=["Asset Cartography (Elite Pack)"])

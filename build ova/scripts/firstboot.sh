@@ -151,11 +151,15 @@ ENABLE_VULN_SCANNER_SCHEDULER=0
 ENABLE_AUDIT_RECURRENCE_SCHEDULER=0
 ENABLE_ARCHIVING_SCHEDULER=0
 ENABLE_RISK_SNAPSHOT_SCHEDULER=0
+ENABLE_LICENSE_PHONE_HOME=0
 
-# Online licence activation. Empty means offline activation only: an
-# administrator pastes the signed licence key they were issued. Set this to the
-# vendor licence server to enable POST /license/activate-online. Nothing
-# contacts it unless an administrator activates a licence by hand.
+# Online licence activation (POST /license/activate-online) and periodic
+# revocation check-in (services/license_phone_home.py, every
+# LICENSE_PHONE_HOME_INTERVAL_HOURS, default 12h). Empty means offline
+# activation only: an administrator pastes the signed licence key they were
+# issued, and nothing here is ever contacted. Set this to the vendor licence
+# server to opt into both. A network blip during check-in never locks the
+# deployment out — only an explicit "revoked" answer from the server does.
 LICENSE_SERVER_URL=${appliance_license_server:-}
 
 # Bring your own AI. All empty means the appliance behaves exactly as before:

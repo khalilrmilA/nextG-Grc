@@ -6,6 +6,7 @@ import {
   Save, Eye, EyeOff, Check, AlertTriangle,
   Lock, Crown, Trash2, Plus, Loader2, Zap,
   Sun, Moon, Monitor, RotateCcw, KeyRound,
+  ChevronLeft, ChevronRight,
 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuthStore, PLAN_FEATURES, type PlanTier } from "../store/auth";
@@ -487,6 +488,8 @@ function NotificationsTab() {
 
 // ── Tab: Security ─────────────────────────────────────────────────────────────
 
+const SESSIONS_PAGE_SIZE = 10;
+
 function SecurityTab() {
   const { t } = useTranslation();
   const [showCurrent, setShowCurrent] = useState(false);
@@ -495,6 +498,7 @@ function SecurityTab() {
   const [sessions, setSessions] = useState<any[]>([]);
   const [sessLoading, setSessLoading] = useState(true);
   const [revoking, setRevoking] = useState("");
+  const [sessPage, setSessPage] = useState(1);
   const [saved, setSaved] = useState(false);
   const [pwError, setPwError] = useState("");
   const [saving, setSaving] = useState(false);
@@ -601,27 +605,51 @@ function SecurityTab() {
             <div className="flex items-center gap-2 text-sm text-gray-400 py-2"><Loader2 className="w-4 h-4 animate-spin" /> {t("common.loading", "Loading…")}</div>
           ) : sessions.length === 0 ? (
             <p className="text-sm text-gray-400 py-2">{t("settings.no_sessions", "No active sessions.")}</p>
-          ) : (
-            sessions.map((s: any) => (
-              <div key={s.id} className="flex items-center justify-between py-2 border-b border-gray-100 last:border-0">
-                <div className="min-w-0">
-                  <p className="text-sm font-medium text-gray-800">
-                    {s.device || "Session"}{" "}
-                    {s.current && <span className="ml-2 px-1.5 py-0.5 bg-green-100 text-green-700 text-xs rounded-full">{t("settings.current_session")}</span>}
-                  </p>
-                  <p className="text-xs text-gray-400 mt-0.5">
-                    {[s.ip_address, relTime(s.last_seen || s.created_at)].filter(Boolean).join(" · ")}
-                  </p>
-                </div>
-                {!s.current && (
-                  <button type="button" onClick={() => revokeSession(s.id)} disabled={revoking === s.id}
-                    className="text-xs text-red-500 hover:text-red-700 font-medium disabled:opacity-50 shrink-0">
-                    {revoking === s.id ? t("common.loading", "…") : t("settings.revoke")}
-                  </button>
+          ) : (() => {
+            const totalPages = Math.max(1, Math.ceil(sessions.length / SESSIONS_PAGE_SIZE));
+            const page = Math.min(sessPage, totalPages);
+            const pageItems = sessions.slice((page - 1) * SESSIONS_PAGE_SIZE, page * SESSIONS_PAGE_SIZE);
+            return (
+              <>
+                {pageItems.map((s: any) => (
+                  <div key={s.id} className="flex items-center justify-between py-2 border-b border-gray-100 last:border-0">
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium text-gray-800">
+                        {s.device || "Session"}{" "}
+                        {s.current && <span className="ml-2 px-1.5 py-0.5 bg-green-100 text-green-700 text-xs rounded-full">{t("settings.current_session")}</span>}
+                      </p>
+                      <p className="text-xs text-gray-400 mt-0.5">
+                        {[s.ip_address, relTime(s.last_seen || s.created_at)].filter(Boolean).join(" · ")}
+                      </p>
+                    </div>
+                    {!s.current && (
+                      <button type="button" onClick={() => revokeSession(s.id)} disabled={revoking === s.id}
+                        className="text-xs text-red-500 hover:text-red-700 font-medium disabled:opacity-50 shrink-0">
+                        {revoking === s.id ? t("common.loading", "…") : t("settings.revoke")}
+                      </button>
+                    )}
+                  </div>
+                ))}
+                {totalPages > 1 && (
+                  <div className="flex items-center justify-between pt-2">
+                    <p className="text-xs text-gray-400">
+                      {t("settings.sessions_page_info", { page, total: totalPages })}
+                    </p>
+                    <div className="flex items-center gap-1">
+                      <button type="button" onClick={() => setSessPage(page - 1)} disabled={page <= 1}
+                        className="p-1 rounded text-gray-500 hover:bg-gray-100 disabled:opacity-30 disabled:hover:bg-transparent">
+                        <ChevronLeft className="w-4 h-4" />
+                      </button>
+                      <button type="button" onClick={() => setSessPage(page + 1)} disabled={page >= totalPages}
+                        className="p-1 rounded text-gray-500 hover:bg-gray-100 disabled:opacity-30 disabled:hover:bg-transparent">
+                        <ChevronRight className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
                 )}
-              </div>
-            ))
-          )}
+              </>
+            );
+          })()}
         </div>
       </div>
     </div>

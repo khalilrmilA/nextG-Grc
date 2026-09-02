@@ -1,23 +1,33 @@
-"""Online licence activation client.
+"""Online licence activation + check-in client.
 
 The appliance normally has no reason to talk to anything. This module is the
 single exception, and it is deliberately narrow:
 
-  - It runs only when an administrator explicitly activates a licence from the
-    web console. Nothing here is on a timer, nothing runs at boot, and nothing
-    runs unless LICENSE_SERVER_URL is configured. An air-gapped appliance never
-    reaches this code, and offline activation (paste a signed key) stays fully
-    supported through POST /license/activate.
-  - It sends the minimum needed to identify the entitlement being claimed: the
-    activation code the customer was given, the machine id, and the product and
-    version. No customer data, no inventory, no usage counters, no telemetry.
-  - It changes no trust decision. The server hands back an Ed25519 signed
-    licence key which is then verified locally against the public key baked into
-    the build, exactly as a pasted key would be. A compromised or spoofed
-    licence server cannot mint a licence this appliance will accept.
+  - Nothing here runs unless LICENSE_SERVER_URL is configured. An air-gapped
+    appliance (the default — see firstboot.sh) never reaches this code, and
+    offline activation (paste a signed key) stays fully supported through
+    POST /license/activate regardless.
+  - fetch_license_key() runs only when an administrator explicitly activates a
+    licence from the web console — nothing on a timer, nothing at boot. It
+    sends the minimum needed to identify the entitlement being claimed: the
+    activation code the customer was given, the machine id, and the product
+    and version. No customer data, no inventory, no usage counters, no
+    telemetry. The server hands back an Ed25519 signed licence key which is
+    then verified locally against the public key baked into the build, exactly
+    as a pasted key would be — a compromised or spoofed licence server cannot
+    mint a licence this appliance will accept.
+  - verify_license_status() is the one thing here that DOES run on a timer,
+    when a server is configured (see services/license_phone_home.py): it asks
+    "is this key still active?" and sends only the key and machine id. Unlike
+    fetch_license_key, its answer CAN change a trust decision — but only when
+    it says "revoked", and only ever towards *less* access, never more (see
+    license_phone_home.py's fail-open policy for what happens when the server
+    can't be reached).
 
 In other words the network is a transport convenience for fetching a key the
-appliance would otherwise be given by email. It is not an authority.
+appliance would otherwise be given by email, plus an optional way to hear
+about revocation sooner than "this key's stated expiry". It is not the
+primary authority — the locally verified signature and expiry remain that.
 """
 from __future__ import annotations
 
@@ -111,3 +121,45 @@ async def fetch_license_key(activation_code: str) -> str:
 
     logger.info("Fetched a licence key from the licence server")
     return key.strip()
+
+
+VERIFY_PATH = "/api/v1/licenses/verify"
+
+
+async def verify_license_status(license_key: str) -> str:
+    """Ask the licence server whether a key is still active.
+
+    Returns "active", "revoked", or "not_found". Raises LicenseServerError on
+    any network failure, bad response, or unconfigured server — the caller
+    (the phone-home scheduler) treats that as "couldn't check, try later" and
+    never as a reason to invalidate anything. See fetch_license_key's class
+    docstring for the trust model: this call can inform a revocation, but it
+    is the local signature/expiry check that remains authoritative day to day.
+    """
+    base = (settings.LICENSE_SERVER_URL or "").strip().rstrip("/")
+    if not base:
+        raise LicenseServerError("No licence server is configured.")
+
+    payload = {
+        "license_key": license_key.strip(),
+        "machine_id": read_machine_id(),
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=TIMEOUT_SECONDS, follow_redirects=False) as client:
+            response = await client.post(base + VERIFY_PATH, json=payload)
+    except httpx.HTTPError as exc:
+        raise LicenseServerError(f"Could not reach the licence server: {exc}") from exc
+
+    if response.status_code >= 400:
+        raise LicenseServerError(f"Licence server returned {response.status_code}")
+
+    try:
+        body = response.json()
+    except ValueError as exc:
+        raise LicenseServerError("Licence server returned a malformed response.") from exc
+
+    result = (body or {}).get("status")
+    if result not in ("active", "revoked", "not_found"):
+        raise LicenseServerError("Licence server returned an unrecognised status.")
+    return result

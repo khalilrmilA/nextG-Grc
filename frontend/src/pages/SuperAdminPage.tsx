@@ -1437,6 +1437,7 @@ function LicensesTab() {
   const [saving, setSaving]             = useState(false);
   const [formError, setFormError]       = useState("");
   const [created, setCreated]           = useState<IssuedLicense | null>(null);
+  const [statusChangingId, setStatusChangingId] = useState<string | null>(null);
 
   useEffect(() => {
     superAdminLicensesApi.list()
@@ -1472,6 +1473,20 @@ function LicensesTab() {
       setFormError(typeof detail === "string" ? detail : "Failed to generate license key. Please try again.");
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function handleToggleStatus(lic: IssuedLicense) {
+    setStatusChangingId(lic.id);
+    try {
+      const updated = lic.status === "revoked"
+        ? await superAdminLicensesApi.reactivate(lic.id)
+        : await superAdminLicensesApi.revoke(lic.id);
+      setLicenses(prev => prev.map(l => (l.id === updated.id ? updated : l)));
+    } catch {
+      // Leave the row as-is; the button stays available to retry.
+    } finally {
+      setStatusChangingId(null);
     }
   }
 
@@ -1573,7 +1588,7 @@ function LicensesTab() {
             <table className="w-full text-sm">
               <thead className="bg-gray-50 border-b border-gray-200">
                 <tr>
-                  {["Customer", "Email", "Plan", "Issued", "Expires", "Status", "Key"].map(h => (
+                  {["Customer", "Email", "Plan", "Issued", "Expires", "Status", "Key", ""].map(h => (
                     <th key={h} className="px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">{h}</th>
                   ))}
                 </tr>
@@ -1581,10 +1596,14 @@ function LicensesTab() {
               <tbody className="divide-y divide-gray-100 bg-white">
                 {licenses.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="px-5 py-10 text-center text-sm text-gray-400">No licenses issued yet.</td>
+                    <td colSpan={8} className="px-5 py-10 text-center text-sm text-gray-400">No licenses issued yet.</td>
                   </tr>
                 ) : licenses.map(l => {
-                  const expired = new Date(l.expires_at) < new Date();
+                  const revoked = l.status === "revoked";
+                  const expired = !revoked && new Date(l.expires_at) < new Date();
+                  const statusLabel = revoked ? "revoked" : expired ? "expired" : "active";
+                  const statusStyle = revoked ? "bg-gray-200 text-gray-600"
+                    : expired ? "bg-red-100 text-red-700" : "bg-green-100 text-green-700";
                   return (
                     <tr key={l.id} className="hover:bg-gray-50 transition-colors">
                       <td className="px-5 py-3.5 font-medium text-gray-900">{l.customer_name}</td>
@@ -1597,8 +1616,8 @@ function LicensesTab() {
                       <td className="px-5 py-3.5 text-gray-600">{new Date(l.issued_at).toLocaleDateString()}</td>
                       <td className="px-5 py-3.5 text-gray-600">{new Date(l.expires_at).toLocaleDateString()}</td>
                       <td className="px-5 py-3.5">
-                        <span className={`px-2.5 py-1 rounded-full text-xs font-semibold ${expired ? "bg-red-100 text-red-700" : "bg-green-100 text-green-700"}`}>
-                          {expired ? "expired" : "active"}
+                        <span className={`px-2.5 py-1 rounded-full text-xs font-semibold ${statusStyle}`}>
+                          {statusLabel}
                         </span>
                       </td>
                       <td className="px-5 py-3.5">
@@ -1607,6 +1626,16 @@ function LicensesTab() {
                           <CopyKeyButton licenseKey={l.license_key}
                             className="p-1.5 border border-gray-200 rounded-lg text-gray-500 hover:bg-gray-50 transition-colors flex-shrink-0" />
                         </div>
+                      </td>
+                      <td className="px-5 py-3.5">
+                        <button onClick={() => handleToggleStatus(l)} disabled={statusChangingId === l.id}
+                          className={`px-2.5 py-1.5 rounded-lg text-xs font-medium border transition-colors disabled:opacity-50 ${
+                            revoked
+                              ? "border-green-200 text-green-700 hover:bg-green-50"
+                              : "border-red-200 text-red-700 hover:bg-red-50"
+                          }`}>
+                          {statusChangingId === l.id ? "…" : revoked ? "Reactivate" : "Revoke"}
+                        </button>
                       </td>
                     </tr>
                   );

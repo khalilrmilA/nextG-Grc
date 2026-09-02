@@ -1,4 +1,17 @@
-"""Framework management endpoints."""
+"""Framework management endpoints.
+
+The AI control-suggestion endpoint (POST /builder/ai-suggestions) runs on the shared AI
+foundation: an expert system prompt + output schema from ``app.services.ai_prompts`` (task
+"framework_builder"), a validated structured call from ``ai_structured`` (schema validation,
+a semantic consistency check, one repair retry), transport + untrusted-text delimiting +
+deterministic decoding + quota metering from ``ai_provider`` (tenant BYO-AI honoured), and
+request-language resolution from ``ai_locale`` (Accept-Language en|fr|ar). Only Ollama is
+ever called, and only through ``ai_provider``. A failed or still-inconsistent reply surfaces
+as an explicit HTTP 424 (never a 5xx — client.ts hard-redirects the SPA to /service-down on
+any 5xx) — never a silently invented suggestion set.
+"""
+import logging
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import func, select
@@ -6,15 +19,25 @@ from pydantic import BaseModel, field_validator
 from typing import Annotated
 
 from app.core.database import get_db
+from app.core import ai_quota
 from app.models.framework import Framework, FrameworkControl, ControlCategory, ControlRequirement, FrameworkStatus
 from app.api.v1.dependencies import get_current_user, get_tenant_id, get_current_user_optional, get_tenant_id_optional
 from app.api.v1.dependencies.auth import require_roles
 from app.models.user import User, UserRole
 from app.workers.tasks.notifications import notify_framework_new, notify_framework_updated
+from app.services import ai_chunking, ai_prompts, ai_provider
+from app.services.ai_locale import failure_message, get_request_language
+from app.services.ai_structured import AiResult, ai_structured
 
 _VALID_CATEGORIES = {c.name for c in ControlCategory}
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
+
+
+def _ai_failure_detail(res: AiResult, lang: str) -> str:
+    """"<localised sentence> (<kind>: <admin-safe detail>)" for an HTTPException(424, ...)."""
+    return "%s (%s)" % (res.user_message(lang), res.failure_detail())
 
 
 class FrameworkResponse(BaseModel):
@@ -97,18 +120,26 @@ class AISuggestionsRequest(BaseModel):
 
 
 class AISuggestion(BaseModel):
-    """A single AI control suggestion."""
+    """A single AI control suggestion (ai_prompts "framework_builder" task)."""
     title: str
     description: str
     category: str
     rationale: str
     priority: str
+    # Additive: traceability to a real published clause (schema field "source_reference" /
+    # "source_confidence") and which already-selected control this complements. Absent when
+    # the model did not supply them (both are optional in FRAMEWORK_BUILDER_SCHEMA).
+    source_reference: str | None = None
+    source_confidence: float | None = None
+    complements: str | None = None
 
 
 class AISuggestionsResponse(BaseModel):
     """AI-generated control suggestions."""
     suggestions: list[AISuggestion]
     rationale: str
+    # Additive: e.g. a prompt-injection attempt spotted in the untrusted use-case text.
+    warnings: list[str] = []
 
 
 class CustomControlInput(BaseModel):
@@ -173,93 +204,127 @@ async def get_ai_control_suggestions(
     body: AISuggestionsRequest,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    tenant_id: str = Depends(get_tenant_id),
+    lang: str = Depends(get_request_language),
 ):
-    """Get AI-suggested controls based on industry, region, and use case."""
-    import httpx
-    import json as json_lib
-    from app.core.config import settings
-    from app.core import ai_quota
+    """AI-suggested controls for the custom Framework Builder ("framework_builder" task).
+
+    Runs on the shared AI foundation (see module docstring). A failed call, or a reply that
+    still fails the schema / duplicate-title / source-reference consistency check after one
+    repair retry, is surfaced as HTTP 424 with an honest, localised reason — never a silently
+    invented suggestion set (the old "greedy-regex JSON recovery -> generic 500" behaviour is
+    gone).
+    """
     ai_quota.check_quota_or_raise(current_user.id)
 
-    selected_context = ""
-    if body.selected_control_ids:
+    # Already-selected controls: restricted to frameworks visible to this tenant (built-in or
+    # tenant-owned — same visibility rule as list_frameworks) so a stray/foreign id cannot pull
+    # another tenant's control text into the prompt. The rich id+title+description context is
+    # packed by token budget instead of a hard 30-row, title-only cut, so "avoid similar
+    # controls" has real signal; the true total is always reported even when not every row gets
+    # the rich treatment, and every title (not just the rich subset) is still surfaced to the
+    # model in compact form so the duplicate-title check below never demands the impossible.
+    ids = list(dict.fromkeys(str(i).strip() for i in body.selected_control_ids if str(i).strip()))[:200]
+    selected: list[FrameworkControl] = []
+    if ids:
         ctrl_result = await db.execute(
-            select(FrameworkControl).where(FrameworkControl.id.in_(body.selected_control_ids))
+            select(FrameworkControl)
+            .join(Framework, Framework.id == FrameworkControl.framework_id)
+            .where(
+                FrameworkControl.id.in_(ids),
+                (Framework.is_builtin == True) | (Framework.tenant_id == tenant_id),  # noqa: E712
+            )
         )
         selected = list(ctrl_result.scalars().all())
-        selected_context = f"\n\nALREADY SELECTED CONTROLS ({len(selected)}):\n"
-        for c in selected[:30]:
-            selected_context += f"- {c.control_id}: {c.title}\n"
 
-    prompt = f"""You are a senior compliance consultant helping build a custom compliance framework.
+    def _render_selected(c: FrameworkControl) -> str:
+        cid = ai_provider.clean_field(c.control_id, 60) or "?"
+        title = ai_provider.clean_field(c.title, 160)
+        desc = ai_provider.clean_field(c.description or "", 200)
+        line = "- %s: %s" % (cid, title)
+        return "%s — %s" % (line, desc) if desc else line
 
-CONTEXT:
-- Industry: {body.industry}
-- Region: {body.region or 'Global'}
-- Use Case: {body.use_case or 'General security and compliance'}
-{selected_context}
+    # Titles only, for the duplicate/collision consistency check (ai_prompts.consistency_issues
+    # compares case-folded titles). This IS the check's `allowed_values`, so every title in it
+    # must also be visible to the model in the prompt below — otherwise the check can fail on a
+    # collision the model had no way to avoid, and (being a `check=` callback replayed verbatim
+    # on the repair retry) the second attempt has no better chance either. Cleaned the same way
+    # `_render_selected` cleans titles, so the two agree on the exact string.
+    selected_titles = list(dict.fromkeys(
+        ai_provider.clean_field(c.title, 160) for c in selected if c.title
+    ))
 
-TASK:
-Suggest 8-12 essential compliance controls tailored to this industry and region.
-Avoid suggesting controls similar to those already selected.
-Focus on practical, implementable controls that address common gaps.
+    shown: list[FrameworkControl] = []
+    if selected:
+        groups = ai_chunking.chunk_items(selected, ai_chunking.CONTROL_BATCH_TOKENS, _render_selected)
+        shown = groups[0] if groups else selected
+    selected_body = "\n".join(_render_selected(c) for c in shown)
+    if len(selected) > len(shown):
+        # The rich id+title+description block above is token-budget-limited and a large-but-
+        # ordinary selection (the browse step lets a user pull in 100+ controls; ids are capped
+        # at 200) can exceed it well before every control is detailed. Titles alone are far
+        # cheaper to render than full lines, so — mirroring compliance.py's clause_coverage
+        # pattern, where the check's allow-list and the prompt's allow-list are always the same
+        # set — the FULL remaining title set (exactly what `selected_titles` above enforces) is
+        # always appended in compact form, not just summarised as "+N more not shown".
+        shown_titles = {ai_provider.clean_field(c.title, 160) for c in shown if c.title}
+        remaining_titles = [t for t in selected_titles if t not in shown_titles]
+        selected_body += (
+            "\n- (+%d more controls not detailed above; ALL of their titles are listed next so "
+            "you can still avoid duplicating them)\n"
+            "OTHER ALREADY-SELECTED TITLES (do not propose a new or near-equal title to any of "
+            "these either):\n- %s"
+        ) % (len(selected) - len(shown), "\n- ".join(remaining_titles) if remaining_titles else "(none)")
+    selected_lines = (
+        ai_provider.delimit_untrusted(selected_body, "ALREADY SELECTED CONTROLS", max_len=len(selected_body) + 1)
+        if selected_body else "(none)"
+    )
 
-Return ONLY valid JSON in this exact format:
+    use_case_text = (body.use_case or "").strip()
+    use_case_block = (
+        ai_provider.delimit_untrusted(use_case_text, "USE CASE", max_len=len(use_case_text) + 1)
+        if use_case_text else "USE CASE: not provided"
+    )
 
-{{
-  "suggestions": [
-    {{
-      "title": "Control title",
-      "description": "Clear, actionable description (1-2 sentences)",
-      "category": "Access Control | Data Protection | Incident Response | Risk Management | Compliance | Operations | Vendor Management | Other",
-      "rationale": "Why this control is important for this industry/region",
-      "priority": "high | medium | low"
-    }}
-  ],
-  "rationale": "Overall explanation of why these controls were chosen"
-}}"""
-
-    base_url = settings.OLLAMA_BASE_URL.rstrip("/")
-    ollama_url = f"{base_url}/api/chat"
-    payload = {
-        "model": settings.OLLAMA_CHAT_MODEL,
-        "stream": False,
-        "format": "json",
-        "messages": [{"role": "user", "content": prompt}],
-    }
-
+    task = "framework_builder"
     try:
-        async with httpx.AsyncClient(timeout=300.0) as client:
-            resp = await client.post(ollama_url, json=payload)
-            if resp.status_code != 200:
-                raise HTTPException(status_code=500, detail=f"Ollama error {resp.status_code}")
-            data = resp.json()
-            ai_quota.record_from_ollama_response(current_user.id, data)
-            ai_text = data.get("message", {}).get("content", "")
-
-        try:
-            ai_result = json_lib.loads(ai_text)
-        except json_lib.JSONDecodeError:
-            import re
-            match = re.search(r'\{[\s\S]*\}', ai_text)
-            if match:
-                ai_result = json_lib.loads(match.group())
-            else:
-                raise HTTPException(status_code=500, detail="AI returned invalid format")
-
-        return AISuggestionsResponse(
-            suggestions=[AISuggestion(**s) for s in ai_result.get("suggestions", [])],
-            rationale=ai_result.get("rationale", ""),
+        system = ai_prompts.system_prompt(task, lang=lang)
+        user = ai_prompts.render_user_prompt(
+            task,
+            industry=ai_provider.clean_field(body.industry, 100) or "not stated",
+            region=ai_provider.clean_field(body.region, 100) or "Global",
+            use_case_block=use_case_block,
+            selected_count=len(selected),
+            shown_count=len(shown),
+            selected_lines=selected_lines,
         )
+        d = ai_prompts.task_defaults(task)
+        res: AiResult = await ai_structured(
+            [{"role": "system", "content": system}, {"role": "user", "content": user}],
+            ai_prompts.task_schema(task), schema_in_prompt=False,   # system_prompt already carries the schema
+            check=lambda data: ai_prompts.consistency_issues(task, data, allowed_values=selected_titles),
+            user_id=current_user.id, tenant_id=tenant_id, db=db, task="frameworks.ai_suggestions",
+            **ai_provider.decoding(d["preset"], temperature=d["temperature"]),
+        )
+    except HTTPException:
+        raise
+    except Exception:  # noqa: BLE001 — never a 5xx: the SPA redirects to /service-down
+        logger.exception("framework.ai_suggest.error tenant=%s", tenant_id)
+        raise HTTPException(status_code=424,
+                            detail="%s (error: framework suggestion generation failed unexpectedly)" % failure_message("error", lang))
 
-    except httpx.RequestError:
-        import logging
-        logging.getLogger(__name__).exception("framework.ai_suggest.ollama_unreachable")
-        raise HTTPException(status_code=503, detail="AI service temporarily unavailable")
-    except Exception:
-        import logging
-        logging.getLogger(__name__).exception("framework.ai_suggest.error")
-        raise HTTPException(status_code=500, detail="AI suggestions failed")
+    if not res.ok:
+        logger.warning("framework.ai_suggest.failed tenant=%s kind=%s attempts=%d: %s",
+                       tenant_id, res.kind, res.attempts, res.error)
+        raise HTTPException(status_code=424, detail=_ai_failure_detail(res, lang))
+
+    data = ai_prompts.apply_fixups(task, res.data)
+
+    return AISuggestionsResponse(
+        suggestions=[AISuggestion(**s) for s in (data.get("suggestions") or [])],
+        rationale=data.get("rationale") or "",
+        warnings=list(data.get("warnings") or []),
+    )
 
 
 @router.post("/builder/create", response_model=FrameworkResponse, status_code=status.HTTP_201_CREATED)
