@@ -75,7 +75,10 @@ if [ -n "${appliance_hostname:-}" ]; then
 fi
 
 HOST="$(hostname -f 2>/dev/null || hostname)"
-IP="$(hostname -I | awk '{print $1}')"
+# Deliberately no IP variable here. The address is not fixed at first boot:
+# DHCP leases change and menu 2 can set a static address later. Anything
+# captured now is a guess. Both places that show a URL resolve it live, the
+# console from hostname -I and /etc/issue from getty's \4 escape.
 ORG="${appliance_org:-Appliance}"
 # The default MUST contain a dot in the domain. The login endpoint validates
 # with pydantic EmailStr, which rejects "admin@localhost" outright:
@@ -138,8 +141,8 @@ UPLOADS_DIR=${UPLOADS}
 
 APP_HOST=127.0.0.1
 APP_PORT=8000
-FRONTEND_URL=https://${HOST}
-FRONTEND_BASE_URL=https://${HOST}
+FRONTEND_URL=http://${HOST}
+FRONTEND_BASE_URL=http://${HOST}
 
 # Every outbound feed is off. Customers deploy this air-gapped, and a scheduler
 # retrying a network that is not there fills the log and nothing else. Each one
@@ -187,19 +190,17 @@ chown root:appliance "${ENVFILE}"
 chmod 0640 "${ENVFILE}"
 umask 022
 
-# --- 6. TLS certificate ----------------------------------------------------
-if [ ! -f "${TLS_DIR}/tls.crt" ]; then
-  echo "[firstboot] generating a self-signed certificate for ${HOST} / ${IP}"
-  openssl req -x509 -newkey rsa:2048 -nodes -days 825 -sha256 \
-    -keyout "${TLS_DIR}/tls.key" -out "${TLS_DIR}/tls.crt" \
-    -subj "/CN=${HOST}" \
-    -addext "subjectAltName=DNS:${HOST},IP:${IP}" \
-    -addext "keyUsage=digitalSignature,keyEncipherment" \
-    -addext "extendedKeyUsage=serverAuth"
-  chmod 600 "${TLS_DIR}/tls.key"
-  chmod 644 "${TLS_DIR}/tls.crt"
-  chown root:appliance "${TLS_DIR}"/tls.*
-fi
+# --- 6. no TLS certificate ------------------------------------------------
+# The web console is served over plain HTTP on port 80, so there is nothing to
+# generate here. See files/nginx/appliance.conf for the reasoning and for what
+# encryption is being given up.
+#
+# The previous version generated a self-signed certificate whose subjectAltName
+# embedded this machine's address. On a machine with no address at first boot
+# that produced an empty "IP:" entry, openssl rejected it, no certificate was
+# written, and nginx then refused to start, leaving an appliance that booted
+# cleanly and served nothing. Removing TLS removes that failure mode with it.
+rm -rf "${TLS_DIR}" 2>/dev/null || true
 
 # --- 7. schema and initial administrator -----------------------------------
 # Order matters and was established by testing against the shipped seed:
@@ -283,9 +284,34 @@ echo "[firstboot] creating the platform super administrator"
 #
 # Non-fatal: an appliance with a working tenant admin is usable, and refusing to
 # boot because the optional second account failed would be the wrong trade.
+#
+# When the build staged a fixed password (20-app.sh writes the seed), use it and
+# do NOT force a change: the vendor arrives on site already holding this
+# credential, and forcing a reset at every client would make the one password
+# they carry useless. Otherwise fall back to the original per-deployment random
+# password. Either way nothing is printed to the console — see section 8.
+SEED_FILE=/etc/appliance/superadmin.seed
 rm -f "${PASS_FILE}"
 SUPER_PASS=""
-if run_app create-admin \
+if [ -s "${SEED_FILE}" ]; then
+  # --password-stdin, never --password: a literal on the command line is visible
+  # in /proc to every process on the box for as long as the CLI runs.
+  if run_app create-admin \
+        --email "${SUPER_EMAIL}" \
+        --company "${ORG}" \
+        --role super_admin \
+        --first-name Platform \
+        --last-name "Super Admin" \
+        --password-stdin < "${SEED_FILE}"; then
+    echo "[firstboot] super administrator created with the image's fixed password"
+  else
+    echo "[firstboot] WARN: could not create the super administrator account"
+  fi
+  # The account now exists as a bcrypt hash in the database. Destroy the only
+  # cleartext copy so a deployed appliance cannot be read for it, and so the
+  # password does not survive in a snapshot or a cloned disk.
+  shred -u "${SEED_FILE}" 2>/dev/null || rm -f "${SEED_FILE}"
+elif run_app create-admin \
       --email "${SUPER_EMAIL}" \
       --company "${ORG}" \
       --role super_admin \
@@ -307,51 +333,35 @@ chmod 0640 "${DB_PATH}"
 # shellcheck disable=SC1091
 . /etc/appliance/version
 
-# Two places, deliberately.
+# NO CREDENTIALS ARE RENDERED HERE. Deliberate, and the reason the appliance
+# ships with a fixed super-administrator password instead of a generated one.
 #
-# /etc/issue is the conventional location and is what a getty renders, so it
-# still works on any target that keeps a login prompt (Azure's serial console,
-# for instance).
+# Anyone who can see the screen of a deployed appliance -- a projector in a
+# meeting room, a colleague walking past the rack, a screenshot in a ticket --
+# could previously read the administrator password straight off the console. The
+# operator now arrives already holding the credential, so the console never has
+# to disclose one.
+#
+# \4 is getty's escape for the machine's IPv4 address, resolved at render time.
+# It must stay an escape and never be substituted here: an appliance installed
+# air-gapped has no address while this script runs, so a baked-in URL renders as
+# "http:///" forever. 20-app.sh fails the build if that regression reappears.
 cat > /etc/issue <<EOF
 
   ${NAME} ${VERSION}
 
-  Web console : https://${IP}/
+  Web console : http://\4/
 
-  Administrator
-    Username  : ${ADMIN_EMAIL}
-    Password  : ${ADMIN_PASS}
-
-  Platform super administrator (/super-admin)
-    Username  : ${SUPER_EMAIL}
-    Password  : ${SUPER_PASS:-<not created>}
-
-  Both passwords must be changed at first login.
+  Sign in with the credentials supplied by your vendor.
 
 EOF
-# 0600, not 0644: this file holds the generated administrator password in clear
-# text until it is changed. A getty renders it as root before login, so it does
-# not need to be world readable.
-chmod 0600 /etc/issue
+chmod 0644 /etc/issue
 
-# The restricted console is what tty1 actually runs on the vmware and hyperv
-# targets, and it does NOT render /etc/issue. Without this file the generated
-# password would be written and then shown to nobody, leaving the operator with
-# no way into the appliance they just deployed.
-install -d -m 0750 -o root -g appliance /etc/appliance
-cat > /etc/appliance/initial-credentials <<EOF
-Web console : https://${IP}/
-
-Administrator
-  Username  : ${ADMIN_EMAIL}
-  Password  : ${ADMIN_PASS}
-
-Platform super administrator (/super-admin)
-  Username  : ${SUPER_EMAIL}
-  Password  : ${SUPER_PASS:-<not created>}
-EOF
-chmod 0640 /etc/appliance/initial-credentials
-chown root:appliance /etc/appliance/initial-credentials
+# The restricted console on the vmware and hyperv targets does not render
+# /etc/issue and reads this file instead. It is removed rather than written:
+# firstboot may be re-running over an image that carried one, and a stale copy
+# would put the very passwords this change removes back on the screen.
+rm -f /etc/appliance/initial-credentials
 
 # --- 9. done ---------------------------------------------------------------
 # Do NOT "systemctl start appliance-api" here.

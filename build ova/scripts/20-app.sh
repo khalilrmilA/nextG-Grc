@@ -121,6 +121,75 @@ VITE_APP_NAME=${APPLIANCE_NAME}
 VITE_APP_VERSION=${APPLIANCE_VERSION}
 EOF
 
+# ---------------------------------------------------------------------------
+# The sidebar's feature keys must be real.
+#
+# Layout.tsx maps a nav module to the entitlement its endpoints are gated
+# behind. If that string does not match a key the backend publishes, the
+# entitlements context treats it as unknown and fails OPEN, so the item never
+# locks and the mistake is invisible. Check it here, where both sources exist.
+echo "[20-app] checking the sidebar's feature keys exist in the backend"
+python3 - "${FRONTEND_BUILD}/src/components/layout/Layout.tsx" "${BACKEND_DIR}" <<'PYGATE'
+import ast
+import re
+import sys
+from pathlib import Path
+
+layout_path, backend_dir = Path(sys.argv[1]), Path(sys.argv[2])
+
+# Pull ELITE_FEATURES and the boolean keys of TIER_LIMITS straight out of the
+# model's source. Importing it would need the venv, which does not exist yet at
+# this point in the build, and parsing is enough for a list of literals.
+model = (backend_dir / "app" / "models" / "subscription.py").read_text(encoding="utf-8")
+tree = ast.parse(model)
+
+known = set()
+for node in ast.walk(tree):
+    if isinstance(node, ast.Assign):
+        for t in node.targets:
+            if isinstance(t, ast.Name) and t.id == "ELITE_FEATURES":
+                for elt in getattr(node.value, "elts", []):
+                    if isinstance(elt, ast.Constant) and isinstance(elt.value, str):
+                        known.add(elt.value)
+    # TIER_LIMITS[...] = {...} and the TIER_LIMITS literal itself
+    if isinstance(node, ast.Dict):
+        for k, v in zip(node.keys, node.values):
+            if isinstance(k, ast.Constant) and isinstance(k.value, str) \
+               and isinstance(v, ast.Constant) and isinstance(v.value, bool):
+                known.add(k.value)
+
+if not known:
+    print("[20-app] FATAL: could not read any feature keys from subscription.py",
+          file=sys.stderr)
+    raise SystemExit(1)
+
+layout = layout_path.read_text(encoding="utf-8")
+m = re.search(r"const MODULE_FEATURES[^{]*\{(.*?)\n\};", layout, re.S)
+if not m:
+    # No table means no feature gating in the sidebar. Not an error: the gate
+    # exists to catch wrong keys, not to require the feature.
+    print("[20-app] no MODULE_FEATURES table in Layout.tsx; nothing to check")
+    raise SystemExit(0)
+
+used = set()
+for arr in re.findall(r"\[([^\]]*)\]", m.group(1)):
+    used.update(re.findall(r'"([a-z_][a-z0-9_]*)"', arr))
+
+unknown = sorted(used - known)
+if unknown:
+    print("[20-app] FATAL: Layout.tsx gates on features the backend does not have:",
+          file=sys.stderr)
+    for k in unknown:
+        print("[20-app]   %s" % k, file=sys.stderr)
+    print("[20-app] These fail OPEN, so the item silently never locks.",
+          file=sys.stderr)
+    print("[20-app] Fix the key in MODULE_FEATURES, or add it to ELITE_FEATURES.",
+          file=sys.stderr)
+    raise SystemExit(1)
+
+print("[20-app] sidebar feature keys all valid (%d checked)" % len(used))
+PYGATE
+
 cd "${FRONTEND_BUILD}"
 npm ci
 npm run build
@@ -140,6 +209,21 @@ install -d -m 0755 "${APP_DIR}/bin"
 install -m 0755 /tmp/bin/ovfprops.py       "${APP_DIR}/bin/ovfprops.py"
 install -m 0755 /tmp/bin/admin-reset       "${APP_DIR}/bin/admin-reset"
 install -m 0755 /tmp/bin/support-verify    "${APP_DIR}/bin/support-verify"
+# The web console URL must never be frozen at first boot.
+#
+# An offline install has no address while firstboot runs, so a URL written then
+# reads "http:///" and stays wrong forever, on an appliance that is otherwise
+# serving perfectly. That is the worst kind of fault: working software the
+# operator has no way to locate. Observed on a real air-gapped ISO install.
+#
+# Both display paths must resolve the address at render time: /etc/issue via
+# getty's \4 escape, and the console via hostname -I on every redraw.
+if grep -q 'Web console : http://${IP}/' /tmp/scripts/firstboot.sh; then
+  echo "[20-app] FATAL: firstboot.sh bakes the address into a console URL." >&2
+  echo "[20-app]        An appliance installed without a network would show" >&2
+  echo "[20-app]        http:/// forever. Resolve the address live instead." >&2
+  exit 1
+fi
 install -m 0755 /tmp/scripts/firstboot.sh  "${APP_DIR}/bin/firstboot.sh"
 install -m 0755 /tmp/scripts/netconfig.sh  "${APP_DIR}/bin/netconfig.sh"
 
@@ -216,6 +300,22 @@ chmod 0644 /etc/appliance/version
 # read without sourcing the version file.
 echo "${APPLIANCE_TARGET:-vmware}" > /etc/appliance/target
 chmod 0644 /etc/appliance/target
+
+# Seed for the fixed platform super-administrator password, when the build was
+# given one. firstboot.sh consumes this file and SHREDS it, so a deployed
+# appliance carries only the bcrypt hash in its database — never the cleartext.
+#
+# 0600 root:root. It exists only between this stage and the first boot, but
+# 35-lockdown runs in between, so it must not be group- or world-readable.
+if [ -n "${SUPERADMIN_PASSWORD:-}" ]; then
+  install -d -m 0755 /etc/appliance
+  printf '%s' "${SUPERADMIN_PASSWORD}" > /etc/appliance/superadmin.seed
+  chmod 0600 /etc/appliance/superadmin.seed
+  chown root:root /etc/appliance/superadmin.seed
+  echo "[20-app] fixed super-administrator password staged for firstboot"
+else
+  echo "[20-app] no SUPERADMIN_PASSWORD; firstboot will generate a random one"
+fi
 
 chown -R root:root "${APP_DIR}"
 

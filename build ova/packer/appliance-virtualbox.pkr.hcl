@@ -108,6 +108,22 @@ variable "license_enforcement" {
   default = "True"
 }
 
+# Fixed platform super-administrator password, baked at build time.
+#
+# The appliance console deliberately shows NO credentials at boot, so the
+# operator arrives at a client site already holding this password, signs in to
+# /super-admin, activates the licence and creates the client's own accounts.
+#
+# This is a SHARED credential: every appliance built from this image accepts it.
+# It is seeded into the database at firstboot and the cleartext copy is shredded
+# immediately afterwards, so only the bcrypt hash survives on a deployed unit.
+# Leave empty to keep the old per-deployment random password.
+variable "superadmin_password" {
+  type      = string
+  sensitive = true
+  default   = ""
+}
+
 variable "headless" {
   type    = bool
   default = true
@@ -195,6 +211,20 @@ source "virtualbox-iso" "appliance" {
     ["modifyvm", "{{ .Name }}", "--rtcuseutc", "on"],
     ["modifyvm", "{{ .Name }}", "--vram", "16"],
     ["modifyvm", "{{ .Name }}", "--graphicscontroller", "vmsvga"],
+
+    # Closing a VirtualBox window must NOT kill the build.
+    #
+    # Packer runs the VM headless, but the VirtualBox Manager can attach a GUI
+    # window to a running headless VM ("Show"/"Afficher"). VirtualBox's default
+    # action when that window closes is to POWER OFF the machine. Twice on
+    # 2026-09-02 that ended a build mid-flight: the VM went RUNNING -> Stopping
+    # -> TERMINATED, VirtualBox deregistered it and deleted the 40 GB disk,
+    # and packer sat waiting for SSH from a machine that no longer existed.
+    # The first loss was 9 minutes in, the second 26.
+    #
+    # Detach leaves the VM running and just closes the window, so looking at
+    # the build can no longer destroy it.
+    ["setextradata", "{{ .Name }}", "GUI/DefaultCloseAction", "Detach"],
   ]
 
   # Runs after provisioning and shutdown, before the export. This is what keeps
@@ -310,7 +340,8 @@ build {
       "GRUB_PASSWORD=${var.grub_password}",
       "SUPPORT_PUBLIC_KEY=${var.support_public_key}",
       "LICENSE_PUBLIC_KEY=${var.license_public_key}",
-      "LICENSE_ENFORCEMENT_BUILD=${var.license_enforcement}"
+      "LICENSE_ENFORCEMENT_BUILD=${var.license_enforcement}",
+      "SUPERADMIN_PASSWORD=${var.superadmin_password}"
     ]
     scripts = [
       "../scripts/10-base.sh",

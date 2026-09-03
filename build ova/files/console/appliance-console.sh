@@ -24,26 +24,33 @@ header() {
   printf '=======================================================\n'
   printf '  %s %s\n' "$NAME" "$VERSION"
   printf '  Host : %s\n' "$(hostname)"
-  printf '  URL  : https://%s/\n' "${ip:-no address}"
+  printf '  URL  : http://%s/\n' "${ip:-no address}"
   printf '=======================================================\n\n'
-  show_initial_credentials
+  show_access_banner
 }
 
-show_initial_credentials() {
-  # firstboot.sh writes the generated administrator password into /etc/issue,
-  # which is the conventional place for it. But /etc/issue is only ever rendered
-  # by a getty, and 35-lockdown.sh replaces the getty on tty1 with THIS menu. So
-  # without this block the password is generated, written, and shown to nobody:
-  # the operator powers the appliance on and has no way to log in.
+show_access_banner() {
+  # The address only. This console MUST NOT print a username or a password.
   #
-  # The banner stays visible until the administrator changes the password, at
-  # which point the application clears it. The password is single use in
-  # practice because create-admin sets must_change_password.
-  [ -r /etc/appliance/initial-credentials ] || return 0
-  printf '  FIRST LOGIN\n'
-  printf '  -----------\n'
-  while IFS= read -r line; do printf '  %s\n' "$line"; done < /etc/appliance/initial-credentials
-  printf '\n  Change the password at first login; this notice then disappears.\n\n'
+  # It used to render /etc/appliance/initial-credentials, because firstboot
+  # generated a per-deployment administrator password and 35-lockdown.sh replaces
+  # the getty on tty1 with this menu, so /etc/issue was shown to nobody. The
+  # appliance now ships with a fixed super-administrator password that the vendor
+  # already holds when they arrive on site, so there is nothing left to disclose
+  # and the screen of a deployed unit no longer leaks a way in.
+  #
+  # Resolved on every redraw, not stored. An address written into a file at first
+  # boot is wrong for every appliance installed without a network and for every
+  # one whose lease later changes.
+  _url_ip="$(hostname -I 2>/dev/null | awk '{print $1}')"
+  printf '  ACCESS\n'
+  printf '  ------\n'
+  if [ -n "$_url_ip" ]; then
+    printf '  Web console : http://%s/\n' "$_url_ip"
+  else
+    printf '  Web console : no address yet; set one with 2) Network configuration\n'
+  fi
+  printf '  Sign in with the credentials supplied by your vendor.\n\n'
 }
 
 status() {

@@ -190,3 +190,50 @@ class Subscription(Base):
         if self.tier == SubscriptionTier.ELITE:
             return True
         return bool(self.limits.get(feature, False))
+
+
+# ── The canonical list of boolean entitlements ────────────────────────────────
+#
+# Defined here, next to TIER_LIMITS and ELITE_FEATURES, because more than one
+# place needs it and a second hand-written copy would drift:
+#
+#   admin.py            renders the super admin's Access Control switches
+#   subscriptions.py    tells the dashboard what to show the current tenant
+#   require_feature     enforces it on the API
+#
+# If the switch list, the UI gate and the API gate are not derived from the same
+# source, a feature eventually appears enabled in the UI and returns 402 when
+# clicked, or is hidden while its endpoints stay open. Both have happened here.
+
+# Numeric or non-boolean limits. They are quotas, not on/off switches, so they
+# are never rendered as toggles and never gate a page.
+NON_TOGGLE_LIMITS = frozenset({
+    "max_frameworks", "max_admin_users", "max_vendors",
+    "max_integrations", "sla_uptime",
+})
+
+
+def togglable_features() -> list[tuple[str, str]]:
+    """Every boolean entitlement, paired with the group it belongs to.
+
+    Group is decided by membership of ELITE_FEATURES, NOT by which dict the key
+    was found in. That distinction matters: the module-level back-fill below
+    TIER_LIMITS adds every Elite feature to every tier (defaulted to False) so
+    that gating checks never KeyError. A side effect is that
+    TIER_LIMITS[ENTERPRISE] ends up containing all of them, so classifying by
+    iteration order labelled all 29 features "platform" and left the Elite group
+    empty. The Access Control page then showed one undifferentiated wall of
+    switches instead of the packs it exists to manage.
+
+    Order is stable: platform features first, in TIER_LIMITS order, then the
+    Elite Pack in its declared order.
+    """
+    elite = set(ELITE_FEATURES)
+    platform = [
+        key for key in TIER_LIMITS[SubscriptionTier.ENTERPRISE]
+        if key not in NON_TOGGLE_LIMITS and key not in elite
+    ]
+    return (
+        [(key, "platform") for key in platform]
+        + [(key, "elite_pack") for key in ELITE_FEATURES]
+    )

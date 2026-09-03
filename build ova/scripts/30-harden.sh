@@ -24,8 +24,10 @@ ufw default allow outgoing
 # re-added for 60 minutes only when the console's support flow verifies a signed
 # response.
 ufw allow 22/tcp comment 'build and support ssh'
-ufw allow 80/tcp comment 'http redirect to https'
-ufw allow 443/tcp comment 'web console'
+ufw allow 80/tcp comment 'web console'
+# 443 is deliberately NOT opened: the console is served over plain HTTP on
+# 80 and nothing listens on 443. An open port with nothing behind it is
+# just an invitation to a scanner.
 ufw --force enable
 
 echo "[30-harden] fail2ban"

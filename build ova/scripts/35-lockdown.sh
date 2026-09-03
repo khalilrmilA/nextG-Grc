@@ -99,9 +99,35 @@ if [ "${TARGET}" = "azure" ]; then
   grep -q '^GRUB_CMDLINE_LINUX=' /etc/default/grub || \
     echo 'GRUB_CMDLINE_LINUX="console=tty1 console=ttyS0 earlyprintk=ttyS0 rootdelay=300"' >> /etc/default/grub
   sed -i 's/^GRUB_TIMEOUT=.*/GRUB_TIMEOUT=5/' /etc/default/grub
-  grep -q '^GRUB_TERMINAL=' /etc/default/grub || echo 'GRUB_TERMINAL=serial console' >> /etc/default/grub
+  # Quoted, and it matters: grub-mkconfig SOURCES this file as a shell script.
+  # Unquoted, "GRUB_TERMINAL=serial console" is parsed as an assignment followed
+  # by a command named "console", and grub-mkconfig dies with
+  #   /etc/default/grub: console: not found
+  # exiting 127. That killed an Azure build 73 minutes in.
+  grep -q '^GRUB_TERMINAL=' /etc/default/grub || \
+    echo 'GRUB_TERMINAL="serial console"' >> /etc/default/grub
   grep -q '^GRUB_SERIAL_COMMAND=' /etc/default/grub || \
     echo 'GRUB_SERIAL_COMMAND="serial --speed=115200 --unit=0 --word=8 --parity=no --stop=1"' >> /etc/default/grub
+
+  # /etc/default/grub is SOURCED by grub-mkconfig, so a quoting mistake here
+  # surfaces as an error blaming grub rather than the line we just wrote. Check
+  # it ourselves and say plainly what is wrong.
+  # SOURCE it, do not merely syntax-check it. "sh -n" accepts
+  #   GRUB_TERMINAL=serial console
+  # because that IS valid shell: an assignment followed by a command. The
+  # failure only appears when the file is executed and "console" turns out not
+  # to be a command, which is exactly what grub-mkconfig does and exactly the
+  # 127 that killed a build. Sourcing in a subshell reproduces that here, where
+  # the error can name the real cause.
+  # shellcheck source=/dev/null disable=SC1091
+  if ! ( set -e; . /etc/default/grub ) >/dev/null 2>/tmp/grubcheck.err; then
+    echo "[35-lockdown] FATAL: /etc/default/grub fails when sourced," >&2
+    echo "[35-lockdown] which is what grub-mkconfig does to it:" >&2
+    sed 's/^/  /' /tmp/grubcheck.err >&2
+    echo "[35-lockdown] current GRUB_ settings:" >&2
+    grep -n 'GRUB_' /etc/default/grub >&2
+    exit 1
+  fi
   update-grub
 else
   echo "[35-lockdown] GRUB password"

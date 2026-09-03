@@ -11,6 +11,7 @@ import {
   type SuperAdminUser,
   type SuperAdminFramework,
   type AccessControlEntry,
+  type FeatureCatalogue,
   type TenantSubscription,
   type CreatedUser,
   type IssuedLicense,
@@ -53,12 +54,14 @@ const MOCK_FRAMEWORKS: SuperAdminFramework[] = [
 ];
 
 const MOCK_ACCESS: AccessControlEntry[] = [
-  { tenant_id: "t1", tenant_name: "Acme Corp",  plan: "enterprise", enabled_modules: ["dashboard","risks","compliance","frameworks","audits","policies","vendors","policy-generator"] },
-  { tenant_id: "t2", tenant_name: "Beta GmbH",  plan: "starter",    enabled_modules: ["dashboard","risks","compliance","audits"] },
-  { tenant_id: "t3", tenant_name: "Gamma Inc",  plan: "free_trial", enabled_modules: ["dashboard","risks"] },
+  { tenant_id: "t1", tenant_name: "Acme Corp",  plan: "enterprise", enabled_modules: ["dashboard","risks","compliance","frameworks","audits","policies","vendors","policy-generator"], features: {}, overrides: {} },
+  { tenant_id: "t2", tenant_name: "Beta GmbH",  plan: "starter",    enabled_modules: ["dashboard","risks","compliance","audits"], features: {}, overrides: {} },
+  { tenant_id: "t3", tenant_name: "Gamma Inc",  plan: "free_trial", enabled_modules: ["dashboard","risks"], features: {}, overrides: {} },
 ];
 
-const ALL_MODULES = ["dashboard","risks","compliance","frameworks","audits","policies","vendors","policy-generator"];
+// The core product. Every tenant has these regardless of pack, so they are shown
+// as fixed rather than as switches that cannot be turned off.
+const CORE_MODULES = ["dashboard","risks","compliance","frameworks","audits","policies","vendors","policy-generator"];
 
 // ── Shared: Demo Banner ───────────────────────────────────────────────────────
 
@@ -604,28 +607,67 @@ function UsersTab() {
 
 // ── Tab: Access Control ───────────────────────────────────────────────────────
 
+/** "elite_pack" -> "Elite Pack", "ai_assistant" -> "Ai assistant". */
+function humanise(key: string): string {
+  const s = key.replace(/_/g, " ");
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
 function AccessControlTab() {
-  const [entries, setEntries] = useState<AccessControlEntry[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [isDemo, setIsDemo]   = useState(false);
-  const [saving, setSaving]   = useState<string | null>(null);
+  const [entries, setEntries]     = useState<AccessControlEntry[]>([]);
+  const [catalogue, setCatalogue] = useState<FeatureCatalogue | null>(null);
+  const [loading, setLoading]     = useState(true);
+  const [isDemo, setIsDemo]       = useState(false);
+  const [saving, setSaving]       = useState<string | null>(null);
+  const [error, setError]         = useState("");
+  const [expanded, setExpanded]   = useState<string | null>(null);
 
   useEffect(() => {
-    superAdminAccessApi.listTenantAccess()
-      .then(data => { setEntries(data); setLoading(false); })
+    // The catalogue is served from the same TIER_LIMITS the backend gate reads,
+    // so the switches on this page cannot drift away from what is enforced.
+    Promise.all([
+      superAdminAccessApi.listTenantAccess(),
+      superAdminAccessApi.getFeatureCatalogue(),
+    ])
+      .then(([rows, cat]) => { setEntries(rows); setCatalogue(cat); setLoading(false); })
       .catch(() => { setEntries(MOCK_ACCESS); setIsDemo(true); setLoading(false); });
   }, []);
 
-  async function toggleModule(tenantId: string, module: string) {
-    const entry = entries.find(e => e.tenant_id === tenantId);
-    if (!entry) return;
-    const next = entry.enabled_modules.includes(module)
-      ? entry.enabled_modules.filter(m => m !== module)
-      : [...entry.enabled_modules, module];
+  // One place to apply a change, because the server is the source of truth for
+  // what actually got stored: it drops any override equal to the pack default,
+  // so the response is the only reliable view of the result.
+  async function apply(
+    tenantId: string,
+    body: { pack?: string; features?: Record<string, boolean> },
+  ) {
     setSaving(tenantId);
-    try { await superAdminAccessApi.updateTenantAccess(tenantId, next); } catch { /* demo */ }
-    setEntries(prev => prev.map(e => e.tenant_id === tenantId ? { ...e, enabled_modules: next } : e));
-    setSaving(null);
+    setError("");
+    try {
+      const updated = await superAdminAccessApi.updateTenantAccess(tenantId, body);
+      setEntries(prev => prev.map(e => (e.tenant_id === tenantId ? updated : e)));
+    } catch {
+      setError("Could not save that change. It has not been applied.");
+    } finally {
+      setSaving(null);
+    }
+  }
+
+  function setPack(tenantId: string, pack: string) {
+    return apply(tenantId, { pack });
+  }
+
+  function toggleFeature(entry: AccessControlEntry, key: string) {
+    return apply(entry.tenant_id, { features: { [key]: !entry.features[key] } });
+  }
+
+  // Send every feature at its pack default. The backend stores only deviations,
+  // so this clears custom_limits rather than filling it with redundant entries.
+  function resetToPack(entry: AccessControlEntry) {
+    if (!catalogue) return;
+    const defaults = catalogue.pack_defaults[entry.plan] ?? {};
+    const all: Record<string, boolean> = {};
+    for (const f of catalogue.features) all[f.key] = Boolean(defaults[f.key]);
+    return apply(entry.tenant_id, { features: all });
   }
 
   if (loading) return (
@@ -634,39 +676,148 @@ function AccessControlTab() {
     </div>
   );
 
+  const groups = catalogue
+    ? Array.from(new Set(catalogue.features.map(f => f.group)))
+    : [];
+
   return (
     <div className="space-y-4">
       {isDemo && <DemoBanner />}
-      {entries.map(entry => (
-        <div key={entry.tenant_id} className="bg-white rounded-xl border border-gray-200 shadow-sm p-5">
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <h3 className="font-semibold text-gray-900">{entry.tenant_name}</h3>
-              <span className="inline-block mt-1 px-2 py-0.5 bg-indigo-50 text-indigo-700 text-xs rounded-md capitalize font-medium">{entry.plan.replace("_", " ")}</span>
-            </div>
-            {saving === entry.tenant_id && <Loader2 className="w-4 h-4 animate-spin text-indigo-500" />}
-          </div>
-          <div className="flex flex-wrap gap-2">
-            {ALL_MODULES.map(mod => {
-              const enabled = entry.enabled_modules.includes(mod);
-              return (
-                <button
-                  key={mod}
-                  type="button"
-                  onClick={() => toggleModule(entry.tenant_id, mod)}
-                  className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-all ${
-                    enabled
-                      ? "bg-indigo-600 border-indigo-600 text-white shadow-sm"
-                      : "bg-white border-gray-200 text-gray-500 hover:border-indigo-400 hover:text-indigo-600"
-                  }`}
-                >
-                  {mod}
-                </button>
-              );
-            })}
-          </div>
+      {error && (
+        <div className="flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+          <span>{error}</span>
         </div>
-      ))}
+      )}
+
+      {entries.map(entry => {
+        const overrideCount = Object.keys(entry.overrides ?? {}).length;
+        const isOpen = expanded === entry.tenant_id;
+        return (
+          <div key={entry.tenant_id} className="bg-white rounded-xl border border-gray-200 shadow-sm p-5">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h3 className="font-semibold text-gray-900">{entry.tenant_name}</h3>
+                <p className="mt-0.5 text-xs text-gray-500">
+                  {entry.enabled_modules.length} modules enabled
+                  {overrideCount > 0 && (
+                    <span className="ml-2 rounded-md bg-amber-50 px-1.5 py-0.5 font-medium text-amber-700">
+                      {overrideCount} override{overrideCount === 1 ? "" : "s"}
+                    </span>
+                  )}
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2">
+                {saving === entry.tenant_id && <Loader2 className="h-4 w-4 animate-spin text-indigo-500" />}
+                {/* The pack is the primary control: pick a bundle and every
+                    feature follows it. Individual switches below are for the
+                    exceptions, not the normal path. */}
+                <label className="text-xs font-medium text-gray-500" htmlFor={`pack-${entry.tenant_id}`}>
+                  Pack
+                </label>
+                <select
+                  id={`pack-${entry.tenant_id}`}
+                  value={entry.plan}
+                  disabled={saving === entry.tenant_id || !catalogue}
+                  onChange={e => setPack(entry.tenant_id, e.target.value)}
+                  className="rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-sm font-medium capitalize text-gray-900 focus:border-indigo-400 focus:outline-none disabled:opacity-50"
+                >
+                  {(catalogue?.packs ?? [entry.plan]).map(p => (
+                    <option key={p} value={p}>{p.replace(/_/g, " ")}</option>
+                  ))}
+                </select>
+                <button
+                  type="button"
+                  onClick={() => setExpanded(isOpen ? null : entry.tenant_id)}
+                  className="rounded-lg border border-gray-200 px-3 py-1.5 text-sm font-medium text-gray-600 hover:border-indigo-400 hover:text-indigo-600"
+                >
+                  {isOpen ? "Hide features" : "Customise"}
+                </button>
+              </div>
+            </div>
+
+            {isOpen && (
+              <div className="mt-5 border-t border-gray-100 pt-4">
+                <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+                  <p className="text-xs text-gray-500">
+                    Switches that differ from the {entry.plan.replace(/_/g, " ")} pack are marked.
+                  </p>
+                  {overrideCount > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => resetToPack(entry)}
+                      disabled={saving === entry.tenant_id}
+                      className="text-xs font-medium text-indigo-600 hover:text-indigo-800 disabled:opacity-50"
+                    >
+                      Reset to pack defaults
+                    </button>
+                  )}
+                </div>
+
+                <div className="mb-5">
+                  <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-400">
+                    Core modules
+                  </h4>
+                  <div className="flex flex-wrap gap-2">
+                    {CORE_MODULES.map(mod => (
+                      <span
+                        key={mod}
+                        title="Included in every pack"
+                        className="rounded-full border border-gray-200 bg-gray-50 px-3 py-1.5 text-xs font-medium text-gray-500"
+                      >
+                        {mod}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+
+                {groups.map(group => (
+                  <div key={group} className="mb-5 last:mb-0">
+                    <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-400">
+                      {humanise(group)}
+                    </h4>
+                    <div className="grid gap-2 sm:grid-cols-2">
+                      {catalogue?.features.filter(f => f.group === group).map(f => {
+                        const on = Boolean(entry.features?.[f.key]);
+                        const isOverride = Object.hasOwn(entry.overrides ?? {}, f.key);
+                        return (
+                          <button
+                            key={f.key}
+                            type="button"
+                            disabled={saving === entry.tenant_id}
+                            onClick={() => toggleFeature(entry, f.key)}
+                            className={`flex items-center justify-between gap-3 rounded-lg border px-3 py-2 text-left text-sm transition-colors disabled:opacity-50 ${
+                              on
+                                ? "border-indigo-200 bg-indigo-50/60 text-gray-900"
+                                : "border-gray-200 bg-white text-gray-500 hover:border-indigo-300"
+                            }`}
+                          >
+                            <span className="flex items-center gap-2 truncate">
+                              <span className="truncate">{humanise(f.key)}</span>
+                              {isOverride && (
+                                <span
+                                  title="Deliberately changed away from the pack default"
+                                  className="shrink-0 rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700"
+                                >
+                                  override
+                                </span>
+                              )}
+                            </span>
+                            {on
+                              ? <ToggleRight className="h-5 w-5 shrink-0 text-indigo-600" />
+                              : <ToggleLeft  className="h-5 w-5 shrink-0 text-gray-300" />}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }

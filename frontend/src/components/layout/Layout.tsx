@@ -11,6 +11,7 @@ import { notificationsApi } from "../../api/endpoints";
 import type { AppNotification } from "../../types";
 import { useAppearance } from "../../store/appearance";
 import { useFramework } from "../../context/FrameworkContext";
+import { useEntitlements } from "../../context/EntitlementsContext";
 import {
   LayoutDashboard, AlertTriangle, CheckSquare, BookOpen,
   ClipboardList, FileText, Building2, LogOut, Shield,
@@ -23,6 +24,29 @@ import {
 
 // roles: null = visible to all authenticated non-auditor users
 // tenant_admin always has access everywhere; ciso is now a regular (but broad) role
+// Nav module -> the entitlement(s) its backend is gated behind.
+//
+// Only modules whose endpoints are ALL behind require_feature appear here.
+// Listing a partly gated module would lock a page the tenant can still use
+// half of, which is worse than showing it and letting the gate answer.
+// Verified against the endpoint files: archiving, cve, ocr, risk_treatment,
+// asset_graph and control_evaluation gate every route; governance gates all 15
+// across two features.
+//
+// A module absent from this table is never locked.
+const MODULE_FEATURES: Record<string, readonly string[]> = {
+  "archiving":              ["archiving"],
+  "asset-graph":            ["asset_cartography"],
+  "control-effectiveness":  ["control_effectiveness"],
+  "cve":                    ["cve_knowledge_base"],
+  "ocr":                    ["ocr_capture"],
+  "risk-treatment":         ["risk_treatment_plans"],
+  // Governance is RACI plus the document repository, gated separately. It stays
+  // reachable while EITHER is enabled, or turning off RACI alone would hide the
+  // document repository with it.
+  "governance":             ["raci_governance", "document_repository"],
+};
+
 const NAV_GROUPS = [
   {
     label: "Core",
@@ -576,6 +600,7 @@ export default function Layout() {
   }, [mobileSidebarOpen]);
 
   const { primaryFramework } = useFramework();
+  const { hasAnyFeature } = useEntitlements();
   const plan        = user?.plan ?? "free_trial";
   const isAdmin     = user?.role === "tenant_admin";
   const isSuperAdmin = user?.role === "super_admin";
@@ -697,14 +722,17 @@ export default function Layout() {
                 {group.items.map(({ to, icon: Icon, label, module, roles }) => {
                   const userRoles = getUserRoles(user);
                   if (roles && !userRoles.some(r => roles.includes(r))) return null;
-                  const locked = false; // reserved for subscription-based module gating
+                  // Was hardwired false with this branch unreachable. The tenant's
+                  // real entitlements now decide it.
+                  const gatedBy = MODULE_FEATURES[module];
+                  const locked = gatedBy ? !hasAnyFeature(gatedBy) : false;
                   if (locked) {
                     return (
                       <button
                         key={to}
                         type="button"
                         onClick={() => navigate("/settings")}
-                        title={`Upgrade to access ${label}`}
+                        title={`${label} is not enabled for your organisation`}
                         className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium w-full transition-all group opacity-50 ${sc.navItem}`}
                       >
                         <Icon className="w-4 h-4 flex-shrink-0" />

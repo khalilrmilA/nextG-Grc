@@ -6,6 +6,7 @@ import { I18nextProvider } from "react-i18next";
 import { HelmetProvider } from "react-helmet-async";
 import App from "./App";
 import { FrameworkProvider } from "./context/FrameworkContext";
+import { EntitlementsProvider } from "./context/EntitlementsContext";
 import "./index.css";
 import "./store/appearance"; // side-effect: applies saved theme/density to <html> immediately
 import i18n from "./i18n";   // side-effect: initialises i18next + applies RTL direction
@@ -65,7 +66,9 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
           <QueryClientProvider client={queryClient}>
             <BrowserRouter>
               <FrameworkProvider>
-                <App />
+                <EntitlementsProvider>
+                  <App />
+                </EntitlementsProvider>
               </FrameworkProvider>
             </BrowserRouter>
           </QueryClientProvider>

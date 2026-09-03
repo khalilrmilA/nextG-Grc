@@ -22,6 +22,7 @@ from app.models.subscription import (
     SubscriptionStatus,
     TIER_LIMITS,
     ELITE_FEATURES,
+    togglable_features,
 )
 from app.models.ai_access import AiAccessRequest, AiUsageQuota
 from app.api.v1.dependencies.auth import get_current_user
@@ -287,19 +288,14 @@ _NON_TOGGLE = {"max_frameworks", "max_admin_users", "max_vendors",
 
 
 def _togglable_features() -> list[tuple[str, str]]:
-    """Every boolean entitlement, with the group it belongs to."""
-    out: list[tuple[str, str]] = []
-    for key in TIER_LIMITS[SubscriptionTier.ENTERPRISE]:
-        if key not in _NON_TOGGLE:
-            out.append((key, "platform"))
-    for key in ELITE_FEATURES:
-        out.append((key, "elite_pack"))
-    seen, uniq = set(), []
-    for key, group in out:
-        if key not in seen:
-            seen.add(key)
-            uniq.append((key, group))
-    return uniq
+    """Every boolean entitlement, with the group it belongs to.
+
+    Delegates to the model so this page, the tenant-facing entitlements
+    endpoint and require_feature all read one list. The local copy this
+    replaced classified by dict iteration order, which put all 29 features in
+    "platform" and left the Elite Pack group empty.
+    """
+    return togglable_features()
 
 
 def _effective(sub: Subscription | None) -> dict:

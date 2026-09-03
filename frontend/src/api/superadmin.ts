@@ -28,6 +28,23 @@ export interface AccessControlEntry {
   tenant_name: string;
   plan: string;
   enabled_modules: string[];
+  /** Effective map: pack defaults with this tenant's overrides applied. */
+  features: Record<string, boolean>;
+  /** Only the deliberate deviations from the pack default. */
+  overrides: Record<string, boolean>;
+}
+
+export interface FeatureCatalogueEntry {
+  key: string;
+  /** "platform" or "elite_pack". Used to group the switches. */
+  group: string;
+}
+
+export interface FeatureCatalogue {
+  packs: string[];
+  features: FeatureCatalogueEntry[];
+  /** pack name -> feature key -> default value for that pack. */
+  pack_defaults: Record<string, Record<string, boolean>>;
 }
 
 export interface TenantSubscription {
@@ -99,9 +116,22 @@ export const superAdminAccessApi = {
   listTenantAccess: () =>
     apiClient.get<AccessControlEntry[]>("/admin/tenant-access").then((r) => r.data),
 
-  updateTenantAccess: (tenant_id: string, enabled_modules: string[]) =>
+  getFeatureCatalogue: () =>
     apiClient
-      .patch(`/admin/tenant-access/${tenant_id}`, { enabled_modules })
+      .get<FeatureCatalogue>("/admin/feature-catalogue")
+      .then((r) => r.data),
+
+  // The body is {pack?, features?}. It previously sent {enabled_modules}, which
+  // TenantAccessUpdate does not declare; pydantic drops unknown fields, so the
+  // request returned 200 having changed nothing and the next refresh discarded
+  // the edit. Sending a shape the endpoint does not read is worse than an error
+  // because it looks like it worked.
+  updateTenantAccess: (
+    tenant_id: string,
+    body: { pack?: string; features?: Record<string, boolean> },
+  ) =>
+    apiClient
+      .patch<AccessControlEntry>(`/admin/tenant-access/${tenant_id}`, body)
       .then((r) => r.data),
 };
 
