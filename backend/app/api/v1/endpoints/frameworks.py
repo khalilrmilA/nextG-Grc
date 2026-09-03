@@ -11,6 +11,7 @@ as an explicit HTTP 424 (never a 5xx — client.ts hard-redirects the SPA to /se
 any 5xx) — never a silently invented suggestion set.
 """
 import logging
+from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -20,7 +21,7 @@ from typing import Annotated
 
 from app.core.database import get_db
 from app.core import ai_quota
-from app.models.framework import Framework, FrameworkControl, ControlCategory, ControlRequirement, FrameworkStatus
+from app.models.framework import Framework, FrameworkControl, ControlCategory, ControlRequirement, FrameworkStatus, FrameworkControlVersion
 from app.api.v1.dependencies import get_current_user, get_tenant_id, get_current_user_optional, get_tenant_id_optional
 from app.api.v1.dependencies.auth import require_roles
 from app.models.user import User, UserRole
@@ -68,6 +69,23 @@ class ControlResponse(BaseModel):
     sort_order: int
     mapped_controls: list
     tags: list
+
+    model_config = {"from_attributes": True}
+
+
+class ControlVersionResponse(BaseModel):
+    """A past snapshot of a control's editable fields (RFP: suivi des modifications
+    réglementaires avec historique — see FrameworkControlVersion's docstring)."""
+    id: str
+    control_id: str
+    version_number: int
+    title: str
+    description: str | None
+    guidance: str | None
+    category: str | None
+    tags: list
+    changed_by_id: str | None
+    created_at: datetime
 
     model_config = {"from_attributes": True}
 
@@ -714,7 +732,7 @@ async def update_control(
     control_db_id: str,
     body: ControlUpdate,
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(require_roles(UserRole.CISO)),
+    current_user: User = Depends(require_roles(UserRole.CISO)),
     tenant_id: str = Depends(get_tenant_id),
 ):
     """Update a control on a tenant-owned framework."""
@@ -729,6 +747,35 @@ async def update_control(
     control = result.scalar_one_or_none()
     if not control:
         raise HTTPException(status_code=404, detail="Control not found")
+
+    # Snapshot the PRE-edit state before applying any change, but only if a
+    # snapshotted field is actually about to change — a PATCH that touches
+    # nothing (or only fields we don't version) shouldn't create version noise.
+    changing = (
+        (body.title is not None and body.title != control.title)
+        or (body.description is not None and body.description != control.description)
+        or (body.guidance is not None and body.guidance != control.guidance)
+        or (body.category is not None and body.category != control.category)
+        or (body.tags is not None and body.tags != control.tags)
+    )
+    if changing:
+        last = (
+            await db.execute(
+                select(func.max(FrameworkControlVersion.version_number)).where(
+                    FrameworkControlVersion.control_id == control.id
+                )
+            )
+        ).scalar_one()
+        db.add(FrameworkControlVersion(
+            control_id=control.id,
+            version_number=(last or 0) + 1,
+            title=control.title,
+            description=control.description,
+            guidance=control.guidance,
+            category=control.category,
+            tags=control.tags,
+            changed_by_id=current_user.id,
+        ))
 
     if body.title is not None:
         control.title = body.title
@@ -756,6 +803,41 @@ async def update_control(
             pass
 
     return ControlResponse.model_validate(control)
+
+
+@router.get("/{framework_id}/controls/{control_db_id}/versions", response_model=list[ControlVersionResponse])
+async def list_control_versions(
+    framework_id: str,
+    control_db_id: str,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(get_current_user),
+    tenant_id: str = Depends(get_tenant_id),
+):
+    """Edit history for a control on a tenant-owned framework, newest first.
+
+    Read access is broader than edit access (any authenticated tenant member,
+    not CISO-only) — same asymmetry as everywhere else GET vs. PATCH is split
+    in this file. Built-in frameworks are never editable, so they never have
+    version rows; ``_get_tenant_framework`` 403s a built-in/foreign framework
+    the same way ``update_control`` does, so history can't leak cross-tenant.
+    """
+    await _get_tenant_framework(db, framework_id, tenant_id)
+
+    control_result = await db.execute(
+        select(FrameworkControl).where(
+            FrameworkControl.id == control_db_id,
+            FrameworkControl.framework_id == framework_id,
+        )
+    )
+    if control_result.scalar_one_or_none() is None:
+        raise HTTPException(status_code=404, detail="Control not found")
+
+    result = await db.execute(
+        select(FrameworkControlVersion)
+        .where(FrameworkControlVersion.control_id == control_db_id)
+        .order_by(FrameworkControlVersion.version_number.desc())
+    )
+    return list(result.scalars().all())
 
 
 @router.delete("/{framework_id}", status_code=status.HTTP_204_NO_CONTENT)

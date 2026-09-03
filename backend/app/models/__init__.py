@@ -1,7 +1,7 @@
 from app.models.tenant import Tenant
 from app.models.user import User, UserRole
 from app.models.ai_access import AiAccessRequest, AiUsageQuota, ApiToken
-from app.models.framework import Framework, FrameworkControl, ControlRequirement
+from app.models.framework import Framework, FrameworkControl, ControlRequirement, FrameworkControlVersion
 from app.models.risk import Risk, RiskAssessment, RiskTreatment
 from app.models.risk_treatment_version import RiskTreatmentVersion
 from app.models.compliance import (
@@ -64,7 +64,7 @@ from app.models.dashboard_layout import DashboardLayout
 
 __all__ = [
     "Tenant", "User", "UserRole",
-    "Framework", "FrameworkControl", "ControlRequirement",
+    "Framework", "FrameworkControl", "ControlRequirement", "FrameworkControlVersion",
     "Risk", "RiskAssessment", "RiskTreatment", "RiskTreatmentVersion",
     "ComplianceAssessment", "ControlAssessment", "Evidence", "ComplianceGap", "UploadedDocument",
     "MandatoryDocument",

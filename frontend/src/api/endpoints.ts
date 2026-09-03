@@ -10,6 +10,7 @@ import type {
   PaginatedResponse,
   Framework,
   FrameworkControl,
+  FrameworkControlVersion,
   ControlAssessmentDetail,
   Audit,
   AuditFinding,
@@ -426,6 +427,11 @@ export const customFrameworkApi = {
   addRequirement: (frameworkId: string, controlDbId: string, data: RequirementCreate) =>
     apiClient
       .post(`/frameworks/${frameworkId}/controls/${controlDbId}/requirements`, data)
+      .then((r) => r.data),
+
+  getControlVersions: (frameworkId: string, controlDbId: string) =>
+    apiClient
+      .get<FrameworkControlVersion[]>(`/frameworks/${frameworkId}/controls/${controlDbId}/versions`)
       .then((r) => r.data),
 };
 

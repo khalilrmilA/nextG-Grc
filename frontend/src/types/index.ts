@@ -94,6 +94,17 @@ export interface FrameworkControl extends BaseEntity {
   tags: string[];
 }
 
+export interface FrameworkControlVersion extends BaseEntity {
+  control_id: string;
+  version_number: number;
+  title: string;
+  description?: string;
+  guidance?: string;
+  category?: string;
+  tags: string[];
+  changed_by_id?: string;
+}
+
 export interface CrosswalkMapping {
   framework: string;
   control: string;

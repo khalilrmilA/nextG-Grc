@@ -101,6 +101,33 @@ class FrameworkControl(Base):
     )
 
 
+class FrameworkControlVersion(Base):
+    """
+    Snapshot of a FrameworkControl's editable fields taken right before an edit
+    replaces them (M/RFP: "suivi des modifications réglementaires avec historique"
+    on the compliance referential — mirrors PolicyVersion / GovernanceDocumentVersion).
+
+    Only the fields an admin can actually change via PATCH /controls/{id} are
+    snapshotted (title/description/guidance/category/tags); control_id/framework_id/
+    parent_id/sort_order/mapped_controls/is_mandatory are structural, not "content".
+    A row is written for the PRE-edit state only when at least one snapshotted field
+    actually changes — the live FrameworkControl row is always the latest version,
+    never duplicated into this table.
+    """
+    __tablename__ = "framework_control_versions"
+
+    control_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("framework_controls.id"), nullable=False, index=True
+    )
+    version_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    title: Mapped[str] = mapped_column(String(500), nullable=False)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    guidance: Mapped[str | None] = mapped_column(Text, nullable=True)
+    category: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    tags: Mapped[list] = mapped_column(JSON, default=list)
+    changed_by_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+
+
 class ControlRequirement(Base):
     """
     Specific implementation requirements for a control.
