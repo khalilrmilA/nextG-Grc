@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams, useLocation } from "react-router-dom";
 import {
   ArrowLeft, Plus, Save, Trash2, Pencil, X, Loader2,
   AlertCircle, CheckCircle, BookOpen, Search, Copy, History, User as UserIcon,
@@ -18,6 +18,7 @@ type Toast = { kind: "ok" | "err"; msg: string } | null;
 export default function EditFrameworkPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
 
   const [fw, setFw] = useState<Framework | null>(null);
   const [controls, setControls] = useState<FrameworkControl[]>([]);
@@ -34,6 +35,18 @@ export default function EditFrameworkPage() {
 
   // Add-control modal
   const [addOpen, setAddOpen] = useState(false);
+  const [addDraft, setAddDraft] = useState<{ title: string; description?: string; guidance?: string } | null>(null);
+
+  // A "Draft framework control" prefill from RegulatoryUpdatesPage — open
+  // the add-control modal pre-filled instead of creating anything directly.
+  useEffect(() => {
+    const draft = (location.state as any)?.controlDraft;
+    if (!draft) return;
+    setAddDraft({ title: draft.title, description: draft.description, guidance: draft.guidance });
+    setAddOpen(true);
+    navigate(location.pathname, { replace: true, state: {} });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.state]);
 
   // Per-row inline-edit state
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -89,15 +102,19 @@ export default function EditFrameworkPage() {
     }
   }
 
-  async function handleAdd(data: { control_id: string; title: string; description?: string; category?: string }) {
+  async function handleAdd(data: { control_id: string; title: string; description?: string; guidance?: string; category?: string }) {
     if (!fw) return;
     try {
       const created = await customFrameworkApi.addControl(fw.id, { ...data, tags: [] });
       setControls(prev => [...prev, created]);
       setAddOpen(false);
+      setAddDraft(null);
       flash("ok", "Control added");
-    } catch {
-      flash("err", "Failed to add control");
+    } catch (err: any) {
+      const msg = err?.response?.status === 403
+        ? "You don't have permission to add controls to this framework"
+        : "Failed to add control";
+      flash("err", msg);
     }
   }
 
@@ -290,7 +307,14 @@ export default function EditFrameworkPage() {
         )}
       </div>
 
-      {addOpen && <AddControlModal onClose={() => setAddOpen(false)} onSave={handleAdd} currentFrameworkId={fw.id} />}
+      {addOpen && (
+        <AddControlModal
+          onClose={() => { setAddOpen(false); setAddDraft(null); }}
+          onSave={handleAdd}
+          currentFrameworkId={fw.id}
+          initial={addDraft ?? undefined}
+        />
+      )}
       {historyControl && (
         <ControlHistoryModal
           frameworkId={fw.id}
@@ -421,17 +445,20 @@ function AddControlModal({
   onClose,
   onSave,
   currentFrameworkId,
+  initial,
 }: {
   readonly onClose: () => void;
-  readonly onSave: (data: { control_id: string; title: string; description?: string; category?: string }) => void;
+  readonly onSave: (data: { control_id: string; title: string; description?: string; guidance?: string; category?: string }) => void;
   readonly currentFrameworkId: string;
+  readonly initial?: { title: string; description?: string; guidance?: string };
 }) {
   const [tab, setTab] = useState<"new" | "import">("new");
 
   // "Create from scratch" fields
   const [controlId, setControlId] = useState("");
-  const [title, setTitle] = useState("");
-  const [description, setDescription] = useState("");
+  const [title, setTitle] = useState(initial?.title ?? "");
+  const [description, setDescription] = useState(initial?.description ?? "");
+  const [guidance, setGuidance] = useState(initial?.guidance ?? "");
   const [category, setCategory] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
@@ -469,6 +496,7 @@ function AddControlModal({
     setControlId(ctrl.control_id);
     setTitle(ctrl.title);
     setDescription(ctrl.description ?? "");
+    setGuidance(ctrl.guidance ?? "");
     setCategory(ctrl.category ?? "");
   }
 
@@ -486,6 +514,7 @@ function AddControlModal({
       control_id: controlId.trim(),
       title: title.trim(),
       description: description.trim() || undefined,
+      guidance: guidance.trim() || undefined,
       category: category || undefined,
     });
     setSubmitting(false);
@@ -620,6 +649,16 @@ function AddControlModal({
               value={description}
               onChange={e => setDescription(e.target.value)}
               placeholder="What does this control require?"
+              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Guidance</label>
+            <textarea
+              rows={2}
+              value={guidance}
+              onChange={e => setGuidance(e.target.value)}
+              placeholder="Implementation notes or references for this control"
               className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
           </div>

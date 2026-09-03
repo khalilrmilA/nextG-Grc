@@ -796,3 +796,48 @@ async def reject_update(
         raise HTTPException(404, "Update not found")
     await db.delete(u)
     await db.commit()
+
+
+# ─── Regulatory Update → Framework Control draft ───────────────────────────
+# No new AI call: reuses the fields the triage in POST /fetch-news already
+# produced (title, summary, url, deadline). The frontend lets the user pick
+# which of the update's `affected_frameworks` to file this under, then opens
+# that framework's editor with these fields pre-filled into the existing
+# "Add control" form — nothing is written to any Framework here.
+
+class ControlDraft(BaseModel):
+    title: str
+    description: str | None
+    guidance: str
+    affected_frameworks: list[str]
+    source_update_id: str
+
+
+@router.get("/{uid}/control-draft", response_model=ControlDraft)
+async def get_update_control_draft(
+    uid: str,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    _: Annotated[User, Depends(get_current_user)],
+    tenant_id: Annotated[str, Depends(get_tenant_id)],
+):
+    r = await db.execute(select(RegulatoryUpdate).where(RegulatoryUpdate.id == uid, RegulatoryUpdate.tenant_id == tenant_id))
+    u = r.scalar_one_or_none()
+    if not u:
+        raise HTTPException(404, "Update not found")
+
+    guidance_parts = [f"Sourced from regulatory update \"{u.title}\""]
+    if u.regulation_name:
+        guidance_parts.append(f"({u.regulation_name})")
+    if u.deadline:
+        guidance_parts.append(f"— deadline {u.deadline}")
+    guidance = " ".join(guidance_parts) + "."
+    if u.url:
+        guidance += f" Reference: {u.url}"
+
+    return ControlDraft(
+        title=(f"{u.regulation_name}: {u.title}" if u.regulation_name else u.title),
+        description=u.description,
+        guidance=guidance,
+        affected_frameworks=list(u.affected_frameworks or []),
+        source_update_id=u.id,
+    )

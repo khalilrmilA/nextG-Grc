@@ -1128,6 +1128,7 @@ export const incidentsApi = {
   create: (data: Record<string, unknown>) => apiClient.post("/incidents", data).then((r) => r.data),
   update: (id: string, data: Record<string, unknown>) => apiClient.patch(`/incidents/${id}`, data).then((r) => r.data),
   delete: (id: string) => apiClient.delete(`/incidents/${id}`),
+  scenarioDraft: (id: string) => apiClient.get(`/incidents/${id}/scenario-draft`).then((r) => r.data),
 };
 
 // ─── Vulnerabilities ────────────────────────
@@ -1227,6 +1228,7 @@ export const regulatoryApi = {
     apiClient.post("/regulatory/fetch-news").then((r) => r.data as { created: number; skipped: number; message: string; titles: string[] }),
   approve: (id: string) => apiClient.post(`/regulatory/${id}/approve`).then((r) => r.data),
   reject: (id: string) => apiClient.delete(`/regulatory/${id}/reject`),
+  controlDraft: (id: string) => apiClient.get(`/regulatory/${id}/control-draft`).then((r) => r.data),
 };
 
 // ─── Activity Log ───────────────────────────

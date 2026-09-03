@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
-import { Plus, Search, X, Loader2, Filter, AlertTriangle, ShieldAlert, Clock, Flame } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+import { Plus, Search, X, Loader2, Filter, AlertTriangle, ShieldAlert, Clock, Flame, GitCommitHorizontal } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { incidentsApi, vulnerabilitiesApi, assetsApi } from "@/api/endpoints";
 import { MultiSelect } from "@/components/common/MultiSelect";
@@ -30,6 +31,7 @@ const STATUS_OPTIONS = ["open", "investigating", "contained", "resolved", "close
 
 export default function IncidentsPage() {
   const { t } = useTranslation();
+  const navigate = useNavigate();
   const [items, setItems] = useState<any[]>([]);
   const [stats, setStats] = useState<any>({ total: 0, open: 0, investigating: 0, critical: 0 });
   const [loading, setLoading] = useState(true);
@@ -39,6 +41,21 @@ export default function IncidentsPage() {
   const [statusFilter, setStatusFilter] = useState("");
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [draftingId, setDraftingId] = useState<string | null>(null);
+  const [draftError, setDraftError] = useState("");
+
+  async function createScenarioFromIncident(incidentId: string) {
+    setDraftingId(incidentId);
+    setDraftError("");
+    try {
+      const draft = await incidentsApi.scenarioDraft(incidentId);
+      navigate("/risk-scenarios", { state: { draft } });
+    } catch {
+      setDraftError(t("incidents.scenario_draft_failed", "Could not draft a risk scenario from this incident"));
+    } finally {
+      setDraftingId(null);
+    }
+  }
 
   const emptyForm = {
     title: "",
@@ -117,6 +134,7 @@ export default function IncidentsPage() {
 
   return (
     <div className="p-8 max-w-7xl space-y-6">
+      {draftError && <div className="p-3 bg-red-50 text-red-700 rounded-xl text-sm">{draftError}</div>}
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
@@ -195,6 +213,7 @@ export default function IncidentsPage() {
                 <th className="text-left px-6 py-3 font-medium text-gray-500">{t("incidents.col_status")}</th>
                 <th className="text-left px-6 py-3 font-medium text-gray-500">{t("incidents.col_detected")}</th>
                 <th className="text-left px-6 py-3 font-medium text-gray-500">{t("incidents.col_assigned")}</th>
+                <th className="text-right px-6 py-3 font-medium text-gray-500"></th>
               </tr>
             </thead>
             <tbody>
@@ -214,6 +233,17 @@ export default function IncidentsPage() {
                   </td>
                   <td className="px-6 py-4 text-gray-500">{item.detected_at ? new Date(item.detected_at).toLocaleDateString() : "-"}</td>
                   <td className="px-6 py-4 text-gray-500">{item.assigned_to_id || "-"}</td>
+                  <td className="px-6 py-4 text-right">
+                    <button
+                      type="button"
+                      onClick={() => createScenarioFromIncident(item.id)}
+                      disabled={draftingId === item.id}
+                      title={t("incidents.create_scenario", "Create risk scenario from this incident")}
+                      className="inline-flex items-center justify-center p-1.5 rounded-lg text-blue-600 hover:bg-blue-50 hover:text-blue-800 disabled:opacity-50"
+                    >
+                      {draftingId === item.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <GitCommitHorizontal className="w-4 h-4" />}
+                    </button>
+                  </td>
                 </tr>
               ))}
             </tbody>

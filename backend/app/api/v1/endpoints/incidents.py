@@ -197,3 +197,82 @@ async def delete_incident(iid: str, db: AsyncSession = Depends(get_db), _: User 
     inc = r.scalar_one_or_none()
     if not inc: raise HTTPException(404, "Incident not found")
     await db.delete(inc); await db.commit()
+
+
+# ─── Incident → Risk Scenario draft ────────────────────────────────────────
+# Deterministic (no AI call): turns an incident that already happened into a
+# pre-filled Risk Scenario draft. Nothing is persisted here — the frontend
+# takes this payload, lets the user review/edit it, then POSTs it to the
+# normal POST /risk-scenarios create endpoint like any manually-entered
+# scenario. Keeps Incidents and Risk Scenarios connected without letting an
+# incident silently spawn a scenario record behind the user's back.
+
+_CATEGORY_TO_THREAT_CATEGORY: dict[str, str] = {
+    "data_breach": "cyber_attack",
+    "unauthorized_access": "cyber_attack",
+    "malware": "cyber_attack",
+    "dos_attack": "cyber_attack",
+    "phishing": "social_engineering",
+    "insider_threat": "insider_threat",
+    "physical_security": "physical",
+    "system_outage": "technical_failure",
+    "policy_violation": "human_error",
+}
+
+_SEVERITY_TO_PROBABILITY: dict[str, int] = {"critical": 5, "high": 5, "medium": 4, "low": 3}
+_SEVERITY_TO_IMPACT: dict[str, int] = {"critical": 5, "high": 4, "medium": 3, "low": 2}
+
+
+class ScenarioDraft(BaseModel):
+    name: str
+    description: str | None
+    justification: str
+    asset_ids: list[str]
+    threat_ids: list[str]
+    current_probability: int
+    current_impact: int
+    source_incident_id: str
+
+
+@router.get("/{iid}/scenario-draft", response_model=ScenarioDraft)
+async def get_incident_scenario_draft(iid: str, db: AsyncSession = Depends(get_db), _: User = Depends(get_current_user), tenant_id: str = Depends(get_tenant_id)):
+    from app.models.threat import Threat
+
+    r = await db.execute(select(Incident).where(Incident.id == iid, Incident.tenant_id == tenant_id))
+    inc = r.scalar_one_or_none()
+    if not inc: raise HTTPException(404, "Incident not found")
+
+    severity = inc.severity.value if hasattr(inc.severity, "value") else str(inc.severity)
+    category = inc.category.value if hasattr(inc.category, "value") else str(inc.category)
+
+    threat_ids: list[str] = []
+    threat_category = _CATEGORY_TO_THREAT_CATEGORY.get(category)
+    if threat_category:
+        tr = await db.execute(
+            select(Threat.id)
+            .where(
+                (Threat.is_builtin == True) | (Threat.tenant_id == tenant_id),  # noqa: E712
+                Threat.is_pending == False,  # noqa: E712
+                Threat.category == threat_category,
+            )
+            .limit(5)
+        )
+        threat_ids = [row[0] for row in tr.all()]
+
+    detected = inc.detected_at or "an unknown date"
+    justification = (
+        f"Drafted from incident \"{inc.title}\" (severity: {severity}, detected {detected}). "
+        f"This scenario captures the risk this incident demonstrated actually materialized — "
+        f"review and adjust before saving."
+    )
+
+    return ScenarioDraft(
+        name=f"[From incident] {inc.title}",
+        description=inc.description,
+        justification=justification,
+        asset_ids=list(inc.affected_asset_ids or []),
+        threat_ids=threat_ids,
+        current_probability=_SEVERITY_TO_PROBABILITY.get(severity, 3),
+        current_impact=_SEVERITY_TO_IMPACT.get(severity, 3),
+        source_incident_id=inc.id,
+    )

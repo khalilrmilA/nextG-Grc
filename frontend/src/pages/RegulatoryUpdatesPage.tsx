@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   Plus,
   Search,
@@ -16,9 +17,12 @@ import {
   ThumbsUp,
   ThumbsDown,
   Clock,
+  FilePlus2,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { regulatoryApi } from "@/api/endpoints";
+import { regulatoryApi, frameworksApi } from "@/api/endpoints";
+import type { Framework } from "@/types";
+import { useAuthStore, hasAnyRole } from "@/store/auth";
 
 const IMPACT_BADGE: Record<string, string> = {
   critical: "bg-red-100 text-red-700 border-red-200",
@@ -45,6 +49,9 @@ function formatLabel(s: string) {
 
 export default function RegulatoryUpdatesPage() {
   const { t } = useTranslation();
+  const navigate = useNavigate();
+  const user = useAuthStore((u) => u);
+  const canDraftControl = hasAnyRole(user, ["ciso", "tenant_admin", "super_admin"]);
   const [items, setItems] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
@@ -56,6 +63,47 @@ export default function RegulatoryUpdatesPage() {
   const [fetching, setFetching] = useState(false);
   const [fetchResult, setFetchResult] = useState<{ created: number; message: string } | null>(null);
   const [approving, setApproving] = useState<string | null>(null);
+
+  // "Draft framework control" (see EditFrameworkPage) — a tenant-owned
+  // framework must be chosen since only editable (non-builtin) frameworks
+  // accept new controls.
+  const [draftingFor, setDraftingFor] = useState<string | null>(null);
+  const [draftPicker, setDraftPicker] = useState<{ updateId: string; draft: any; candidates: Framework[]; hasMatch: boolean } | null>(null);
+  const [draftTargetId, setDraftTargetId] = useState("");
+  const [draftError, setDraftError] = useState("");
+
+  async function startControlDraft(updateId: string) {
+    setDraftingFor(updateId);
+    setDraftError("");
+    try {
+      const [draft, allFrameworks] = await Promise.all([
+        regulatoryApi.controlDraft(updateId),
+        frameworksApi.list(),
+      ]);
+      const editable = allFrameworks.filter((f) => !f.is_builtin);
+      const names: string[] = (draft.affected_frameworks || [])
+        .map((n: string) => n.trim().toLowerCase())
+        .filter((n: string) => n.length > 0);
+      const matched = editable.filter((f) =>
+        names.some((n) => f.name.toLowerCase().includes(n) || n.includes(f.name.toLowerCase()) || f.short_name.toLowerCase().includes(n))
+      );
+      if (matched.length === 1) {
+        navigate(`/framework/${matched[0].id}/edit`, { state: { controlDraft: draft } });
+        return;
+      }
+      const candidates = matched.length > 0 ? matched : editable;
+      if (candidates.length === 0) {
+        setDraftError(t("regulatory.no_editable_frameworks", "No editable framework found. Use \"Customize\" on the relevant framework first, then try again."));
+        return;
+      }
+      setDraftTargetId(candidates[0].id);
+      setDraftPicker({ updateId, draft, candidates, hasMatch: matched.length > 0 });
+    } catch {
+      setDraftError(t("regulatory.control_draft_failed", "Could not draft a framework control from this update"));
+    } finally {
+      setDraftingFor(null);
+    }
+  }
 
   const [form, setForm] = useState({
     title: "",
@@ -167,6 +215,7 @@ export default function RegulatoryUpdatesPage() {
 
   return (
     <div className="p-8 max-w-7xl space-y-6">
+      {draftError && <div className="p-3 bg-red-50 text-red-700 rounded-xl text-sm">{draftError}</div>}
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
@@ -446,6 +495,19 @@ export default function RegulatoryUpdatesPage() {
                               </p>
                             </div>
                           )}
+                          {canDraftControl && (
+                            <div>
+                              <button
+                                type="button"
+                                onClick={(e) => { e.stopPropagation(); startControlDraft(item.id); }}
+                                disabled={draftingFor === item.id}
+                                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-200 text-gray-700 text-xs font-medium rounded-lg hover:bg-gray-50 disabled:opacity-50 transition-colors"
+                              >
+                                {draftingFor === item.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <FilePlus2 className="w-3 h-3" />}
+                                {t("regulatory.btn_draft_control", "Draft framework control")}
+                              </button>
+                            </div>
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -580,6 +642,48 @@ export default function RegulatoryUpdatesPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Framework picker for "Draft framework control" */}
+      {draftPicker && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setDraftPicker(null)} />
+          <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-md mx-4 p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-semibold text-gray-900">{t("regulatory.pick_framework_title", "Which framework?")}</h2>
+              <button onClick={() => setDraftPicker(null)} className="text-gray-400 hover:text-gray-600"><X className="w-5 h-5" /></button>
+            </div>
+            <p className="text-sm text-gray-500 mb-4">
+              {draftPicker.hasMatch
+                ? t("regulatory.pick_framework_body_matched", "This update affects more than one of your editable frameworks. Choose which one should get the new control draft.")
+                : t("regulatory.pick_framework_body_unmatched", "Couldn't automatically match this update to one of your editable frameworks. Choose which one should get the new control draft.")}
+            </p>
+            <select
+              value={draftTargetId}
+              onChange={(e) => setDraftTargetId(e.target.value)}
+              className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 mb-4"
+            >
+              {draftPicker.candidates.map((f) => (
+                <option key={f.id} value={f.id}>{f.name} ({f.short_name})</option>
+              ))}
+            </select>
+            <div className="flex justify-end gap-3">
+              <button type="button" onClick={() => setDraftPicker(null)} className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800">
+                {t("regulatory.btn_cancel")}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  navigate(`/framework/${draftTargetId}/edit`, { state: { controlDraft: draftPicker.draft } });
+                  setDraftPicker(null);
+                }}
+                className="inline-flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-xl text-sm font-medium hover:bg-blue-700"
+              >
+                {t("regulatory.btn_continue", "Continue")}
+              </button>
+            </div>
           </div>
         </div>
       )}

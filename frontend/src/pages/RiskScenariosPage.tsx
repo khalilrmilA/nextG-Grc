@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import { Plus, Search, X, Loader2, Filter, History, GitCommitHorizontal, AlertTriangle, ArrowUpDown } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { riskScenariosApi, scenarioVersionsApi, assetsApi, vulnerabilitiesApi, threatsApi, appliedControlsApi } from "@/api/endpoints";
@@ -222,6 +223,8 @@ const EMPTY_FORM = {
 
 export default function RiskScenariosPage() {
   const { t } = useTranslation();
+  const location = useLocation();
+  const navigate = useNavigate();
   const [items, setItems] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
@@ -238,6 +241,27 @@ export default function RiskScenariosPage() {
   const [historyFor, setHistoryFor] = useState<{ id: string; name: string } | null>(null);
 
   const [form, setForm] = useState(EMPTY_FORM);
+
+  // Prefill from an "Create risk scenario from this incident" draft
+  // (see IncidentsPage) passed via router state. Consumed once, then the
+  // state is cleared so a refresh/back-navigation doesn't reopen the modal.
+  useEffect(() => {
+    const draft = (location.state as any)?.draft;
+    if (!draft) return;
+    setForm({
+      ...EMPTY_FORM,
+      name: draft.name ?? "",
+      description: draft.description ?? "",
+      justification: draft.justification ?? "",
+      asset_ids: draft.asset_ids ?? [],
+      threat_ids: draft.threat_ids ?? [],
+      current_probability: draft.current_probability ?? EMPTY_FORM.current_probability,
+      current_impact: draft.current_impact ?? EMPTY_FORM.current_impact,
+    });
+    setShowModal(true);
+    navigate(location.pathname, { replace: true, state: {} });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.state]);
 
   async function load() {
     try {
