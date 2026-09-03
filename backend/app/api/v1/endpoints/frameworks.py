@@ -286,13 +286,29 @@ async def get_ai_control_suggestions(
         if use_case_text else "USE CASE: not provided"
     )
 
+    # industry/region are free text on the wire (the frontend's <select> is UI-only, not
+    # a server-side constraint) — clean_field() only single-lines and length-caps, it does
+    # not neutralise fence look-alikes or mark the text as data-not-instructions, so it must
+    # not be treated as trusted context (same class of bug already fixed for Framework.name
+    # in compliance.py and feed titles in regulatory.py).
+    industry_text = ai_provider.clean_field(body.industry, 100)
+    region_text = ai_provider.clean_field(body.region, 100)
+    industry_block = (
+        ai_provider.delimit_untrusted(industry_text, "INDUSTRY", max_len=len(industry_text) + 1)
+        if industry_text else "not stated"
+    )
+    region_block = (
+        ai_provider.delimit_untrusted(region_text, "REGION", max_len=len(region_text) + 1)
+        if region_text else "Global"
+    )
+
     task = "framework_builder"
     try:
         system = ai_prompts.system_prompt(task, lang=lang)
         user = ai_prompts.render_user_prompt(
             task,
-            industry=ai_provider.clean_field(body.industry, 100) or "not stated",
-            region=ai_provider.clean_field(body.region, 100) or "Global",
+            industry=industry_block,
+            region=region_block,
             use_case_block=use_case_block,
             selected_count=len(selected),
             shown_count=len(shown),
