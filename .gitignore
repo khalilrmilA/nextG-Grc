@@ -60,6 +60,8 @@ backend/grc_dev.db
 backend/grc_dev.db.bak-*
 backend/grc_dev.db.pre-*
 backend/grc_dev.db.*.bak
+backend/grc_dev.db-wal
+backend/grc_dev.db-shm
 
 # Local DB backups (rotated by scripts.backup_db)
 backend/backups/
