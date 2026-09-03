@@ -53,12 +53,12 @@ air-gapped: every outbound feed is off by default.
 =======================================================
   grceye-appliance 1.0.0
   Host : appliance
-  URL  : https://10.0.2.15/
+  URL  : http://10.0.2.15/
 =======================================================
 
   FIRST LOGIN
   -----------
-  Web console : https://10.0.2.15/
+  Web console : http://10.0.2.15/
 
   Administrator
     Username  : admin@appliance.lan
@@ -84,13 +84,16 @@ credential.
 
 ## First login
 
-Browse to the address shown. The browser warns about the certificate, because
-the appliance signs its own. That is expected. Click through it, or install the
-certificate on client machines, or replace it with one from your own CA.
+Browse to the address shown. No certificate warning: the console is served over
+plain HTTP on port 80.
 
-Anyone on the same network can reach it. The dashboard is served on 443 and the
-application backend is bound to localhost only, so the web server is the only
-way in.
+That means traffic between the browser and the appliance is **not encrypted**.
+This is intended for a trusted internal network. Do not expose the appliance
+directly to the internet; put it behind your own reverse proxy or VPN if remote
+access is needed.
+
+Anyone on the same network can reach it. The application backend is bound to
+localhost only, so the web server is the only way in.
 
 ---
 

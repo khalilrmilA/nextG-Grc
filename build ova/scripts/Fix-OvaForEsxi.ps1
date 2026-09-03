@@ -55,6 +55,28 @@ try {
     $xml = [regex]::Replace($xml, "<vbox:Machine.*?</vbox:Machine>", "",
         [System.Text.RegularExpressions.RegexOptions]::Singleline)
 
+    # Strip hardware ESXi has no device for. VirtualBox adds a sound card to
+    # every VM it exports, and ESXi does not ignore it, it refuses the whole
+    # upload:
+    #
+    #   OVF hardware element 'ResourceType' with instance ID '6':
+    #   No support for the virtual hardware device type '35'
+    #
+    # ResourceType 35 is an audio adapter; 23 is a USB controller, which older
+    # ESXi builds reject the same way. The appliance has no use for either.
+    $unsupported = @{ 35 = "sound card"; 23 = "USB controller" }
+    foreach ($rt in $unsupported.Keys) {
+        $pattern = "(?s)[ \t]*<Item>(?:(?!</Item>).)*?<rasd:ResourceType>$rt</rasd:ResourceType>.*?</Item>\r?\n?"
+        $before = $xml.Length
+        $xml = [regex]::Replace($xml, $pattern, "")
+        if ($xml.Length -ne $before) {
+            Write-Host "[fix] removed the $($unsupported[$rt]) (ResourceType $rt), which ESXi refuses"
+        }
+    }
+    if ($xml -match "<rasd:ResourceType>35</rasd:ResourceType>") {
+        throw "a sound card survived the strip; ESXi would reject this OVA"
+    }
+
     # Let the guest read vApp properties through VMware Tools.
     if ($xml -notmatch 'ovf:transport=') {
         $xml = [regex]::Replace($xml, "<VirtualHardwareSection>",

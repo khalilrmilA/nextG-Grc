@@ -92,6 +92,18 @@ $ErrorActionPreference = "Stop"
 $BuildPassword     = $env:BUILD_PASSWORD
 $BuildPasswordHash = $env:BUILD_PASSWORD_HASH
 $GrubPassword      = $env:GRUB_PASSWORD
+
+# Optional, and from the environment for the same reason as the three above: it
+# is the fixed platform super-administrator password baked into the image. Unset
+# means the old behaviour -- firstboot generates a random one per deployment.
+# Must satisfy app/core/password_policy.py (12+ characters, including a symbol)
+# or create-admin rejects it at first boot, after the image is already built.
+$SuperAdminPassword = $env:SUPERADMIN_PASSWORD
+if (-not [string]::IsNullOrWhiteSpace($SuperAdminPassword) -and
+    ($SuperAdminPassword.Length -lt 12 -or $SuperAdminPassword -notmatch '[^\w\s]')) {
+    throw "SUPERADMIN_PASSWORD must be at least 12 characters and contain a symbol, or create-admin will reject it at first boot."
+}
+
 foreach ($pair in @(
     @{ Name = 'BUILD_PASSWORD';      Value = $BuildPassword },
     @{ Name = 'BUILD_PASSWORD_HASH'; Value = $BuildPasswordHash },
@@ -248,6 +260,7 @@ try {
         "-var", "support_public_key=$SupportPublicKey",
         "-var", "license_public_key=$LicensePublicKey",
         "-var", "license_enforcement=$LicenseEnforcement",
+        "-var", "superadmin_password=$SuperAdminPassword",
         "-var", "headless=$headlessArg"
     )
     if ($IsoUrl) {

@@ -738,6 +738,22 @@ export const subscriptionsApi = {
     apiClient
       .post<{ checkout_url: string }>("/subscriptions/checkout", { tier, billing_cycle })
       .then((r) => r.data),
+
+  /**
+   * What this tenant may actually use.
+   *
+   * features is computed with the same has_feature() that require_feature
+   * enforces with, so the navigation cannot offer a page whose endpoints
+   * answer 402. Do not swap this for /current/limits: that is the merged tier
+   * map, which does not apply Elite god mode and would hide features an Elite
+   * tenant is entitled to.
+   */
+  getEntitlements: () =>
+    apiClient
+      .get<{ tier: string; features: Record<string, boolean>; limits: Record<string, unknown> }>(
+        "/subscriptions/current/entitlements",
+      )
+      .then((r) => r.data),
 };
 
 // ─── Notifications ────────────────────────────

@@ -8,7 +8,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_db
 from app.api.v1.dependencies.auth import get_current_user, get_tenant_id, require_roles
 from app.models.user import User, UserRole
-from app.models.subscription import Subscription, SubscriptionTier, SubscriptionStatus, TIER_LIMITS
+from app.models.subscription import (
+    Subscription,
+    SubscriptionTier,
+    SubscriptionStatus,
+    TIER_LIMITS,
+    togglable_features,
+)
 
 router = APIRouter()
 
@@ -86,3 +92,64 @@ async def get_limits(db: AsyncSession = Depends(get_db), _: User = Depends(get_c
     if not sub:
         return TIER_LIMITS[SubscriptionTier.STARTER]
     return sub.limits
+
+
+class EntitlementsOut(BaseModel):
+    """What the signed-in tenant may actually use."""
+    tier: str
+    # feature key -> allowed. Computed with the SAME has_feature() that
+    # require_feature enforces with, so the two cannot disagree.
+    features: dict[str, bool]
+    # Numeric quotas (max_vendors, max_frameworks, ...). Shown, never toggled.
+    limits: dict
+
+
+@router.get("/current/entitlements", response_model=EntitlementsOut)
+async def get_entitlements(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    tenant_id: str = Depends(get_tenant_id),
+):
+    """The feature map the dashboard gates its navigation on.
+
+    This exists because the frontend previously had no entitlement source at
+    all: every module was rendered for every tenant, and a blocked one only
+    revealed itself as a 402 after the user clicked it. Hiding it needs the
+    same answer the gate gives, which is why this calls has_feature rather than
+    reading sub.limits. They are not equivalent: limits is the merged tier map,
+    while has_feature also applies Elite god mode and lets an explicit override
+    win over it. Gating the UI on limits would hide features an Elite tenant is
+    entitled to.
+
+    Super admins are not tenant-scoped and bypass require_feature entirely, so
+    they get everything enabled here too. Reporting anything else would hide
+    parts of the platform from the person administering it.
+    """
+    keys = [k for k, _ in togglable_features()]
+
+    if current_user.role == UserRole.SUPER_ADMIN:
+        return EntitlementsOut(
+            tier="super_admin",
+            features={k: True for k in keys},
+            limits=TIER_LIMITS[SubscriptionTier.ENTERPRISE],
+        )
+
+    r = await db.execute(select(Subscription).where(Subscription.tenant_id == tenant_id))
+    sub = r.scalar_one_or_none()
+
+    if not sub:
+        # No subscription row: fall back to Starter rather than unlocking
+        # everything. Failing open here would defeat the gate for any tenant
+        # whose row is missing.
+        base = TIER_LIMITS[SubscriptionTier.STARTER]
+        return EntitlementsOut(
+            tier=SubscriptionTier.STARTER.value,
+            features={k: bool(base.get(k, False)) for k in keys},
+            limits=base,
+        )
+
+    return EntitlementsOut(
+        tier=sub.tier.value,
+        features={k: sub.has_feature(k) for k in keys},
+        limits=sub.limits,
+    )

@@ -1,0 +1,82 @@
+#cloud-config
+# Autoinstall seed for the OFFLINE appliance ISO.
+#
+# Rendered by scripts/build-offline-iso.sh, which fills in the doubled-at
+# placeholders below and refuses to build if any survive.
+#
+# HOW THIS DIFFERS FROM THE NETWORK ISO
+#
+# The network ISO installs plain Ubuntu and then spends 40 to 60 minutes on the
+# customer's machine downloading packages and compiling the backend. This one
+# carries the finished appliance filesystem and tells the installer to lay that
+# down instead, which takes about five minutes and needs no internet at all.
+#
+# The whole mechanism is one line: source.id names an entry we added to
+# /casper/install-sources.yaml pointing at our squashfs. Everything else here
+# exists to keep the result a valid, generic, sealed appliance.
+autoinstall:
+  version: 1
+  locale: en_US.UTF-8
+  keyboard:
+    layout: us
+
+  # The appliance filesystem, not Ubuntu's.
+  source:
+    id: grceye-appliance
+    # No driver hunt: that reaches out to the network, which is exactly what
+    # this ISO exists to avoid.
+    search_drivers: false
+
+  # No "network:" and no "apt:" block here, deliberately.
+  #
+  # Both were tried and both made things worse. Forcing offline behaviour with
+  #   network: {version: 2, ethernets: {}}
+  #   apt: {fallback: offline-install}      then  apt: {preserve_sources_list: true}
+  # steers subiquity into an offline apt path that crashes on its own mount
+  # point, failing the install after every other stage has succeeded:
+  #   configure_apt: [Errno 17] File exists: '/tmp/.../mount/cdrom'
+  #
+  # A stock Ubuntu ISO autoinstalls offline without that error, so the fix is to
+  # stop pushing and let subiquity discover for itself that there is no network,
+  # exactly as stock does. Nothing needs downloading regardless: the source below
+  # is a complete filesystem with every package already in it.
+  #
+  # The appliance configures its own network on first boot, from DHCP or the
+  # console menu, so nothing is lost by staying quiet here.
+
+  storage:
+    layout:
+      name: lvm
+
+  # subiquity refuses to install without an identity. The account is given a
+  # 32 character random password generated at ISO build time and never written
+  # down, and reseal-target.sh below removes it entirely before first boot.
+  identity:
+    hostname: @@HOSTNAME@@
+    realname: Appliance setup
+    username: setup
+    password: "@@SETUP_PASSWORD_HASH@@"
+
+  # openssh-server is already in the appliance image, and its postinst would
+  # regenerate host keys at install time. Each deployment must generate its own
+  # on first boot instead, so the same keys are never shared between customers.
+  ssh:
+    install-server: false
+
+  user-data:
+    disable_root: true
+
+  late-commands:
+    # subiquity's lvm layout leaves the rest of the volume group unallocated.
+    # On the 2 TB array somebody installs this on, that would strand almost the
+    # whole disk. Neither command is fatal: on a disk with nothing free,
+    # lvextend exits non zero and that is correct.
+    - curtin in-target --target=/target -- sh -c 'lvextend -l +100%FREE /dev/mapper/ubuntu--vg-ubuntu--lv || true'
+    - curtin in-target --target=/target -- sh -c 'resize2fs /dev/mapper/ubuntu--vg-ubuntu--lv || true'
+
+    # MANDATORY, not a tidy-up. The installer creates the identity account above
+    # with a real password hash, and copies /var/log/installer/autoinstall-user-data
+    # into the installed system: a file whose own upstream comment says it
+    # "contains a password hash". Every ISO handed out is byte identical, so
+    # without this every customer would receive the same credential.
+    - /cdrom/appliance/reseal-target.sh /target
