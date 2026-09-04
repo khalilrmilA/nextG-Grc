@@ -201,7 +201,7 @@ export default function AssetGraphPage() {
   useEffect(() => { loadGraph(); /* eslint-disable-next-line */ }, [entityFilter, assetTypeFilter]);
   useEffect(() => { loadSidebars(); }, []);
   useEffect(() => {
-    assetsApi.list({ page_size: 500 }).then((d: any) => {
+    assetsApi.options().then((d: any) => {
       const list = Array.isArray(d) ? d : d.items || [];
       setAssetOptions(list.map((a: any) => ({ id: a.id, label: a.name })));
       setAssetTypes(Array.from(new Set(list.map((a: any) => a.asset_type).filter(Boolean))) as string[]);

@@ -195,6 +195,48 @@ async def get_stats(db: AsyncSession = Depends(get_db), _: User = Depends(get_cu
     return AssetStats(total=len(assets), by_type=by_type, by_criticality=by_crit, with_pii=pii, with_phi=phi, with_pci=pci)
 
 
+class AssetOption(BaseModel):
+    id: str
+    name: str
+    asset_type: str | None = None
+
+    model_config = {"from_attributes": True}
+
+
+@router.get("/options", response_model=list[AssetOption])
+async def list_asset_options(
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(get_current_user),
+    tenant_id: str = Depends(get_tenant_id),
+    limit: int = Query(10000, ge=1, le=50000),
+):
+    """Every asset as {id, name, asset_type}, for pickers and graphs.
+
+    The pickers used to call ``GET /assets?page_size=500``, which the list
+    endpoint rejects outright (``le=200``) — so four asset selectors were
+    returning 422 and silently rendering empty. Capping those callers at 200
+    instead would have been worse at this client's scale: with 5,000-10,000
+    assets a picker would quietly offer the first 200 and hide the rest.
+
+    This returns three columns instead of the full asset row, so the whole
+    inventory is a small payload rather than megabytes of unused fields.
+    """
+    rows = (await db.execute(
+        select(Asset.id, Asset.name, Asset.asset_type)
+        .where(Asset.tenant_id == tenant_id)
+        .order_by(Asset.name)
+        .limit(limit)
+    )).all()
+    return [
+        AssetOption(
+            id=r.id,
+            name=r.name,
+            asset_type=r.asset_type.value if hasattr(r.asset_type, "value") else (r.asset_type or None),
+        )
+        for r in rows
+    ]
+
+
 @router.get("/lifecycle/eol-soon", response_model=list[AssetOut])
 async def eol_soon(
     current_user: Annotated[User, Depends(require_feature("asset_lifecycle"))],

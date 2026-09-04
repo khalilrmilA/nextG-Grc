@@ -144,7 +144,7 @@ export default function CvePage() {
   useEffect(() => { load(); /* eslint-disable-next-line */ }, [relFilter, minCvss]);
 
   useEffect(() => {
-    assetsApi.list({ page_size: 500 }).then((d: any) => {
+    assetsApi.options().then((d: any) => {
       const list = Array.isArray(d) ? d : d.items || [];
       setAssetOptions(list.map((a: any) => ({ id: a.id, label: a.name })));
     }).catch(() => setAssetOptions([]));

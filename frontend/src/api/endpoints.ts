@@ -1465,6 +1465,10 @@ export const assetsApi = {
   list: (params?: { page?: number; page_size?: number }) =>
     apiClient.get("/assets", { params }).then((r) => r.data),
   stats: () => apiClient.get("/assets/stats").then((r) => r.data),
+  // Lightweight {id, name, asset_type} for pickers and graphs. The list
+  // endpoint caps page_size at 200, so callers that need the whole inventory
+  // (5k-10k assets at enterprise scale) must not page through /assets.
+  options: () => apiClient.get("/assets/options").then((r) => r.data),
   get: (id: string) => apiClient.get(`/assets/${id}`).then((r) => r.data),
   create: (data: Record<string, unknown>) => apiClient.post("/assets", data).then((r) => r.data),
   update: (id: string, data: Record<string, unknown>) => apiClient.patch(`/assets/${id}`, data).then((r) => r.data),

@@ -279,7 +279,7 @@ export default function RiskScenariosPage() {
 
   async function loadOptions() {
     const results = await Promise.allSettled([
-      assetsApi.list({ page_size: 500 }),
+      assetsApi.options(),
       vulnerabilitiesApi.list(),
       threatsApi.list(),
       appliedControlsApi.list(),

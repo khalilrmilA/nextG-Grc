@@ -70,7 +70,7 @@ function ThreatDetailModal({ threat, onClose, onUpdated }: { threat: any; onClos
   );
 
   useEffect(() => {
-    Promise.allSettled([assetsApi.list({ page_size: 500 }), vulnerabilitiesApi.list()]).then(([a, v]) => {
+    Promise.allSettled([assetsApi.options(), vulnerabilitiesApi.list()]).then(([a, v]) => {
       const unwrap = (r: PromiseSettledResult<any>): any[] => {
         if (r.status !== "fulfilled") return [];
         const d = r.value;
