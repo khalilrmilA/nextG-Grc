@@ -18,6 +18,7 @@ whole tenant's uploads) never loads one into memory.
 from __future__ import annotations
 
 import hashlib
+from datetime import datetime, timezone
 from pathlib import Path
 
 from sqlalchemy import func, select, update
@@ -31,6 +32,11 @@ UNREADABLE = "unreadable"    # the file is there but cannot be read (permissions
 UNRECORDED = "unrecorded"    # stored before checksums existed; nothing to compare against
 
 _CHUNK = 1024 * 1024  # 1 MiB
+
+
+def _utcnow() -> datetime:
+    """Naive UTC, matching how the rest of the app stores timestamps."""
+    return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
 def sha256_bytes(data: bytes) -> str:
@@ -136,7 +142,7 @@ async def record_version(
             StoredFileVersion.parent_id == parent_id,
             StoredFileVersion.status == CURRENT,
         )
-        .values(status=SUPERSEDED)
+        .values(status=SUPERSEDED, retired_at=_utcnow())
     )
 
     version = StoredFileVersion(
@@ -179,6 +185,8 @@ async def retire_versions(
     )).scalars().all()
     for row in rows:
         row.status = DELETED
+        if row.retired_at is None:
+            row.retired_at = _utcnow()
         if note:
             # Append, never overwrite: the original note ("Uploaded via share
             # link") is part of the provenance this table exists to preserve.

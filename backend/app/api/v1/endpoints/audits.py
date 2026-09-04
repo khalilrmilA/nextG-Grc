@@ -20,6 +20,7 @@ from app.models.audit import (
 )
 from app.models.tenant import Tenant
 from app.services.report_generator import generate_single_audit_report
+from app.services import file_integrity
 from app.workers.tasks.notifications import notify_audit_assigned
 
 router = APIRouter()
@@ -188,9 +189,21 @@ async def generate_audit_report_file(audit_id: str, db: AsyncSession = Depends(g
     rel_path = f"audit-reports/{uuid.uuid4()}.pdf"
     (uploads_dir / rel_path).write_bytes(pdf_bytes)
 
+    # Regenerating a report used to abandon the previous PDF: report_url was
+    # overwritten and the old file left on disk with nothing pointing at it.
+    # Recording each generation as a version keeps the superseded report
+    # retrievable and, eventually, reclaimable by the retention policy.
     a.report_url = rel_path
     a.report_approved_by_id = None
     a.report_approved_at = None
+    await file_integrity.record_version(
+        db, tenant_id=tenant_id, entity_type="audit_report", entity_id=a.id,
+        parent_type="audit", parent_id=a.id,
+        file_path=rel_path, file_name=f"audit-report-{a.id}.pdf",
+        file_sha256=file_integrity.sha256_bytes(pdf_bytes),
+        file_size_bytes=len(pdf_bytes), content_type="application/pdf",
+        uploaded_by_id=user.id,
+    )
     await db.commit(); await db.refresh(a)
     return await _with_count(db, a)
 

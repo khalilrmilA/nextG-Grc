@@ -687,7 +687,7 @@ async def update_vendor(
 async def delete_vendor(
     vendor_id: str,
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(require_roles(UserRole.VENDOR_MANAGER, UserRole.CISO)),
+    current_user: User = Depends(require_roles(UserRole.VENDOR_MANAGER, UserRole.CISO)),
     tenant_id: str = Depends(get_tenant_id),
 ):
     """Delete a vendor."""
@@ -701,6 +701,20 @@ async def delete_vendor(
 
     if not vendor:
         raise HTTPException(status_code=404, detail="Vendor not found")
+
+    # Retire the file versions of this vendor's contracts. Without this their
+    # rows vanish while the PDFs stay on disk with nothing referencing them —
+    # unreachable through the app and invisible to retention, so the space is
+    # never reclaimable. Retiring keeps them recoverable and lets the policy
+    # decide when they go.
+    contracts = (await db.execute(
+        select(VendorContract).where(VendorContract.vendor_id == vendor_id)
+    )).scalars().all()
+    for contract in contracts:
+        await file_integrity.retire_versions(
+            db, entity_type=file_integrity.CONTRACT, entity_id=contract.id,
+            note=f"Vendor {vendor.name} deleted by {current_user.email}",
+        )
 
     await db.delete(vendor)
     await db.commit()

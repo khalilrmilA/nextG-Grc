@@ -16,7 +16,9 @@ Rows are keyed by (entity_type, entity_id) rather than a foreign key, because
 the history has to outlive the record it belonged to — the whole point is that
 it still exists after the Evidence row is gone.
 """
-from sqlalchemy import String, Integer, Text, Index
+from datetime import datetime
+
+from sqlalchemy import String, Integer, Text, Index, DateTime, Boolean
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
@@ -32,6 +34,7 @@ class StoredFileVersion(Base):
         # Two uploads racing for the same parent must not both claim a version
         # number; the loser retries against the new tail.
         Index("ix_file_versions_seq", "parent_type", "parent_id", "version_number", unique=True),
+        Index("ix_file_versions_purge", "status", "retired_at"),
     )
 
     tenant_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
@@ -68,3 +71,10 @@ class StoredFileVersion(Base):
 
     uploaded_by_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
     note: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    # When this version stopped being current — the clock a retention policy
+    # counts from. updated_at cannot serve: any later write moves it.
+    retired_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    # Exempt from every purge regardless of policy: a file under legal hold or
+    # tied to an open audit must outlive retention.
+    legal_hold: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)

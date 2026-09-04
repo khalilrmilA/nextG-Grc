@@ -102,6 +102,19 @@ class Settings(BaseSettings):
     # File uploads
     UPLOADS_DIR: str = "uploads"
     MAX_UPLOAD_SIZE_MB: int = 2
+
+    # ── Stored-file retention (see app/services/file_retention.py) ───────────
+    # OFF by default: purging destroys real client evidence, so it starts only
+    # once an operator has read GET /compliance/files/retention/preview and
+    # decided the policy is right. Every key must be declared here — the
+    # settings model uses extra="ignore", so an undeclared env var is silently
+    # dropped rather than raising.
+    FILE_RETENTION_ENABLED: bool = False
+    FILE_RETENTION_DELETED_DAYS: int = 90      # keep a deleted file this long
+    FILE_RETENTION_SUPERSEDED_DAYS: int = 365  # keep a replaced version this long
+    FILE_RETENTION_SUPERSEDED_KEEP: int = 10   # ...but always keep the last N
+    FILE_RETENTION_MAX_PURGE_PER_RUN: int = 500
+    FILE_RETENTION_MAX_DAYS: int = 3650        # clamp: a bad env value can't mean "now"
     OCR_MAX_UPLOAD_SIZE_MB: int = 40   # full scanned tenders (image-only PDFs) run large
     FRONTEND_BASE_URL: str = "http://localhost:4000"
 

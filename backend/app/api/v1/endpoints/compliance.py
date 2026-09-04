@@ -3466,3 +3466,59 @@ async def download_file_version(
         status_, actual, acknowledge_integrity_failure, current_user, tenant_id,
         label=f"version {row.version_number} of {row.entity_type} {row.entity_id}", db=db,
     )
+
+
+# ─── Stored-file retention ────────────────────────────────────────────────────
+# Recoverable deletes mean nothing reclaims bytes on its own. These expose the
+# policy: what is holding space, what a purge WOULD remove (with a reason per
+# row), and the purge itself. See app/services/file_retention.py — purging is
+# off by default because it destroys real client evidence.
+
+@router.get("/files/storage-summary")
+async def file_storage_summary(
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_roles(UserRole.CISO, UserRole.COMPLIANCE_MANAGER)),
+    tenant_id: str = Depends(get_tenant_id),
+):
+    """How much space this tenant's stored file versions occupy, by status."""
+    from app.services import file_retention
+    return await file_retention.storage_summary(db, tenant_id)
+
+
+@router.get("/files/retention/preview")
+async def file_retention_preview(
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_roles(UserRole.CISO, UserRole.COMPLIANCE_MANAGER)),
+    tenant_id: str = Depends(get_tenant_id),
+    limit: int = Query(200, ge=1, le=2000),
+):
+    """Dry run — exactly what a purge would delete, and what it would skip and why.
+
+    Nothing is removed. This is what an operator reads before turning retention
+    on at all; a skip reason naming the record that still points at a file is
+    the difference between a policy someone trusts and one they disable.
+    """
+    from app.services import file_retention
+    return await file_retention.preview(db, tenant_id=tenant_id, limit=limit)
+
+
+@router.post("/files/retention/purge")
+async def file_retention_purge(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_roles(UserRole.CISO)),
+    tenant_id: str = Depends(get_tenant_id),
+):
+    """Run the retention policy now for this tenant. Requires FILE_RETENTION_ENABLED."""
+    from app.services import file_retention
+    if not settings.FILE_RETENTION_ENABLED:
+        raise HTTPException(
+            status_code=409,
+            detail="File retention is disabled (FILE_RETENTION_ENABLED=false). "
+                   "Review GET /compliance/files/retention/preview, then enable it.",
+        )
+    result = await file_retention.run_file_retention(db, tenant_id=tenant_id)
+    logger.info(
+        "file_retention.manual_run tenant=%s by=%s purged=%s skipped=%s failed=%s",
+        tenant_id, current_user.id, result.get("purged"), result.get("skipped"), result.get("failed"),
+    )
+    return result

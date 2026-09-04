@@ -19,6 +19,7 @@ from app.services.nvd_sync import start_cve_auto_sync
 from app.services.vuln_scanner_scheduler import start_vuln_scanner_scheduler
 from app.services.audit_recurrence_scheduler import start_audit_recurrence_scheduler
 from app.services.archiving_engine import start_archiving_scheduler
+from app.services.file_retention import start_file_retention_scheduler
 from app.services.risk_snapshot_scheduler import start_risk_snapshot_scheduler
 from app.services.license_phone_home import start_license_phone_home
 from app.core.activity_middleware import ActivityLogMiddleware
@@ -65,6 +66,7 @@ async def lifespan(application: FastAPI):
     _vuln_scanner_task = asyncio.create_task(start_vuln_scanner_scheduler())
     _audit_recurrence_task = asyncio.create_task(start_audit_recurrence_scheduler())
     _archiving_task = asyncio.create_task(start_archiving_scheduler())
+    _file_retention_task = asyncio.create_task(start_file_retention_scheduler())
     _risk_snapshot_task = asyncio.create_task(start_risk_snapshot_scheduler())
     _license_phone_home_task = asyncio.create_task(start_license_phone_home())
 
