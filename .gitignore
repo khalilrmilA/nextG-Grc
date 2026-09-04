@@ -65,3 +65,9 @@ backend/grc_dev.db-shm
 
 # Local DB backups (rotated by scripts.backup_db)
 backend/backups/
+
+# Client-uploaded evidence, contracts and documents. These are real customer
+# files: they belong on the server disk (and in the backup), never in version
+# control, where every clone would carry them. .dockerignore already excludes
+# this path from images for the same reason.
+backend/uploads/
