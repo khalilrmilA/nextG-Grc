@@ -159,6 +159,11 @@ class Evidence(Base):
 
     # Local file path (relative to UPLOADS_DIR)
     file_path: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+    # SHA-256 of the bytes received at upload, so a later read can prove the
+    # file was not altered on disk (see services/file_integrity.py). NULL on
+    # rows stored before checksums existed — reported as "unrecorded", never
+    # as tampering.
+    file_sha256: Mapped[str | None] = mapped_column(String(64), nullable=True)
     # Auditor can see this file
     is_visible_to_auditor: Mapped[bool] = mapped_column(Boolean, default=True)
 
@@ -219,6 +224,8 @@ class UploadedDocument(Base):
     )
     file_name: Mapped[str] = mapped_column(String(255), nullable=False)
     file_path: Mapped[str] = mapped_column(String(500), nullable=False)  # local path or S3 key
+    # SHA-256 of the uploaded bytes — see services/file_integrity.py.
+    file_sha256: Mapped[str | None] = mapped_column(String(64), nullable=True)
     content_type: Mapped[str | None] = mapped_column(String(100), nullable=True)
     file_size_bytes: Mapped[int | None] = mapped_column(Integer, nullable=True)
     extracted_text: Mapped[str | None] = mapped_column(Text, nullable=True)

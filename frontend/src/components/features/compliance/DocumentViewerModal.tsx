@@ -264,7 +264,22 @@ export default function DocumentViewerModal({
 
     fetch(doc.fetchUrl, { headers: token ? { Authorization: `Bearer ${token}` } : {} })
       .then(async (res) => {
-        if (!res.ok) { setFetchError("Could not load document."); return; }
+        if (!res.ok) {
+          // 409 is the integrity guard: the file no longer matches the
+          // checksum recorded at upload. That is a very different thing from
+          // "not found", and an auditor has to be told which one it is —
+          // showing the same generic line for both hides a tampered file.
+          if (res.status === 409) {
+            const detail = await res.json().catch(() => null);
+            setFetchError(
+              detail?.detail ??
+                "This file no longer matches the checksum recorded when it was uploaded and may have been altered."
+            );
+            return;
+          }
+          setFetchError("Could not load document.");
+          return;
+        }
         const blob = await res.blob();
         const looksLikeText =
           blob.type.startsWith("text/") ||

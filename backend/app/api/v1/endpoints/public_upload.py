@@ -21,6 +21,7 @@ from app.models.framework import FrameworkControl
 from app.models.mandatory_document import MandatoryDocument
 from app.models.notification import Notification, NotificationStatus, NotificationType
 from app.models.user import User, UserRole
+from app.services import file_integrity
 
 router = APIRouter()
 
@@ -183,6 +184,7 @@ async def upload_evidence_via_token(
         file_name=safe_display_name,
         file_path=rel_path,
         file_size_bytes=len(content),
+        file_sha256=file_integrity.sha256_bytes(content),
         content_type=file.content_type,
         evidence_type=EvidenceType.DOCUMENT,
         is_automated=False,
@@ -222,6 +224,11 @@ async def upload_evidence_via_token(
             file_path=rel_path,
             content_type=file.content_type,
             file_size_bytes=len(content),
+            # Same bytes, same file on disk as the Evidence row above — hash it
+            # here too so this row isn't reported "unrecorded" while its twin
+            # verifies, and so the /documents download guard has something to
+            # check against.
+            file_sha256=file_integrity.sha256_bytes(content),
             document_type_key=doc_type_key,
             is_visible_to_auditor=True,
             uploaded_by_id=None,

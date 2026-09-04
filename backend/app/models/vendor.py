@@ -126,6 +126,8 @@ class VendorContract(Base):
     file_name: Mapped[str] = mapped_column(String(500), nullable=False)
     file_path: Mapped[str] = mapped_column(String(1000), nullable=False)
     file_size: Mapped[int] = mapped_column(nullable=True)
+    # SHA-256 of the uploaded bytes — see services/file_integrity.py.
+    file_sha256: Mapped[str | None] = mapped_column(String(64), nullable=True)
     extracted_text: Mapped[str | None] = mapped_column(Text, nullable=True)
     ai_review: Mapped[str | None] = mapped_column(Text, nullable=True)
     review_status: Mapped[str] = mapped_column(String(50), default="pending")  # pending, completed, error

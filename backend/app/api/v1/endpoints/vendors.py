@@ -14,6 +14,7 @@ import calendar
 import io
 import logging
 import re
+import uuid
 from collections import Counter
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File
 from sqlalchemy import select
@@ -33,6 +34,7 @@ from app.core.config import settings
 from app.services import ai_chunking, ai_prompts, ai_provider
 from app.services.ai_locale import failure_message, get_request_language, guess_language
 from app.services.ai_structured import AiResult, ai_structured
+from app.services import file_integrity
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -1158,7 +1160,12 @@ async def upload_vendor_contract(
     vendeur   = re.sub(r"[^\w]", "_", vendor.name or "vendeur")[:30].strip("_")
     ext       = Path(contract_file.filename or "").suffix[:10] or ".bin"
     display_name = f"contrat_{vendeur}_{date_str}{ext}"
-    candidate = upload_dir / f"{vendor_id}_{safe_name}"
+    # Unique per upload. The previous "{vendor_id}_{safe_name}" collided as soon
+    # as the same filename was uploaded twice for one vendor: v2 overwrote v1's
+    # bytes in place while v1's row kept pointing at that path, silently
+    # replacing an earlier contract version — and, now that versions carry a
+    # digest, guaranteeing a false "modified" verdict on v1.
+    candidate = upload_dir / f"{vendor_id}_{uuid.uuid4().hex}_{safe_name}"
     file_path = assert_path_within(upload_dir, candidate)
     max_bytes = settings.MAX_UPLOAD_SIZE_MB * 1024 * 1024
     ct = (contract_file.content_type or "").lower()
@@ -1212,6 +1219,7 @@ async def upload_vendor_contract(
         file_name=display_name,
         file_path=str(file_path),
         file_size=len(content),
+        file_sha256=file_integrity.sha256_bytes(content),
         extracted_text=extracted_text,
         review_status="pending",
         validation_status=ContractValidationStatus.PENDING_AI.value,

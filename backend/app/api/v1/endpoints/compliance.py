@@ -6,13 +6,14 @@ AI sites in this file (both on the shared AI foundation under ``app.services``):
   * ``_detect_clauses_background`` — document → clause tags + summary
     (``ai_structured`` + the ``clause_coverage`` prompt, chunked with ``map_reduce``).
 """
+import asyncio
 import logging
 import re
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
-from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, UploadFile, status
+from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, Query, UploadFile, status
 from pydantic import BaseModel
 from sqlalchemy import func, or_, select, update as sa_update
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -22,6 +23,7 @@ from app.api.v1.dependencies.pagination import PaginationParams
 from app.core.config import settings
 from app.core.database import AsyncSessionLocal, get_db
 from app.core.security_utils import verify_file_signature
+from app.services import file_integrity
 from app.models.compliance import (
     AssessmentStatus,
     ComplianceAssessment,
@@ -1257,6 +1259,7 @@ async def upload_document(
         file_path=str(rel_path),
         content_type=content_type,
         file_size_bytes=len(file_bytes),
+        file_sha256=file_integrity.sha256_bytes(file_bytes),
         extracted_text=extracted,
         uploaded_by_id=current_user.id,
         document_type_key=document_type_key,  # pre-assign if provided by the UI
@@ -2289,6 +2292,7 @@ async def upload_control_evidence(
         file_name=display_name,
         file_path=rel_path,
         file_size_bytes=len(file_bytes),
+        file_sha256=file_integrity.sha256_bytes(file_bytes),
         content_type=content_type,
         uploaded_by_id=current_user.id,
         is_visible_to_auditor=True,
@@ -2361,6 +2365,11 @@ async def upload_control_evidence(
                                 file_name=evidence.file_name,
                                 file_path=copy_rel,
                                 file_size_bytes=evidence.file_size_bytes,
+                                # copy2 is byte-for-byte, so the source digest
+                                # describes the copy too. Without this, every
+                                # propagated copy would land "unrecorded" and
+                                # that status would stop meaning "legacy".
+                                file_sha256=evidence.file_sha256,
                                 content_type=evidence.content_type,
                                 uploaded_by_id=current_user.id,
                                 is_visible_to_auditor=True,
@@ -2480,11 +2489,36 @@ async def download_evidence(
     full = _Path(settings.UPLOADS_DIR) / evidence.file_path
     if not full.exists():
         raise HTTPException(status_code=404, detail="File not found on disk")
-    return FileResponse(
+
+    # Integrity check before the bytes leave the building. Evidence is what an
+    # audit conclusion rests on, so serving a file that no longer matches what
+    # was uploaded — silently — is the one outcome worth refusing outright.
+    status_, actual = await asyncio.to_thread(
+        file_integrity.verify_file, full, evidence.file_sha256
+    )
+    if status_ == file_integrity.MODIFIED:
+        logger.error(
+            "evidence.integrity.failed id=%s tenant=%s expected=%s actual=%s",
+            evidence.id, tenant_id, evidence.file_sha256, actual,
+        )
+        raise HTTPException(
+            status_code=409,
+            detail="This file no longer matches the checksum recorded when it was "
+                   "uploaded and may have been altered. Contact your administrator.",
+        )
+
+    response = FileResponse(
         path=str(full),
         filename=evidence.file_name or "evidence",
         media_type=evidence.content_type or "application/octet-stream",
     )
+    # Let a caller (and an auditor reading response headers) see which of the
+    # two honest answers this is: verified against a recorded digest, or simply
+    # predating checksums and therefore unproven.
+    response.headers["X-Content-Integrity"] = status_
+    if evidence.file_sha256:
+        response.headers["X-Content-SHA256"] = evidence.file_sha256
+    return response
 
 
 # ─── Uploaded Document (checklist) management ──────────────────────────────────
@@ -2512,11 +2546,34 @@ async def download_uploaded_document(
     full = _Path2(settings.UPLOADS_DIR) / doc.file_path
     if not full.exists():
         raise HTTPException(status_code=404, detail="File not found on disk")
-    return _FR(
+
+    # Same integrity guard as the evidence route. Without it this endpoint is a
+    # way around that one: a share-link upload writes an Evidence row and an
+    # UploadedDocument row pointing at the SAME file, so a blocked evidence
+    # download could simply be fetched here instead.
+    status_, actual = await asyncio.to_thread(
+        file_integrity.verify_file, full, doc.file_sha256
+    )
+    if status_ == file_integrity.MODIFIED:
+        logger.error(
+            "document.integrity.failed id=%s tenant=%s expected=%s actual=%s",
+            doc.id, tenant_id, doc.file_sha256, actual,
+        )
+        raise HTTPException(
+            status_code=409,
+            detail="This file no longer matches the checksum recorded when it was "
+                   "uploaded and may have been altered. Contact your administrator.",
+        )
+
+    response = _FR(
         path=str(full),
         filename=doc.file_name or "document",
         media_type=doc.content_type or "application/octet-stream",
     )
+    response.headers["X-Content-Integrity"] = status_
+    if doc.file_sha256:
+        response.headers["X-Content-SHA256"] = doc.file_sha256
+    return response
 
 
 @router.patch("/documents/{doc_id}/visibility", response_model=UploadedDocumentResponse)
@@ -3028,3 +3085,129 @@ async def revoke_share_link(
         raise HTTPException(404, "Share link not found")
     await db.delete(tok)
     await db.commit()
+
+
+# ─── Stored-file integrity report ─────────────────────────────────────────────
+# Companion to GET /activity-log/verify: that endpoint proves the audit trail
+# was not rewritten, this one proves the files it points at were not swapped.
+# Together they answer "non-altération des données à toutes les étapes du
+# traitement" — the record of what happened, and the artefacts themselves.
+
+class FileIntegrityItem(BaseModel):
+    kind: str            # evidence | document | contract
+    id: str
+    name: str | None
+    status: str          # ok | modified | missing | unrecorded
+    recorded_sha256: str | None
+    actual_sha256: str | None
+
+
+class FileIntegrityReport(BaseModel):
+    checked: int
+    ok: int
+    modified: int
+    missing: int
+    unrecorded: int
+    unreadable: int
+    # True when a table hit `limit` and some files were NOT examined. Without
+    # this an auditor reading "modified: 0" would take it as a clean estate
+    # when it only ever describes the rows that fit under the cap.
+    truncated: bool
+    problems: list[FileIntegrityItem]
+    verified_at: str
+
+
+@router.get("/evidence/integrity-report", response_model=FileIntegrityReport)
+async def evidence_integrity_report(
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_roles(UserRole.CISO, UserRole.AUDITOR, UserRole.COMPLIANCE_MANAGER)),
+    tenant_id: str = Depends(get_tenant_id),
+    limit: int = Query(2000, ge=1, le=20000),
+):
+    """Re-hash every stored file for this tenant and report any that changed.
+
+    Covers evidence, checklist documents and vendor contracts. Digests are
+    streamed off the event loop, so each file is read once without being loaded
+    into memory. Only failures are listed — a clean estate returns counts and an
+    empty ``problems`` list, which is the answer an auditor wants to see.
+
+    ``unrecorded`` counts files stored before checksums existed. They are
+    reported separately from failures on purpose: no digest was captured at the
+    time, so nothing can be asserted about them either way, and backfilling one
+    now would only certify whatever happens to be on disk today.
+
+    ``limit`` caps rows examined per table and is reflected by ``truncated`` —
+    a bounded report that says so beats an unbounded one that rehashes an
+    entire estate on an unauthenticated-looking GET.
+    """
+    from pathlib import Path as _Path
+    from app.models.vendor import Vendor, VendorContract
+
+    root = _Path(settings.UPLOADS_DIR)
+    problems: list[FileIntegrityItem] = []
+    counts = {file_integrity.OK: 0, file_integrity.MODIFIED: 0, file_integrity.MISSING: 0,
+              file_integrity.UNRECORDED: 0, file_integrity.UNREADABLE: 0}
+    checked = 0
+    truncated = False
+    # Problems are capped independently of `limit` so a badly damaged estate
+    # returns a usable report instead of a megabyte of JSON.
+    max_problems = 500
+
+    async def _sweep(kind: str, rows, path_of, name_of, hash_of, id_of, absolute=False):
+        nonlocal checked
+        for row in rows:
+            rel = path_of(row)
+            if not rel:
+                continue
+            checked += 1
+            target = _Path(rel) if absolute else root / rel
+            status_, actual = await asyncio.to_thread(
+                file_integrity.verify_file, target, hash_of(row)
+            )
+            counts[status_] = counts.get(status_, 0) + 1
+            if status_ != file_integrity.OK and len(problems) < max_problems:
+                problems.append(FileIntegrityItem(
+                    kind=kind, id=id_of(row), name=name_of(row), status=status_,
+                    recorded_sha256=hash_of(row), actual_sha256=actual,
+                ))
+
+    ev_rows = (await db.execute(
+        select(Evidence).where(Evidence.tenant_id == tenant_id)
+        .order_by(Evidence.created_at.desc()).limit(limit)
+    )).scalars().all()
+    truncated = truncated or len(ev_rows) >= limit
+    await _sweep("evidence", ev_rows,
+                 lambda r: r.file_path, lambda r: r.file_name,
+                 lambda r: r.file_sha256, lambda r: r.id)
+
+    doc_rows = (await db.execute(
+        select(UploadedDocument).where(UploadedDocument.tenant_id == tenant_id)
+        .order_by(UploadedDocument.created_at.desc()).limit(limit)
+    )).scalars().all()
+    truncated = truncated or len(doc_rows) >= limit
+    await _sweep("document", doc_rows,
+                 lambda r: r.file_path, lambda r: r.file_name,
+                 lambda r: r.file_sha256, lambda r: r.id)
+
+    # Contracts are stored by absolute path and scoped through their vendor.
+    con_rows = (await db.execute(
+        select(VendorContract).join(Vendor, VendorContract.vendor_id == Vendor.id)
+        .where(Vendor.tenant_id == tenant_id)
+        .order_by(VendorContract.created_at.desc()).limit(limit)
+    )).scalars().all()
+    truncated = truncated or len(con_rows) >= limit
+    await _sweep("contract", con_rows,
+                 lambda r: r.file_path, lambda r: r.file_name,
+                 lambda r: r.file_sha256, lambda r: r.id, absolute=True)
+
+    return FileIntegrityReport(
+        checked=checked,
+        ok=counts[file_integrity.OK],
+        modified=counts[file_integrity.MODIFIED],
+        missing=counts[file_integrity.MISSING],
+        unrecorded=counts[file_integrity.UNRECORDED],
+        unreadable=counts[file_integrity.UNREADABLE],
+        truncated=truncated,
+        problems=problems,
+        verified_at=datetime.utcnow().isoformat(timespec="seconds"),
+    )
