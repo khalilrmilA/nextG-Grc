@@ -6,10 +6,11 @@ import {
   CheckCircle, XCircle, AlertTriangle, MinusCircle,
   ChevronDown, ChevronUp, Sparkles, Globe, GitBranch,
   Download, Table2, Eye, EyeOff, Trash2, ExternalLink,
-  Link2, CheckSquare,
+  Link2, CheckSquare, History,
 } from "lucide-react";
 import { complianceApi, type EvidenceItem } from "@/api/endpoints";
 import type { AssessmentDetail, GapDetail, ControlAssessmentDetail, LinkedChecklistDocument } from "@/types";
+import { FileHistoryModal } from "@/components/features/compliance/FileHistoryModal";
 import PolicyGeneratorModal from "@/components/features/compliance/PolicyGeneratorModal";
 import DocumentChecklistTab from "@/components/features/compliance/DocumentChecklistTab";
 import GapReportTab from "@/components/features/compliance/GapReportTab";
@@ -229,6 +230,8 @@ function ResultsTab({
   const [uploadingEvidence, setUploadingEvidence] = useState<string | null>(null);
   const [evidenceMap, setEvidenceMap] = useState<Record<string, EvidenceItem[]>>({});
   const [deletingEvidence, setDeletingEvidence] = useState<string | null>(null);
+  const [historyFor, setHistoryFor] = useState<{ id: string; label: string } | null>(null);
+  const [evidenceError, setEvidenceError] = useState("");
   const [togglingVisibility, setTogglingVisibility] = useState<string | null>(null);
   const [viewingDoc, setViewingDoc] = useState<ViewableDoc | null>(null);
   const [shareModalCa, setShareModalCa] = useState<ControlAssessmentDetail | null>(null);
@@ -289,14 +292,30 @@ function ResultsTab({
   }
 
   async function handleDeleteEvidence(caId: string, evidenceId: string) {
+    // The file itself is kept and stays downloadable from File history — say
+    // that rather than implying the bytes are destroyed, which they no longer
+    // are. Deliberately not worded as "restore": there is no restore action,
+    // the earlier file is downloaded from the history.
+    const ok = window.confirm(
+      t(
+        "compliance.evidence_delete_confirm",
+        "Remove this evidence from the control?\n\nThe file is kept and stays downloadable from File history.",
+      ),
+    );
+    if (!ok) return;
     setDeletingEvidence(evidenceId);
+    setEvidenceError("");
     try {
       await complianceApi.deleteEvidence(evidenceId);
       setEvidenceMap(prev => ({
         ...prev,
         [caId]: (prev[caId] ?? []).filter(e => e.id !== evidenceId),
       }));
-    } catch {/* silent */} finally {
+    } catch {
+      // Previously swallowed: the row vanished from the screen whether or not
+      // the server accepted the delete.
+      setEvidenceError(t("compliance.evidence_delete_failed", "Could not remove that evidence. Nothing was changed."));
+    } finally {
       setDeletingEvidence(null);
     }
   }
@@ -821,6 +840,14 @@ function ResultsTab({
                                     ? <Eye className="w-3 h-3" />
                                     : <EyeOff className="w-3 h-3" />}
                               </button>
+                              {/* File history (scoped to the control, not this row) */}
+                              <button
+                                onClick={() => setHistoryFor({ id: ca.id, label: ca.control_identifier || ca.control_title || "Control" })}
+                                title={t("compliance.file_history_open", "File history for this control")}
+                                className="flex-shrink-0 text-gray-400 hover:text-gray-600"
+                              >
+                                <History className="w-3 h-3" />
+                              </button>
                               {/* Delete */}
                               <button
                                 onClick={() => handleDeleteEvidence(ca.id, ev.id)}
@@ -849,6 +876,22 @@ function ResultsTab({
           <div className="p-8 text-center text-sm text-gray-400">No controls in this category.</div>
         )}
       </div>
+
+      {evidenceError && (
+        <div className="fixed bottom-6 right-6 z-50 p-3 bg-red-50 border border-red-200 text-red-700 rounded-xl text-sm shadow-lg max-w-sm">
+          {evidenceError}
+          <button onClick={() => setEvidenceError("")} className="ml-3 text-red-400 hover:text-red-600">×</button>
+        </div>
+      )}
+
+      {historyFor && (
+        <FileHistoryModal
+          parentType="control_assessment"
+          parentId={historyFor.id}
+          title={historyFor.label}
+          onClose={() => setHistoryFor(null)}
+        />
+      )}
     </div>
   );
 }

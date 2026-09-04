@@ -4,6 +4,7 @@
  */
 import { apiClient } from "./client";
 import type {
+  StoredFileVersionItem,
   AuthTokens,
   Risk,
   RiskHeatmapData,
@@ -375,6 +376,20 @@ export const complianceApi = {
 
   downloadEvidenceUrl: (evidenceId: string) =>
     `${API_BASE}/compliance/evidence/${evidenceId}/download`,
+
+  // ── Stored-file version history & recovery ────────────────────────────────
+  // History is keyed on the PARENT a file hangs off (a control assessment),
+  // not the evidence row: every upload mints a new evidence id, so an
+  // entity-keyed history would always hold exactly one entry.
+  listFileVersions: (parentType: string, parentId: string) =>
+    apiClient
+      .get(`/compliance/files/${parentType}/${parentId}/versions`)
+      .then((r) => r.data as StoredFileVersionItem[]),
+  listDeletedFiles: () =>
+    apiClient.get("/compliance/files/deleted").then((r) => r.data as StoredFileVersionItem[]),
+  downloadFileVersionUrl: (versionId: string, acknowledgeIntegrityFailure = false) =>
+    `${API_BASE}/compliance/files/versions/${versionId}/download` +
+    (acknowledgeIntegrityFailure ? "?acknowledge_integrity_failure=true" : ""),
 
   // ── Checklist document management ──────────────────────────────────────────
   downloadDocumentUrl: (docId: string) =>

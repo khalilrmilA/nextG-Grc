@@ -620,3 +620,24 @@ export interface AiTokenUsage {
   reset_at: string;
   percentage_used: number;
 }
+
+
+/** One stored version of a file — mirrors FileVersionOut in compliance.py.
+ *  `integrity` is recomputed server-side on every read: ok | modified |
+ *  missing | unreadable | unrecorded. "unrecorded" means the file predates
+ *  checksums, which is not a failure. */
+export interface StoredFileVersionItem {
+  id: string;
+  entity_type: string;
+  entity_id: string;
+  version_number: number;
+  file_name?: string | null;
+  file_sha256?: string | null;
+  file_size_bytes?: number | null;
+  content_type?: string | null;
+  status: "current" | "superseded" | "deleted" | string;
+  note?: string | null;
+  uploaded_by_id?: string | null;
+  created_at: string;
+  integrity: "ok" | "modified" | "missing" | "unreadable" | "unrecorded" | string;
+}
