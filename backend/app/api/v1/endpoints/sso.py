@@ -6,6 +6,7 @@ pair as password login. Gated per-tenant by the ``ad_ldap_sso`` Elite feature
 (checked against the tenant's subscription, since there is no current_user yet).
 """
 import asyncio
+import logging
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -21,11 +22,15 @@ from app.models.tenant import Tenant
 from app.models.subscription import Subscription
 from app.services.directory_auth import (
     authenticate,
+    group_map_configured,
     ldap_enabled,
+    map_groups_to_role,
     resolve_ldap_config,
     env_ldap_config,
     DirectoryAuthError,
 )
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -106,27 +111,82 @@ async def ldap_login(body: LdapLoginRequest, db: Annotated[AsyncSession, Depends
     except DirectoryAuthError as exc:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=str(exc))
 
-    # Find-or-create the local account within this tenant.
+    # Entitlements from AD group membership, when a group→role map is
+    # configured. This is what makes AD the authority for rights and not just
+    # for identity: the role is recomputed on EVERY login, so moving someone
+    # between groups in AD takes effect at their next sign-in with nothing to
+    # do in the app.
+    mapped_role_value = map_groups_to_role(dir_user.groups, cfg)
+    try:
+        default_role = UserRole(cfg.get("default_role", "viewer"))
+    except ValueError:
+        default_role = UserRole.VIEWER
+    mapped_role = None
+    if mapped_role_value:
+        try:
+            mapped_role = UserRole(mapped_role_value)
+        except ValueError:
+            mapped_role = None
+
+    # Find-or-create the local account within this tenant. Email is globally
+    # unique, so the lookup can surface an account belonging to a DIFFERENT
+    # tenant; authenticating them here would sign them into someone else's
+    # organisation and — now that this endpoint writes roles — let this
+    # tenant's group map rewrite another tenant's user. Refuse instead.
     result = await db.execute(select(User).where(User.email == dir_user.email))
     user = result.scalar_one_or_none()
+    if user is not None and user.tenant_id != tenant.id:
+        logger.warning(
+            "LDAP login refused: %s resolves to a user in another organization", dir_user.email,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="This directory account belongs to another organization.",
+        )
     if user is None:
         if not cfg.get("auto_create", True):
             raise HTTPException(status_code=403, detail="No account provisioned for this directory user.")
-        try:
-            role = UserRole(cfg.get("default_role", "viewer"))
-        except ValueError:
-            role = UserRole.VIEWER
         user = User(
             tenant_id=tenant.id,
             email=dir_user.email,
             first_name=dir_user.first_name,
             last_name=dir_user.last_name,
-            role=role,
+            role=mapped_role or default_role,
             is_verified=True,
             hashed_password=None,  # directory-managed; local password login stays disabled
         )
         db.add(user)
         await db.flush()
+    elif group_map_configured(cfg) and user.hashed_password is None and dir_user.groups:
+        # Re-sync an existing directory-managed account. Guarded three ways:
+        #
+        #  - no map configured  -> roles stay administered in-app, as before;
+        #  - the account still has a local password -> never touched, so a
+        #    break-glass local admin can't be demoted by a directory change;
+        #  - the directory returned NO groups at all -> skip, fail closed.
+        #
+        # That last guard matters more than it looks. `memberOf` comes back
+        # empty for entirely mundane reasons — the service account losing read
+        # access to it, a typo in LDAP_ATTR_GROUPS, or AD simply omitting
+        # primary-group and nested memberships — and without it every
+        # directory user in the tenant would silently drop to the default role
+        # on their next login. A user genuinely removed from all mapped groups
+        # is handled by the admin, not by a directory read that may just have
+        # failed quietly.
+        desired = mapped_role or default_role
+        if user.role != desired:
+            logger.info(
+                "LDAP role sync: user %s %s -> %s (%d directory groups)",
+                user.id, user.role, desired.value, len(dir_user.groups),
+            )
+            user.role = desired
+        # The scalar column alone is not enough: get_effective_roles() ignores
+        # it whenever the multi-role JSON is non-empty (app/services/authz.py),
+        # so a sync that only wrote `role` would appear to work and change
+        # nothing. Keep the directory's answer authoritative in both places.
+        if user.roles and list(user.roles) != [desired.value]:
+            logger.info("LDAP role sync: user %s roles %s -> [%s]", user.id, user.roles, desired.value)
+            user.roles = [desired.value]
 
     if not user.is_active:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Account disabled.")

@@ -64,6 +64,14 @@ class Settings(BaseSettings):
     LDAP_DEFAULT_TENANT_SLUG: str = ""     # tenant SSO logins map to when unspecified
     LDAP_DEFAULT_ROLE: str = "viewer"      # role for auto-provisioned directory users
     LDAP_AUTO_CREATE: bool = True          # create a local account on first SSO login
+    LDAP_ATTR_GROUPS: str = "memberOf"     # AD group membership attribute
+    # JSON object mapping an AD group to an app role, so entitlements are
+    # administered in AD rather than re-entered here. Keys match either the
+    # group's CN or its full DN, case-insensitively:
+    #   {"GRC_RSSI": "ciso", "GRC_Auditeurs": "auditor", "GRC_Lecture": "viewer"}
+    # Empty (the default) keeps the previous behaviour: every directory user is
+    # provisioned with LDAP_DEFAULT_ROLE and roles are managed in-app.
+    LDAP_GROUP_ROLE_MAP: str = ""
 
     # AWS S3
     AWS_ACCESS_KEY_ID: str = ""
