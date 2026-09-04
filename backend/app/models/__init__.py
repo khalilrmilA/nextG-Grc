@@ -53,6 +53,7 @@ from app.models.governance import (
 )
 from app.models.archive import ArchiveRecord, ArchivingRule
 from app.models.scenario_version import RiskScenarioVersion
+from app.models.stored_file_version import StoredFileVersion
 from app.models.scanner_connector import ScannerConnector
 from app.models.report_schedule import ReportSchedule, ReportFrequency
 from app.models.login_event import LoginEvent
@@ -72,6 +73,7 @@ __all__ = [
     "AuditorAssignment",
     "Audit", "AuditFinding", "AuditEvidence",
     "Policy", "PolicyVersion", "PolicyAttestation",
+    "StoredFileVersion",
     "Vendor", "VendorAssessment", "VendorRisk", "VendorContract",
     "Asset",
     "ActivityLog",

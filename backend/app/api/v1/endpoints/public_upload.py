@@ -192,6 +192,16 @@ async def upload_evidence_via_token(
         uploaded_by_id=None,
     )
     db.add(evidence)
+    await db.flush()
+    await file_integrity.record_version(
+        db, tenant_id=tok.tenant_id, entity_type=file_integrity.EVIDENCE,
+        entity_id=evidence.id, parent_type="control_assessment",
+        parent_id=tok.control_assessment_id,
+        file_path=rel_path, file_name=safe_display_name,
+        file_sha256=evidence.file_sha256, file_size_bytes=len(content),
+        content_type=file.content_type, uploaded_by_id=None,
+        note="Uploaded via share link",
+    )
 
     # Also create an UploadedDocument so the file appears in the Document Checklist tab
     ca = (await db.execute(

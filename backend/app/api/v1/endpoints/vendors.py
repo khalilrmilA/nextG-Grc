@@ -1228,6 +1228,16 @@ async def upload_vendor_contract(
 
     db.add(contract)
     await db.flush()
+    # Contract history already exists as separate rows (version N+1 per upload);
+    # this records the FILE alongside it so an earlier contract's bytes stay
+    # retrievable and checkable.
+    await file_integrity.record_version(
+        db, tenant_id=tenant_id, entity_type=file_integrity.CONTRACT,
+        entity_id=contract.id, parent_type="vendor", parent_id=vendor_id,
+        file_path=str(file_path), file_name=display_name,
+        file_sha256=contract.file_sha256, file_size_bytes=len(content),
+        content_type=ct, uploaded_by_id=current_user.id, is_absolute_path=True,
+    )
     await db.commit()
     await db.refresh(contract)
 

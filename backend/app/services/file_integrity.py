@@ -20,6 +20,9 @@ from __future__ import annotations
 import hashlib
 from pathlib import Path
 
+from sqlalchemy import func, select, update
+from sqlalchemy.ext.asyncio import AsyncSession
+
 # Status values returned by verify_file().
 OK = "ok"                    # digest recorded and matches the bytes on disk
 MODIFIED = "modified"        # digest recorded and does NOT match — tampering or corruption
@@ -70,3 +73,114 @@ def verify_file(path: str | Path, expected_sha256: str | None) -> tuple[str, str
     if not expected_sha256:
         return UNRECORDED, actual
     return (OK if actual == expected_sha256 else MODIFIED), actual
+
+
+# ── Version history ──────────────────────────────────────────────────────────
+# Deleting evidence used to unlink the file, so the bytes an audit conclusion
+# rested on were gone permanently and silently. These helpers keep every
+# version of every stored file, so an earlier one can be retrieved and a
+# deleted one recovered. See app/models/stored_file_version.py.
+
+EVIDENCE = "evidence"
+DOCUMENT = "document"
+CONTRACT = "contract"
+
+CURRENT = "current"
+SUPERSEDED = "superseded"
+DELETED = "deleted"
+
+
+async def record_version(
+    db: AsyncSession,
+    *,
+    tenant_id: str,
+    entity_type: str,
+    entity_id: str,
+    parent_type: str,
+    parent_id: str,
+    file_path: str,
+    file_name: str | None = None,
+    file_sha256: str | None = None,
+    file_size_bytes: int | None = None,
+    content_type: str | None = None,
+    uploaded_by_id: str | None = None,
+    is_absolute_path: bool = False,
+    note: str | None = None,
+):
+    """Record a newly stored file as the current version for its parent.
+
+    Versions are numbered per PARENT (the control assessment, assessment or
+    vendor the file hangs off), not per file record. Every upload mints a fresh
+    evidence/document/contract row with a new id, so numbering per file id
+    would make everything "version 1" forever and supersede nothing — the
+    history has to belong to the thing files are attached to over time.
+
+    The previous current version is marked superseded rather than removed: its
+    bytes stay on disk, which is what makes "show me what was attached before"
+    answerable. The caller commits.
+    """
+    from app.models.stored_file_version import StoredFileVersion
+
+    next_number = (await db.execute(
+        select(func.coalesce(func.max(StoredFileVersion.version_number), 0) + 1)
+        .where(
+            StoredFileVersion.parent_type == parent_type,
+            StoredFileVersion.parent_id == parent_id,
+        )
+    )).scalar_one()
+
+    await db.execute(
+        update(StoredFileVersion)
+        .where(
+            StoredFileVersion.parent_type == parent_type,
+            StoredFileVersion.parent_id == parent_id,
+            StoredFileVersion.status == CURRENT,
+        )
+        .values(status=SUPERSEDED)
+    )
+
+    version = StoredFileVersion(
+        tenant_id=tenant_id,
+        entity_type=entity_type,
+        entity_id=entity_id,
+        parent_type=parent_type,
+        parent_id=parent_id,
+        version_number=next_number,
+        file_name=file_name,
+        file_path=file_path,
+        is_absolute_path=is_absolute_path,
+        file_sha256=file_sha256,
+        file_size_bytes=file_size_bytes,
+        content_type=content_type,
+        uploaded_by_id=uploaded_by_id,
+        status=CURRENT,
+        note=note,
+    )
+    db.add(version)
+    return version
+
+
+async def retire_versions(
+    db: AsyncSession, *, entity_type: str, entity_id: str, note: str | None = None
+) -> int:
+    """Mark an entity's file versions deleted, keeping the bytes on disk.
+
+    Called instead of unlinking when the owning record is deleted, so the file
+    remains recoverable. Returns how many versions were retired.
+    """
+    from app.models.stored_file_version import StoredFileVersion
+
+    rows = (await db.execute(
+        select(StoredFileVersion).where(
+            StoredFileVersion.entity_type == entity_type,
+            StoredFileVersion.entity_id == entity_id,
+            StoredFileVersion.status != DELETED,
+        )
+    )).scalars().all()
+    for row in rows:
+        row.status = DELETED
+        if note:
+            # Append, never overwrite: the original note ("Uploaded via share
+            # link") is part of the provenance this table exists to preserve.
+            row.note = f"{row.note} | {note}" if row.note else note
+    return len(rows)

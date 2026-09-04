@@ -1266,6 +1266,13 @@ async def upload_document(
     )
     db.add(doc)
     await db.flush()
+    await file_integrity.record_version(
+        db, tenant_id=tenant_id, entity_type=file_integrity.DOCUMENT,
+        entity_id=doc.id, parent_type="assessment", parent_id=assessment_id,
+        file_path=str(rel_path), file_name=display_name,
+        file_sha256=doc.file_sha256, file_size_bytes=len(file_bytes),
+        content_type=content_type, uploaded_by_id=current_user.id,
+    )
 
     # Auto-update matching control statuses when a checklist document is uploaded.
     # A document uploaded for clause "4.1" automatically promotes any not_started or
@@ -1479,6 +1486,15 @@ async def _run_analysis_background(assessment_id: str, tenant_id: str, user_id: 
                     select(Evidence).where(Evidence.control_assessment_id.in_(cas_to_replace_ids))
                 )).scalars().all()
                 for ev in old_evidence:
+                    # Re-running an analysis is routine, and it silently wiped
+                    # every evidence row on the replaced control assessments.
+                    # The bytes stay on disk either way; retiring the version
+                    # is what makes them show up in the recovery list instead
+                    # of becoming untraceable orphans.
+                    await file_integrity.retire_versions(
+                        db, entity_type=file_integrity.EVIDENCE, entity_id=ev.id,
+                        note="Control assessment replaced by a re-run analysis",
+                    )
                     await db.delete(ev)
                 await db.flush()
             for ca in cas_to_replace:
@@ -2273,9 +2289,18 @@ async def upload_control_evidence(
         raise HTTPException(415, "File contents do not match the declared XLS type.")
 
     safe_name = _sanitize_filename(file.filename or "evidence.txt")
+    # ControlAssessment has no `control_identifier` — that name belongs to the
+    # response schemas, which fill it from the linked FrameworkControl. Reading
+    # it off the ORM row raised AttributeError, so EVERY upload through this
+    # endpoint 500'd. Resolve the human identifier ("A.5.1") the same way the
+    # rest of this module does, and fall back to the FK if the control is gone.
+    ev_ctrl = (await db.execute(
+        select(FrameworkControl).where(FrameworkControl.id == ca.control_id)
+    )).scalar_one_or_none()
+    control_identifier = ev_ctrl.control_id if ev_ctrl else (ca.control_id or "")
     display_name = _build_evidence_filename(
         ev_fw_short,
-        ca.control_identifier or "",
+        control_identifier,
         ca.status.value if ca.status else "not_started",
         file.filename or safe_name,
     )
@@ -2299,6 +2324,13 @@ async def upload_control_evidence(
     )
     db.add(evidence)
     await db.flush()
+    await file_integrity.record_version(
+        db, tenant_id=tenant_id, entity_type=file_integrity.EVIDENCE,
+        entity_id=evidence.id, parent_type="control_assessment",
+        parent_id=control_assessment_id, file_path=rel_path, file_name=display_name,
+        file_sha256=evidence.file_sha256, file_size_bytes=len(file_bytes),
+        content_type=content_type, uploaded_by_id=current_user.id,
+    )
 
     # ── Cross-framework evidence propagation ──────────────────────────────────
     # Find the FrameworkControl for this control assessment to read its mapped_controls.
@@ -2376,6 +2408,20 @@ async def upload_control_evidence(
                                 shared_from_evidence_id=None,
                             )
                             db.add(shared)
+                            await db.flush()
+                            await file_integrity.record_version(
+                                db, tenant_id=tenant_id,
+                                entity_type=file_integrity.EVIDENCE,
+                                entity_id=shared.id,
+                                parent_type="control_assessment",
+                                parent_id=target_ca.id,
+                                file_path=copy_rel, file_name=evidence.file_name,
+                                file_sha256=evidence.file_sha256,
+                                file_size_bytes=evidence.file_size_bytes,
+                                content_type=evidence.content_type,
+                                uploaded_by_id=current_user.id,
+                                note=f"Propagated from evidence {evidence.id}",
+                            )
                             shared_count += 1
     except Exception:
         # Propagation failure must never block the primary upload
@@ -2462,10 +2508,17 @@ async def delete_evidence(
     evidence = result.scalar_one_or_none()
     if not evidence:
         raise HTTPException(status_code=404, detail="Evidence not found")
+    # The file is deliberately NOT unlinked. This used to destroy the bytes an
+    # audit conclusion rested on, permanently and with no trace — one wrong
+    # click and the evidence was unrecoverable. The version history is retired
+    # instead, so the file stays retrievable via the file-versions endpoints.
     if evidence.file_path:
-        from pathlib import Path as _Path
-        full = _Path(settings.UPLOADS_DIR) / evidence.file_path
-        full.unlink(missing_ok=True)
+        await file_integrity.retire_versions(
+            db,
+            entity_type=file_integrity.EVIDENCE,
+            entity_id=evidence.id,
+            note=f"Evidence record deleted by {current_user.email}",
+        )
     await db.delete(evidence)
     await db.commit()
 
@@ -2476,6 +2529,11 @@ async def download_evidence(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
     tenant_id: str = Depends(get_tenant_id),
+    acknowledge_integrity_failure: bool = Query(
+        False,
+        description="CISO override: serve a file whose checksum no longer matches, "
+                    "so a damaged or altered file can still be investigated.",
+    ),
 ):
     """Download/view an evidence file."""
     from fastapi.responses import FileResponse
@@ -2496,29 +2554,11 @@ async def download_evidence(
     status_, actual = await asyncio.to_thread(
         file_integrity.verify_file, full, evidence.file_sha256
     )
-    if status_ == file_integrity.MODIFIED:
-        logger.error(
-            "evidence.integrity.failed id=%s tenant=%s expected=%s actual=%s",
-            evidence.id, tenant_id, evidence.file_sha256, actual,
-        )
-        raise HTTPException(
-            status_code=409,
-            detail="This file no longer matches the checksum recorded when it was "
-                   "uploaded and may have been altered. Contact your administrator.",
-        )
-
-    response = FileResponse(
-        path=str(full),
-        filename=evidence.file_name or "evidence",
-        media_type=evidence.content_type or "application/octet-stream",
+    return await _integrity_response(
+        FileResponse, full, evidence.file_name or "evidence", evidence.content_type,
+        evidence.file_sha256, status_, actual, acknowledge_integrity_failure,
+        current_user, tenant_id, label=f"evidence {evidence.id}", db=db,
     )
-    # Let a caller (and an auditor reading response headers) see which of the
-    # two honest answers this is: verified against a recorded digest, or simply
-    # predating checksums and therefore unproven.
-    response.headers["X-Content-Integrity"] = status_
-    if evidence.file_sha256:
-        response.headers["X-Content-SHA256"] = evidence.file_sha256
-    return response
 
 
 # ─── Uploaded Document (checklist) management ──────────────────────────────────
@@ -2530,6 +2570,11 @@ async def download_uploaded_document(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
     tenant_id: str = Depends(get_tenant_id),
+    acknowledge_integrity_failure: bool = Query(
+        False,
+        description="CISO override: serve a file whose checksum no longer matches, "
+                    "so a damaged or altered file can still be investigated.",
+    ),
 ):
     """Download/view an uploaded checklist document."""
     from fastapi.responses import FileResponse as _FR
@@ -2554,26 +2599,11 @@ async def download_uploaded_document(
     status_, actual = await asyncio.to_thread(
         file_integrity.verify_file, full, doc.file_sha256
     )
-    if status_ == file_integrity.MODIFIED:
-        logger.error(
-            "document.integrity.failed id=%s tenant=%s expected=%s actual=%s",
-            doc.id, tenant_id, doc.file_sha256, actual,
-        )
-        raise HTTPException(
-            status_code=409,
-            detail="This file no longer matches the checksum recorded when it was "
-                   "uploaded and may have been altered. Contact your administrator.",
-        )
-
-    response = _FR(
-        path=str(full),
-        filename=doc.file_name or "document",
-        media_type=doc.content_type or "application/octet-stream",
+    return await _integrity_response(
+        _FR, full, doc.file_name or "document", doc.content_type,
+        doc.file_sha256, status_, actual, acknowledge_integrity_failure,
+        current_user, tenant_id, label=f"document {doc.id}", db=db,
     )
-    response.headers["X-Content-Integrity"] = status_
-    if doc.file_sha256:
-        response.headers["X-Content-SHA256"] = doc.file_sha256
-    return response
 
 
 @router.patch("/documents/{doc_id}/visibility", response_model=UploadedDocumentResponse)
@@ -2707,10 +2737,16 @@ async def delete_uploaded_document(
     doc = result.scalar_one_or_none()
     if not doc:
         raise HTTPException(status_code=404, detail="Document not found")
+    # Deliberately NOT unlinked, for two reasons. The file stays recoverable
+    # like deleted evidence does; and a share-link upload points an Evidence
+    # row AND this UploadedDocument at the SAME path, so unlinking here used to
+    # destroy the bytes of a live evidence record that delete_evidence was
+    # written never to touch.
     if doc.file_path:
-        from pathlib import Path as _Path3
-        full = _Path3(settings.UPLOADS_DIR) / doc.file_path
-        full.unlink(missing_ok=True)
+        await file_integrity.retire_versions(
+            db, entity_type=file_integrity.DOCUMENT, entity_id=doc.id,
+            note=f"Checklist document deleted by {current_user.email}",
+        )
     await db.delete(doc)
     await db.commit()
 
@@ -3087,6 +3123,67 @@ async def revoke_share_link(
     await db.commit()
 
 
+# ─── Stored-file download guard ───────────────────────────────────────────────
+
+async def _integrity_response(
+    response_cls, full, filename, content_type, recorded_sha, status_, actual,
+    acknowledged: bool, current_user, tenant_id: str, label: str, db=None,
+):
+    """Serve a stored file, refusing it when its checksum no longer matches.
+
+    A file that fails verification is blocked by default: evidence that has
+    changed since upload must not be handed over as if it were intact. But an
+    outright block leaves nobody able to even look at a damaged file, and
+    "investigate what happened" is the normal response to a corrupt artefact —
+    so a CISO can pass ``acknowledge_integrity_failure=true`` to retrieve it
+    anyway. The override is logged, and the response says plainly that the
+    bytes are not the ones that were uploaded.
+    """
+    if status_ == file_integrity.MODIFIED:
+        # Effective roles, not the scalar column: a CISO granted through a Group
+        # must be able to override, and one carved out via excluded_roles must
+        # not — these download routes have no require_roles() of their own, so
+        # reading `role` directly would honour neither.
+        may_override = False
+        if current_user is not None:
+            if getattr(current_user, "role", None) in (UserRole.TENANT_ADMIN, UserRole.SUPER_ADMIN):
+                may_override = True
+            elif db is not None:
+                from app.services.authz import get_effective_roles
+                may_override = UserRole.CISO.value in await get_effective_roles(current_user, db)
+        if not (acknowledged and may_override):
+            logger.error(
+                "file.integrity.failed %s tenant=%s expected=%s actual=%s",
+                label, tenant_id, recorded_sha, actual,
+            )
+            detail = (
+                "This file no longer matches the checksum recorded when it was "
+                "uploaded and may have been altered."
+            )
+            if may_override:
+                detail += (" A CISO can retrieve it for investigation with "
+                           "?acknowledge_integrity_failure=true.")
+            else:
+                detail += " Contact your administrator."
+            raise HTTPException(status_code=409, detail=detail)
+        logger.warning(
+            "file.integrity.override %s tenant=%s by=%s expected=%s actual=%s",
+            label, tenant_id, current_user.id, recorded_sha, actual,
+        )
+
+    response = response_cls(
+        path=str(full),
+        filename=filename,
+        media_type=content_type or "application/octet-stream",
+    )
+    response.headers["X-Content-Integrity"] = status_
+    if recorded_sha:
+        response.headers["X-Content-SHA256"] = recorded_sha
+    if actual and status_ == file_integrity.MODIFIED:
+        response.headers["X-Content-SHA256-Actual"] = actual
+    return response
+
+
 # ─── Stored-file integrity report ─────────────────────────────────────────────
 # Companion to GET /activity-log/verify: that endpoint proves the audit trail
 # was not rewritten, this one proves the files it points at were not swapped.
@@ -3210,4 +3307,162 @@ async def evidence_integrity_report(
         truncated=truncated,
         problems=problems,
         verified_at=datetime.utcnow().isoformat(timespec="seconds"),
+    )
+
+
+# ─── Stored-file version history ──────────────────────────────────────────────
+# Files used to be unlinked on delete, so "show me the version that was attached
+# in March" and "restore the file someone deleted by mistake" were both
+# unanswerable. Every upload now records a version and a delete retires it
+# instead of destroying the bytes; these endpoints read that history.
+
+class FileVersionOut(BaseModel):
+    id: str
+    entity_type: str
+    entity_id: str
+    version_number: int
+    file_name: str | None
+    file_sha256: str | None
+    file_size_bytes: int | None
+    content_type: str | None
+    status: str
+    note: str | None
+    uploaded_by_id: str | None
+    created_at: str
+    integrity: str
+
+    model_config = {"from_attributes": True}
+
+
+def _version_abs_path(row) -> Path:
+    return Path(row.file_path) if row.is_absolute_path else Path(settings.UPLOADS_DIR) / row.file_path
+
+
+@router.get("/files/{parent_type}/{parent_id}/versions", response_model=list[FileVersionOut])
+async def list_file_versions(
+    parent_type: str,
+    parent_id: str,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_roles(UserRole.CISO, UserRole.AUDITOR, UserRole.COMPLIANCE_MANAGER)),
+    tenant_id: str = Depends(get_tenant_id),
+):
+    """Every file ever attached to one parent, newest first, with its integrity state.
+
+    ``parent_type``/``parent_id`` is what the files hang off — a control
+    assessment, an assessment, a vendor — so this answers "what was attached
+    here over time", including versions that were superseded or whose record
+    was deleted.
+    """
+    from app.models.stored_file_version import StoredFileVersion
+
+    rows = (await db.execute(
+        select(StoredFileVersion)
+        .where(
+            StoredFileVersion.tenant_id == tenant_id,
+            StoredFileVersion.parent_type == parent_type,
+            StoredFileVersion.parent_id == parent_id,
+        )
+        .order_by(StoredFileVersion.version_number.desc())
+        .limit(500)
+    )).scalars().all()
+
+    out: list[FileVersionOut] = []
+    for row in rows:
+        status_, _actual = await asyncio.to_thread(
+            file_integrity.verify_file, _version_abs_path(row), row.file_sha256
+        )
+        out.append(FileVersionOut(
+            id=row.id, entity_type=row.entity_type, entity_id=row.entity_id,
+            version_number=row.version_number, file_name=row.file_name,
+            file_sha256=row.file_sha256, file_size_bytes=row.file_size_bytes,
+            content_type=row.content_type, status=row.status, note=row.note,
+            uploaded_by_id=row.uploaded_by_id,
+            created_at=row.created_at.isoformat() if row.created_at else "",
+            integrity=status_,
+        ))
+    return out
+
+
+@router.get("/files/deleted", response_model=list[FileVersionOut])
+async def list_deleted_files(
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_roles(UserRole.CISO, UserRole.COMPLIANCE_MANAGER)),
+    tenant_id: str = Depends(get_tenant_id),
+    limit: int = Query(200, ge=1, le=2000),
+):
+    """Files whose record was deleted but whose bytes were kept — the recovery list."""
+    from app.models.stored_file_version import StoredFileVersion
+
+    rows = (await db.execute(
+        select(StoredFileVersion)
+        .where(
+            StoredFileVersion.tenant_id == tenant_id,
+            StoredFileVersion.status == file_integrity.DELETED,
+        )
+        .order_by(StoredFileVersion.updated_at.desc())
+        .limit(limit)
+    )).scalars().all()
+
+    out: list[FileVersionOut] = []
+    for row in rows:
+        status_, _actual = await asyncio.to_thread(
+            file_integrity.verify_file, _version_abs_path(row), row.file_sha256
+        )
+        out.append(FileVersionOut(
+            id=row.id, entity_type=row.entity_type, entity_id=row.entity_id,
+            version_number=row.version_number, file_name=row.file_name,
+            file_sha256=row.file_sha256, file_size_bytes=row.file_size_bytes,
+            content_type=row.content_type, status=row.status, note=row.note,
+            uploaded_by_id=row.uploaded_by_id,
+            created_at=row.created_at.isoformat() if row.created_at else "",
+            integrity=status_,
+        ))
+    return out
+
+
+@router.get("/files/versions/{version_id}/download")
+async def download_file_version(
+    version_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_roles(UserRole.CISO, UserRole.AUDITOR, UserRole.COMPLIANCE_MANAGER)),
+    tenant_id: str = Depends(get_tenant_id),
+    acknowledge_integrity_failure: bool = Query(
+        False,
+        description="CISO override: serve a file whose checksum no longer matches, "
+                    "so a damaged or altered file can still be investigated.",
+    ),
+):
+    """Download one specific stored version — including a superseded or deleted one."""
+    from fastapi.responses import FileResponse as _FR
+    from app.models.stored_file_version import StoredFileVersion
+
+    row = (await db.execute(
+        select(StoredFileVersion).where(
+            StoredFileVersion.id == version_id,
+            StoredFileVersion.tenant_id == tenant_id,
+        )
+    )).scalar_one_or_none()
+    if not row:
+        raise HTTPException(status_code=404, detail="File version not found")
+
+    # The auditor portal hides evidence flagged is_visible_to_auditor=False;
+    # fetching the same bytes by version id must not be a way around that.
+    if row.entity_type == file_integrity.EVIDENCE and current_user.role == UserRole.AUDITOR:
+        owner = (await db.execute(
+            select(Evidence).where(Evidence.id == row.entity_id)
+        )).scalar_one_or_none()
+        if owner is not None and not owner.is_visible_to_auditor:
+            raise HTTPException(status_code=404, detail="File version not found")
+
+    full = _version_abs_path(row)
+    status_, actual = await asyncio.to_thread(
+        file_integrity.verify_file, full, row.file_sha256
+    )
+    if status_ in (file_integrity.MISSING, file_integrity.UNREADABLE):
+        raise HTTPException(status_code=404, detail="File not available on disk")
+
+    return await _integrity_response(
+        _FR, full, row.file_name or "file", row.content_type, row.file_sha256,
+        status_, actual, acknowledge_integrity_failure, current_user, tenant_id,
+        label=f"version {row.version_number} of {row.entity_type} {row.entity_id}", db=db,
     )
