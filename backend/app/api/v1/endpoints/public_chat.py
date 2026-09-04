@@ -1,7 +1,7 @@
 """
 Public support chatbot endpoint — no authentication required.
 Restricted to GRCEye platform questions and general GRC topics only.
-Rate-limited by IP using a simple in-memory sliding window.
+Rate-limited by IP via shared state, so the limit holds across all workers.
 
 Built on the shared AI foundation (app.services.ai_prompts / ai_provider / ai_locale):
 the expert `public_support` system prompt owns the product-facts grounding, the
@@ -17,14 +17,13 @@ stream carries tuned decoding, correct timeout handling, honest truncated/empty
 error frames and localised (en/fr/ar) error text instead of a silent empty bubble.
 """
 import logging
-import time
-from collections import defaultdict
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
+from app.core import shared_state
 from app.core.security_utils import sanitize_for_prompt
 from app.services import ai_prompts, ai_provider
 from app.services.ai_locale import get_request_language, guess_language, normalize_language
@@ -33,23 +32,23 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
-# ── In-memory rate limiter (per IP, 20 requests per 10 minutes) ───────────────
-_rate_store: dict[str, list[float]] = defaultdict(list)
+# ── Rate limiter (per IP, 20 requests per 10 minutes) ─────────────────────────
+# Counted in shared state so the limit is 20 across the whole deployment, not
+# 20 per uvicorn worker. This endpoint is unauthenticated, so the per-worker
+# multiplier was a real abuse margin — and the previous in-process store kept
+# one growing list per IP forever, since a bucket was only pruned if that same
+# IP came back. See app/core/shared_state.py.
 _RATE_LIMIT = 20
 _RATE_WINDOW = 600  # 10 minutes in seconds
 
 
-def _check_rate_limit(ip: str) -> None:
-    now = time.time()
-    timestamps = _rate_store[ip]
-    # Evict old timestamps outside the window
-    _rate_store[ip] = [t for t in timestamps if now - t < _RATE_WINDOW]
-    if len(_rate_store[ip]) >= _RATE_LIMIT:
+async def _check_rate_limit(ip: str) -> None:
+    hits = await shared_state.incr(f"ratelimit:public_chat:{ip}", 1, _RATE_WINDOW)
+    if hits > _RATE_LIMIT:
         raise HTTPException(
             status_code=429,
             detail="Too many requests. Please wait a few minutes before sending more messages.",
         )
-    _rate_store[ip].append(now)
 
 
 # ── Schema ─────────────────────────────────────────────────────────────────────
@@ -123,7 +122,7 @@ async def public_support_chat(
     """
     # Rate limit by client IP
     client_ip = request.client.host if request.client else "unknown"
-    _check_rate_limit(client_ip)
+    await _check_rate_limit(client_ip)
 
     # Validate message count (max 40 messages to prevent abuse)
     if len(body.messages) > _MAX_INCOMING_MESSAGES:

@@ -7,19 +7,21 @@ POST /public/contact
 - No data stored in DB (avoids needing a new model)
 """
 import logging
-import time
-from collections import defaultdict
+
 from fastapi import APIRouter, HTTPException, Request, status
 from pydantic import BaseModel, EmailStr, Field
 
+from app.core import shared_state
 from app.core.config import settings
 from app.services.email_service import send_email
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
-# In-memory rate limiter (per IP, 5 submissions per hour)
-_rate_store: dict[str, list[float]] = defaultdict(list)
+# Rate limiter (per IP, 5 submissions per hour). Counted in shared state so the
+# limit is 5 across the deployment rather than 5 per uvicorn worker — this
+# endpoint is unauthenticated and sends mail, so the per-worker multiplier was a
+# real abuse margin. See app/core/shared_state.py.
 _RATE_LIMIT = 5
 _RATE_WINDOW = 3600  # 1 hour in seconds
 
@@ -30,15 +32,13 @@ CONTACT_RECIPIENTS = [
 ]
 
 
-def _check_rate_limit(ip: str) -> None:
-    now = time.time()
-    _rate_store[ip] = [t for t in _rate_store[ip] if now - t < _RATE_WINDOW]
-    if len(_rate_store[ip]) >= _RATE_LIMIT:
+async def _check_rate_limit(ip: str) -> None:
+    hits = await shared_state.incr(f"ratelimit:public_contact:{ip}", 1, _RATE_WINDOW)
+    if hits > _RATE_LIMIT:
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
             detail="Too many contact submissions. Please try again later.",
         )
-    _rate_store[ip].append(now)
 
 
 class ContactRequest(BaseModel):
@@ -53,7 +53,7 @@ class ContactRequest(BaseModel):
 async def submit_contact_form(request: Request, body: ContactRequest):
     """Public contact form — sends a separate email to each recipient."""
     ip = request.client.host if request.client else "unknown"
-    _check_rate_limit(ip)
+    await _check_rate_limit(ip)
 
     subject = body.subject or "New contact form submission"
     safe_message = body.message.replace("\n", "<br>")

@@ -352,7 +352,7 @@ async def mfa_login(request: Request, body: MfaLoginRequest, db: AsyncSession = 
     """Second step of login for MFA-enrolled accounts: redeem the challenge
     token from POST /login plus a TOTP code for real access/refresh tokens."""
     try:
-        payload = decode_token(body.challenge_token)
+        payload = await decode_token(body.challenge_token)
     except HTTPException:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, _INVALID_MFA_CHALLENGE)
     if payload.get("type") != "mfa_challenge":
@@ -380,7 +380,7 @@ async def mfa_login(request: Request, body: MfaLoginRequest, db: AsyncSession = 
         logger.info("login.mfa_fail email_hash=%s", email_hash)
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid MFA code")
     device.last_used_at = datetime.now(timezone.utc).replace(tzinfo=None)
-    revoke_jti(payload.get("jti"))  # single-use: this challenge can't be redeemed twice
+    await revoke_jti(payload.get("jti"))  # single-use: this challenge can't be redeemed twice
 
     token_data = {"sub": user.id, "tenant_id": user.tenant_id, "role": user.role}
     try:
@@ -432,7 +432,7 @@ async def list_sessions(
     auth = request.headers.get("Authorization", "")
     if auth.startswith("Bearer "):
         try:
-            cur_sid = decode_token(auth[7:]).get("sid")
+            cur_sid = (await decode_token(auth[7:])).get("sid")
         except Exception:  # noqa: BLE001
             cur_sid = None
     rows = (await db.execute(
@@ -755,12 +755,12 @@ async def update_selected_frameworks(
 @router.post("/refresh", response_model=TokenResponse)
 @limiter.limit("30/minute")
 async def refresh_token(request: Request, body: RefreshRequest, db: AsyncSession = Depends(get_db)):
-    payload = decode_token(body.refresh_token)
+    payload = await decode_token(body.refresh_token)
     if payload.get("type") != "refresh":
         raise HTTPException(status_code=400, detail="Invalid refresh token")
 
     # Refresh-token rotation: revoke the old jti so it can't be reused.
-    revoke_jti(payload.get("jti"))
+    await revoke_jti(payload.get("jti"))
 
     user_id = payload.get("sub")
     result = await db.execute(select(User).where(User.id == user_id))
@@ -897,8 +897,8 @@ async def reset_password(request: Request, body: ResetPasswordRequest, db: Async
 async def logout(body: RefreshRequest):
     """Revoke the supplied refresh token (best-effort)."""
     try:
-        payload = decode_token(body.refresh_token)
-        revoke_jti(payload.get("jti"))
+        payload = await decode_token(body.refresh_token)
+        await revoke_jti(payload.get("jti"))
     except HTTPException:
         # Already invalid — nothing to revoke. Still return 204.
         pass

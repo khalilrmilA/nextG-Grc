@@ -38,7 +38,7 @@ async def get_current_user(
     db: AsyncSession = Depends(get_db),
 ) -> User:
     """Extract and validate the current user from JWT token."""
-    payload = decode_token(credentials.credentials)
+    payload = await decode_token(credentials.credentials)
 
     # mfa_challenge tokens prove "password verified, MFA still owed" — they must
     # never work as an access token, only at POST /auth/mfa-login.
@@ -154,7 +154,7 @@ async def get_current_user_optional(
     if not credentials:
         return None
     try:
-        payload = decode_token(credentials.credentials)
+        payload = await decode_token(credentials.credentials)
         user_id: str | None = payload.get("sub")
         if not user_id:
             return None
@@ -170,7 +170,7 @@ async def get_current_user_ws(token: str, db: AsyncSession) -> User:
     from app.core.security import decode_token
     from sqlalchemy import select
     try:
-        payload = decode_token(token)
+        payload = await decode_token(token)
     except Exception:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
     user_id: str | None = payload.get("sub")

@@ -4,24 +4,29 @@ from typing import Any
 from jose import jwt, JWTError
 from passlib.context import CryptContext
 from fastapi import HTTPException, status
+from app.core import shared_state
 from app.core.config import settings
 
 # Use Argon2 for password hashing (more reliable than bcrypt)
 pwd_context = CryptContext(schemes=["argon2"], deprecated="auto")
 
-# In-memory revocation set for refresh token JTIs. Process-local — for
-# multi-worker / multi-host deployments swap with a Redis set keyed by jti.
-_REVOKED_JTIS: set[str] = set()
+# Revoked token jtis live in shared state (Redis when reachable) so a token
+# revoked on one uvicorn worker is rejected by every other worker too — the
+# previous process-local set left a revoked refresh token usable on whichever
+# worker hadn't seen the logout. Entries expire after the longest token
+# lifetime: past that the token fails on `exp` anyway, so keeping the jti
+# would only leak memory.
+_REVOCATION_TTL_SECONDS = settings.REFRESH_TOKEN_EXPIRE_DAYS * 24 * 60 * 60
 
 
-def revoke_jti(jti: str) -> None:
+async def revoke_jti(jti: str) -> None:
     """Mark a token's jti as revoked. Subsequent decodes will reject it."""
     if jti:
-        _REVOKED_JTIS.add(jti)
+        await shared_state.mark(f"revoked_jti:{jti}", _REVOCATION_TTL_SECONDS)
 
 
-def is_jti_revoked(jti: str | None) -> bool:
-    return bool(jti) and jti in _REVOKED_JTIS
+async def is_jti_revoked(jti: str | None) -> bool:
+    return bool(jti) and await shared_state.is_marked(f"revoked_jti:{jti}")
 
 
 def hash_password(password: str) -> str:
@@ -75,12 +80,12 @@ def create_mfa_challenge_token(data: dict[str, Any]) -> str:
     return jwt.encode(payload, settings.SECRET_KEY, algorithm=settings.JWT_ALGORITHM)
 
 
-def decode_token(token: str) -> dict[str, Any]:
+async def decode_token(token: str) -> dict[str, Any]:
     try:
         payload = jwt.decode(
             token, settings.SECRET_KEY, algorithms=[settings.JWT_ALGORITHM]
         )
-        if is_jti_revoked(payload.get("jti")):
+        if await is_jti_revoked(payload.get("jti")):
             raise JWTError("Token has been revoked")
         return payload
     except JWTError:
