@@ -11,6 +11,58 @@ from fastapi import HTTPException
 
 
 _ALLOWED_SCHEMES = {"http", "https"}
+
+# ── Upload filename safety ───────────────────────────────────────────────────
+#
+# Uploads were stored under a name derived from the client's own filename with
+# no check on the extension, so an .exe, .sh or .html could be written into the
+# uploads volume and later handed back over HTTP. None of these is a document,
+# and the evidence, contract and OCR endpoints only ever want documents.
+#
+# A denylist rather than an allowlist: this platform accepts a genuinely wide
+# spread of client evidence — office formats, images, archives, CSV, XML, EML —
+# and an allowlist would reject legitimate evidence a bank actually holds. What
+# must not land on disk is a much shorter and much more stable list.
+DANGEROUS_UPLOAD_EXTENSIONS = frozenset({
+    # Executables and installers
+    ".exe", ".dll", ".so", ".dylib", ".msi", ".app", ".com", ".scr", ".pif",
+    ".bat", ".cmd", ".sh", ".bash", ".zsh", ".ps1", ".psm1", ".vbs", ".vbe",
+    ".js", ".jse", ".wsf", ".wsh", ".jar", ".apk", ".deb", ".rpm",
+    # Server-executable sources — dangerous if the uploads volume is ever
+    # served by anything that interprets them.
+    ".php", ".phtml", ".php3", ".php4", ".php5", ".asp", ".aspx", ".jsp",
+    ".cgi", ".pl", ".py", ".rb",
+    # Markup the browser will execute in the app's own origin.
+    ".html", ".htm", ".xhtml", ".svg", ".swf",
+    # Windows shortcut / scriptlet families
+    ".lnk", ".url", ".hta", ".chm", ".reg", ".sct", ".msc",
+})
+
+
+def assert_safe_upload_name(filename: str | None, *, field_name: str = "file") -> str:
+    """Reject a filename whose extension must never reach the uploads volume.
+
+    Checks every suffix, not only the last one: ``report.pdf.exe`` is an
+    executable, and ``payload.php.pdf`` is a PHP file to anything that resolves
+    extensions left to right. Raises HTTPException(422); returns the cleaned
+    basename otherwise.
+    """
+    from fastapi import HTTPException
+
+    name = (filename or "").strip().replace("\\", "/").split("/")[-1]
+    if not name:
+        return ""
+    suffixes = {s.lower() for s in Path(name).suffixes}
+    blocked = suffixes & DANGEROUS_UPLOAD_EXTENSIONS
+    if blocked:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                f"{field_name}: '{', '.join(sorted(blocked))}' files are not accepted. "
+                f"Upload the document itself (PDF, Office, image, archive or text)."
+            ),
+        )
+    return name
 _FORBIDDEN_HOSTS = {"localhost", "metadata.google.internal", "metadata"}
 
 # Magic-byte signatures for the file types we accept on uploads.

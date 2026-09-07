@@ -22,7 +22,7 @@ from app.api.v1.dependencies.auth import get_current_user, get_tenant_id, requir
 from app.api.v1.dependencies.pagination import PaginationParams
 from app.core.config import settings
 from app.core.database import AsyncSessionLocal, get_db
-from app.core.security_utils import verify_file_signature
+from app.core.security_utils import verify_file_signature, assert_safe_upload_name
 from app.services import file_integrity
 from app.models.compliance import (
     AssessmentStatus,
@@ -1196,6 +1196,9 @@ async def upload_document(
     lang: str = Depends(get_request_language),
 ) -> UploadedDocumentResponse:
     """Upload a document to an assessment for compliance analysis."""
+    # Reject filenames whose extension must never reach the uploads
+    # volume — see security_utils.DANGEROUS_UPLOAD_EXTENSIONS.
+    assert_safe_upload_name(file.filename, field_name="file")
     assessment_result = await db.execute(
         select(ComplianceAssessment).where(
             ComplianceAssessment.id == assessment_id,
@@ -2251,6 +2254,9 @@ async def upload_control_evidence(
     tenant_id: str = Depends(get_tenant_id),
 ) -> EvidenceResponse:
     """Upload evidence file for a specific control assessment."""
+    # Reject filenames whose extension must never reach the uploads
+    # volume — see security_utils.DANGEROUS_UPLOAD_EXTENSIONS.
+    assert_safe_upload_name(file.filename, field_name="file")
     result = await db.execute(
         select(ControlAssessment, ComplianceAssessment)
         .join(ComplianceAssessment, ControlAssessment.assessment_id == ComplianceAssessment.id)

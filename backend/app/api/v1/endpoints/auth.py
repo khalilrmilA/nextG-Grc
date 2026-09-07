@@ -15,8 +15,10 @@ from app.core.security import (
     create_refresh_token,
     decode_token,
     hash_password,
+    hash_password_async,
     revoke_jti,
     verify_password,
+    verify_password_async,
 )
 from app.models.user import User, UserRole
 from app.models.tenant import Tenant
@@ -283,7 +285,7 @@ async def login(request: Request, body: LoginRequest, db: AsyncSession = Depends
             logger.info("login.fail email_hash=%s reason=no_user", email_hash)
             await _journal_login(request, normalized_email, False, "no_user")
             raise HTTPException(status.HTTP_401_UNAUTHORIZED, _GENERIC_LOGIN_FAILURE)
-        if not verify_password(body.password, user.hashed_password):
+        if not await verify_password_async(body.password, user.hashed_password):
             # Count the failure and lock the account once the threshold is crossed.
             # Threshold/window are tenant-configurable (falls back to the platform
             # defaults when the tenant hasn't overridden them).
@@ -534,7 +536,7 @@ async def register(request: Request, body: RegisterRequest, db: AsyncSession = D
     user = User(
         tenant_id=tenant.id,
         email=body.email,
-        hashed_password=hash_password(body.password),
+        hashed_password=await hash_password_async(body.password),
         first_name=body.first_name,
         last_name=body.last_name,
         role=UserRole.CISO,
@@ -805,12 +807,12 @@ async def change_password(
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
     """Allow the authenticated user to change their own password."""
-    if not verify_password(body.current_password, current_user.hashed_password):
+    if not await verify_password_async(body.current_password, current_user.hashed_password):
         raise HTTPException(status_code=400, detail="Current password is incorrect")
     _enforce_password_policy(body.new_password)
     result = await db.execute(select(User).where(User.id == current_user.id))
     user = result.scalar_one()
-    user.hashed_password = hash_password(body.new_password)
+    user.hashed_password = await hash_password_async(body.new_password)
     user.password_changed_at = _utcnow()
     user.must_change_password = False
     await db.commit()
@@ -898,7 +900,7 @@ async def reset_password(request: Request, body: ResetPasswordRequest, db: Async
     if user is None:
         raise HTTPException(status_code=400, detail="Invalid or expired reset token")
 
-    user.hashed_password = hash_password(body.new_password)
+    user.hashed_password = await hash_password_async(body.new_password)
     user.password_changed_at = _utcnow()
     user.must_change_password = False
     # Clear any lockout so the user can log straight in.

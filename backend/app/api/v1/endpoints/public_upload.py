@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import settings
 from app.core.database import get_db
 from app.core.security_utils import (
+    assert_safe_upload_name,
     sanitize_filename,
     server_extension_for,
     verify_file_signature,
@@ -142,6 +143,9 @@ async def upload_evidence_via_token(
     db: AsyncSession = Depends(get_db),
 ):
     """Upload evidence via share token (no auth)."""
+    # Reject filenames whose extension must never reach the uploads
+    # volume — see security_utils.DANGEROUS_UPLOAD_EXTENSIONS.
+    assert_safe_upload_name(file.filename, field_name="file")
     tok = (await db.execute(
         select(EvidenceUploadToken).where(EvidenceUploadToken.token == token)
     )).scalar_one_or_none()

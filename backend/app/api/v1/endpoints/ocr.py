@@ -87,6 +87,9 @@ async def extract(
     lang: Annotated[str, Form()] = DEFAULT_LANG,
     file: UploadFile = File(...),
 ):
+    # Reject filenames whose extension must never reach the uploads
+    # volume — see security_utils.DANGEROUS_UPLOAD_EXTENSIONS.
+    assert_safe_upload_name(file.filename, field_name="file")
     content = await file.read()
     if not content:
         raise HTTPException(400, "Empty file")
@@ -217,6 +220,9 @@ async def searchable_pdf(
     that was "all screenshots" (e.g. a scanned tender) becomes a full,
     selectable, searchable PDF. Digital pages are copied through untouched.
     """
+    # Reject filenames whose extension must never reach the uploads
+    # volume — see security_utils.DANGEROUS_UPLOAD_EXTENSIONS.
+    assert_safe_upload_name(file.filename, field_name="file")
     content = await file.read()
     if not content:
         raise HTTPException(400, "Empty file")

@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.core.database import get_db
+from app.core.security_utils import assert_safe_upload_name
 from app.models.user import User
 from app.models.scan_journal import ScanJournal
 from app.api.v1.dependencies.auth import get_tenant_id
@@ -55,6 +56,9 @@ async def upload_scan(
     file: UploadFile = File(...),
 ):
     """Ingest a scanner export file and return the resulting ScanJournal."""
+    # Reject filenames whose extension must never reach the uploads
+    # volume — see security_utils.DANGEROUS_UPLOAD_EXTENSIONS.
+    assert_safe_upload_name(file.filename, field_name="file")
     tool_norm = (tool or "csv").strip().lower()
     if tool_norm not in _ALLOWED_TOOLS:
         raise HTTPException(

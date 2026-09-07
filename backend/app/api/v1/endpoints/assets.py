@@ -7,7 +7,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
-from sqlalchemy import select
+from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
@@ -204,11 +204,20 @@ async def list_assets(
         base = base.where(Asset.criticality == criticality)
     if asset_class:
         base = base.where(Asset.asset_class == asset_class)
-    all_rows = list((await db.execute(base)).scalars().all())
-    total = len(all_rows)
-    ordered = sorted(all_rows, key=lambda a: a.created_at, reverse=True)
-    start = (page - 1) * page_size
-    items = [AssetOut.model_validate(a) for a in ordered[start:start + page_size]]
+    # Count and slice in the database, not in Python. This used to load every
+    # asset row, hydrate all of them through the ORM, sort in memory and then
+    # take twenty — so page 1 of a 10,000-asset estate cost the same as
+    # fetching the whole register, on every request. At STB's stated volumetry
+    # that is the difference between a page load and a timeout.
+    total = (await db.execute(
+        select(func.count()).select_from(base.subquery())
+    )).scalar() or 0
+    rows = (await db.execute(
+        base.order_by(Asset.created_at.desc())
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+    )).scalars().all()
+    items = [AssetOut.model_validate(a) for a in rows]
     return PaginatedAssets(items=items, total=total, page=page, page_size=page_size)
 
 

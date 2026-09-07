@@ -398,7 +398,16 @@ async def get_cartography(
         if p.entity_id:
             _add_edge(p.id, p.entity_id, "operated_by")
 
-    asset_owner_map = {a.id: a.owner_id for a in assets}
+    # Index the assets by owner once, instead of scanning every asset for every
+    # process. The previous form was O(processes x assets) on the event loop:
+    # at STB's stated 10,000 assets and a few hundred processes that is millions
+    # of iterations per request, blocking every other request on the worker.
+    # This is O(assets + processes) and produces exactly the same edges.
+    assets_by_owner: dict[str, list[str]] = {}
+    for a in assets:
+        if a.owner_id:
+            assets_by_owner.setdefault(a.owner_id, []).append(a.id)
+
     for p in processes:
         linked = set(p.asset_ids or [])
         # explicit process -> asset dependency
@@ -406,10 +415,8 @@ async def get_cartography(
             _add_edge(p.id, aid, "depends_on")
         # inferred asset -> process by shared ownership (skip ones already linked)
         if p.owner_id:
-            for aid, a_owner in asset_owner_map.items():
-                if aid in linked:
-                    continue
-                if a_owner and a_owner == p.owner_id:
+            for aid in assets_by_owner.get(p.owner_id, ()):
+                if aid not in linked:
                     _add_edge(aid, p.id, "owned_by")
 
     stats = {

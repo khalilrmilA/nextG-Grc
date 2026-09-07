@@ -465,6 +465,10 @@ async function _streamAi(
     method: "POST",
     headers: {
       "Content-Type": "application/json",
+      // The axios client sets this on every other request; this one uses raw
+      // fetch and was the single hole in the origin classification, so AI
+      // generation showed in the audit trail as an unidentified caller.
+      "X-GRC-Client": "web-ui",
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
     },
     body: JSON.stringify(body),

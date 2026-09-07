@@ -26,10 +26,10 @@ someone outside this repo answers a question.
 | # | Item | Effort | Why |
 |---|---|---|---|
 | 8.2 | Per-tenant label overrides | small | Explicit requirement, visible in a demo, tenant settings blob already exists to hold it |
-| 4.3 | `asyncio.to_thread` around Argon2 | one line | Largest blocking call in the request path |
+| 4.3 | ~~Argon2 on the event loop~~ | done | `hash_password_async` / `verify_password_async`; all five request-path call sites converted |
 | 5.4 | Arabic in the last two PDF generators | small | Helper exists; one call per client-data field |
 | 5.3 | Restore for the other version tables | small | Same append-don't-rewrite pattern as policies |
-| 3.5 | Send `X-GRC-Client` from `_streamAi` | small | Closes a hole in the origin field just built |
+| 3.5 | ~~`X-GRC-Client` from `_streamAi`~~ | done | AI generation no longer appears as an unidentified caller |
 
 ### Real gaps, larger builds
 | # | Item | Effort | Note |
@@ -40,9 +40,9 @@ someone outside this repo answers a question.
 | 10.1 | Custom roles with their own permission set | large | 13 fixed roles today; Groups bundle built-ins. Scope the cheap path first |
 | 3.1 | Field-level before/after in the action trace | moderate | SQLAlchemy flush hook |
 | 3.2 | Remaining schedulers still log nothing | moderate | Helper exists — call it **after** the caller commits |
-| 4.1 | Asset cartography O(n²) + blocks the event loop | moderate | Latent; zero-impact today only because a row has a NULL owner |
+| 4.1 | ~~Asset cartography O(n²)~~ | done | Indexed by owner; identical edge set, 8x faster at 10k assets and now linear |
 | 12.1 | ~~Threat pending queue~~ | done | Feeds now land in the threat watch, not the register |
-| 14.3 | Applied-control create/edit/delete take any authenticated user | small | Validation is gated; the control itself is not |
+| 14.3 | ~~Applied-control endpoints ungated~~ | done | Create/edit: CISO, risk manager, security analyst, control owner. Delete: CISO / risk manager |
 | 11.1 | CAPEC catalog (ids are bridged, names are not) | small | Near-copy of `mitre_cwe_sync.py`; only if STB asks for attack-pattern search |
 
 ### Decide, then act
@@ -853,4 +853,72 @@ and it either matches the seal or the restored set is not what was purged.
 Backup of the audit trail (rule 5 of the traceability block) is the same gap as
 §1.2 / §6.1: no scheduled backup exists on the deployment. The configuration is
 in the production runbook; it has not been applied.
+
+---
+
+## 16. Defect sweep (2026-09-07)
+
+A pass over the register's actual defects — things that misbehave or are
+unsafe — as opposed to the feature builds and blocked decisions alongside them.
+
+### 16.1 Argon2 ran on the event loop (4.3)
+Password hashing and verification are deliberately expensive, and both ran on
+the request thread. At the specified volumetry a 09:00 sign-in wave from 300
+staff would queue behind each other's key derivation, taking every other
+request on that worker with them. `hash_password_async` / `verify_password_async`
+move it to a worker thread; all five request-path call sites across auth, users
+and admin are converted. The seed path in `startup.py` stays synchronous — it
+runs once at boot, not on a request.
+
+### 16.2 Uploads accepted executables (2.3)
+Files were stored under a name derived from the client's own filename with no
+check on the extension, so `.exe`, `.sh`, `.php` or `.html` could be written to
+the uploads volume and later served back. `assert_safe_upload_name` now guards
+all seven upload handlers — evidence, assessment documents, vendor contracts,
+OCR (x2), the public evidence-token upload and scanner import.
+
+A denylist rather than an allowlist, deliberately: this platform accepts a wide
+spread of client evidence — office formats, images, archives, CSV, XML, EML —
+and an allowlist would reject legitimate evidence a bank actually holds. What
+must never land on disk is a shorter and far more stable list. Every suffix is
+checked, not just the last: `report.pdf.exe` is an executable, and
+`payload.php.pdf` is a PHP file to anything resolving extensions left to right.
+
+### 16.3 The control register was editable by any account (14.3)
+Sign-off was correctly restricted to the security referent while the record
+itself was open to every authenticated user, which made the gate on validation
+largely decorative. Create and edit now require CISO, risk manager, security
+analyst or control owner; delete is narrower — CISO or risk manager — because
+removing a control removes a claimed mitigation from every risk that counted
+on it.
+
+### 16.4 Deleting a control left it claimed as a mitigation
+`RiskScenario.applied_control_ids` has no foreign key, so a deleted control's
+id stayed in every scenario that listed it. The scenario went on claiming a
+mitigating control that no longer existed, which overstates its treatment —
+worse than the link simply being absent. The delete now detaches it from each
+scenario and records which ones in the control's history.
+
+Live data was clean (0 dangling references across 16 controls); this was latent.
+
+### 16.5 Pagination that did not paginate (4.2)
+`GET /assets` accepted `page` and `page_size`, then loaded **every** asset row,
+hydrated all of them through the ORM, sorted in Python and sliced twenty out.
+Page 1 of a 10,000-asset estate cost exactly as much as fetching the whole
+register, on every request. Counting and slicing now happen in SQL.
+
+`GET /vulnerabilities` and `GET /applied-controls` returned whole tables with
+no bound at all. Both are now capped with `limit`/`offset` and report the true
+total in `X-Total-Count`. The list response shape is unchanged so no client
+breaks, and the header is what tells a caller it has not seen everything.
+
+### 16.6 Asset cartography was O(processes x assets) (4.1)
+For every business process it scanned every asset looking for a shared owner.
+At STB's 10,000 assets and a few hundred processes that is millions of
+iterations per request, on the event loop, blocking every other request on the
+worker. Indexing the assets by owner once makes it linear.
+
+Verified equivalent, not just faster: on 10,000 assets x 200 processes both
+forms produce an **identical 49,398-edge set**, and the new one runs in 26 ms
+against 201 ms — a gap that widens with estate size.
 

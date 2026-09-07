@@ -25,7 +25,7 @@ import json
 from pathlib import Path
 
 from app.core.database import get_db
-from app.core.security_utils import assert_path_within, sanitize_filename, verify_file_signature
+from app.core.security_utils import assert_path_within, sanitize_filename, verify_file_signature, assert_safe_upload_name
 from app.core import ai_quota
 from app.api.v1.dependencies.auth import get_current_user, get_tenant_id, require_roles
 from app.models.user import User, UserRole
@@ -1150,6 +1150,9 @@ async def upload_vendor_contract(
     lang: str = Depends(get_request_language),
 ):
     """Upload a contract for a vendor and trigger the background AI review (written in the uploader's UI language)."""
+    # Reject filenames whose extension must never reach the uploads
+    # volume — see security_utils.DANGEROUS_UPLOAD_EXTENSIONS.
+    assert_safe_upload_name(contract_file.filename, field_name="contract_file")
     # Get vendor
     result = await db.execute(
         select(Vendor).where(

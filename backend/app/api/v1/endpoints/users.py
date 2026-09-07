@@ -19,7 +19,7 @@ def _generate_password() -> str:
 
 
 from app.core.database import get_db, AsyncSessionLocal
-from app.core.security import hash_password
+from app.core.security import hash_password, hash_password_async
 from app.models.user import User, UserRole, ASSIGNABLE_ROLES
 from app.models.tenant import Tenant
 from app.models.group import Group
@@ -211,7 +211,7 @@ async def create_user(
     new_user = User(
         tenant_id=tenant_id,
         email=normalized_email,
-        hashed_password=hash_password(temp_password),
+        hashed_password=await hash_password_async(temp_password),
         first_name=body.first_name,
         last_name=body.last_name,
         role=primary_role,
@@ -383,7 +383,7 @@ async def reset_user_password(
     if is_system_actor(user.email):
         raise HTTPException(403, "The automated-task account cannot be given a password.")
     new_password = _generate_password()
-    user.hashed_password = hash_password(new_password)
+    user.hashed_password = await hash_password_async(new_password)
     await db.commit()
     return ResetPasswordResponse(temporary_password=new_password)
 
@@ -474,7 +474,7 @@ async def create_auditor(
     temp_password = body.temporary_password or _generate_password()
     auditor = User(
         tenant_id=tenant_id, email=body.email,
-        hashed_password=hash_password(temp_password),
+        hashed_password=await hash_password_async(temp_password),
         first_name=body.first_name, last_name=body.last_name,
         role=UserRole.AUDITOR, roles=["auditor"],
         is_verified=True, expires_at=body.expires_at,

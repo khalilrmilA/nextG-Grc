@@ -14,9 +14,9 @@ Elite Pack (RFP module 3):
 from datetime import datetime, timezone
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from pydantic import BaseModel, field_validator, model_validator
-from sqlalchemy import String, cast, select
+from sqlalchemy import String, cast, select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
@@ -232,11 +232,30 @@ async def _scenario_link_view(
 
 
 @router.get("", response_model=list[VulnOut])
-async def list_vulns(severity: str | None = None, status_filter: str | None = None, db: AsyncSession = Depends(get_db), _: User = Depends(get_current_user), tenant_id: str = Depends(get_tenant_id)):
+async def list_vulns(
+    response: Response,
+    severity: str | None = None,
+    status_filter: str | None = None,
+    limit: int = Query(1000, ge=1, le=5000),
+    offset: int = Query(0, ge=0),
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(get_current_user),
+    tenant_id: str = Depends(get_tenant_id),
+):
+    """Bounded: this used to return the whole table in one response.
+
+    The list shape is unchanged so no client breaks; the total goes in
+    X-Total-Count so a caller can tell when it has not seen everything.
+    """
     q = select(Vulnerability).where(Vulnerability.tenant_id == tenant_id)
     if severity: q = q.where(Vulnerability.severity == severity)
     if status_filter: q = q.where(Vulnerability.status == status_filter)
-    return [VulnOut.model_validate(v) for v in (await db.execute(q.order_by(Vulnerability.created_at.desc()))).scalars().all()]
+    total = (await db.execute(select(func.count()).select_from(q.subquery()))).scalar() or 0
+    response.headers["X-Total-Count"] = str(total)
+    rows = (await db.execute(
+        q.order_by(Vulnerability.created_at.desc()).offset(offset).limit(limit)
+    )).scalars().all()
+    return [VulnOut.model_validate(v) for v in rows]
 
 @router.get("/stats", response_model=VulnStats)
 async def get_stats(db: AsyncSession = Depends(get_db), _: User = Depends(get_current_user), tenant_id: str = Depends(get_tenant_id)):

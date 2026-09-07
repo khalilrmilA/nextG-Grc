@@ -1,4 +1,5 @@
 import uuid
+import asyncio
 from datetime import datetime, timedelta, timezone
 from typing import Any
 from jose import jwt, JWTError
@@ -34,6 +35,18 @@ def hash_password(password: str) -> str:
     return pwd_context.hash(password)
 
 
+async def hash_password_async(password: str) -> str:
+    """Hash off the event loop.
+
+    Argon2 is deliberately expensive — that is the point of it — and it runs on
+    the request thread. At the specified volumetry a 09:00 sign-in wave from 300
+    staff would queue behind each other's key derivation, and every other
+    request on that worker with them. A worker thread costs nothing here and
+    keeps the loop free.
+    """
+    return await asyncio.to_thread(hash_password, password)
+
+
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     """Verify password against hash. Supports both Argon2 and bcrypt for legacy compatibility."""
     try:
@@ -47,6 +60,11 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
             return bcrypt.checkpw(plain_bytes, hashed_bytes)
         except Exception:
             return False
+
+
+async def verify_password_async(plain_password: str, hashed_password: str) -> bool:
+    """Verify off the event loop — see :func:`hash_password_async`."""
+    return await asyncio.to_thread(verify_password, plain_password, hashed_password)
 
 
 def create_access_token(data: dict[str, Any]) -> str:

@@ -8,9 +8,9 @@ Elite Pack (RFP module 3) addition:
 """
 from datetime import datetime, timezone
 from typing import Annotated
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from pydantic import BaseModel
-from sqlalchemy import select
+from sqlalchemy import String, cast, select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
@@ -19,6 +19,7 @@ from app.models.user import User, UserRole
 from app.models.applied_control import AppliedControl, ControlValidationStatus
 from app.models.applied_control_history import AppliedControlHistory
 from app.models.control_evaluation import ControlEvaluation
+from app.models.risk_scenario import RiskScenario
 from app.services import control_registry as registry
 from app.models.activity_log import ActivityLog
 from app.services.activity_chain import chain_and_add
@@ -65,13 +66,36 @@ class ControlValidationRequest(BaseModel):
     notes: str | None = None
 
 @router.get("", response_model=list[ACOut])
-async def list_controls(status: str | None = None, db: AsyncSession = Depends(get_db), _: User = Depends(get_current_user), tenant_id: str = Depends(get_tenant_id)):
+async def list_controls(
+    response: Response,
+    status: str | None = None,
+    limit: int = Query(1000, ge=1, le=5000),
+    offset: int = Query(0, ge=0),
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(get_current_user),
+    tenant_id: str = Depends(get_tenant_id),
+):
+    """Bounded, with the total in X-Total-Count — see list_vulns."""
     q = select(AppliedControl).where(AppliedControl.tenant_id == tenant_id)
     if status: q = q.where(AppliedControl.status == status)
-    return [ACOut.model_validate(c) for c in (await db.execute(q.order_by(AppliedControl.created_at.desc()))).scalars().all()]
+    total = (await db.execute(select(func.count()).select_from(q.subquery()))).scalar() or 0
+    response.headers["X-Total-Count"] = str(total)
+    rows = (await db.execute(
+        q.order_by(AppliedControl.created_at.desc()).offset(offset).limit(limit)
+    )).scalars().all()
+    return [ACOut.model_validate(c) for c in rows]
 
 @router.post("", response_model=ACOut, status_code=201)
-async def create_control(body: ACCreate, db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user), tenant_id: str = Depends(get_tenant_id)):
+async def create_control(
+    body: ACCreate,
+    db: AsyncSession = Depends(get_db),
+    # A deployed security measure is not something any account should be able
+    # to add, edit or remove. Validation was already restricted to the security
+    # referent; the record itself was open to every authenticated user, which
+    # made the gate on validation largely decorative.
+    user: User = Depends(require_roles(UserRole.CISO, UserRole.RISK_MANAGER, UserRole.SECURITY_ANALYST, UserRole.CONTROL_OWNER)),
+    tenant_id: str = Depends(get_tenant_id),
+):
     c = AppliedControl(tenant_id=tenant_id, ref_id=body.ref_id, name=body.name,
                        description=body.description, category=body.category, csf_function=body.csf_function,
                        status=body.status, eta=body.eta, expiration=body.expiration,
@@ -92,7 +116,13 @@ async def get_control(cid: str, db: AsyncSession = Depends(get_db), _: User = De
     return ACOut.model_validate(c)
 
 @router.patch("/{cid}", response_model=ACOut)
-async def update_control(cid: str, body: ACUpdate, db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user), tenant_id: str = Depends(get_tenant_id)):
+async def update_control(
+    cid: str,
+    body: ACUpdate,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_roles(UserRole.CISO, UserRole.RISK_MANAGER, UserRole.SECURITY_ANALYST, UserRole.CONTROL_OWNER)),
+    tenant_id: str = Depends(get_tenant_id),
+):
     r = await db.execute(select(AppliedControl).where(AppliedControl.id == cid, AppliedControl.tenant_id == tenant_id))
     c = r.scalar_one_or_none()
     if not c: raise HTTPException(404, "Control not found")
@@ -113,7 +143,9 @@ async def delete_control(
     cid: str,
     reason: str = Query(..., min_length=3, description="Required justification for deleting this applied control"),
     db: AsyncSession = Depends(get_db),
-    user: User = Depends(get_current_user),
+    # Deletion is narrower than editing: removing a control removes a claimed
+    # mitigation from every risk that counted on it.
+    user: User = Depends(require_roles(UserRole.CISO, UserRole.RISK_MANAGER)),
     tenant_id: str = Depends(get_tenant_id),
 ):
     r = await db.execute(select(AppliedControl).where(AppliedControl.id == cid, AppliedControl.tenant_id == tenant_id))
@@ -135,6 +167,31 @@ async def delete_control(
     )).scalars().all()
     for ev in orphans:
         await db.delete(ev)
+
+    # Detach the control from any scenario that listed it. There is no FK on
+    # RiskScenario.applied_control_ids either, so without this a scenario goes
+    # on claiming a mitigating control that no longer exists — which overstates
+    # its treatment, and is worse than the link simply being absent.
+    scenarios = (await db.execute(
+        select(RiskScenario).where(
+            RiskScenario.tenant_id == tenant_id,
+            cast(RiskScenario.applied_control_ids, String).ilike(f'%"{c.id}"%'),
+        )
+    )).scalars().all()
+    detached = []
+    for sc in scenarios:
+        if c.id in (sc.applied_control_ids or []):
+            # Reassign rather than mutate: SQLAlchemy does not track in-place
+            # edits to a JSON column.
+            sc.applied_control_ids = [x for x in sc.applied_control_ids if x != c.id]
+            detached.append(sc.ref_id or sc.name)
+    if detached:
+        registry.record(
+            db, c, "updated", actor=user,
+            changes={"detached_from_scenarios": {"from": detached, "to": []}},
+            note=f"Removed as a mitigation from {len(detached)} scenario(s) on deletion.",
+        )
+
     await db.delete(c); await db.commit()
 
     # The generic ActivityLogMiddleware only records {method, path} for every mutating

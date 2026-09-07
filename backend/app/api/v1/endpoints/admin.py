@@ -12,7 +12,7 @@ from pydantic import BaseModel, EmailStr, Field, field_serializer
 from app.core.config import settings
 from app.core.database import get_db
 from app.core.licensing import LICENSE_PRODUCT, sign_license, normalize_plan
-from app.core.security import hash_password
+from app.core.security import hash_password, hash_password_async
 from app.models.license import IssuedLicense
 from app.models.user import User, UserRole
 from app.models.tenant import Tenant
@@ -185,7 +185,7 @@ async def create_user(
     user = User(
         tenant_id=tenant.id,
         email=email,
-        hashed_password=hash_password(password),
+        hashed_password=await hash_password_async(password),
         first_name=body.first_name.strip(),
         last_name=body.last_name.strip(),
         role=role,
