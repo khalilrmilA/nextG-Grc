@@ -377,6 +377,11 @@ async def reset_user_password(
         raise HTTPException(404, "User not found")
     if user.role == UserRole.SUPER_ADMIN:
         raise HTTPException(403, "Cannot reset super admin passwords")
+    # The automated-task principal has no password precisely so it can never be
+    # signed into. Issuing one would let an admin act AS the batch actor and
+    # have their own changes recorded as "the system did it".
+    if is_system_actor(user.email):
+        raise HTTPException(403, "The automated-task account cannot be given a password.")
     new_password = _generate_password()
     user.hashed_password = hash_password(new_password)
     await db.commit()
@@ -398,6 +403,11 @@ async def delete_user(
     user = (await db.execute(
         select(User).where(User.id == user_id, User.tenant_id == tenant_id)
     )).scalar_one_or_none()
+    # Deleting the automated-task principal orphans every audit entry that
+    # references it and, on a database that enforces foreign keys, breaks batch
+    # logging for this tenant from then on.
+    if user and is_system_actor(user.email):
+        raise HTTPException(403, "The automated-task account cannot be deleted.")
     if not user:
         raise HTTPException(404, "User not found")
     if user.role == UserRole.SUPER_ADMIN:

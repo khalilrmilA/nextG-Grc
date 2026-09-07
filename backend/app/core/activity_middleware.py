@@ -119,15 +119,30 @@ def _decode_token(token: str) -> dict | None:
 # on every entry is the JWT subject, which is authenticated.
 _BROWSER_MARKERS = ("Mozilla/", "AppleWebKit", "Gecko/", "Chrome/", "Safari/", "Firefox/", "Edg/")
 
-# Bulk data paths are machine work regardless of who kicked them off — this is
+# Bulk data movement is machine work regardless of who kicked it off — this is
 # the "batch" STB asks to see distinguished from an interactive edit.
-_BATCH_PATH_MARKERS = ("/data/import", "/data/export", "/vuln-import", "/scanner-import")
+#
+# Matched as exact path prefixes, not loose substrings. "/vuln-import" as a
+# substring also swallowed POST /vuln-import/connectors, which is a person
+# configuring a scanner connection — an interactive edit reported as batch is
+# a wrong answer to the requirement, not a harmless approximation.
+_BATCH_PATH_PREFIXES = (
+    "/api/v1/data/import",
+    "/api/v1/data/export",
+    "/api/v1/vuln-import/upload",
+    "/api/v1/threats/import-mitre",
+    "/api/v1/cve/sync",
+    "/api/v1/report-builder/export",
+)
+# ...with one nested exception: syncing an existing connector pulls findings in
+# bulk, while creating/testing that connector does not.
+_BATCH_PATH_SUFFIXES = ("/sync",)
 
 
 def classify_origin(request: Request) -> str:
     """manual | batch | api — see the note above on why the hint is corroborated."""
     path = request.url.path
-    if any(marker in path for marker in _BATCH_PATH_MARKERS):
+    if path.startswith(_BATCH_PATH_PREFIXES) or path.endswith(_BATCH_PATH_SUFFIXES):
         return "batch"
     client_hint = (request.headers.get("x-grc-client") or "").strip().lower()
     ua = request.headers.get("user-agent") or ""
