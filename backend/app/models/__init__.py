@@ -49,6 +49,7 @@ from app.models.threat_history import ThreatHistory
 from app.models.threat_watch import ThreatWatchItem
 from app.models.applied_control_history import AppliedControlHistory
 from app.models.audit_log_seal import AuditLogSeal
+from app.models.risk_version import RiskVersion
 from app.models.asset_history import AssetValuationHistory
 from app.models.scan_journal import ScanJournal
 from app.models.report_builder import ReportTemplate
@@ -96,7 +97,7 @@ __all__ = [
     "IssuedLicense", "LicenseActivation",
     "PasswordResetToken", "MfaDevice",
     "ControlEvaluation", "OrgEntity", "BusinessProcess", "CveEntry", "CveAnnotation",
-    "CweEntry", "ThreatHistory", "ThreatWatchItem", "AppliedControlHistory", "AuditLogSeal",
+    "CweEntry", "ThreatHistory", "ThreatWatchItem", "AppliedControlHistory", "AuditLogSeal", "RiskVersion",
     "AssetValuationHistory", "ScanJournal",
     "ReportTemplate",
     "RaciAssignment", "GovernanceDocument", "GovernanceDocumentVersion",

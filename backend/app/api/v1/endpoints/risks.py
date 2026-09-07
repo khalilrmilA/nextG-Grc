@@ -15,7 +15,8 @@ from app.models.user import UserRole
 from app.api.v1.dependencies import get_current_user, require_roles, get_tenant_id, PaginationParams
 from app.api.v1.dependencies.features import require_feature
 from app.models.user import User
-from app.services import risk_scoring, residual_risk
+from app.services import risk_scoring, residual_risk, risk_versioning
+from app.models.risk_version import RiskVersion
 from app.models.applied_control import AppliedControl
 from app.services.notification_generator import create_notification, get_recipients_for_tenant, notification_exists
 from app.services import perimeter
@@ -325,6 +326,22 @@ async def update_risk(
                 detail="Reopening a closed risk requires a justification (reopen_reason).",
             )
 
+    # Archive the state this edit starts from, before anything is mutated, and
+    # mark it as a lifecycle transition when the status is what moved. The
+    # reopen justification the rule demands is carried here — it used to be
+    # validated and then discarded, so the one place a reason is mandatory kept
+    # none.
+    before_snapshot = risk_versioning.snapshot(risk)
+    old_status = getattr(risk.status, "value", risk.status)
+    moving = new_status is not None and new_status != risk.status
+    await risk_versioning.archive(
+        db, risk, current_user,
+        change_reason=(body.reopen_reason.strip() if getattr(body, "reopen_reason", None)
+                       else getattr(body, "change_reason", None)),
+        transition_from=old_status if moving else None,
+        transition_to=(getattr(new_status, "value", new_status) if moving else None),
+    )
+
     was_over = risk.over_appetite
     was_target_over = risk.target_over_appetite
     for field, value in provided.items():
@@ -373,6 +390,111 @@ async def delete_risk(
     # entry — so leaving the write uncommitted here holds SQLite's single write
     # lock while the middleware waits for it, and the request hangs.
     await db.commit()
+
+
+class RiskVersionOut(BaseModel):
+    id: str
+    risk_id: str
+    version_number: int
+    snapshot: dict
+    risk_title: str | None = None
+    transition_from: str | None = None
+    transition_to: str | None = None
+    change_reason: str | None = None
+    author_id: str | None = None
+    author_email: str | None = None
+    created_at: datetime
+    model_config = {"from_attributes": True}
+
+
+class RiskDiffCell(BaseModel):
+    field: str
+    from_value: object | None = None
+    to_value: object | None = None
+
+
+@router.get("/{risk_id}/versions", response_model=list[RiskVersionOut])
+async def list_risk_versions(
+    risk_id: str,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(get_current_user),
+    tenant_id: str = Depends(get_tenant_id),
+):
+    """Every archived state of this risk, newest first — read-only.
+
+    Nothing in the API updates or deletes a version, which is what "accessibles
+    uniquement en lecture seule" means in practice. Scoped on the version rows
+    rather than by loading the risk first, so the history of a deleted risk
+    remains readable.
+    """
+    rows = (await db.execute(
+        select(RiskVersion)
+        .where(RiskVersion.tenant_id == tenant_id, RiskVersion.risk_id == risk_id)
+        .order_by(RiskVersion.version_number.desc())
+    )).scalars().all()
+    return [RiskVersionOut.model_validate(r) for r in rows]
+
+
+@router.get("/{risk_id}/lifecycle", response_model=list[RiskVersionOut])
+async def risk_lifecycle(
+    risk_id: str,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(get_current_user),
+    tenant_id: str = Depends(get_tenant_id),
+):
+    """Just the lifecycle moves, oldest first: who moved this risk, when, why.
+
+    A separate view from the full history because "when was this closed and by
+    whom" should not mean reading every field diff.
+    """
+    rows = (await db.execute(
+        select(RiskVersion)
+        .where(RiskVersion.tenant_id == tenant_id, RiskVersion.risk_id == risk_id,
+               RiskVersion.transition_to.isnot(None))
+        .order_by(RiskVersion.version_number.asc())
+    )).scalars().all()
+    return [RiskVersionOut.model_validate(r) for r in rows]
+
+
+@router.get("/{risk_id}/versions/diff", response_model=list[RiskDiffCell])
+async def diff_risk_versions(
+    risk_id: str,
+    from_version: int,
+    to_version: int,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(get_current_user),
+    tenant_id: str = Depends(get_tenant_id),
+):
+    """What changed between two archived states — impact, probability, status.
+
+    ``to_version`` may be 0, meaning the risk as it stands now, so the most
+    common question ("what has changed since we assessed it?") does not require
+    creating a version first.
+    """
+    async def _load(n: int) -> dict:
+        if n == 0:
+            risk = (await db.execute(
+                select(Risk).where(Risk.id == risk_id, Risk.tenant_id == tenant_id)
+            )).scalar_one_or_none()
+            if risk is None:
+                raise HTTPException(status_code=404, detail="Risk not found")
+            return risk_versioning.snapshot(risk)
+        row = (await db.execute(
+            select(RiskVersion).where(
+                RiskVersion.tenant_id == tenant_id,
+                RiskVersion.risk_id == risk_id,
+                RiskVersion.version_number == n,
+            )
+        )).scalar_one_or_none()
+        if row is None:
+            raise HTTPException(status_code=404, detail=f"Version {n} not found")
+        return row.snapshot or {}
+
+    before, after = await _load(from_version), await _load(to_version)
+    return [
+        RiskDiffCell(field=f, from_value=c["from"], to_value=c["to"])
+        for f, c in risk_versioning.diff(before, after).items()
+    ]
 
 
 @router.get("/heatmap/data")

@@ -220,6 +220,21 @@ class RiskTreatment(Base):
     # from before this migration don't need a backfill to stay valid.
     priority: Mapped[str | None] = mapped_column(String(20), nullable=True)
 
+    # Implementation complexity, the second half of the requirement's
+    # "priorité en fonction de la criticité et la complexité". Priority was
+    # derived from criticality alone because there was no notion of complexity
+    # to weigh against it: low / medium / high, set by whoever owns the plan.
+    # A critical risk whose fix is a configuration change should outrank a
+    # critical risk needing an eighteen-month programme, and without this the
+    # two ranked identically.
+    complexity: Mapped[str | None] = mapped_column(String(20), nullable=True)
+
+    # Why a plan has slipped. "Possibilité de commenter ou justifier les
+    # retards" — the tracking view could flag a plan overdue but carried
+    # nowhere for the owner to say why, so the explanation lived in email.
+    delay_justification: Mapped[str | None] = mapped_column(Text, nullable=True)
+    delay_reported_at: Mapped[str | None] = mapped_column(String(30), nullable=True)
+
     # If "transfer" — name of insurer or third party
     transfer_to: Mapped[str | None] = mapped_column(String(255), nullable=True)
 

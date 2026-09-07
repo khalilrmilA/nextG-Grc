@@ -30,6 +30,8 @@ from app.models.compliance import ComplianceAssessment
 from app.models.threat import Threat
 from app.models.applied_control import AppliedControl
 from app.models.control_evaluation import ControlEvaluation
+from app.services.excel_export import rows_to_xlsx
+from app.services.tabular_pdf import rows_to_pdf
 from app.services.xml_export import rows_to_xml, xml_to_rows
 
 router = APIRouter()
@@ -37,7 +39,20 @@ router = APIRouter()
 _VALID_FORMATS = ("csv", "xml")
 
 
-def _check_format(format: str) -> str:
+_EXPORT_FORMATS = {"csv", "xml", "xlsx", "pdf"}
+
+
+def _check_export_format(format: str) -> str:
+    fmt = (format or "csv").strip().lower()
+    if fmt not in _EXPORT_FORMATS:
+        raise HTTPException(400, f"format must be one of {', '.join(sorted(_EXPORT_FORMATS))}")
+    return fmt
+
+
+def _check_import_format(format: str) -> str:
+    """Imports stay csv/xml. Excel and PDF are output formats — there is no
+    sane way to read a register back out of a PDF, and accepting one here would
+    fail later with a confusing parse error instead of a clear refusal."""
     fmt = (format or "csv").strip().lower()
     if fmt not in _VALID_FORMATS:
         raise HTTPException(400, "format must be 'csv' or 'xml'")
@@ -87,13 +102,38 @@ def _xml_response(rows: list[dict], filename: str, root_tag: str, record_tag: st
 
 
 def _export_response(rows: list[dict], filename_base: str, root_tag: str, record_tag: str, format: str) -> StreamingResponse:
-    """Branch a per-module export to CSV or XML, following the ``?format=``
-    convention already used elsewhere in the app (archiving.py, report_builder.py)."""
-    fmt = _check_format(format)
+    """Branch a per-module export to CSV, XML, Excel or PDF.
+
+    Excel and PDF were added because the requirement asks for "export possible
+    au format Excel ou PDF" and CSV is neither: an auditor handed a CSV of a
+    risk register has to open and format it before it can be read, which is the
+    friction the rule exists to remove. Every module's export goes through this
+    one helper, so all of them gained both formats at once rather than the risk
+    register alone.
+    """
+    fmt = _check_export_format(format)
     date_stamp = datetime.utcnow().strftime("%Y%m%d")
+    stem = f"{filename_base}_{date_stamp}"
+    columns = list(rows[0]) if rows else []
+    label = root_tag.replace("_", " ").title()
+
     if fmt == "xml":
-        return _xml_response(rows, f"{filename_base}_{date_stamp}.xml", root_tag, record_tag)
-    return _csv_response(rows, f"{filename_base}_{date_stamp}.csv")
+        return _xml_response(rows, f"{stem}.xml", root_tag, record_tag)
+    if fmt == "xlsx":
+        data = rows_to_xlsx(label, columns, rows)
+        return StreamingResponse(
+            io.BytesIO(data),
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            headers={"Content-Disposition": f'attachment; filename="{stem}.xlsx"'},
+        )
+    if fmt == "pdf":
+        data = rows_to_pdf(label, columns, rows)
+        return StreamingResponse(
+            io.BytesIO(data),
+            media_type="application/pdf",
+            headers={"Content-Disposition": f'attachment; filename="{stem}.pdf"'},
+        )
+    return _csv_response(rows, f"{stem}.csv")
 
 
 async def _read_import_rows(file: UploadFile, format: str) -> tuple[list[dict], int]:
@@ -102,7 +142,7 @@ async def _read_import_rows(file: UploadFile, format: str) -> tuple[list[dict], 
     Returns (rows, row_number_start) — CSV numbering starts at 2 (row 1 is
     the header), XML numbering starts at 1 (records aren't preceded by a
     header row) so error messages line up with what the user opened."""
-    fmt = _check_format(format)
+    fmt = _check_import_format(format)
     if fmt == "xml":
         content = await _read_upload_text(file, "XML")
         try:

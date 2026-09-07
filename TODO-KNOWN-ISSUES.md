@@ -25,6 +25,9 @@ someone outside this repo answers a question.
 ### Highest value for the effort
 | # | Item | Effort | Why |
 |---|---|---|---|
+| 19.d | Department / process on risks, for register filtering | small | Policies carry these fields; risks do not, so the register cannot be filtered by either |
+| 19.a | Ship a few ISO 27001 report templates | small | The builder supports templates and duplication; none are seeded |
+| 19.b | Notify on a RACI responsibility change | small | The matrix is configurable and filterable; nobody is told when an owner changes |
 | 8.2 | Per-tenant label overrides | small | Explicit requirement, visible in a demo, tenant settings blob already exists to hold it |
 | 4.3 | ~~Argon2 on the event loop~~ | done | `hash_password_async` / `verify_password_async`; all five request-path call sites converted |
 | 5.4 | Arabic in the last two PDF generators | small | Helper exists; one call per client-data field |
@@ -988,4 +991,44 @@ round-trip *refuses to run* when the supplied password is under the endpoint's
 restored — which is exactly how the previous harness stranded a test account
 and made every later run fail at login. Verified by running it twice in
 succession, and against the live instance, where it correctly skipped.
+
+---
+
+## 19. Risk treatment, register lifecycle, reporting (2026-09-07)
+
+Audited thirteen requirement blocks across three batches: treatment options,
+treatment plans, execution tracking, target risk, the risk register, risk
+lifecycle, risk versioning, custom reports, report templates, dashboards,
+policies, RACI and the document repository.
+
+**Most of it was already built.** What follows is only what was not.
+
+### 19.1 Built in this pass
+| Gap | What was there | What it is now |
+|---|---|---|
+| Risk versioning | Nothing per-risk. `risk_snapshots` counts open risks by severity per day and says nothing about how an individual risk changed | `risk_versions` archives the state before every edit, read-only by construction (no write route exists), with `GET /risks/{id}/versions` and a diff that accepts version 0 for "compare against the risk as it stands now" |
+| Lifecycle transitions | The statuses existed; a move recorded nothing. The justification demanded for reopening a closed risk was validated and then **discarded** | Every transition is archived with who, when and why; `GET /risks/{id}/lifecycle` lists just the moves, so "when was this closed and by whom" does not require reading field diffs |
+| Treatment priority | Criticality alone — the code said so, because there was no complexity to weigh against it. A critical risk fixed by a config change ranked identically to one needing an eighteen-month programme | `complexity` (low/medium/high) shifts the criticality tier by one step. A shift rather than a multiplication, so the result stays on the same four-tier scale the action plan already uses and remains explainable |
+| Delay explanation | The tracking view could flag a plan overdue but carried nowhere to say why, so the reason lived in email | `delay_justification` with `delay_reported_at`, both surfaced on the tracking view beside the overdue flag |
+| Excel / PDF export | CSV and XML only, though `rows_to_xlsx` and ReportLab were both already in the codebase | `?format=xlsx\|pdf` on **every** module export, through the one shared helper — a new `tabular_pdf` renderer with content-derived column widths and Arabic via the existing `pdf_arabic` helper. Imports deliberately stay csv/xml: there is no sane way to read a register back out of a PDF |
+
+### 19.2 Verified as MET — no work needed
+Treatment option with a justification required for **all four** options (not
+just acceptance); plan carrying risk, schedule, estimated and actual cost,
+owner and scenario links; supersede with a change summary and version history;
+tracking flags for overdue, at-risk and over-budget **with notifications**;
+target-risk comparison against appetite with its own alert; the risk lifecycle
+statuses; reopen-requires-justification; report builder with filters, Excel/CSV
+export, saved templates and scheduling; RACI matrix with filters; the document
+repository with versions and read/edit/validate rights; policies with effective
+and expiry dates, version history, and links to a business process and an
+organisational entity.
+
+### 19.3 Still open from these blocks
+| # | Item | Effort | Note |
+|---|---|---|---|
+| 19.a | Seeded ISO 27001 report templates | small | `report_templates` is empty — the builder supports templates and duplication, but ships none. "Modèles prêts à l'emploi" means shipping a few |
+| 19.b | Notification when a RACI responsible changes | small | The matrix is configurable and filterable; nothing tells the incoming or outgoing owner |
+| 19.c | Dashboard chart export to PNG/PDF | moderate | Data exports now cover PDF; exporting a *rendered chart* is a client-side capture, not a server render |
+| 19.d | Department / process filters on the risk register | small | Policies carry `business_process_id` and `org_entity_id`; risks carry neither, so the register cannot be filtered by department or process |
 

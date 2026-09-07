@@ -27,7 +27,7 @@ requires a `change_summary` justification (distinct from a plain PATCH, which
 stays available for minor edits like a progress-percentage bump).
 GET /{risk_id}/versions lists that history, newest first.
 """
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -53,6 +53,9 @@ _SNAPSHOT_FIELDS = [
     "treatment_option", "description", "due_date", "start_date", "owner_id",
     "progress_percentage", "estimated_cost", "actual_cost", "priority",
     "transfer_to", "acceptance_justification", "linked_scenario_ids",
+    # Both feed the ranking and the delay explanation, so a superseded plan has
+    # to carry them or the history cannot show why it ranked where it did.
+    "complexity", "delay_justification",
 ]
 
 
@@ -79,6 +82,8 @@ class TreatmentIn(BaseModel):
     actual_cost: float | None = None
     transfer_to: str | None = None
     acceptance_justification: str | None = None
+    complexity: str | None = None
+    delay_justification: str | None = None
     # RFP gap fix: direct plan -> scenario(s) association. Validated tenant-scoped
     # (each id must be a RiskScenario belonging to this tenant) in the handler.
     linked_scenario_ids: list[str] = []
@@ -95,6 +100,8 @@ class TreatmentPatch(BaseModel):
     actual_cost: float | None = None
     transfer_to: str | None = None
     acceptance_justification: str | None = None
+    complexity: str | None = None
+    delay_justification: str | None = None
     linked_scenario_ids: list[str] | None = None
 
 
@@ -112,6 +119,8 @@ class TreatmentOut(BaseModel):
     priority: str | None = None
     transfer_to: str | None = None
     acceptance_justification: str | None = None
+    complexity: str | None = None
+    delay_justification: str | None = None
     linked_scenario_ids: list[str] = []
     model_config = {"from_attributes": True}
 
@@ -139,6 +148,8 @@ class SupersedeIn(BaseModel):
     actual_cost: float | None = None
     transfer_to: str | None = None
     acceptance_justification: str | None = None
+    complexity: str | None = None
+    delay_justification: str | None = None
     linked_scenario_ids: list[str] = []
     change_summary: str
 
@@ -167,6 +178,12 @@ class TrackingRow(BaseModel):
     overdue: bool
     at_risk: bool
     over_budget: bool
+    priority: str | None = None
+    complexity: str | None = None
+    # Why it slipped, and when the owner said so. An overdue flag with no
+    # explanation beside it is a question, not information.
+    delay_justification: str | None = None
+    delay_reported_at: str | None = None
 
 
 async def _risk_in_tenant(risk_id: str, tenant_id: str, db: AsyncSession) -> Risk:
@@ -216,19 +233,24 @@ _SEVERITY_TO_PRIORITY = {
 }
 
 
-def _derive_treatment_priority(risk: Risk) -> str:
-    """RFP gap fix: auto-derive the treatment plan's priority from its linked risk,
-    reusing the same critical/high/medium/low tiering compliance.py's ActionItem
-    remediation already uses (there: gap.remediation_priority -> ActionItemPriority;
-    here: risk.severity -> priority).
+def _validate_complexity(value: str | None) -> None:
+    if value is not None and str(value).strip().lower() not in COMPLEXITY_LEVELS:
+        raise HTTPException(422, f"complexity must be one of {COMPLEXITY_LEVELS}")
 
-    Simplified from the RFP's "criticité x complexité" formula to severity alone —
-    this codebase has no existing notion of treatment "complexity" to multiply
-    against, and inventing one would be a materially bigger feature than this gap
-    fix warrants. Falls back to the raw likelihood x impact score when severity
-    hasn't been computed yet (bands mirror the register's qualitative 1-5 scale:
-    >=20 critical, >=12 high, >=6 medium, else low).
-    """
+
+COMPLEXITY_LEVELS = ("low", "medium", "high")
+
+# Criticality tier -> rank, so complexity can shift it by whole steps.
+_TIERS = ["low", "medium", "high", "critical"]
+
+# How complexity moves the ranking. A cheap fix on a serious risk is the work to
+# do first; a serious risk needing an eighteen-month programme still matters but
+# should not sit at the top of a queue people work through in order.
+_COMPLEXITY_SHIFT = {"low": +1, "medium": 0, "high": -1}
+
+
+def _criticality_tier(risk: Risk) -> str:
+    """The risk's own criticality, before complexity is considered."""
     severity = risk.severity
     if severity is not None:
         sev = severity.value if hasattr(severity, "value") else str(severity)
@@ -243,6 +265,32 @@ def _derive_treatment_priority(risk: Risk) -> str:
     if score >= 6:
         return "medium"
     return "low"
+
+
+def _derive_treatment_priority(risk: Risk, complexity: str | None = None) -> str:
+    """Treatment priority from the risk's criticality **and** the plan's complexity.
+
+    The requirement asks for the priority to be deduced "en fonction de la
+    criticité et la complexité". This used to use criticality alone, because
+    there was no notion of complexity in the model to weigh against it — so a
+    critical risk fixed by a configuration change and a critical risk needing an
+    eighteen-month programme ranked identically, which is exactly the
+    distinction the rule exists to draw.
+
+    Complexity shifts the criticality tier by one step: a low-complexity plan
+    moves up, a high-complexity one moves down, and medium leaves it alone.
+    A shift, not a multiplication, so the result stays on the same four-tier
+    scale the action plan and compliance remediation already use, and remains
+    explainable to whoever has to defend the ordering.
+
+    With no complexity recorded the behaviour is unchanged from before.
+    """
+    tier = _criticality_tier(risk)
+    key = (complexity or "").strip().lower()
+    if key not in _COMPLEXITY_SHIFT:
+        return tier
+    index = _TIERS.index(tier) + _COMPLEXITY_SHIFT[key]
+    return _TIERS[max(0, min(len(_TIERS) - 1, index))]
 
 
 @router.post("", response_model=TreatmentOut, status_code=status.HTTP_201_CREATED)
@@ -261,6 +309,7 @@ async def upsert_treatment(
     """
     risk = await _risk_in_tenant(body.risk_id, tenant_id, db)
     _require_justification(body.treatment_option, body.acceptance_justification)
+    _validate_complexity(getattr(body, "complexity", None))
     await _assert_scenarios_in_tenant(body.linked_scenario_ids, tenant_id, db)
 
     existing = (await db.execute(
@@ -268,7 +317,7 @@ async def upsert_treatment(
     )).scalar_one_or_none()
 
     data = body.model_dump()
-    priority = _derive_treatment_priority(risk)
+    priority = _derive_treatment_priority(risk, body.complexity)
     if existing is None:
         treatment = RiskTreatment(**data, priority=priority)
         db.add(treatment)
@@ -313,6 +362,8 @@ def _build_tracking_row(t: RiskTreatment, today: str) -> TrackingRow:
         progress_percentage=t.progress_percentage or 0, due_date=t.due_date,
         estimated_cost=t.estimated_cost, actual_cost=t.actual_cost,
         overdue=overdue, at_risk=at_risk, over_budget=over_budget,
+        priority=t.priority, complexity=t.complexity,
+        delay_justification=t.delay_justification, delay_reported_at=t.delay_reported_at,
     )
 
 
@@ -399,6 +450,9 @@ async def patch_treatment(
     if treatment is None:
         raise HTTPException(status_code=404, detail="Treatment not found")
     updates = body.model_dump(exclude_none=True)
+    _validate_complexity(updates.get("complexity"))
+    if "delay_justification" in updates and updates["delay_justification"] != treatment.delay_justification:
+        updates["delay_reported_at"] = datetime.now(timezone.utc).replace(tzinfo=None).isoformat(timespec="seconds")
     option = updates.get("treatment_option", treatment.treatment_option)
     justification = updates.get("acceptance_justification", treatment.acceptance_justification)
     _require_justification(option, justification)
@@ -409,7 +463,7 @@ async def patch_treatment(
     # Re-derive priority from the linked risk on every update — its severity may
     # have changed since the treatment plan was created.
     risk = await _risk_in_tenant(treatment.risk_id, tenant_id, db)
-    treatment.priority = _derive_treatment_priority(risk)
+    treatment.priority = _derive_treatment_priority(risk, treatment.complexity)
     await db.commit()
     await db.refresh(treatment)
     return treatment
@@ -445,6 +499,7 @@ async def supersede_treatment(
             detail="No existing treatment plan for this risk — use POST /risk-treatment to create one.",
         )
     _require_justification(body.treatment_option, body.acceptance_justification)
+    _validate_complexity(getattr(body, "complexity", None))
     await _assert_scenarios_in_tenant(body.linked_scenario_ids, tenant_id, db)
 
     # Snapshot the CURRENT (soon-to-be-overwritten) plan before mutating it.
@@ -462,7 +517,7 @@ async def supersede_treatment(
     data = body.model_dump(exclude={"change_summary"})
     for k, v in data.items():
         setattr(treatment, k, v)
-    treatment.priority = _derive_treatment_priority(risk)
+    treatment.priority = _derive_treatment_priority(risk, treatment.complexity)
 
     await db.commit()
     await db.refresh(treatment)
