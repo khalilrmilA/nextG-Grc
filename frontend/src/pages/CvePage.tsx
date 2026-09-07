@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import {
   Search, Loader2, Crown, RefreshCw, Database, ChevronDown, StickyNote, X,
-  ShieldCheck, Wrench, ExternalLink, Bug, CalendarDays,
+  ShieldCheck, Wrench, ExternalLink, Bug, CalendarDays, Flame,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { cveApi, assetsApi } from "@/api/endpoints";
@@ -141,6 +141,22 @@ function CveSheet({
         ) : (
           <div className="px-6 py-5 space-y-6">
             {error && <div className="p-2.5 bg-red-50 text-red-700 rounded-lg text-sm">{error}</div>}
+
+            {cve?.known_exploited && (
+              <div className="flex items-start gap-2 p-3 rounded-xl bg-red-50 border border-red-200">
+                <Flame className="w-4 h-4 text-red-600 mt-0.5 shrink-0" />
+                <div className="text-sm">
+                  <p className="font-semibold text-red-800">
+                    {t("cve.kev_title", "Actively exploited (CISA KEV)")}
+                    {cve.kev_added_at ? ` · ${t("cve.kev_since", "listed {{date}}", { date: cve.kev_added_at })}` : ""}
+                  </p>
+                  {cve.kev_due_date && (
+                    <p className="text-red-700">{t("cve.kev_due", "Remediation due {{date}}", { date: cve.kev_due_date })}</p>
+                  )}
+                  {cve.kev_action && <p className="text-red-700 mt-1">{cve.kev_action}</p>}
+                </div>
+              </div>
+            )}
 
             <section>
               <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-400 mb-2">{t("cve.col_desc", "Description")}</h3>
@@ -312,6 +328,7 @@ export default function CvePage() {
   const [publishedAfter, setPublishedAfter] = useState("");
   const [minCvss, setMinCvss] = useState("");
   const [relFilter, setRelFilter] = useState("");
+  const [kevOnly, setKevOnly] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [syncMsg, setSyncMsg] = useState("");
   const [busy, setBusy] = useState("");
@@ -332,6 +349,7 @@ export default function CvePage() {
     if (publishedAfter) params.published_after = `${publishedAfter}T00:00:00`;
     if (minCvss) params.min_cvss = parseFloat(minCvss);
     if (relFilter) params.relevance = relFilter;
+    if (kevOnly) params.known_exploited = true;
     return params;
   }
 
@@ -359,7 +377,7 @@ export default function CvePage() {
       setHasMore(d.length === PAGE_SIZE);
     } catch { /* keep what we have */ } finally { setLoadingMore(false); }
   }
-  useEffect(() => { load(); /* eslint-disable-next-line */ }, [relFilter, minCvss]);
+  useEffect(() => { load(); /* eslint-disable-next-line */ }, [relFilter, minCvss, kevOnly]);
 
   useEffect(() => {
     assetsApi.options().then((d: any) => {
@@ -465,6 +483,14 @@ export default function CvePage() {
           <option value="7">≥ 7.0 (high+)</option>
           <option value="4">≥ 4.0 (medium+)</option>
         </select>
+        <button
+          type="button"
+          onClick={() => setKevOnly((v) => !v)}
+          className={`inline-flex items-center gap-1.5 rounded-xl border px-3 py-2 text-sm font-medium ${
+            kevOnly ? "bg-red-50 border-red-200 text-red-700" : "bg-white border-gray-200 text-gray-600 hover:bg-gray-50"}`}
+        >
+          <Flame className="w-4 h-4" /> {t("cve.kev_filter", "Actively exploited")}
+        </button>
         <select value={relFilter} onChange={(e) => setRelFilter(e.target.value)} className={inputCls}>
           <option value="">{t("cve.all_relevance", "All relevance")}</option>
           {RELEVANCE.map((r) => <option key={r} value={r}>{r.replace(/_/g, " ")}</option>)}
@@ -504,7 +530,19 @@ export default function CvePage() {
                       <td className="px-6 py-4 whitespace-nowrap">
                         <button onClick={() => setOpenCve(c.cve_id)} className="font-mono text-xs text-blue-700 hover:underline">{c.cve_id}</button>
                       </td>
-                      <td className="px-6 py-4"><span className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold border ${CVSS_BADGE(c.cvss_score)}`}>{c.cvss_score ?? "—"}</span></td>
+                      <td className="px-6 py-4">
+                        <div className="flex items-center gap-1.5">
+                          <span className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold border ${CVSS_BADGE(c.cvss_score)}`}>{c.cvss_score ?? "—"}</span>
+                          {c.known_exploited && (
+                            <span
+                              title={t("cve.kev_hint", "CISA lists this as actively exploited — remediate by {{date}}", { date: c.kev_due_date || "—" })}
+                              className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold border bg-red-100 text-red-700 border-red-200 whitespace-nowrap"
+                            >
+                              <Flame className="w-3 h-3" /> {t("cve.kev_short", "Exploited")}
+                            </span>
+                          )}
+                        </div>
+                      </td>
                       <td className="px-6 py-4">
                         {weaknesses.length === 0 ? <span className="text-gray-300">—</span> : (
                           <div className="flex flex-col gap-0.5 max-w-[13rem]">

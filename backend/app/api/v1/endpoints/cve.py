@@ -59,6 +59,12 @@ class CveOut(BaseModel):
     cwe_ids: list = []
     cwe: list[CweRef] = []
     references: list = []
+    # CISA "Known Exploited Vulnerabilities". Actively exploited outranks a
+    # higher theoretical score, so it belongs on every row, not only the sheet.
+    known_exploited: bool = False
+    kev_added_at: str | None = None
+    kev_due_date: str | None = None
+    kev_action: str | None = None
     published_at: datetime | None = None
     last_modified: datetime | None = None
     relevance: str | None = None
@@ -151,6 +157,7 @@ async def search_cve(
     published_after: datetime | None = None,
     published_before: datetime | None = None,
     relevance: str | None = None,
+    known_exploited: bool | None = None,
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=200),
 ):
@@ -193,6 +200,8 @@ async def search_cve(
         # Substring match on a fragment like "AV:N" is the practical filter shape
         # for a free-text CVSS vector ("CVSS:3.1/AV:N/AC:L/...").
         stmt = stmt.where(CveEntry.cvss_vector.ilike(f"%{vector}%"))
+    if known_exploited is not None:
+        stmt = stmt.where(CveEntry.known_exploited == known_exploited)
     if published_after is not None:
         stmt = stmt.where(CveEntry.published_at >= published_after)
     if published_before is not None:

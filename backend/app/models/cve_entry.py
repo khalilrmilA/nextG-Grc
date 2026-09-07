@@ -5,7 +5,7 @@ per-tenant triage (pertinent / non_pertinent / to_watch) + notes + asset links.
 """
 from datetime import datetime
 from sqlalchemy.orm import Mapped, mapped_column
-from sqlalchemy import DateTime, String, Float, Text, JSON, ForeignKey, Index
+from sqlalchemy import Boolean, DateTime, String, Float, Text, JSON, ForeignKey, Index
 from app.core.database import Base
 
 RELEVANCE_VALUES = ("pertinent", "non_pertinent", "to_watch")
@@ -24,6 +24,15 @@ class CveEntry(Base):
     # "Mitigation", "Vendor Advisory", "Exploit", which is exactly the
     # "liens vers des solutions correctives" the CVE sheet has to show.
     references: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    # CISA "Known Exploited Vulnerabilities": this CVE is being exploited in the
+    # wild right now. It is the most actionable signal in the whole watch — a
+    # CVSS 7.5 under active exploitation outranks a theoretical 9.8 — and it was
+    # arriving as a row in the *threat register*, where it could do nothing.
+    known_exploited: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, index=True)
+    kev_added_at: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    kev_due_date: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    kev_action: Mapped[str | None] = mapped_column(Text, nullable=True)
+
     published_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     last_modified: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, index=True)
     source: Mapped[str] = mapped_column(String(30), nullable=False, default="NVD")

@@ -46,6 +46,7 @@ from app.models.org_unit import OrgEntity, BusinessProcess
 from app.models.cve_entry import CveEntry, CveAnnotation
 from app.models.cwe_entry import CweEntry
 from app.models.threat_history import ThreatHistory
+from app.models.threat_watch import ThreatWatchItem
 from app.models.asset_history import AssetValuationHistory
 from app.models.scan_journal import ScanJournal
 from app.models.report_builder import ReportTemplate
@@ -93,7 +94,7 @@ __all__ = [
     "IssuedLicense", "LicenseActivation",
     "PasswordResetToken", "MfaDevice",
     "ControlEvaluation", "OrgEntity", "BusinessProcess", "CveEntry", "CveAnnotation",
-    "CweEntry", "ThreatHistory",
+    "CweEntry", "ThreatHistory", "ThreatWatchItem",
     "AssetValuationHistory", "ScanJournal",
     "ReportTemplate",
     "RaciAssignment", "GovernanceDocument", "GovernanceDocumentVersion",

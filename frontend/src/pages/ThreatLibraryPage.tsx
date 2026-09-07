@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import {
   Plus, Search, X, Loader2, Filter, Shield, Trash2, Tag,
   Sparkles, Download, ThumbsUp, ThumbsDown, Clock, CheckCircle2, RefreshCw,
-  AlertTriangle, ExternalLink, CheckCheck, ChevronRight, ChevronDown, Pencil, Lock,
+  AlertTriangle, ExternalLink, CheckCheck, ChevronRight, ChevronDown, Pencil, Lock, Rss,
   BadgeCheck, CalendarClock, CopyPlus, History,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
@@ -576,6 +576,10 @@ export default function ThreatLibraryPage() {
   const [probFilter, setProbFilter] = useState("");
   const [sevFilter, setSevFilter]   = useState("");
   const [overdueOnly, setOverdueOnly] = useState(false);
+  const [watch, setWatch] = useState<any[]>([]);
+  const [watchKind, setWatchKind] = useState("");
+  const [watchBusy, setWatchBusy] = useState("");
+  const [showWatch, setShowWatch] = useState(false);
   const [error, setError]           = useState("");
   const [submitting, setSubmitting] = useState(false);
 
@@ -614,6 +618,30 @@ export default function ThreatLibraryPage() {
   }
 
   useEffect(() => { load(); }, [catFilter, typeFilter, probFilter, sevFilter, overdueOnly]);
+
+  async function loadWatch() {
+    try {
+      const d = await threatsApi.watch(watchKind ? { kind: watchKind } : undefined);
+      setWatch(Array.isArray(d) ? d : []);
+    } catch { setWatch([]); }
+  }
+  useEffect(() => { loadWatch(); /* eslint-disable-next-line */ }, [watchKind]);
+
+  async function dismissWatch(id: string) {
+    setWatchBusy(id);
+    try { await threatsApi.dismissWatch(id); await loadWatch(); }
+    catch {} finally { setWatchBusy(""); }
+  }
+  async function promoteWatch(item: any) {
+    setWatchBusy(item.id);
+    try {
+      await threatsApi.promoteWatch(item.id, { name: item.title, category: "cyber_attack" });
+      await loadWatch(); await load();
+      setNotice({ msg: `"${String(item.title).slice(0, 60)}" proposed for the register — it is pending validation.`, ok: true });
+    } catch (e: any) {
+      setNotice({ msg: e?.response?.data?.detail || "Could not promote this item.", ok: false });
+    } finally { setWatchBusy(""); }
+  }
 
   /* ── MITRE one-time import ── */
   async function handleImportMitre() {
@@ -773,6 +801,92 @@ export default function ThreatLibraryPage() {
           <button onClick={() => setNotice(null)}><X className="w-4 h-4 opacity-50 hover:opacity-100" /></button>
         </div>
       )}
+
+      {/* Threat watch — what the feeds brought in. Deliberately separate from the
+          register: these are advisories, packages and news, not threat types. */}
+      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+        <button
+          type="button"
+          onClick={() => setShowWatch((v) => !v)}
+          className="w-full flex items-center gap-2 px-6 py-4 border-b border-gray-100 bg-gray-50/60 text-left"
+        >
+          {showWatch ? <ChevronDown className="w-4 h-4 text-gray-400" /> : <ChevronRight className="w-4 h-4 text-gray-400" />}
+          <Rss className="w-4 h-4 text-blue-600" />
+          <span className="text-sm font-semibold text-gray-800">
+            {t("threats.watch_title", "Threat watch")}
+          </span>
+          <span className="text-xs text-gray-500">
+            {t("threats.watch_subtitle", "{{n}} item(s) from CISA, SANS and supply-chain feeds — read here, not filed in the register", { n: watch.filter((w) => w.status === "new").length })}
+          </span>
+        </button>
+
+        {showWatch && (
+          <div>
+            <div className="flex items-center gap-2 px-6 py-3 border-b border-gray-50 flex-wrap">
+              {["", "cve", "malicious_package", "advisory", "news"].map((k) => (
+                <button
+                  key={k || "all"}
+                  onClick={() => setWatchKind(k)}
+                  className={`rounded-full px-3 py-1 text-xs font-medium border ${
+                    watchKind === k
+                      ? "bg-blue-50 border-blue-200 text-blue-700"
+                      : "bg-white border-gray-200 text-gray-500 hover:bg-gray-50"}`}
+                >
+                  {k ? String(t(`threats.watch_kind_${k}` as never, k.replace(/_/g, " "))) : t("threats.watch_all", "All")}
+                </button>
+              ))}
+            </div>
+
+            {watch.length === 0 ? (
+              <div className="text-center py-10 text-sm text-gray-400">
+                {t("threats.watch_empty", "Nothing in the watch yet. Use 'Fetch latest' to pull from the feeds.")}
+              </div>
+            ) : (
+              <div className="divide-y divide-gray-50 max-h-[28rem] overflow-y-auto">
+                {watch.map((w) => (
+                  <div key={w.id} className={`px-6 py-3 flex items-start gap-3 ${w.status !== "new" ? "opacity-55" : ""}`}>
+                    <span className="mt-0.5 shrink-0 inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold border bg-gray-50 text-gray-600 border-gray-200 whitespace-nowrap">
+                      {String(t(`threats.watch_kind_${w.kind}` as never, w.kind.replace(/_/g, " ")))}
+                    </span>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm text-gray-800 break-words">{w.title}</p>
+                      <p className="text-[11px] text-gray-400">
+                        {w.source}{w.ref ? ` · ${w.ref}` : ""}
+                        {w.status !== "new" && ` · ${String(t(`threats.watch_status_${w.status}` as never, w.status))}`}
+                      </p>
+                    </div>
+                    {w.url && (
+                      <a href={w.url} target="_blank" rel="noreferrer" className="text-gray-300 hover:text-blue-600 mt-0.5" title={t("threats.view_advisory")}>
+                        <ExternalLink className="w-3.5 h-3.5" />
+                      </a>
+                    )}
+                    {w.status === "new" && (
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <button
+                          onClick={() => promoteWatch(w)}
+                          disabled={watchBusy === w.id}
+                          title={t("threats.watch_promote_hint", "Only if this describes a genuinely new kind of threat")}
+                          className="inline-flex items-center gap-1 text-xs font-medium text-blue-600 hover:text-blue-800 disabled:opacity-50"
+                        >
+                          {watchBusy === w.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <ChevronRight className="w-3.5 h-3.5" />}
+                          {t("threats.watch_promote", "To register")}
+                        </button>
+                        <button
+                          onClick={() => dismissWatch(w.id)}
+                          disabled={watchBusy === w.id}
+                          className="text-xs font-medium text-gray-400 hover:text-gray-600 disabled:opacity-50"
+                        >
+                          {t("threats.watch_dismiss", "Dismiss")}
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
 
       {/* Pending approval queue */}
       {pending.length > 0 && (

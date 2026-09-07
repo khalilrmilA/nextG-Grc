@@ -1194,6 +1194,12 @@ export const threatsApi = {
   reviewProfile: (id: string, note?: string) =>
     apiClient.post(`/threats/${id}/profile/review`, { note: note || null }).then((r) => r.data),
   history: (id: string) => apiClient.get(`/threats/${id}/history`).then((r) => r.data),
+  // Threat watch — what the feeds bring in, before it is anything else.
+  watch: (params?: { kind?: string; status_filter?: string }) =>
+    apiClient.get("/threats/watch", { params }).then((r) => r.data),
+  dismissWatch: (id: string) => apiClient.post(`/threats/watch/${id}/dismiss`).then((r) => r.data),
+  promoteWatch: (id: string, data: Record<string, unknown>) =>
+    apiClient.post(`/threats/watch/${id}/promote`, data).then((r) => r.data),
 };
 
 // ─── Risk Scenarios ─────────────────────────

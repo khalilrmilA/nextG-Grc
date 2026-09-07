@@ -30,11 +30,19 @@ from app.api.v1.dependencies.features import require_feature
 from app.models.user import User, UserRole
 from app.models.threat import Threat, ThreatCategory, ThreatType
 from app.models.threat_history import ThreatHistory
+from app.models.threat_watch import ThreatWatchItem, WATCH_KINDS, WATCH_STATUSES
 from app.models.vulnerability import Vulnerability
-from app.services.threat_feeds import fetch_all_threat_feeds, stable_ref
+from app.services.threat_feeds import fetch_all_threat_feeds
+from app.services.threat_watch_ingest import apply_kev_flags, ingest_for_tenant
 from app.services import threat_registry as registry
 
 router = APIRouter()
+
+
+def _utcnow() -> datetime:
+    """Naive UTC, matching how the rest of this codebase stores DateTime."""
+    return datetime.now(timezone.utc).replace(tzinfo=None)
+
 
 PROBABILITY_LEVELS = ("rare", "peu_probable", "possible", "probable", "quasiment_certain")
 SEVERITY_LEVELS = ("mineur", "notable", "fort", "tres_fort", "critique")
@@ -662,68 +670,156 @@ async def fetch_threat_news(
     current_user: Annotated[User, Depends(require_roles(UserRole.SECURITY_ANALYST, UserRole.CISO))],
     tenant_id: Annotated[str, Depends(get_tenant_id)],
 ):
-    """Fetch latest threats from CISA KEV, SANS ISC, and opensourcemalware.com."""
-    raw = await fetch_all_threat_feeds()
+    """Pull CISA KEV, SANS ISC and opensourcemalware into the threat **watch**.
 
+    Not into the register: see app/models/threat_watch.py. CVE advisories also
+    flag the CVE knowledge base as actively exploited, which is the actionable
+    half of what CISA KEV carries and previously had nowhere to land.
+    """
+    raw = await fetch_all_threat_feeds()
     if not raw:
         return FetchOut(created=0, skipped=0, message="Could not reach any threat feed.", names=[])
 
-    # Skip duplicates (by ref_id for KEV, by name for RSS items)
-    existing_refs = await db.execute(select(Threat.ref_id).where(
-        (Threat.is_builtin == True) | (Threat.tenant_id == tenant_id)  # noqa: E712
-    ))
-    existing_ref_set = {r[0].lower() for r in existing_refs.all()}
-    existing_names = await db.execute(select(Threat.name).where(
-        (Threat.is_builtin == True) | (Threat.tenant_id == tenant_id)  # noqa: E712
-    ))
-    existing_name_set = {r[0].lower() for r in existing_names.all()}
-
-    new_items = [
-        it for it in raw
-        if it["name"].lower() not in existing_name_set
-        and (not it["ref_id"] or it["ref_id"].lower() not in existing_ref_set)
-    ]
-
-    if not new_items:
-        return FetchOut(created=0, skipped=len(raw), message="No new threats found — all items already in your library.", names=[])
-
-    created_names: list[str] = []
-    for item in new_items:
-        ref = stable_ref(item)
-        t = Threat(
-            ref_id=ref,
-            name=item["name"],
-            description=item.get("description") or None,
-            category=item.get("category", ThreatCategory.CYBER_ATTACK.value),
-            typical_threat_actors=item.get("typical_threat_actors", []),
-            typical_attack_vectors=item.get("typical_attack_vectors", []),
-            affected_assets=[],
-            mitre_ids=[],
-            is_builtin=False,
-            is_pending=True,
-            tenant_id=tenant_id,
-        )
-        # Each insert in its own savepoint: the unique (tenant_id, name)
-        # constraint is what actually stops the feed duplicating itself, and one
-        # collision must skip that item rather than abort the whole batch.
-        try:
-            async with db.begin_nested():
-                db.add(t)
-                await db.flush()
-        except IntegrityError:
-            continue
-        registry.record(db, t, "created", actor=current_user,
-                        note=f"Ingested from the {item.get('source', 'threat')} feed; awaiting validation.")
-        created_names.append(item["name"])
-
+    summary = await ingest_for_tenant(db, tenant_id, raw)
+    flagged = await apply_kev_flags(db, raw)
     await db.commit()
-    skipped = len(raw) - len(new_items)
+
+    parts = [f"Fetched {len(raw)} items; {summary['created']} new in your threat watch"]
+    if summary["by_kind"]:
+        parts.append("(" + ", ".join(f"{n} {k.replace('_', ' ')}" for k, n in sorted(summary["by_kind"].items())) + ")")
+    if flagged:
+        parts.append(f"— {flagged} CVE(s) marked as actively exploited")
     return FetchOut(
-        created=len(created_names),
-        skipped=skipped,
-        message=f"Fetched {len(raw)} items. {len(created_names)} new threats pending your review.",
-        names=created_names,
+        created=summary["created"],
+        skipped=summary["skipped"],
+        message=" ".join(parts) + ".",
+        names=[],
     )
+
+
+# ── Threat watch ──────────────────────────────────────────────────────────────
+
+class WatchItemOut(BaseModel):
+    id: str; kind: str; source: str; ref: str
+    title: str; summary: str | None = None; url: str | None = None
+    severity: str | None = None
+    published_at: datetime | None = None
+    status: str
+    promoted_threat_id: str | None = None
+    extra: dict = {}
+    created_at: datetime
+    model_config = {"from_attributes": True}
+
+
+class PromoteRequest(BaseModel):
+    """Turn a watch item into a candidate threat *type* for the register."""
+    name: str | None = None          # defaults to the item's title
+    category: str = "cyber_attack"
+    threat_type: str | None = None
+    description: str | None = None
+
+
+@router.get("/watch", response_model=list[WatchItemOut])
+async def list_watch(
+    db: Annotated[AsyncSession, Depends(get_db)],
+    _: Annotated[User, Depends(get_current_user)],
+    tenant_id: Annotated[str, Depends(get_tenant_id)],
+    kind: str | None = None,
+    status_filter: str | None = None,
+    limit: int = 200,
+):
+    """What the watch has brought in, newest first.
+
+    Declared before ``/{tid}`` routes that could otherwise capture "watch"."""
+    if kind and kind not in WATCH_KINDS:
+        raise HTTPException(422, f"kind must be one of {WATCH_KINDS}")
+    if status_filter and status_filter not in WATCH_STATUSES:
+        raise HTTPException(422, f"status must be one of {WATCH_STATUSES}")
+    q = select(ThreatWatchItem).where(ThreatWatchItem.tenant_id == tenant_id)
+    if kind:
+        q = q.where(ThreatWatchItem.kind == kind)
+    if status_filter:
+        q = q.where(ThreatWatchItem.status == status_filter)
+    q = q.order_by(ThreatWatchItem.published_at.desc().nullslast(),
+                   ThreatWatchItem.created_at.desc()).limit(max(1, min(limit, 500)))
+    return [WatchItemOut.model_validate(w) for w in (await db.execute(q)).scalars().all()]
+
+
+async def _get_watch_item(db: AsyncSession, wid: str, tenant_id: str) -> ThreatWatchItem:
+    item = (await db.execute(select(ThreatWatchItem).where(
+        ThreatWatchItem.id == wid, ThreatWatchItem.tenant_id == tenant_id
+    ))).scalar_one_or_none()
+    if item is None:
+        raise HTTPException(404, "Watch item not found")
+    return item
+
+
+@router.post("/watch/{wid}/dismiss", response_model=WatchItemOut)
+async def dismiss_watch_item(
+    wid: str,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: Annotated[User, Depends(require_roles(UserRole.SECURITY_ANALYST, UserRole.CISO))],
+    tenant_id: Annotated[str, Depends(get_tenant_id)],
+):
+    """Mark an item as read and not relevant. It stays, so the watch shows what
+    was considered — dismissing is a judgement, and deleting it would erase the
+    evidence that anyone looked."""
+    item = await _get_watch_item(db, wid, tenant_id)
+    item.status = "dismissed"
+    item.reviewed_by_id = current_user.id
+    item.reviewed_at = _utcnow()
+    await db.commit(); await db.refresh(item)
+    return WatchItemOut.model_validate(item)
+
+
+@router.post("/watch/{wid}/promote", response_model=ThreatOut, status_code=201)
+async def promote_watch_item(
+    wid: str,
+    body: PromoteRequest,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: Annotated[User, Depends(require_roles(UserRole.SECURITY_ANALYST, UserRole.CISO))],
+    tenant_id: Annotated[str, Depends(get_tenant_id)],
+):
+    """Promote a watch item into the register as a candidate threat type.
+
+    The deliberate act the old design did automatically 150 times a week. The
+    threat still enters pending, so promoting is a proposal, not a decision.
+    """
+    item = await _get_watch_item(db, wid, tenant_id)
+    if item.promoted_threat_id:
+        existing = (await db.execute(select(Threat).where(Threat.id == item.promoted_threat_id))).scalar_one_or_none()
+        if existing is not None:
+            return _view(existing)
+
+    if body.threat_type and body.threat_type not in THREAT_TYPES:
+        raise HTTPException(422, f"threat_type must be one of {THREAT_TYPES}")
+
+    threat = Threat(
+        ref_id=item.ref[:50],
+        name=(body.name or item.title)[:500],
+        description=body.description or item.summary,
+        category=body.category,
+        threat_type=body.threat_type,
+        typical_threat_actors=list((item.extra or {}).get("typical_threat_actors") or []),
+        typical_attack_vectors=list((item.extra or {}).get("typical_attack_vectors") or []),
+        affected_assets=[], mitre_ids=[],
+        is_builtin=False, is_pending=True, tenant_id=tenant_id,
+    )
+    db.add(threat)
+    try:
+        await db.flush()
+    except IntegrityError:
+        await db.rollback()
+        raise HTTPException(409, "Your register already contains a threat with this reference and name.")
+
+    registry.record(db, threat, "created", actor=current_user,
+                    note=f"Promoted from the threat watch ({item.source}); awaiting validation.")
+    item.status = "promoted"
+    item.promoted_threat_id = threat.id
+    item.reviewed_by_id = current_user.id
+    item.reviewed_at = _utcnow()
+    await db.commit(); await db.refresh(threat)
+    return _view(threat)
 
 
 # ── Approve / Reject pending threats ──────────────────────────────────────────

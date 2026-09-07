@@ -16,6 +16,27 @@ from app.models.threat import ThreatCategory
 
 logger = logging.getLogger(__name__)
 
+def classify_item(item: dict) -> str:
+    """What kind of thing a feed item is, so it can be filed where it belongs.
+
+    The source is a reliable discriminator here — each feed produces one kind
+    of thing — so this is a classification, not a guess. Falls back to "news",
+    which is the safe default: news is read, never filed as a threat.
+    """
+    source = (item.get("source") or "").lower()
+    ref = (item.get("ref_id") or "").strip().upper()
+
+    if ref.startswith("CVE-"):
+        return "cve"
+    if "opensourcemalware" in source:
+        return "malicious_package"
+    if "kev" in source or "cisa" in source:
+        return "advisory"
+    if "sans" in source or "isc" in source:
+        return "news"
+    return "news"
+
+
 def stable_ref(item: dict) -> str:
     """A reference for a feed item that means the same thing on every run.
 
@@ -140,6 +161,12 @@ async def _fetch_cisa_kev(client: httpx.AsyncClient) -> list[dict]:
                 "name": name[:500],
                 "description": desc[:800],
                 "url": None,
+                # Kept structured rather than mashed into the description: this
+                # is what makes the CVE knowledge base able to say "actively
+                # exploited, remediate by <date>".
+                "kev_added_at": v.get("dateAdded") or None,
+                "kev_due_date": v.get("dueDate") or None,
+                "kev_action": (v.get("requiredAction") or "").strip() or None,
                 "source": "CISA KEV",
                 "category": ThreatCategory.CYBER_ATTACK.value,
                 "typical_threat_actors": [v.get("vendorProject", "")],

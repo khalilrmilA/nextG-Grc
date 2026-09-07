@@ -41,7 +41,7 @@ someone outside this repo answers a question.
 | 3.1 | Field-level before/after in the action trace | moderate | SQLAlchemy flush hook |
 | 3.2 | Remaining schedulers still log nothing | moderate | Helper exists — call it **after** the caller commits |
 | 4.1 | Asset cartography O(n²) + blocks the event loop | moderate | Latent; zero-impact today only because a row has a NULL owner |
-| 12.1 | Threat pending queue: 4,717 items nobody can triage | moderate | Rule works; the volume makes "Approve all" the only usable action |
+| 12.1 | ~~Threat pending queue~~ | done | Feeds now land in the threat watch, not the register |
 | 11.1 | CAPEC catalog (ids are bridged, names are not) | small | Near-copy of `mitre_cwe_sync.py`; only if STB asks for attack-pattern search |
 
 ### Decide, then act
@@ -582,17 +582,23 @@ Audited against the threat-register and threat-profiling requirements. The
 profiling fields existed but had never been used — **0 of 6,030 threats had a
 profile or a linked asset**, and built-in threats could not be profiled at all.
 
-### 12.1 The pending queue is unmanageable
-The feed creates a pending threat per tenant per item and nothing consumes the
-queue: **4,717 pending threats**, the oldest from 2026-04-14, across 11 tenants
-(1,827 in the largest). Validation before integration is the correct rule and it
-works, but at this volume "Approve all" is the only usable action, which makes
-the control theatre.
+### 12.1 The pending queue was unmanageable — **FIXED**
+The feed was writing every item into the register as a candidate threat: 4,515
+pending, the oldest from 2026-04-14, across 11 tenants. Composition told the
+real story — 45% malicious package URLs, 31% SANS diary entries **including
+podcast episodes**, 20% CVE advisories. Nobody can write "origine probable,
+objectifs, vecteurs d'attaque" for a podcast episode.
 
-What is needed is triage the feed can support: rank incoming items by whether
-they touch an asset or technology the tenant actually has, and let the rest
-expire unreviewed rather than accumulate. Effort: moderate. Nothing here is
-broken — it is a workflow that does not scale to the volume the feed produces.
+The requirement asks for the register to be *fed* by a continuous watch, not to
+*be* the watch. Feeds now land in `threat_watch_items`, each item classified,
+and a person promotes only what genuinely describes a new kind of threat.
+Register and pending queue both stay flat across a sync — verified.
+
+**Remaining:** 618 feed-shaped threats are already *approved* in the register
+(someone used "Approve all" before this change). They are left alone because
+deleting validated content is the tenant's call, not a migration's. They can be
+removed from the Threat Library one at a time, or with a follow-up script if
+STB wants them gone in bulk.
 
 ### 12.2 The scheduler still writes nothing to the activity chain
 Feed-created threats now write to `threat_history` with a null actor, but the
@@ -600,18 +606,31 @@ scheduler remains one of the background writers that never touches the
 hash-chained activity log (§3.2). Same fix as the others: call the helper
 **after** the caller commits.
 
-### 12.3 CATEGORY_TO_TYPE is a mapping, not an assessment
+### 12.3 The seeded starter register is a starting point, not an assessment
+The register held **four** authored threats across all 11 tenants, and nothing
+environmental, physical, human-error or regulatory — the categories the
+requirement names. `scripts/seed_threat_register.py` adds 38 banking threat
+types across the four families, worded from EBIOS RM / ISO 27005 annex C /
+ENISA and adapted to retail banking, in French.
+
+No probability or severity is set on any of them: those are the organisation's
+judgement. Each has to be adopted, completed and validated by STB before it
+means anything. Confirm the wording with them rather than presenting it as
+delivered content.
+
+### 12.4 CATEGORY_TO_TYPE is a mapping, not an assessment
 The four required families are derived from the existing nine-value category
 when a profile does not state one. The API marks a derived value as derived and
 the screen labels it, so nothing presents a guess as a judgement — but the
 mapping itself (supply chain → operational, insider → organisational) is a
 reasonable reading, not a standard. Confirm it with STB rather than assuming it.
 
-### 12.4 Verified as MET
+### 12.5 Verified as MET
 | Requirement | Evidence |
 |---|---|
 | Threats linked to assets **and** exploitable vulnerabilities | `linked_asset_ids` / `linked_vulnerability_ids`, now validated against the tenant — a forged or typo'd id is refused with 422 instead of stored |
-| Continuous update from an integrated watch | CISA KEV (CERT), SANS ISC (RSS) and opensourcemalware (sector) on a 24h scheduler, plus a manual fetch |
+| Continuous update from an integrated watch | CISA KEV (CERT), SANS ISC (RSS) and opensourcemalware (sector) on a 24h scheduler, plus a manual fetch — filed in the **watch**, promoted into the register by a person |
+| CISA KEV reaches something that can act on it | A KEV advisory now marks the CVE knowledge-base entry as actively exploited, with CISA's required action and due date, and `GET /cve?known_exploited=true` filters on it. Verified: 9 CVEs flagged, 4 of them below CVSS 9 — which is the point, since active exploitation outranks a higher theoretical score |
 | Classification by type and by likelihood | The four families as a first-class field with filters, alongside the probability and severity scales |
 | New threats validated before integration | Every new threat now starts pending; the opt-out that let API-created threats skip it is gone |
 | Change history per threat (add / update / delete) | `threat_history`, with before/after per field. A deletion is recorded **before** the row goes and keeps the reference and name, so it survives the threat |
@@ -622,7 +641,7 @@ reasonable reading, not a standard. Confirm it with STB rather than assuming it.
 | Periodic revision | A cadence (default 12 months), a due date set on validation and review, an overdue filter, and reminders at 14/7/0 days and while overdue — capped at 30 days, matching the risk and asset checks |
 | All modifications historised | Editing a validated profile returns it to draft and records why, through either edit path |
 
-### 12.5 Fixed along the way — the feed was duplicating itself
+### 12.6 Fixed along the way — the feed was duplicating itself
 Both uvicorn workers run the feed scheduler, read the same "already known" set
 and commit independently (the split-brain in `multi-worker-state-split-brain`,
 now with evidence). Measured: **213 duplicate rows**.
