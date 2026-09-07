@@ -17,6 +17,8 @@ from app.api.v1.dependencies.features import require_feature
 from app.models.user import User
 from app.services import risk_scoring
 from app.services.notification_generator import create_notification, get_recipients_for_tenant, notification_exists
+from app.services import perimeter
+from app.services.authz import get_effective_roles
 
 router = APIRouter()
 
@@ -260,6 +262,12 @@ async def create_risk(
     definition, matrix_name = await _apply_scoring(db, tenant_id, risk)
     db.add(risk)
     await db.flush()
+    # Commit before returning. get_db() commits at teardown, but that runs AFTER
+    # ActivityLogMiddleware, which opens its own connection to write the audit
+    # entry — so leaving the write uncommitted here holds SQLite's single write
+    # lock while the middleware waits for it, and the request hangs.
+    await db.commit()
+    await db.refresh(risk)
     return _enrich(risk, definition, matrix_name)
 
 
@@ -286,7 +294,8 @@ async def update_risk(
     body: RiskUpdate,
     tenant_id: str = Depends(get_tenant_id),
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_roles(UserRole.CISO, UserRole.RISK_MANAGER)),
+    current_user: User = Depends(require_roles(
+        UserRole.CISO, UserRole.RISK_MANAGER, UserRole.BUSINESS_OWNER)),
 ):
     result = await db.execute(
         select(Risk).where(Risk.id == risk_id, Risk.tenant_id == tenant_id)
@@ -294,6 +303,11 @@ async def update_risk(
     risk = result.scalar_one_or_none()
     if not risk:
         raise HTTPException(status_code=404, detail=_RISK_NOT_FOUND)
+
+    # A perimeter-scoped role may only act on what it owns. Reading stays
+    # tenant-wide — see app/services/perimeter.py for why that asymmetry.
+    perimeter.assert_in_perimeter(
+        current_user, risk, await get_effective_roles(current_user, db), what="risk")
 
     provided = body.model_dump(exclude_none=True)
     # Risk appetite is an Elite Pack capability — gate the write.
@@ -327,6 +341,12 @@ async def update_risk(
         await _alert_target_over_appetite(db, risk)
 
     definition, matrix_name = await risk_scoring.resolve_matrix(db, tenant_id, risk.risk_matrix_id)
+    # Commit before returning. get_db() would commit at teardown, but that runs
+    # AFTER ActivityLogMiddleware, which opens its own connection to write the
+    # audit entry — so an uncommitted write here leaves this session holding
+    # SQLite's single write lock while the middleware waits for it. The request
+    # then hangs until the busy timeout instead of returning.
+    await db.commit()
     # Reload server-computed columns (updated_at onupdate) in async context so the
     # sync _enrich never triggers a lazy refresh (MissingGreenlet).
     await db.refresh(risk)
@@ -347,6 +367,11 @@ async def delete_risk(
     if not risk:
         raise HTTPException(status_code=404, detail=_RISK_NOT_FOUND)
     await db.delete(risk)
+    # Commit before returning. get_db() commits at teardown, but that runs AFTER
+    # ActivityLogMiddleware, which opens its own connection to write the audit
+    # entry — so leaving the write uncommitted here holds SQLite's single write
+    # lock while the middleware waits for it, and the request hangs.
+    await db.commit()
 
 
 @router.get("/heatmap/data")
@@ -431,6 +456,9 @@ async def set_risk_appetite(
     if risk.target_over_appetite and not was_target_over:
         await _alert_target_over_appetite(db, risk)
     await db.flush()
+    # See update_risk: commit before returning so the write lock is released
+    # before ActivityLogMiddleware opens its own connection.
+    await db.commit()
     # Reload server-computed columns (updated_at onupdate) before the sync _enrich.
     await db.refresh(risk)
     return _enrich(risk, definition, matrix_name)
@@ -446,9 +474,14 @@ async def validate_target(
     body: ValidateTargetInput,
     tenant_id: str = Depends(get_tenant_id),
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_roles(UserRole.CISO, UserRole.RISK_MANAGER)),
+    current_user: User = Depends(require_roles(
+        UserRole.CISO, UserRole.RISK_MANAGER, UserRole.BUSINESS_OWNER)),
 ):
     """Elite Pack: final validation gate for a risk's treatment plan.
+
+    The Propriétaire métier validates risks and treatment plans "sur son
+    périmètre métier", so the role is granted here and then confined to the
+    risks it owns — see the perimeter check below and app/services/perimeter.py.
 
     RFP rules covered:
     - "Utilisé comme critère de validation finale du plan de traitement" — the
@@ -464,6 +497,11 @@ async def validate_target(
     risk = result.scalar_one_or_none()
     if not risk:
         raise HTTPException(status_code=404, detail=_RISK_NOT_FOUND)
+
+    # "Validation ... sur son périmètre métier": a business owner validates the
+    # risks they own, not the organisation's.
+    perimeter.assert_in_perimeter(
+        current_user, risk, await get_effective_roles(current_user, db), what="risk")
 
     if risk.appetite_threshold is None:
         raise HTTPException(
@@ -489,6 +527,9 @@ async def validate_target(
 
     definition, matrix_name = await risk_scoring.resolve_matrix(db, tenant_id, risk.risk_matrix_id)
     await db.flush()
+    # See update_risk: committing here releases SQLite's write lock before
+    # ActivityLogMiddleware opens its own connection for the audit entry.
+    await db.commit()
     await db.refresh(risk)
     return _enrich(risk, definition, matrix_name)
 
