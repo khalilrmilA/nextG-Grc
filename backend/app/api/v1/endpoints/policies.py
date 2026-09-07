@@ -14,6 +14,8 @@ from app.models.user import User, UserRole
 from app.models.policy import Policy, PolicyVersion, PolicyAttestation, PolicyStatus, AttestationStatus
 from app.models.org_unit import OrgEntity, BusinessProcess
 from app.services import pdf_arabic
+from app.models.activity_log import ActivityLog
+from app.services.activity_chain import chain_and_add
 
 router = APIRouter()
 
@@ -206,6 +208,82 @@ async def approve_version(pid: str, vid: str, db: AsyncSession = Depends(get_db)
     v.approved_by_id = user.id; v.approved_at = datetime.utcnow().isoformat()
     await db.commit(); await db.refresh(v)
     return VersionOut.model_validate(v)
+
+
+@router.post("/{pid}/versions/{vid}/restore", response_model=VersionOut, status_code=201)
+async def restore_version(
+    pid: str,
+    vid: str,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_roles(UserRole.POLICY_MANAGER, UserRole.CISO)),
+    tenant_id: str = Depends(get_tenant_id),
+):
+    """Return a policy to an earlier version — "retour à l'état antérieur".
+
+    History was previously readable but not actionable: an operator could see
+    that version 3 was wrong and see what version 2 said, with no way to go
+    back except retyping it.
+
+    Restoring APPENDS rather than rewrites. The old content becomes a new
+    current version, so the erroneous version stays in the record and the
+    revert is itself a dated, attributed event. Deleting versions to "undo"
+    would destroy the audit trail that makes the history worth keeping, and an
+    auditor asking "what did this policy say last March, and who changed it"
+    must still get an answer afterwards.
+    """
+    await _policy(db, pid, tenant_id)
+    r = await db.execute(select(PolicyVersion).where(PolicyVersion.id == vid, PolicyVersion.policy_id == pid))
+    source = r.scalar_one_or_none()
+    if not source:
+        raise HTTPException(404, "Version not found")
+    if source.is_current:
+        raise HTTPException(400, "That version is already the current one.")
+
+    max_v = (await db.execute(
+        select(func.max(PolicyVersion.version_number)).where(PolicyVersion.policy_id == pid)
+    )).scalar() or 0
+
+    current = (await db.execute(select(PolicyVersion).where(
+        PolicyVersion.policy_id == pid, PolicyVersion.is_current == True))).scalars().all()  # noqa: E712
+    for c in current:
+        c.is_current = False
+
+    restored = PolicyVersion(
+        policy_id=pid,
+        version_number=max_v + 1,
+        content=source.content,
+        change_summary=f"Restored from version {source.version_number}",
+        is_current=True,
+        authored_by_id=user.id,
+    )
+    db.add(restored)
+    await db.flush()
+    await db.commit()
+    await db.refresh(restored)
+
+    # A revert of an approved document is exactly the kind of change an auditor
+    # looks for, so it is recorded explicitly rather than left as a generic
+    # "POST /versions" in the request log.
+    try:
+        await chain_and_add(db, ActivityLog(
+            tenant_id=tenant_id,
+            user_id=user.id,
+            user_email=user.email,
+            action="restore",
+            entity_type="policy",
+            entity_id=pid,
+            entity_name=None,
+            details={
+                "restored_from_version": source.version_number,
+                "new_version": restored.version_number,
+                "replaced_version": current[0].version_number if current else None,
+            },
+            origin="api",
+        ))
+    except Exception:
+        pass
+
+    return VersionOut.model_validate(restored)
 
 
 # ── Attestations ─────────────────────────────────────────────────────────

@@ -21,6 +21,29 @@ function currentUiLanguage(): string {
 class ApiClient {
   private client: AxiosInstance;
 
+  /**
+   * Confirms an apparent outage against the health endpoint before the whole
+   * interface is thrown away. Deliberately not routed through this axios
+   * instance: it must not inherit interceptors, auth headers or a long timeout.
+   */
+  private async backendIsDown(): Promise<boolean> {
+    try {
+      const base = API_BASE_URL.replace(/\/api\/v\d+\/?$/, "");
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 4000);
+      const res = await fetch(`${base}/health`, {
+        method: "GET",
+        cache: "no-store",
+        signal: controller.signal,
+      });
+      clearTimeout(timer);
+      return !res.ok;
+    } catch {
+      return true;
+    }
+  }
+
+
   constructor() {
     this.client = axios.create({
       baseURL: API_BASE_URL,
@@ -112,24 +135,29 @@ class ApiClient {
       (error) => Promise.reject(error)
     );
 
-    // Response: auto-refresh on 401, redirect to service-down on server errors
+    // Response: auto-refresh on 401, degrade locally on server errors.
+    //
+    // Degraded mode: a single failing endpoint must not take the whole
+    // application down. This used to send the entire SPA to /service-down on
+    // ANY 5xx from ANY call, so one broken report made Risks, Compliance and
+    // everything else unreachable too. A 5xx also *proves* the server is alive
+    // — it answered — so a redirect is the wrong conclusion from it. The error
+    // is now rejected to the caller, which shows its own message while the
+    // rest of the platform keeps working.
+    //
+    // /service-down is reserved for the case it was meant for: the backend not
+    // answering at all. Even then it is confirmed against /health first, so a
+    // single aborted or timed-out request cannot masquerade as an outage.
     this.client.interceptors.response.use(
       (response) => response,
       async (error) => {
         const status: number | undefined = error.response?.status;
 
-        // No response at all = backend unreachable (network down, connection refused)
+        // No response at all — possibly unreachable, possibly one dead request.
         if (!error.response) {
-          window.location.href = "/service-down";
-          return Promise.reject(error);
-        }
-
-        // Server-side failures — backend is broken, not a user error
-        // Exception: compliance analyze endpoint handles its own errors (long-running background job)
-        const url: string = error.config?.url ?? "";
-        const isAnalyze = url.includes("/compliance/assessments/") && url.includes("/analyze");
-        if (status !== undefined && status >= 500 && !isAnalyze) {
-          window.location.href = "/service-down";
+          if (await this.backendIsDown()) {
+            window.location.href = "/service-down";
+          }
           return Promise.reject(error);
         }
 

@@ -4,7 +4,7 @@ import { Link } from "react-router-dom";
 import {
   FileText, Plus, CheckCircle, Clock, AlertCircle, Calendar, Link2, X,
   ChevronRight, Wand2, Trash2, Search, Download, Send, History,
-  Edit3, AlertTriangle, Users, Sparkles, StopCircle,
+  Edit3, AlertTriangle, Users, Sparkles, StopCircle, Loader2,
 } from "lucide-react";
 import { policiesApi, usersApi, aiApi, assetGraphApi, type PolicyVersion, type PolicyAttestation } from "../api/endpoints";
 import type { Policy } from "../types";
@@ -194,6 +194,7 @@ function PolicyDetailModal({ policy, onClose, onStatusChange, onDelete, users }:
   const [changeSummary, setChangeSummary] = useState("");
   const [savingVer, setSavingVer] = useState(false);
   const [verError, setVerError] = useState("");
+  const [restoringVer, setRestoringVer] = useState<string | null>(null);
 
   // attestation state
   const [attestations, setAttestations] = useState<PolicyAttestation[]>([]);
@@ -230,6 +231,33 @@ function PolicyDetailModal({ policy, onClose, onStatusChange, onDelete, users }:
   useEffect(() => {
     if (tab === "content" && currentVersion) setNewContent(currentVersion.content);
   }, [tab, currentVersion]);
+
+  async function handleRestoreVersion(v: PolicyVersion) {
+    if (!policy) return;
+    // Restoring appends rather than rewrites, so nothing is lost — say so, or
+    // it reads like a destructive action and nobody uses it.
+    const ok = window.confirm(
+      t(
+        "policies.restore_confirm",
+        "Restore version {{num}} as the current version?\n\nA new version is created holding its content. Nothing is deleted — the version being replaced stays in the history.",
+        { num: v.version_number },
+      ),
+    );
+    if (!ok) return;
+    setRestoringVer(v.id);
+    setVerError("");
+    try {
+      await policiesApi.restorePolicyVersion(policy.id, v.id);
+      await loadVersions();
+    } catch (err: any) {
+      setVerError(
+        err?.response?.data?.detail ??
+          t("policies.restore_failed", "Could not restore that version."),
+      );
+    } finally {
+      setRestoringVer(null);
+    }
+  }
 
   async function handleSaveVersion() {
     if (!newContent.trim()) return;
@@ -596,6 +624,20 @@ function PolicyDetailModal({ policy, onClose, onStatusChange, onDelete, users }:
                         <pre className="text-sm text-gray-700 whitespace-pre-wrap font-sans leading-relaxed">
                           {v.content}
                         </pre>
+                        {!v.is_current && (
+                          <div className="mt-3 pt-3 border-t border-gray-100 flex justify-end">
+                            <button
+                              onClick={() => handleRestoreVersion(v)}
+                              disabled={restoringVer === v.id}
+                              className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-gray-200 text-gray-700 text-xs font-medium rounded-lg hover:bg-gray-50 disabled:opacity-50"
+                            >
+                              {restoringVer === v.id
+                                ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                : <History className="w-3.5 h-3.5" />}
+                              {t("policies.restore_version", "Restore this version")}
+                            </button>
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>

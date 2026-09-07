@@ -592,6 +592,13 @@ export const policiesApi = {
   createVersion: (id: string, data: { content: string; change_summary?: string }) =>
     apiClient.post<PolicyVersion>(`/policies/${id}/versions`, data).then((r) => r.data),
 
+  /** Return a policy to an earlier version. Appends a new current version
+   *  holding the old content — the superseded version stays in the history. */
+  restorePolicyVersion: (id: string, versionId: string) =>
+    apiClient
+      .post<PolicyVersion>(`/policies/${id}/versions/${versionId}/restore`)
+      .then((r) => r.data),
+
   listAttestations: (id: string) =>
     apiClient.get<PolicyAttestation[]>(`/policies/${id}/attestations`).then((r) => r.data),
 
