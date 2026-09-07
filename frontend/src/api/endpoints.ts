@@ -1662,6 +1662,16 @@ export const ssoApi = {
   login: (data: { username: string; password: string; tenant_slug?: string }) => apiClient.post("/sso/ldap/login", data).then((r) => r.data),
 };
 
+// ── Directory (AD/LDAP) configuration — tenant admin, Settings > Directory ───
+// The bind password is write-only: `get` reports whether one is stored, never
+// its value, and omitting it from `update` keeps the stored one.
+export const directoryApi = {
+  get: () => apiClient.get("/tenants/current/ldap").then((r) => r.data),
+  update: (data: Record<string, unknown>) => apiClient.patch("/tenants/current/ldap", data).then((r) => r.data),
+  test: (data: { probe_username?: string | null; draft?: Record<string, unknown> }) =>
+    apiClient.post("/tenants/current/ldap/test", data).then((r) => r.data),
+};
+
 // ── System self-test (in-app acceptance checks) ──────────────────────────────
 export const systemApi = {
   selfTest: () => apiClient.get("/system/self-test").then((r) => r.data),

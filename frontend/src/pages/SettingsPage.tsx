@@ -6,11 +6,11 @@ import {
   Save, Eye, EyeOff, Check, AlertTriangle,
   Lock, Crown, Trash2, Plus, Loader2, Zap,
   Sun, Moon, Monitor, RotateCcw, KeyRound,
-  ChevronLeft, ChevronRight,
+  ChevronLeft, ChevronRight, Network, PlugZap, X,
 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuthStore, PLAN_FEATURES, type PlanTier } from "../store/auth";
-import { notificationsApi, authApi } from "../api/endpoints";
+import { notificationsApi, authApi, directoryApi } from "../api/endpoints";
 import type { NotificationPreference, NotificationType, NotificationChannel } from "../types";
 import { useAppearance, appearanceStore, type ThemeMode, type Density, type AccentColor, type FontSize, type SidebarStyle } from "../store/appearance";
 import { useFramework } from "../context/FrameworkContext";
@@ -20,7 +20,7 @@ import MfaPanel from "../components/MfaPanel";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-type Tab = "profile" | "organization" | "framework" | "notifications" | "security" | "ai-access" | "appearance" | "admin";
+type Tab = "profile" | "organization" | "framework" | "notifications" | "security" | "directory" | "ai-access" | "appearance" | "admin";
 
 // ── Reusable primitives ───────────────────────────────────────────────────────
 
@@ -832,6 +832,316 @@ function OptionCard({ selected, onClick, children }: { selected: boolean; onClic
   );
 }
 
+// ── Directory (Active Directory / LDAP) ──────────────────────────────────────
+// The backend has always read this from Tenant.settings["ldap"], but nothing
+// could write it: the key was missing from the settings whitelist, so a
+// directory could only be configured by editing .env on the server. This tab
+// is the administrator-facing half of that integration.
+
+const LDAP_TEXT_FIELDS: { key: string; label: string; hint?: string; placeholder?: string }[] = [
+  { key: "server_uri", label: "dir.f_server_uri", placeholder: "ldap://ad.example.com:389", hint: "dir.h_server_uri" },
+  { key: "bind_dn", label: "dir.f_bind_dn", placeholder: "CN=grc-svc,OU=Services,DC=example,DC=com", hint: "dir.h_bind_dn" },
+  { key: "user_search_base", label: "dir.f_search_base", placeholder: "OU=Users,DC=example,DC=com" },
+  { key: "user_filter", label: "dir.f_user_filter", placeholder: "(sAMAccountName={username})", hint: "dir.h_user_filter" },
+  { key: "default_email_domain", label: "dir.f_email_domain", placeholder: "example.com", hint: "dir.h_email_domain" },
+];
+
+const LDAP_ATTR_FIELDS: { key: string; label: string; placeholder: string }[] = [
+  { key: "attr_email", label: "dir.f_attr_email", placeholder: "mail" },
+  { key: "attr_firstname", label: "dir.f_attr_first", placeholder: "givenName" },
+  { key: "attr_lastname", label: "dir.f_attr_last", placeholder: "sn" },
+  { key: "attr_groups", label: "dir.f_attr_groups", placeholder: "memberOf" },
+];
+
+function DirectoryTab() {
+  const { t } = useTranslation();
+  const [cfg, setCfg] = useState<any | null>(null);
+  const [form, setForm] = useState<any>({});
+  const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [groupRows, setGroupRows] = useState<{ group: string; role: string }[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [error, setError] = useState("");
+  const [probe, setProbe] = useState("");
+  const [testing, setTesting] = useState(false);
+  const [testResult, setTestResult] = useState<any | null>(null);
+
+  function hydrate(d: any) {
+    setCfg(d);
+    setForm({
+      enabled: d.enabled, server_uri: d.server_uri, use_ssl: d.use_ssl, bind_dn: d.bind_dn,
+      user_search_base: d.user_search_base, user_filter: d.user_filter,
+      attr_email: d.attr_email, attr_firstname: d.attr_firstname,
+      attr_lastname: d.attr_lastname, attr_groups: d.attr_groups,
+      default_email_domain: d.default_email_domain, default_role: d.default_role,
+      auto_create: d.auto_create,
+    });
+    setGroupRows(Object.entries(d.group_role_map || {}).map(([group, role]) => ({ group, role: String(role) })));
+    setPassword("");
+  }
+
+  useEffect(() => {
+    directoryApi.get()
+      .then(hydrate)
+      .catch((e: any) => setError(e?.response?.data?.detail || t("dir.e_load", "Could not load the directory settings.")))
+      .finally(() => setLoading(false));
+  }, []);
+
+  function draftPayload(includePassword: boolean) {
+    const map: Record<string, string> = {};
+    for (const row of groupRows) {
+      if (row.group.trim() && row.role.trim()) map[row.group.trim()] = row.role.trim();
+    }
+    const payload: Record<string, unknown> = { ...form, group_role_map: map };
+    // Omitted entirely -> the server keeps the stored password. Only send it
+    // when the administrator actually typed a new one.
+    if (includePassword && password) payload.bind_password = password;
+    return payload;
+  }
+
+  async function save() {
+    setSaving(true); setError(""); setSaved(false);
+    try {
+      const updated = await directoryApi.update(draftPayload(true));
+      hydrate(updated);
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2500);
+    } catch (e: any) {
+      const detail = e?.response?.data?.detail;
+      setError(typeof detail === "string" ? detail : t("dir.e_save", "Could not save the directory settings."));
+    } finally { setSaving(false); }
+  }
+
+  async function runTest() {
+    setTesting(true); setTestResult(null); setError("");
+    try {
+      setTestResult(await directoryApi.test({ probe_username: probe.trim() || null, draft: draftPayload(true) }));
+    } catch (e: any) {
+      const detail = e?.response?.data?.detail;
+      setError(typeof detail === "string" ? detail : t("dir.e_test", "The connection test could not be run."));
+    } finally { setTesting(false); }
+  }
+
+  if (loading) {
+    return <div className="flex items-center justify-center py-16"><Loader2 className="w-6 h-6 animate-spin text-blue-500" /></div>;
+  }
+
+  const set = (key: string) => (v: any) => setForm({ ...form, [key]: v });
+  const inherited = (key: string) => cfg && !(cfg.overridden_keys || []).includes(key);
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+          <Network className="w-5 h-5 text-blue-600" /> {t("dir.title", "Active Directory / LDAP")}
+        </h2>
+        <p className="text-sm text-gray-500 mt-1">
+          {t("dir.subtitle", "Let people sign in with their directory account. Settings here apply to your organisation and override the server defaults.")}
+        </p>
+      </div>
+
+      {cfg && !cfg.ldap3_installed && (
+        <div className="flex items-start gap-2 p-3 rounded-xl bg-amber-50 text-amber-800 text-sm">
+          <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
+          <span>{t("dir.no_ldap3", "The ldap3 library is not installed on this server, so directory sign-in cannot run. Settings can still be saved.")}</span>
+        </div>
+      )}
+      {error && (
+        <div className="flex items-start gap-2 p-3 rounded-xl bg-red-50 text-red-700 text-sm">
+          <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" /> <span>{error}</span>
+        </div>
+      )}
+
+      <SectionCard title={t("dir.s_connection", "Connection")}>
+        <Toggle
+          enabled={!!form.enabled}
+          onChange={set("enabled")}
+          label={t("dir.t_enable", "Enable directory sign-in")}
+          description={t("dir.t_enable_d", "Adds a directory login option to the sign-in screen for your organisation.")}
+        />
+        <Toggle
+          enabled={!!form.use_ssl}
+          onChange={set("use_ssl")}
+          label={t("dir.t_ssl", "Use SSL (LDAPS)")}
+          description={t("dir.t_ssl_d", "Encrypt the connection to the directory server.")}
+        />
+        {LDAP_TEXT_FIELDS.slice(0, 2).map((f) => (
+          <Field key={f.key} label={t(f.label) + (inherited(f.key) ? t("dir.inherited", "  ·  inherited from server") : "")} hint={f.hint ? t(f.hint) : undefined}>
+            <Input value={form[f.key] ?? ""} onChange={set(f.key)} placeholder={f.placeholder} />
+          </Field>
+        ))}
+        <Field
+          label={t("dir.f_password", "Service account password")}
+          hint={cfg?.bind_password_set
+            ? t("dir.h_password_set", "A password is stored. Leave blank to keep it, or type a new one to replace it.")
+            : t("dir.h_password_unset", "No password stored. Leave blank to bind anonymously.")}
+        >
+          <div className="relative">
+            <Input
+              value={password}
+              onChange={setPassword}
+              type={showPassword ? "text" : "password"}
+              placeholder={cfg?.bind_password_set ? "••••••••  (unchanged)" : ""}
+            />
+            <button
+              type="button"
+              onClick={() => setShowPassword((v) => !v)}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+            >
+              {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+            </button>
+          </div>
+        </Field>
+        {LDAP_TEXT_FIELDS.slice(2).map((f) => (
+          <Field key={f.key} label={t(f.label) + (inherited(f.key) ? t("dir.inherited", "  ·  inherited from server") : "")} hint={f.hint ? t(f.hint) : undefined}>
+            <Input value={form[f.key] ?? ""} onChange={set(f.key)} placeholder={f.placeholder} />
+          </Field>
+        ))}
+      </SectionCard>
+
+      <SectionCard title={t("dir.s_attributes", "Directory attributes")}>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          {LDAP_ATTR_FIELDS.map((f) => (
+            <Field key={f.key} label={t(f.label)}>
+              <Input value={form[f.key] ?? ""} onChange={set(f.key)} placeholder={f.placeholder} />
+            </Field>
+          ))}
+        </div>
+      </SectionCard>
+
+      <SectionCard title={t("dir.s_accounts", "Accounts and roles")}>
+        <Toggle
+          enabled={!!form.auto_create}
+          onChange={set("auto_create")}
+          label={t("dir.t_autocreate", "Create an account on first sign-in")}
+          description={t("dir.t_autocreate_d", "Off means only people who already have an account here can use directory sign-in.")}
+        />
+        <Field label={t("dir.f_default_role", "Default role")} hint={t("dir.h_default_role", "Used when no directory group maps to a role.")}>
+          <select
+            value={form.default_role ?? ""}
+            onChange={(e) => set("default_role")(e.target.value)}
+            className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm text-gray-800 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+          >
+            {(cfg?.assignable_roles || []).map((r: string) => (
+              <option key={r} value={r}>{r.replace(/_/g, " ")}</option>
+            ))}
+          </select>
+        </Field>
+
+        <div>
+          <p className="text-sm font-medium text-gray-700 mb-1">{t("dir.s_group_map", "Group to role mapping")}</p>
+          <p className="text-xs text-gray-400 mb-3">
+            {t("dir.h_group_map", "A directory group grants a role here. Write the group name (GRC_RSSI) or its full DN. When someone belongs to several mapped groups, the most privileged role wins.")}
+          </p>
+          <div className="space-y-2">
+            {groupRows.map((row, i) => (
+              <div key={i} className="flex items-center gap-2">
+                <input
+                  value={row.group}
+                  onChange={(e) => setGroupRows(groupRows.map((r, j) => (j === i ? { ...r, group: e.target.value } : r)))}
+                  placeholder={t("dir.ph_group", "Directory group")}
+                  className="flex-1 px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+                <span className="text-gray-300">&rarr;</span>
+                <select
+                  value={row.role}
+                  onChange={(e) => setGroupRows(groupRows.map((r, j) => (j === i ? { ...r, role: e.target.value } : r)))}
+                  className="w-52 px-3 py-2 border border-gray-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="">{t("dir.ph_role", "Select a role…")}</option>
+                  {(cfg?.assignable_roles || []).map((r: string) => (
+                    <option key={r} value={r}>{r.replace(/_/g, " ")}</option>
+                  ))}
+                </select>
+                <button
+                  type="button"
+                  onClick={() => setGroupRows(groupRows.filter((_, j) => j !== i))}
+                  className="p-2 text-gray-400 hover:text-red-600"
+                  aria-label={t("dir.a_remove", "Remove mapping")}
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              </div>
+            ))}
+            <button
+              type="button"
+              onClick={() => setGroupRows([...groupRows, { group: "", role: "" }])}
+              className="inline-flex items-center gap-1.5 text-sm font-medium text-blue-600 hover:text-blue-800"
+            >
+              <Plus className="w-4 h-4" /> {t("dir.a_add", "Add a mapping")}
+            </button>
+          </div>
+        </div>
+      </SectionCard>
+
+      <SectionCard title={t("dir.s_test", "Test the connection")}>
+        <p className="text-xs text-gray-400 -mt-1">
+          {t("dir.h_test", "Tries what is on screen against the directory. Nothing is saved and nobody is signed in.")}
+        </p>
+        <div className="flex items-end gap-3 flex-wrap">
+          <div className="flex-1 min-w-[14rem]">
+            <Field label={t("dir.f_probe", "Directory username to look up (optional)")} hint={t("dir.h_probe", "Proves the filter and the group mapping, not just that the server answers.")}>
+              <Input value={probe} onChange={setProbe} placeholder="jdupont" />
+            </Field>
+          </div>
+          <button
+            type="button"
+            onClick={runTest}
+            disabled={testing}
+            className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-50 disabled:opacity-50"
+          >
+            {testing ? <Loader2 className="w-4 h-4 animate-spin" /> : <PlugZap className="w-4 h-4" />} {t("dir.a_test", "Test connection")}
+          </button>
+        </div>
+
+        {testResult && (
+          <div className="mt-2 rounded-xl border border-gray-100 divide-y divide-gray-50">
+            {(testResult.steps || []).map((st: any, i: number) => (
+              <div key={i} className="flex items-start gap-2.5 px-3 py-2.5">
+                {st.ok
+                  ? <Check className="w-4 h-4 text-green-600 mt-0.5 shrink-0" />
+                  : <X className="w-4 h-4 text-red-600 mt-0.5 shrink-0" />}
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-gray-800 capitalize">{st.step}</p>
+                  {st.detail && <p className="text-xs text-gray-500 break-words">{st.detail}</p>}
+                </div>
+              </div>
+            ))}
+            {testResult.user_found && (
+              <div className="px-3 py-2.5 text-xs text-gray-600">
+                <p className="font-medium text-gray-800 mb-1">{t("dir.r_entry", "Directory entry")}</p>
+                <p className="break-all">{testResult.user_found.dn}</p>
+                <p>{testResult.user_found.first_name} {testResult.user_found.last_name} · {testResult.user_found.email || t("dir.r_no_email", "no email attribute")}</p>
+                {(testResult.groups || []).length > 0 && (
+                  <p className="mt-1 break-all">{t("dir.r_groups", "Groups:")} {testResult.groups.slice(0, 8).join(", ")}{testResult.groups.length > 8 ? ` +${testResult.groups.length - 8} more` : ""}</p>
+                )}
+                <p className="mt-1">
+                  {t("dir.r_role", "Role on sign-in:")} <span className="font-medium text-gray-800">{(testResult.mapped_role || form.default_role || "").replace(/_/g, " ")}</span>
+                  {!testResult.mapped_role && t("dir.r_role_default", " (default — no group matched)")}
+                </p>
+              </div>
+            )}
+          </div>
+        )}
+      </SectionCard>
+
+      <div className="flex items-center justify-end gap-3 pt-2">
+        {saved && <span className="flex items-center gap-1.5 text-sm text-green-600"><Check className="w-4 h-4" /> {t("settings.saved", "Saved")}</span>}
+        <button
+          type="button"
+          onClick={save}
+          disabled={saving}
+          className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50"
+        >
+          {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />} {t("settings.save_changes", "Save changes")}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function SectionCard({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div className="bg-white dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700 rounded-xl p-5 space-y-4">
@@ -1251,14 +1561,14 @@ export default function SettingsPage() {
   const [searchParams] = useSearchParams();
   const [activeTab, setActiveTab] = useState<Tab>(() => {
     const t = searchParams.get("tab");
-    const valid: Tab[] = ["profile","framework","notifications","security","ai-access","appearance","admin"];
+    const valid: Tab[] = ["profile","framework","notifications","security","directory","ai-access","appearance","admin"];
     return valid.includes(t as Tab) ? (t as Tab) : "profile";
   });
 
   // Sync if URL changes
   useEffect(() => {
     const t = searchParams.get("tab");
-    const valid: Tab[] = ["profile","framework","notifications","security","ai-access","appearance","admin"];
+    const valid: Tab[] = ["profile","framework","notifications","security","directory","ai-access","appearance","admin"];
     if (t && valid.includes(t as Tab)) setActiveTab(t as Tab);
   }, [searchParams]);
 
@@ -1267,6 +1577,7 @@ export default function SettingsPage() {
     { id: "framework",     icon: Shield,    label: t("settings.framework")          },
     { id: "notifications", icon: Bell,      label: t("settings.notifications")      },
     { id: "security",      icon: Shield,    label: t("settings.security")           },
+    { id: "directory",     icon: Network,   label: t("settings.directory", "Directory (AD/LDAP)"), adminOnly: true },
     { id: "ai-access",     icon: Zap,       label: "AI Access"                      },
     { id: "appearance",    icon: Palette,   label: t("settings.appearance")         },
     { id: "admin",         icon: Crown,     label: t("settings.admin_panel"), superAdminOnly: true },
@@ -1275,6 +1586,9 @@ export default function SettingsPage() {
   // Admin Panel tab only visible to super_admin; regular admin uses /company-admin
   const visibleTabs = ALL_TABS.filter(t => {
     if ((t as { superAdminOnly?: boolean }).superAdminOnly) return isSuperAdmin;
+    // Directory settings hold a service-account credential and the API gates
+    // them to tenant_admin — showing the tab to anyone else only produces a 403.
+    if (t.id === "directory") return canManageLicense;
     return true;
   });
 
@@ -1288,6 +1602,7 @@ export default function SettingsPage() {
     if (tab === "framework")     return <FrameworkTab />;
     if (tab === "notifications") return <NotificationsTab />;
     if (tab === "security")      return <SecurityTab />;
+    if (tab === "directory")     return <DirectoryTab />;
     if (tab === "ai-access")     return <AiAccessTab />;
     return <AppearanceTab />;
   }

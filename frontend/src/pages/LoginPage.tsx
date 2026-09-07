@@ -35,10 +35,16 @@ export default function LoginPage() {
   const [ssoPass, setSsoPass] = useState("");
   const [ssoLoading, setSsoLoading] = useState(false);
   const [ssoError, setSsoError] = useState("");
+  // Asked for only when the server says several organisations here use
+  // directory sign-in — with one, it can work out which without being told.
+  const [ssoNeedsOrg, setSsoNeedsOrg] = useState(false);
+  const [ssoOrg, setSsoOrg] = useState("");
 
   useEffect(() => {
     import("../api/endpoints").then(({ ssoApi }) => {
-      ssoApi.status().then((s) => setSsoEnabled(!!s?.enabled)).catch(() => setSsoEnabled(false));
+      ssoApi.status()
+        .then((s) => { setSsoEnabled(!!s?.enabled); setSsoNeedsOrg(!!s?.requires_organization); })
+        .catch(() => setSsoEnabled(false));
     });
   }, []);
 
@@ -69,14 +75,21 @@ export default function LoginPage() {
     setSsoLoading(true); setSsoError("");
     try {
       const { ssoApi } = await import("../api/endpoints");
-      const tokenData = await ssoApi.login({ username: ssoUser.trim(), password: ssoPass });
+      const tokenData = await ssoApi.login({
+        username: ssoUser.trim(), password: ssoPass,
+        ...(ssoOrg.trim() ? { tenant_slug: ssoOrg.trim() } : {}),
+      });
       authSession.login({
         email: ssoUser.trim(), name: ssoUser.trim(), role: "ciso" as UserRole, plan: "enterprise" as PlanTier, org: "",
         accessToken: tokenData.access_token, refreshToken: tokenData.refresh_token,
       });
       await enrichAndRedirect();
-    } catch {
-      setSsoError(t("public.login.err_invalid"));
+    } catch (err: any) {
+      // The server distinguishes "wrong password" from "which organisation?"
+      // and "no directory configured" — collapsing all three into "invalid
+      // credentials" sends the user looking for the wrong problem.
+      const detail = err?.response?.data?.detail;
+      setSsoError(typeof detail === "string" ? detail : t("public.login.err_invalid"));
     } finally {
       setSsoLoading(false);
     }
@@ -320,6 +333,9 @@ export default function LoginPage() {
           <form onSubmit={handleSsoLogin} className="space-y-3">
             <input value={ssoUser} onChange={(e) => setSsoUser(e.target.value)} required placeholder={t("sso.username", "Directory username")} className="w-full px-3.5 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
             <input value={ssoPass} onChange={(e) => setSsoPass(e.target.value)} required type="password" placeholder={t("public.login.password_placeholder")} className="w-full px-3.5 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            {ssoNeedsOrg && (
+              <input value={ssoOrg} onChange={(e) => setSsoOrg(e.target.value)} required placeholder={t("sso.organization", "Organisation")} className="w-full px-3.5 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            )}
             <button type="submit" disabled={ssoLoading} className="w-full bg-slate-800 hover:bg-slate-900 disabled:opacity-60 text-white font-medium py-2.5 px-4 rounded-xl text-sm transition-colors flex items-center justify-center gap-2">
               {ssoLoading ? <><Loader2 className="w-4 h-4 animate-spin" /> {t("public.login.submitting")}</> : t("sso.ldap_login", "Sign in with company directory")}
             </button>

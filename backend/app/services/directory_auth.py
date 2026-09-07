@@ -237,6 +237,116 @@ def map_groups_to_role(groups: list[str], cfg: dict) -> str | None:
     return min(matched, key=precedence.index)
 
 
+def test_connection(cfg: dict, probe_username: str | None = None) -> dict:
+    """Dry-run a directory configuration without logging anyone in.
+
+    Exists so an administrator can find out *which* part of the configuration is
+    wrong before a single user is told "invalid credentials". Each step reports
+    separately, because the failures look identical from a login screen and are
+    completely different problems: an unreachable host is a firewall, a failed
+    service bind is the wrong service account, and an empty search is the wrong
+    search base or filter.
+
+    Returns a plain dict — never raises for a configuration fault, only for a
+    programming one. Messages come from the directory and are shown to a tenant
+    administrator who already owns this configuration, so they are safe to
+    surface; they are never returned to an anonymous caller.
+    """
+    result = {
+        "ok": False,
+        "steps": [],          # [{"step", "ok", "detail"}]
+        "user_found": None,
+        "groups": [],
+        "mapped_role": None,
+    }
+
+    def step(name: str, ok: bool, detail: str = "") -> None:
+        result["steps"].append({"step": name, "ok": ok, "detail": detail})
+
+    if not cfg.get("server_uri"):
+        step("configuration", False, "No server URI is set.")
+        return result
+    step("configuration", True, f"{cfg['server_uri']} (SSL: {'on' if cfg.get('use_ssl') else 'off'})")
+
+    try:
+        ldap3 = _ldap3()
+    except DirectoryAuthError as exc:
+        step("ldap3 library", False, str(exc))
+        return result
+    step("ldap3 library", True, "installed")
+
+    server = ldap3.Server(
+        cfg["server_uri"], use_ssl=bool(cfg.get("use_ssl")), get_info=ldap3.NONE, connect_timeout=8,
+    )
+
+    # Step 1 — service (or anonymous) bind.
+    try:
+        if cfg.get("bind_dn"):
+            conn = ldap3.Connection(
+                server, user=cfg["bind_dn"], password=cfg.get("bind_password", ""), auto_bind=True,
+            )
+            step("service bind", True, f"bound as {cfg['bind_dn']}")
+        else:
+            conn = ldap3.Connection(server, auto_bind=True)
+            step("service bind", True, "anonymous bind accepted")
+    except Exception as exc:  # noqa: BLE001 — every bind failure is a config answer
+        step("service bind", False, str(exc)[:300])
+        return result
+
+    # Step 2 — the search base has to resolve, whether or not a probe is given.
+    base = cfg.get("user_search_base", "")
+    if not base:
+        step("search base", False, "No user search base is set.")
+        conn.unbind()
+        return result
+
+    groups_attr = cfg.get("attr_groups") or _DEFAULTS["attr_groups"]
+    attrs = [cfg["attr_email"], cfg["attr_firstname"], cfg["attr_lastname"], groups_attr]
+
+    try:
+        if probe_username:
+            safe = ldap3.utils.conv.escape_filter_chars(probe_username)
+            user_filter = (cfg.get("user_filter") or _DEFAULTS["user_filter"]).format(username=safe)
+            conn.search(base, user_filter, attributes=attrs)
+            entries = list(conn.entries)
+            if not entries:
+                step("search base", True, base)
+                step("user lookup", False, f"No entry matched {user_filter!r} under {base}")
+                conn.unbind()
+                return result
+            entry = entries[0]
+            step("search base", True, base)
+            step("user lookup", True, entry.entry_dn)
+            groups = _attr_list(entry, groups_attr)
+            result["user_found"] = {
+                "dn": entry.entry_dn,
+                "email": _attr(entry, cfg["attr_email"]),
+                "first_name": _attr(entry, cfg["attr_firstname"]),
+                "last_name": _attr(entry, cfg["attr_lastname"]),
+            }
+            result["groups"] = groups
+            mapped = map_groups_to_role(groups, cfg)
+            result["mapped_role"] = mapped
+            step(
+                "group to role mapping",
+                True,
+                f"{len(groups)} group(s); resolves to "
+                + (mapped or f"no mapped role — the default {cfg.get('default_role')!r} would be used"),
+            )
+        else:
+            # No probe user: prove the base exists by asking for one entry.
+            conn.search(base, "(objectClass=*)", attributes=[], size_limit=1)
+            step("search base", True, f"{base} is readable")
+    except Exception as exc:  # noqa: BLE001
+        step("search base", False, str(exc)[:300])
+        conn.unbind()
+        return result
+
+    conn.unbind()
+    result["ok"] = all(s["ok"] for s in result["steps"])
+    return result
+
+
 def authenticate(username: str, password: str, cfg: dict) -> DirectoryUser:
     """Verify credentials against AD/LDAP and return the directory profile.
 

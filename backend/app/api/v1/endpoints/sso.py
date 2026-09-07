@@ -56,6 +56,11 @@ class TokenResponse(BaseModel):
 
 class SsoStatusResponse(BaseModel):
     enabled: bool
+    # True when more than one organisation on this deployment uses directory
+    # sign-in and there is no deployment-wide default, so the login form has to
+    # ask which one. Deliberately a boolean and not the list of organisations —
+    # naming them to an anonymous caller would disclose the customer list.
+    requires_organization: bool = False
 
 
 async def _resolve_tenant(db: AsyncSession, slug: str | None) -> Tenant | None:
@@ -64,6 +69,34 @@ async def _resolve_tenant(db: AsyncSession, slug: str | None) -> Tenant | None:
         return None
     result = await db.execute(select(Tenant).where(Tenant.slug == slug))
     return result.scalar_one_or_none()
+
+
+async def _tenants_with_directory(db: AsyncSession) -> list[Tenant]:
+    """Tenants that have enabled directory sign-in in their own settings.
+
+    Needed because the login screen has no tenant context: it asks "is directory
+    sign-in available here?" before anyone has identified themselves. Without
+    this, a tenant that configured LDAP through Settings would never see the
+    button, and the configuration screen would look like it did nothing.
+
+    The settings blob is JSON and this has to work on both SQLite and Postgres,
+    so the filter runs in Python over active tenants — a handful of rows on any
+    deployment that has this problem at all.
+    """
+    rows = (await db.execute(select(Tenant).where(Tenant.is_active == True))).scalars().all()  # noqa: E712
+    return [t for t in rows if ldap_enabled(resolve_ldap_config(getattr(t, "settings", None)))]
+
+
+async def _directory_tenant_count(db: AsyncSession) -> int:
+    """How many tenants use directory sign-in, without loading whole rows.
+
+    The status endpoint is unauthenticated and hit on every visit to the login
+    screen, so it reads only the settings column it needs.
+    """
+    rows = (await db.execute(
+        select(Tenant.settings).where(Tenant.is_active == True)  # noqa: E712
+    )).all()
+    return sum(1 for (raw,) in rows if ldap_enabled(resolve_ldap_config(raw)))
 
 
 @router.get("/ldap/status", response_model=SsoStatusResponse)
@@ -80,9 +113,18 @@ async def ldap_sso_status(
     if tenant_slug:
         tenant = await _resolve_tenant(db, tenant_slug)
         cfg = resolve_ldap_config(getattr(tenant, "settings", None)) if tenant else env_ldap_config()
-    else:
-        cfg = env_ldap_config()
-    return SsoStatusResponse(enabled=ldap_enabled(cfg))
+        return SsoStatusResponse(enabled=ldap_enabled(cfg))
+
+    # No slug: the deployment-wide config answers first (this is the on-prem
+    # shape, where env is the only configuration). Otherwise fall back to
+    # whether *any* tenant has turned it on in its settings, so a SaaS tenant
+    # that configured a directory in Settings gets the button on the login
+    # screen. Only a boolean is returned either way — nothing about which
+    # organisation, which the button itself would reveal anyway.
+    if ldap_enabled(env_ldap_config()):
+        return SsoStatusResponse(enabled=True)
+    count = await _directory_tenant_count(db)
+    return SsoStatusResponse(enabled=count > 0, requires_organization=count > 1)
 
 
 @router.post("/ldap/login", response_model=TokenResponse)
@@ -93,6 +135,21 @@ async def ldap_sso_status(
 async def ldap_login(request: Request, body: LdapLoginRequest, db: Annotated[AsyncSession, Depends(get_db)]):
     username = (body.username or "").strip()
     tenant = await _resolve_tenant(db, body.tenant_slug)
+    if tenant is None and not (body.tenant_slug or "").strip():
+        # No organisation named and no deployment-wide default: if exactly one
+        # tenant has directory sign-in configured, that is unambiguously the one
+        # meant. This is what makes a Settings-only configuration usable from a
+        # login screen that has no tenant context. More than one and we have to
+        # ask — guessing would send credentials to the wrong directory.
+        candidates = await _tenants_with_directory(db)
+        if len(candidates) == 1:
+            tenant = candidates[0]
+        elif len(candidates) > 1:
+            await _journal_login(request, username, False, "sso_ambiguous_tenant")
+            raise HTTPException(
+                status_code=400,
+                detail="Several organizations use directory sign-in here. Please specify yours.",
+            )
     if tenant is None:
         await _journal_login(request, username, False, "sso_unknown_tenant")
         raise HTTPException(status_code=400, detail="Unknown organization for SSO login.")
