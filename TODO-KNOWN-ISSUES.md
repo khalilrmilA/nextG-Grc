@@ -48,15 +48,15 @@ someone outside this repo answers a question.
 ### Decide, then act
 | # | Item | Blocked on |
 |---|---|---|
-| 2.2 | Live DB + snapshot are in git history | Repository owner — needs a history rewrite |
+| 2.2 | ~~Live DB in git history~~ | **Accepted** — the data is test data, not a real client's. Revisit before the first real tenant |
 | 8.4 / GED | CMIS or vendor connector | STB naming their GED product |
-| 6.2 | Production runs in development mode | A maintenance window |
+| 6.2 | ~~Production runs in development mode~~ | **Done** 2026-09-07 — see §17 |
 | 5.1 | ~35 unreferenced files on disk | Judgement — **never auto-delete**, they predate checksums |
 
 ### Standing
 | # | Item |
 |---|---|
-| 6.1 | `pm2 restart grceye-backend` — none of the recent backend work is live, including the evidence-upload fix |
+| 6.1 | ~~`pm2 restart grceye-backend`~~ — done 2026-09-07; all of this session's backend work is live |
 | 11.2 | One-off `POST /cve/sync?days=1&refresh_days=120` to heal the 1,969 CVEs ingested before NVD analysed them |
 | 6.3 | Watch for a third occurrence of the schema drift; instrument it if it recurs |
 
@@ -921,4 +921,71 @@ worker. Indexing the assets by owner once makes it linear.
 Verified equivalent, not just faster: on 10,000 assets x 200 processes both
 forms produce an **identical 49,398-edge set**, and the new one runs in 26 ms
 against 201 ms — a gap that widens with estate size.
+
+---
+
+## 17. Production cutover (2026-09-07)
+
+The deployment ran in `development` mode with `DEBUG=true` since it was stood
+up. That left the hardening guards off, no HSTS, and `/api/v1/docs` and
+`/api/v1/openapi.json` publicly readable — the full API surface of a bank's GRC
+platform, including every route and schema, served to anyone who asked.
+
+**No new SECRET_KEY was needed.** The stored one is 86 characters and already
+passes the production guard, so the cutover did not invalidate a single session
+— nobody was logged out.
+
+Rehearsed on a spare port against a copy of the live database before anything
+was touched: the app booted, the docs closed, HSTS appeared, and the acceptance
+suite passed 27/27 under production settings.
+
+Applied:
+* `ENVIRONMENT=production`, `DEBUG=false`
+* `LDAP_ALLOW_PRIVATE_TARGETS=1` — this install's directory is on the internal
+  network, so private targets stay permitted (see §15 and the runbook)
+* frontend rebuilt; the gateway is serving the new bundle
+* `pm2 restart grceye-backend` — the first restart in four days, which is what
+  finally makes every fix from this session live, including the evidence-upload
+  fix that had been returning 500 since 9 June
+
+Verified live: `/docs` and `/openapi.json` now 404, HSTS and the security
+headers present, login working through the gateway, the marketing site up, all
+nine new tables created by `create_all()` on boot, and the acceptance suite
+green on the non-destructive suites.
+
+Rollback, if it is ever needed — everything was captured first:
+`dist-backup-<stamp>.tgz`, `grc_dev.pre-production-<stamp>.db`,
+`env.local.pre-production-<stamp>`.
+
+### 17.1 What production mode changes for you
+`/api/v1/docs` is gone. That is the point of it, but it also means the
+interactive API browser is no longer available on the live box — use a staging
+instance, or read the specification exported for the tender (1.5).
+
+---
+
+## 18. Acceptance suite (2026-09-07)
+
+`backend/tests/acceptance.py` replaces forty-odd throwaway scripts. Run it
+against any instance:
+
+    python -m tests.acceptance --base-url https://host/api/v1 \
+        --email you@bank.tn --password '...'
+
+Built around the two failure modes the throwaway scripts kept producing, both
+of which cost real debugging time this session:
+
+**Routes are verified, not guessed.** Every path is checked against the live
+`/openapi.json` first, so a mistyped path says "route not in the API" instead
+of failing an assertion on a 404 that looks like a broken feature. Where the
+schema is not exposed — as it now is not, in production — verification degrades
+to "unavailable" rather than blocking the run.
+
+**Every check is idempotent.** Fixtures carry a per-run suffix and are removed
+afterwards; anything changed on an existing record is put back. The password
+round-trip *refuses to run* when the supplied password is under the endpoint's
+12-character minimum, because it could then be changed away from but never
+restored — which is exactly how the previous harness stranded a test account
+and made every later run fail at login. Verified by running it twice in
+succession, and against the live instance, where it correctly skipped.
 
