@@ -1,7 +1,8 @@
 import { useState, useEffect } from "react";
-import { Plus, Search, X, Loader2, Filter, Bug, ShieldCheck, Wrench, BarChart3, Upload, Download, Plug, RefreshCw, Trash2, ChevronRight, ChevronDown, Check, Gauge } from "lucide-react";
+import { Plus, Search, X, Loader2, Filter, Bug, ShieldCheck, Wrench, BarChart3, Upload, Download, Plug, RefreshCw, Trash2, ChevronRight, ChevronDown, Check, Gauge, GitBranch } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { vulnerabilitiesApi, vulnImportApi, scannerConnectorsApi } from "@/api/endpoints";
+import { vulnerabilitiesApi, vulnImportApi, scannerConnectorsApi, riskScenariosApi } from "@/api/endpoints";
+import { MultiSelect, type MultiSelectOption } from "@/components/common/MultiSelect";
 
 const SEV_BADGE: Record<string, string> = {
   critical: "bg-red-100 text-red-700 border-red-200",
@@ -54,6 +55,12 @@ export default function VulnerabilitiesPage() {
   const [showImpactHistory, setShowImpactHistory] = useState(false);
   const [impactHistory, setImpactHistory] = useState<any[] | null>(null);
   const [impactHistoryLoading, setImpactHistoryLoading] = useState(false);
+
+  // The risk scenarios this vulnerability's impact evaluation is attached to.
+  const [scenarioLink, setScenarioLink] = useState<any | null>(null);
+  const [scenarioOptions, setScenarioOptions] = useState<MultiSelectOption[]>([]);
+  const [scenarioDraft, setScenarioDraft] = useState<string[]>([]);
+  const [scenarioBusy, setScenarioBusy] = useState(false);
 
   // Scanner import
   const [showImport, setShowImport] = useState(false);
@@ -205,6 +212,8 @@ Weak SSH ciphers,Low,3.7,,Backup Storage Array,Restrict to strong ciphers`;
     setDetailErr("");
     setImpactContext(""); setImpactOverrideMode(false); setImpactOverrideValue(""); setImpactJustification(""); setImpactErr("");
     setShowImpactHistory(false); setImpactHistory(null); setImpactHistoryLoading(false);
+    setScenarioLink(null); setScenarioDraft([]);
+    loadScenarioLink(item.id);
     setDetailForm({
       title: item.title ?? "",
       severity: item.severity ?? "medium",
@@ -215,6 +224,13 @@ Weak SSH ciphers,Low,3.7,,Backup Storage Array,Restrict to strong ciphers`;
     });
   }
   function refreshAll() { setLoading(true); load(); loadStats(); }
+
+  useEffect(() => {
+    riskScenariosApi.list().then((d: any) => {
+      const list = Array.isArray(d) ? d : d.items || [];
+      setScenarioOptions(list.map((sc: any) => ({ id: sc.id, label: sc.name })));
+    }).catch(() => setScenarioOptions([]));
+  }, []);
 
   async function saveDetail() {
     if (!detail) return;
@@ -236,6 +252,23 @@ Weak SSH ciphers,Low,3.7,,Backup Storage Array,Restrict to strong ciphers`;
       setDetail(null); refreshAll();
     } catch (e: any) { setDetailErr(e?.response?.data?.detail || t("common.error", "Something went wrong.")); }
     finally { setDetailBusy(""); }
+  }
+  async function loadScenarioLink(vulnId: string) {
+    try {
+      const link = await vulnerabilitiesApi.scenarios(vulnId);
+      setScenarioLink(link);
+      setScenarioDraft((link.scenarios || []).map((sc: any) => sc.id));
+    } catch { setScenarioLink(null); }
+  }
+  async function saveScenarioLink() {
+    if (!detail) return;
+    setScenarioBusy(true); setImpactErr("");
+    try {
+      const link = await vulnerabilitiesApi.setScenarios(detail.id, scenarioDraft);
+      setScenarioLink(link);
+      setScenarioDraft((link.scenarios || []).map((sc: any) => sc.id));
+    } catch (e: any) { setImpactErr(e?.response?.data?.detail || t("common.error", "Something went wrong.")); }
+    finally { setScenarioBusy(false); }
   }
   async function loadImpactHistory() {
     if (!detail) return;
@@ -516,6 +549,72 @@ Weak SSH ciphers,Low,3.7,,Backup Storage Array,Restrict to strong ciphers`;
                   </div>
                 )}
 
+                {/* Risk scenarios this evaluation is attached to (RFP: impact must be
+                    traceable to one or more existing risk scenarios) */}
+                <div className="mt-4 pt-3 border-t border-gray-100">
+                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2 flex items-center gap-1.5">
+                    <GitBranch className="w-3.5 h-3.5" /> {t("vulnerabilities.impact_scenarios", "Risk scenarios this impact feeds")}
+                  </p>
+                  {scenarioLink === null ? (
+                    <div className="flex items-center py-2"><Loader2 className="w-4 h-4 animate-spin text-blue-400" /></div>
+                  ) : (
+                    <>
+                      {(scenarioLink.scenarios || []).length === 0 ? (
+                        <p className="text-xs text-gray-400 italic mb-2">
+                          {t("vulnerabilities.impact_scenarios_empty", "Not attached to any risk scenario — this impact score feeds no risk analysis yet.")}
+                        </p>
+                      ) : (
+                        <div className="space-y-1.5 mb-2">
+                          {(scenarioLink.scenarios || []).map((sc: any) => (
+                            <div key={sc.id} className="flex items-center gap-2 bg-gray-50 rounded-lg px-3 py-2">
+                              <span className="text-xs text-gray-700 flex-1 min-w-0 truncate" title={sc.name}>{sc.name}</span>
+                              {sc.current_probability != null && sc.current_impact != null && (
+                                <span className="text-[11px] text-gray-400 whitespace-nowrap">P{sc.current_probability} × I{sc.current_impact}</span>
+                              )}
+                              {sc.current_risk_level && (
+                                <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border whitespace-nowrap ${SEV_BADGE[sc.current_risk_level] || "bg-gray-100 text-gray-600 border-gray-200"}`}>
+                                  {sc.current_risk_level}
+                                </span>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      {scenarioLink.suggested_impact_level != null && (
+                        <p className="text-xs text-gray-500 mb-2">
+                          {t("vulnerabilities.impact_suggested", "Composite impact {{score}}/100 corresponds to impact level {{level}} on your 1–{{scale}} scale. Suggestion only — the scenario's own rating is never overwritten.", {
+                            score: Math.round(scenarioLink.impact_score ?? 0),
+                            level: scenarioLink.suggested_impact_level,
+                            scale: scenarioLink.impact_scale_size,
+                          })}
+                        </p>
+                      )}
+
+                      <MultiSelect
+                        options={scenarioOptions}
+                        selected={scenarioDraft}
+                        onChange={setScenarioDraft}
+                        placeholder={t("vulnerabilities.impact_scenarios_pick", "Attach to risk scenarios…")}
+                        emptyLabel={t("risk_scenarios.no_options", "No risk scenarios yet")}
+                      />
+                      {JSON.stringify([...scenarioDraft].sort()) !==
+                        JSON.stringify((scenarioLink.scenarios || []).map((sc: any) => sc.id).sort()) && (
+                        <div className="flex justify-end mt-2">
+                          <button
+                            onClick={saveScenarioLink}
+                            disabled={scenarioBusy}
+                            className="inline-flex items-center gap-1.5 bg-blue-600 text-white px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-blue-700 disabled:opacity-50"
+                          >
+                            {scenarioBusy && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                            {t("vulnerabilities.impact_scenarios_save", "Update links")}
+                          </button>
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
+
                 {/* Impact score history */}
                 <div className="mt-3 pt-3 border-t border-gray-100">
                   <button
@@ -543,6 +642,11 @@ Weak SSH ciphers,Low,3.7,,Backup Storage Array,Restrict to strong ciphers`;
                             )}
                             <div className="flex-1 min-w-0">
                               {h.justification && <p className="text-xs text-gray-500 italic truncate" title={h.justification}>"{h.justification}"</p>}
+                              {(h.linked_scenario_ids || []).length > 0 && (
+                                <p className="text-[11px] text-gray-400">
+                                  {t("vulnerabilities.impact_history_scenarios", "judged against {{count}} risk scenario(s)", { count: (h.linked_scenario_ids || []).length })}
+                                </p>
+                              )}
                             </div>
                             <span className="text-[11px] text-gray-400 whitespace-nowrap">{h.created_at ? new Date(h.created_at).toLocaleString() : ""}</span>
                           </div>

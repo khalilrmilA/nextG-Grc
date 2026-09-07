@@ -6,14 +6,17 @@ Elite Pack (RFP module 3):
 - Validation workflow: manual vulnerabilities start ``pending_validation`` and a
   security referent (CISO) validates them via POST /{id}/validate before they
   enter risk analysis.
-- Composite impact scoring (gated: ``vuln_impact_scoring``) via POST /{id}/impact.
+- Composite impact scoring (gated: ``vuln_impact_scoring``) via POST /{id}/impact,
+  tied to the risk scenarios the vulnerability feeds (GET/PUT /{id}/risk-scenarios)
+  so an impact evaluation is traceable to the scenarios it informs, and every
+  scored value is snapshotted with the scenario set it was judged against.
 """
 from datetime import datetime, timezone
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, field_validator, model_validator
-from sqlalchemy import select
+from sqlalchemy import String, cast, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
@@ -30,8 +33,10 @@ from app.models.vulnerability import (
     resolve_context_weight,
 )
 from app.models.vulnerability_impact_history import VulnerabilityImpactHistory
+from app.models.risk_scenario import RiskScenario
 from app.models.activity_log import ActivityLog
 from app.services.activity_chain import chain_and_add
+from app.services.risk_scoring import resolve_matrix
 
 router = APIRouter()
 
@@ -149,7 +154,81 @@ class ImpactHistoryOut(BaseModel):
     id: str; vulnerability_id: str; score: float; override: bool
     context_weight: float | None; justification: str | None
     changed_by_id: str | None; created_at: datetime
+    linked_scenario_ids: list = []
     model_config = {"from_attributes": True}
+
+
+class LinkedScenarioOut(BaseModel):
+    """A risk scenario this vulnerability feeds, as shown next to its impact score."""
+    id: str; name: str
+    current_probability: int | None = None; current_impact: int | None = None
+    current_risk_level: str | None = None
+    linked_risk_id: str | None = None
+    model_config = {"from_attributes": True}
+
+
+class VulnScenarioLinkOut(BaseModel):
+    """The impact evaluation's tie to the risk analysis.
+
+    ``suggested_impact_level`` translates the 0-100 composite score onto the
+    tenant's own impact scale (a 5x5 matrix gives 1-5). It is a suggestion and
+    nothing more — it is never written to the scenario. Pushing a computed
+    number straight into the scenario's ``current_impact`` would overwrite an
+    assessor's deliberate judgement with an automatic one, and the two are
+    different claims: the composite score rates this vulnerability on this
+    asset, the scenario's impact rates the whole threat chain.
+    """
+    vulnerability_id: str
+    impact_score: float | None = None
+    impact_scale_size: int
+    suggested_impact_level: int | None = None
+    scenarios: list[LinkedScenarioOut] = []
+
+
+class ScenarioLinkIn(BaseModel):
+    """The exact set of scenarios that should reference this vulnerability."""
+    scenario_ids: list[str] = []
+
+
+async def _scenarios_for_vuln(db: AsyncSession, tenant_id: str, vid: str) -> list[RiskScenario]:
+    """Scenarios whose threat chain includes this vulnerability.
+
+    ``vulnerability_ids`` is a JSON list stored as text; the id is matched with
+    its surrounding quotes so one uuid can never match another as a substring.
+    """
+    rows = (await db.execute(
+        select(RiskScenario).where(
+            RiskScenario.tenant_id == tenant_id,
+            cast(RiskScenario.vulnerability_ids, String).ilike(f'%"{vid}"%'),
+        ).order_by(RiskScenario.created_at.desc())
+    )).scalars().all()
+    # The LIKE is a pre-filter the database can run; confirm membership in Python
+    # so a malformed JSON blob can never produce a false positive.
+    return [s for s in rows if vid in (s.vulnerability_ids or [])]
+
+
+def _suggested_impact_level(score: float | None, scale_size: int) -> int | None:
+    """Map a 0-100 composite score onto a 1..scale_size impact scale."""
+    if score is None or scale_size < 1:
+        return None
+    import math
+    level = math.ceil((max(0.0, min(100.0, float(score))) / 100.0) * scale_size)
+    return max(1, min(scale_size, level))
+
+
+async def _scenario_link_view(
+    db: AsyncSession, tenant_id: str, v: Vulnerability
+) -> VulnScenarioLinkOut:
+    definition, _name = await resolve_matrix(db, tenant_id)
+    scale = int(((definition or {}).get("impact") or {}).get("count") or 5)
+    scenarios = await _scenarios_for_vuln(db, tenant_id, v.id)
+    return VulnScenarioLinkOut(
+        vulnerability_id=v.id,
+        impact_score=v.impact_score,
+        impact_scale_size=scale,
+        suggested_impact_level=_suggested_impact_level(v.impact_score, scale),
+        scenarios=[LinkedScenarioOut.model_validate(s) for s in scenarios],
+    )
 
 
 @router.get("", response_model=list[VulnOut])
@@ -294,6 +373,11 @@ async def score_impact(
     if not v:
         raise HTTPException(404, "Vulnerability not found")
 
+    # The scenarios this evaluation applies to, as they stand right now — stored
+    # on the history row so the record shows the scope that was actually judged
+    # even after the links are edited.
+    scenario_ids = [sc.id for sc in await _scenarios_for_vuln(db, tenant_id, v.id)]
+
     if body.override is not None:
         if not (body.justification and body.justification.strip()):
             raise HTTPException(400, "A justification is required to override the impact score")
@@ -304,7 +388,7 @@ async def score_impact(
         db.add(VulnerabilityImpactHistory(
             vulnerability_id=v.id, score=v.impact_score, override=True,
             context_weight=None, justification=v.impact_justification,
-            changed_by_id=current_user.id,
+            changed_by_id=current_user.id, linked_scenario_ids=scenario_ids,
         ))
         await db.commit(); await db.refresh(v)
         return VulnOut.model_validate(v)
@@ -333,7 +417,7 @@ async def score_impact(
     db.add(VulnerabilityImpactHistory(
         vulnerability_id=v.id, score=v.impact_score, override=False,
         context_weight=weight, justification=v.impact_justification,
-        changed_by_id=current_user.id,
+        changed_by_id=current_user.id, linked_scenario_ids=scenario_ids,
     ))
     await db.commit(); await db.refresh(v)
     return VulnOut.model_validate(v)
@@ -363,6 +447,78 @@ async def get_impact_history(
         .order_by(VulnerabilityImpactHistory.created_at.desc())
     )).scalars().all()
     return [ImpactHistoryOut.model_validate(r) for r in rows]
+
+@router.get("/{vid}/risk-scenarios", response_model=VulnScenarioLinkOut)
+async def list_vuln_scenarios(
+    vid: str,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    _: Annotated[User, Depends(get_current_user)],
+    tenant_id: Annotated[str, Depends(get_tenant_id)],
+):
+    """The risk scenarios this vulnerability's impact evaluation is attached to.
+
+    The link itself already existed in one direction — a scenario names the
+    vulnerabilities in its threat chain — but there was no way to read it from
+    the vulnerability, which is where the impact is actually assessed. Without
+    it the composite score sat in isolation, unconnected to any risk analysis.
+    """
+    v = (await db.execute(
+        select(Vulnerability).where(Vulnerability.id == vid, Vulnerability.tenant_id == tenant_id)
+    )).scalar_one_or_none()
+    if not v:
+        raise HTTPException(404, "Vulnerability not found")
+    return await _scenario_link_view(db, tenant_id, v)
+
+@router.put("/{vid}/risk-scenarios", response_model=VulnScenarioLinkOut)
+async def set_vuln_scenarios(
+    vid: str,
+    body: ScenarioLinkIn,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    # Deliberately the SAME gate as PATCH /risk-scenarios/{id} (risk_manager /
+    # ciso). This endpoint writes RiskScenario.vulnerability_ids, so a looser
+    # gate here would be a way around the one guarding the scenario itself.
+    current_user: Annotated[User, Depends(require_roles(UserRole.RISK_MANAGER, UserRole.CISO))],
+    tenant_id: Annotated[str, Depends(get_tenant_id)],
+):
+    """Attach this vulnerability to (exactly) the given risk scenarios.
+
+    Writes through to ``RiskScenario.vulnerability_ids``, the field the scenario
+    screen and the risk consolidation already read, rather than introducing a
+    second place the same link can live and drift.
+    """
+    v = (await db.execute(
+        select(Vulnerability).where(Vulnerability.id == vid, Vulnerability.tenant_id == tenant_id)
+    )).scalar_one_or_none()
+    if not v:
+        raise HTTPException(404, "Vulnerability not found")
+
+    wanted = list(dict.fromkeys(body.scenario_ids or []))
+    targets: dict[str, RiskScenario] = {}
+    if wanted:
+        rows = (await db.execute(
+            select(RiskScenario).where(
+                RiskScenario.tenant_id == tenant_id, RiskScenario.id.in_(wanted)
+            )
+        )).scalars().all()
+        targets = {sc.id: sc for sc in rows}
+        missing = [sid for sid in wanted if sid not in targets]
+        if missing:
+            raise HTTPException(422, f"Unknown risk scenario(s) for this tenant: {', '.join(missing)}")
+
+    current = {sc.id: sc for sc in await _scenarios_for_vuln(db, tenant_id, v.id)}
+
+    for sid, sc in targets.items():
+        if sid not in current:
+            # Reassign rather than mutate in place: SQLAlchemy does not track
+            # in-place edits to a JSON column, so an .append() would be silently
+            # dropped on commit.
+            sc.vulnerability_ids = list(sc.vulnerability_ids or []) + [v.id]
+    for sid, sc in current.items():
+        if sid not in targets:
+            sc.vulnerability_ids = [x for x in (sc.vulnerability_ids or []) if x != v.id]
+
+    await db.commit()
+    return await _scenario_link_view(db, tenant_id, v)
 
 @router.delete("/{vid}", status_code=204)
 async def delete_vuln(vid: str, db: AsyncSession = Depends(get_db), _: User = Depends(get_current_user), tenant_id: str = Depends(get_tenant_id)):

@@ -1164,6 +1164,10 @@ export const vulnerabilitiesApi = {
   validate: (id: string) => apiClient.post(`/vulnerabilities/${id}/validate`).then((r) => r.data),
   scoreImpact: (id: string, data: Record<string, unknown>) => apiClient.post(`/vulnerabilities/${id}/impact`, data).then((r) => r.data),
   impactHistory: (id: string) => apiClient.get(`/vulnerabilities/${id}/impact-history`).then((r) => r.data),
+  // The risk scenarios this vulnerability's impact evaluation is attached to.
+  scenarios: (id: string) => apiClient.get(`/vulnerabilities/${id}/risk-scenarios`).then((r) => r.data),
+  setScenarios: (id: string, scenarioIds: string[]) =>
+    apiClient.put(`/vulnerabilities/${id}/risk-scenarios`, { scenario_ids: scenarioIds }).then((r) => r.data),
   delete: (id: string) => apiClient.delete(`/vulnerabilities/${id}`),
 };
 
@@ -1614,8 +1618,13 @@ export const archivingApi = {
 // ── CVE knowledge base (Elite Pack) ──────────────────────────────────────────
 export const cveApi = {
   search: (params?: Record<string, unknown>) => apiClient.get("/cve", { params }).then((r) => r.data),
-  sync: (days = 7) => apiClient.post("/cve/sync", null, { params: { days } }).then((r) => r.data),
+  sync: (days = 7, refreshDays?: number) =>
+    apiClient.post("/cve/sync", null, { params: { days, refresh_days: refreshDays } }).then((r) => r.data),
   annotate: (cveId: string, data: Record<string, unknown>) => apiClient.put(`/cve/${cveId}/annotation`, data).then((r) => r.data),
+  // Full sheet: NVD's data joined to MITRE's weakness text (names + mitigations).
+  detail: (cveId: string) => apiClient.get(`/cve/${cveId}`).then((r) => r.data),
+  // MITRE CWE catalog, for the flaw-type filter's autocomplete.
+  cwe: (q?: string, limit = 25) => apiClient.get("/cve/cwe", { params: { q, limit } }).then((r) => r.data),
 };
 
 // ── MFA / TOTP (Elite Pack) ──────────────────────────────────────────────────

@@ -41,6 +41,7 @@ someone outside this repo answers a question.
 | 3.1 | Field-level before/after in the action trace | moderate | SQLAlchemy flush hook |
 | 3.2 | Remaining schedulers still log nothing | moderate | Helper exists — call it **after** the caller commits |
 | 4.1 | Asset cartography O(n²) + blocks the event loop | moderate | Latent; zero-impact today only because a row has a NULL owner |
+| 11.1 | CAPEC catalog (ids are bridged, names are not) | small | Near-copy of `mitre_cwe_sync.py`; only if STB asks for attack-pattern search |
 
 ### Decide, then act
 | # | Item | Blocked on |
@@ -54,6 +55,7 @@ someone outside this repo answers a question.
 | # | Item |
 |---|---|
 | 6.1 | `pm2 restart grceye-backend` — none of the recent backend work is live, including the evidence-upload fix |
+| 11.2 | One-off `POST /cve/sync?days=1&refresh_days=120` to heal the 1,969 CVEs ingested before NVD analysed them |
 | 6.3 | Watch for a third occurrence of the schema drift; instrument it if it recurs |
 
 ---
@@ -501,3 +503,73 @@ asks for permissions the built-in roles cannot express between them.
 | Temporary password expiring at first login | `must_change_password` set at creation, cleared on first password change |
 | Enable / disable an account at any time | Verified: a deactivated account cannot log in (401) |
 | Secure sessions, logout, session revocation | `user_sessions` with device/IP/user-agent; refresh-token revocation is now cross-worker (`4a440c4`) |
+
+---
+
+## 11. CVE knowledge base and impact scoring (added 2026-09-07)
+
+Audited against the vulnerability-knowledge-base and impact-evaluation
+requirements. Most was already built; the defects found are fixed and are
+recorded here only where something is still outstanding.
+
+### 11.1 CAPEC is bridged, not catalogued
+**Required:** the knowledge base may draw on CVE **or** CWE **or** CAPEC.
+**Built:** CVE (NVD, daily) and CWE (MITRE, 969 weaknesses, 30-day staleness
+check). Each weakness carries MITRE's `Related_Attack_Patterns`, so a CVE sheet
+shows the CAPEC ids it relates to and links out to cwe.mitre.org.
+**Not built:** a local CAPEC catalog — the ids show as codes, not names, and
+cannot be searched or filtered on. MITRE publishes CAPEC in the same shape as
+CWE (`capec_latest.xml.zip`), so this is a near-copy of
+`services/mitre_cwe_sync.py` plus one model. Effort: small.
+**Why deferred:** the requirement reads "CVE ou CWE ou CAPEC", and CVE+CWE with
+a CAPEC bridge answers it. Build it if STB asks for attack-pattern search
+specifically.
+
+### 11.2 One-off catch-up for the historic hollow entries
+NVD publishes a CVE on reservation and analyses it days later. The old sync only
+ever walked the *publication* window, so anything ingested before its analysis
+landed stayed permanently score-less: **1,969 of 8,404 entries (23%)** had no
+CVSS, no vector and no CWE, and never would have.
+
+`ee2f...`/this commit adds the refresh pass, which fixes it **going forward** —
+measured on a copy: one 7-day refresh healed 270 of them and populated tagged
+reference links on 3,211 CVEs. The historic backlog still needs one wide pass,
+which is an operator action, not code:
+```
+POST /api/v1/cve/sync?days=1&refresh_days=120
+```
+That walks 120 days of NVD analysis updates (NVD's maximum window) against
+entries already held. It is bounded at 10 pages of 2,000 per pass, so it may
+need running more than once; the response reports truncation explicitly.
+
+### 11.3 Treatment priority does not read the vulnerability impact score
+**Required:** "l'impact sert de base pour le calcul de la priorité dans le plan
+de traitement des risques".
+**Met, at the risk level:** `_derive_treatment_priority` derives the plan's
+priority from `risk.severity`, which is likelihood x **impact** — so impact does
+drive treatment priority today.
+**Not connected:** the 0-100 composite vulnerability impact score is a finer
+measure and feeds nothing downstream. The chain now exists to carry it
+(vulnerability -> scenario -> risk -> treatment) and the scenario link screen
+shows the score's equivalent level on the tenant's own scale, but a human still
+transfers it.
+**Deliberate.** Writing a computed score into a scenario's `current_impact`
+would overwrite an assessor's judgement with an automatic one, and the two are
+different claims — the composite rates one vulnerability on one asset, the
+scenario's impact rates a whole threat chain. Revisit only if STB asks for the
+propagation to be automatic, and then make it a suggestion the assessor accepts.
+
+### 11.4 Verified as MET
+| Requirement | Evidence |
+|---|---|
+| Daily sync with official sources | In-process loop, 6-hourly wake, 20h staleness gate; NVD publication + analysis-refresh passes, MITRE CWE on a 30-day gate. Both passes now paginate — the previous single 500-row request silently dropped the surplus on any day NVD published more than 500 CVEs, which is most weekdays |
+| Pertinent / non pertinent / à surveiller | `CveAnnotation.relevance`, per tenant, plus a synthetic `untriaged` filter for the triage queue |
+| Internal comments and links to affected assets | `notes` + `linked_asset_ids` on the annotation, edited from the CVE sheet |
+| Advanced search: flaw type, criticality, attack vector, publication date | All four, and the flaw-type filter accepts a weakness **name** ("cross-site scripting") as well as a code. Two defects fixed: the relevance filter ran *after* `OFFSET/LIMIT` so it only searched one page of an 8,000-row catalog, and `CWE-79` also matched `CWE-798` |
+| Detailed sheet: description, criticality, attack vector, known workarounds, links to fixes | `GET /cve/{id}` — description, CVSS decoded metric by metric, MITRE's weakness text with its published `Potential_Mitigations`, and NVD references carrying their Patch / Mitigation / Vendor Advisory / Exploit tags |
+| Pertinent CVEs surfaced in a dashboard | `dashboards.py::_cve_summary`, rendered by `AnalyticsPage` |
+| Impact from CVSS + operational context + asset value | `compute_impact_score`: 60% CVSS, 40% asset business value, scaled by a context weight (internet_facing 1.5 -> test 0.6) |
+| Manual override with documented justification | `POST /{id}/impact` returns 400 without one |
+| Impact tied to one or more risk scenarios | `GET`/`PUT /vulnerabilities/{id}/risk-scenarios`, writing through to `RiskScenario.vulnerability_ids` so there is one source of truth. Gated identically to `PATCH /risk-scenarios/{id}` |
+| Every score change historised with date, author, reason | `VulnerabilityImpactHistory`, now also snapshotting the scenario set the score was judged against |
+

@@ -1,5 +1,8 @@
 import { useState, useEffect } from "react";
-import { Search, Loader2, Crown, RefreshCw, Database, ChevronDown, StickyNote, X } from "lucide-react";
+import {
+  Search, Loader2, Crown, RefreshCw, Database, ChevronDown, StickyNote, X,
+  ShieldCheck, Wrench, ExternalLink, Bug, CalendarDays,
+} from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { cveApi, assetsApi } from "@/api/endpoints";
 import { MultiSelect, type MultiSelectOption } from "@/components/common/MultiSelect";
@@ -18,30 +21,86 @@ const REL_BADGE: Record<string, string> = {
 };
 const RELEVANCE = ["pertinent", "to_watch", "non_pertinent"];
 
-function AnnotationModal({
-  cve,
+// CVSS v3 vector metrics, spelled out. "AV:N/AC:L/PR:N" is precise and
+// unreadable; the requirement asks the sheet to show the attack vector, which
+// means showing what it says, not the shorthand.
+const VECTOR_METRICS: Record<string, { label: string; values: Record<string, string> }> = {
+  AV: { label: "Attack vector", values: { N: "Network", A: "Adjacent network", L: "Local", P: "Physical" } },
+  AC: { label: "Attack complexity", values: { L: "Low", H: "High" } },
+  PR: { label: "Privileges required", values: { N: "None", L: "Low", H: "High" } },
+  UI: { label: "User interaction", values: { N: "None", R: "Required" } },
+  S: { label: "Scope", values: { U: "Unchanged", C: "Changed" } },
+  C: { label: "Confidentiality impact", values: { H: "High", L: "Low", N: "None" } },
+  I: { label: "Integrity impact", values: { H: "High", L: "Low", N: "None" } },
+  A: { label: "Availability impact", values: { H: "High", L: "Low", N: "None" } },
+};
+
+function decodeVector(vector?: string | null): { label: string; value: string }[] {
+  if (!vector) return [];
+  return vector
+    .split("/")
+    .map((part) => part.split(":"))
+    .filter(([k, v]) => k && v && VECTOR_METRICS[k])
+    .map(([k, v]) => ({ label: VECTOR_METRICS[k].label, value: VECTOR_METRICS[k].values[v] || v }));
+}
+
+// NVD tags a reference by what it is. Patch and Mitigation are the ones a
+// responder is looking for, so they lead and are visually separated.
+const REF_TAG_STYLE: Record<string, string> = {
+  patch: "bg-green-100 text-green-700 border-green-200",
+  mitigation: "bg-blue-100 text-blue-700 border-blue-200",
+  "vendor advisory": "bg-indigo-100 text-indigo-700 border-indigo-200",
+  exploit: "bg-red-100 text-red-700 border-red-200",
+};
+
+function fmtDate(value?: string | null) {
+  if (!value) return "—";
+  return String(value).slice(0, 10);
+}
+
+function CveSheet({
+  cveId,
   assetOptions,
   onClose,
   onSaved,
 }: {
-  cve: any;
+  cveId: string;
   assetOptions: MultiSelectOption[];
   onClose: () => void;
   onSaved: (updated: any) => void;
 }) {
   const { t } = useTranslation();
-  const [relevance, setRelevance] = useState(cve.relevance || "to_watch");
-  const [notes, setNotes] = useState(cve.notes || "");
-  const [linkedAssetIds, setLinkedAssetIds] = useState<string[]>(cve.linked_asset_ids || []);
+  const [cve, setCve] = useState<any | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [relevance, setRelevance] = useState("to_watch");
+  const [notes, setNotes] = useState("");
+  const [linkedAssetIds, setLinkedAssetIds] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+
+  useEffect(() => {
+    let alive = true;
+    setLoading(true);
+    cveApi
+      .detail(cveId)
+      .then((d: any) => {
+        if (!alive) return;
+        setCve(d);
+        setRelevance(d.relevance || "to_watch");
+        setNotes(d.notes || "");
+        setLinkedAssetIds(d.linked_asset_ids || []);
+      })
+      .catch(() => alive && setError(t("cve.error_load_failed", "Could not load this CVE")))
+      .finally(() => alive && setLoading(false));
+    return () => { alive = false; };
+  }, [cveId, t]);
 
   async function save() {
     setSaving(true);
     setError("");
     try {
-      const updated = await cveApi.annotate(cve.cve_id, { relevance, notes, linked_asset_ids: linkedAssetIds });
-      onSaved({ ...cve, ...updated });
+      const updated = await cveApi.annotate(cveId, { relevance, notes, linked_asset_ids: linkedAssetIds });
+      onSaved({ ...(cve || {}), ...updated });
       onClose();
     } catch {
       setError(t("cve.error_save_failed", "Failed to save"));
@@ -50,44 +109,194 @@ function AnnotationModal({
     }
   }
 
+  const decoded = decodeVector(cve?.cvss_vector);
+  const refs: any[] = cve?.references || [];
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-lg p-6 max-h-[85vh] overflow-y-auto">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold text-gray-900 font-mono">{cve.cve_id}</h2>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600"><X className="w-5 h-5" /></button>
+      <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-3xl max-h-[88vh] overflow-y-auto">
+        <div className="sticky top-0 bg-white border-b border-gray-100 px-6 py-4 flex items-start justify-between gap-4">
+          <div className="min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              <h2 className="text-lg font-semibold text-gray-900 font-mono">{cveId}</h2>
+              {cve && (
+                <span className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold border ${CVSS_BADGE(cve.cvss_score)}`}>
+                  CVSS {cve.cvss_score ?? "—"}
+                </span>
+              )}
+              {cve?.published_at && (
+                <span className="inline-flex items-center gap-1 text-xs text-gray-400">
+                  <CalendarDays className="w-3.5 h-3.5" /> {fmtDate(cve.published_at)}
+                </span>
+              )}
+            </div>
+            {cve?.cvss_vector && <p className="text-xs font-mono text-gray-400 mt-1 truncate">{cve.cvss_vector}</p>}
+          </div>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 shrink-0"><X className="w-5 h-5" /></button>
         </div>
-        <p className="text-sm text-gray-600 mb-4 line-clamp-3">{cve.description}</p>
-        {error && <div className="mb-3 p-2.5 bg-red-50 text-red-700 rounded-lg text-sm">{error}</div>}
-        <div className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">{t("cve.col_rel", "Relevance")}</label>
-            <select value={relevance} onChange={(e) => setRelevance(e.target.value)} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-              {RELEVANCE.map((r) => <option key={r} value={r}>{r.replace(/_/g, " ")}</option>)}
-            </select>
+
+        {loading ? (
+          <div className="flex items-center justify-center py-20"><Loader2 className="w-6 h-6 animate-spin text-blue-500" /></div>
+        ) : (
+          <div className="px-6 py-5 space-y-6">
+            {error && <div className="p-2.5 bg-red-50 text-red-700 rounded-lg text-sm">{error}</div>}
+
+            <section>
+              <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-400 mb-2">{t("cve.col_desc", "Description")}</h3>
+              <p className="text-sm text-gray-700 leading-relaxed">{cve?.description || "—"}</p>
+            </section>
+
+            {decoded.length > 0 && (
+              <section>
+                <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-400 mb-2">{t("cve.attack_vector", "Attack vector")}</h3>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                  {decoded.map((d) => (
+                    <div key={d.label} className="rounded-xl border border-gray-100 bg-gray-50/60 px-3 py-2">
+                      <div className="text-[11px] text-gray-400">{d.label}</div>
+                      <div className="text-sm font-medium text-gray-800">{d.value}</div>
+                    </div>
+                  ))}
+                </div>
+              </section>
+            )}
+
+            <section>
+              <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-400 mb-2 flex items-center gap-1.5">
+                <Bug className="w-3.5 h-3.5" /> {t("cve.flaw_type", "Flaw type (MITRE CWE)")}
+              </h3>
+              {(cve?.weaknesses || []).length === 0 ? (
+                <p className="text-sm text-gray-400 italic">
+                  {(cve?.cwe_ids || []).length > 0
+                    ? t("cve.cwe_not_synced", "NVD classified this as {{codes}}, but the MITRE catalog has not been synced yet.", { codes: (cve?.cwe_ids || []).join(", ") })
+                    : t("cve.cwe_none", "NVD has not classified this CVE against a weakness type yet.")}
+                </p>
+              ) : (
+                <div className="space-y-3">
+                  {(cve?.weaknesses || []).map((w: any) => (
+                    <div key={w.cwe_id} className="rounded-xl border border-gray-100 p-4">
+                      <div className="flex items-baseline gap-2 flex-wrap">
+                        <span className="font-mono text-xs text-blue-700">{w.cwe_id}</span>
+                        <span className="text-sm font-semibold text-gray-900">{w.name}</span>
+                        {w.abstraction && (
+                          <span className="text-[11px] rounded-full bg-gray-100 text-gray-500 px-2 py-0.5">{w.abstraction}</span>
+                        )}
+                      </div>
+                      {w.description && <p className="text-sm text-gray-600 mt-1.5 leading-relaxed">{w.description}</p>}
+                      {(w.mitigations || []).length > 0 && (
+                        <div className="mt-3">
+                          <div className="text-[11px] font-semibold uppercase tracking-wide text-gray-400 mb-1.5 flex items-center gap-1.5">
+                            <ShieldCheck className="w-3.5 h-3.5" /> {t("cve.workarounds", "Known workarounds (MITRE)")}
+                          </div>
+                          <ul className="space-y-1.5">
+                            {(w.mitigations || []).slice(0, 4).map((m: any, i: number) => (
+                              <li key={i} className="text-sm text-gray-600 flex gap-2">
+                                <span className="text-gray-300 mt-0.5">•</span>
+                                <span>
+                                  {m.phase && <span className="text-[11px] text-gray-400 mr-1.5">[{m.phase}]</span>}
+                                  {m.description}
+                                </span>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                      {(w.capec_ids || []).length > 0 && (
+                        <div className="mt-3 flex items-center gap-1.5 flex-wrap">
+                          <span className="text-[11px] text-gray-400">{t("cve.attack_patterns", "Attack patterns")}</span>
+                          {(w.capec_ids || []).slice(0, 8).map((c: string) => (
+                            <a
+                              key={c}
+                              href={`https://capec.mitre.org/data/definitions/${c.replace("CAPEC-", "")}.html`}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="text-[11px] font-mono rounded-full border border-gray-200 px-2 py-0.5 text-gray-500 hover:text-blue-700 hover:border-blue-200"
+                            >
+                              {c}
+                            </a>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </section>
+
+            <section>
+              <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-400 mb-2 flex items-center gap-1.5">
+                <Wrench className="w-3.5 h-3.5" /> {t("cve.fixes", "Fixes and advisories")}
+              </h3>
+              {refs.length === 0 ? (
+                <p className="text-sm text-gray-400 italic">
+                  {t("cve.no_refs", "No reference links recorded. Run a sync to pull them from NVD.")}
+                </p>
+              ) : (
+                <ul className="space-y-1.5">
+                  {refs.slice(0, 12).map((r: any, i: number) => (
+                    <li key={i} className="flex items-start gap-2">
+                      <div className="flex gap-1 shrink-0 pt-0.5">
+                        {(r.tags || []).slice(0, 2).map((tag: string) => (
+                          <span
+                            key={tag}
+                            className={`text-[10px] rounded-full px-2 py-0.5 border font-semibold whitespace-nowrap ${
+                              REF_TAG_STYLE[String(tag).toLowerCase()] || "bg-gray-100 text-gray-500 border-gray-200"
+                            }`}
+                          >
+                            {tag}
+                          </span>
+                        ))}
+                      </div>
+                      <a
+                        href={r.url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-sm text-blue-600 hover:text-blue-800 hover:underline break-all inline-flex items-start gap-1"
+                      >
+                        {r.url}
+                        <ExternalLink className="w-3 h-3 mt-1 shrink-0" />
+                      </a>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </section>
+
+            <section className="border-t border-gray-100 pt-5">
+              <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-400 mb-3">
+                {t("cve.your_triage", "Your assessment for this environment")}
+              </h3>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">{t("cve.col_rel", "Relevance")}</label>
+                  <select value={relevance} onChange={(e) => setRelevance(e.target.value)} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    {RELEVANCE.map((r) => <option key={r} value={r}>{r.replace(/_/g, " ")}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">{t("cve.notes_label", "Internal notes")}</label>
+                  <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={3} placeholder={t("cve.notes_placeholder", "Why this CVE matters (or doesn't) for our environment...")} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">{t("cve.linked_assets_label", "Linked assets")}</label>
+                  <MultiSelect
+                    options={assetOptions}
+                    selected={linkedAssetIds}
+                    onChange={setLinkedAssetIds}
+                    placeholder={t("risk_scenarios.select_placeholder")}
+                    emptyLabel={t("risk_scenarios.no_options")}
+                  />
+                </div>
+                <div className="flex justify-end gap-3 pt-1">
+                  <button onClick={onClose} className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800">{t("common.cancel")}</button>
+                  <button onClick={save} disabled={saving} className="inline-flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-xl text-sm font-medium hover:bg-blue-700 disabled:opacity-50">
+                    {saving && <Loader2 className="w-4 h-4 animate-spin" />} {t("common.save")}
+                  </button>
+                </div>
+              </div>
+            </section>
           </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">{t("cve.notes_label", "Internal notes")}</label>
-            <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={3} placeholder={t("cve.notes_placeholder", "Why this CVE matters (or doesn't) for our environment...")} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">{t("cve.linked_assets_label", "Linked assets")}</label>
-            <MultiSelect
-              options={assetOptions}
-              selected={linkedAssetIds}
-              onChange={setLinkedAssetIds}
-              placeholder={t("risk_scenarios.select_placeholder")}
-              emptyLabel={t("risk_scenarios.no_options")}
-            />
-          </div>
-          <div className="flex justify-end gap-3 pt-2">
-            <button onClick={onClose} className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800">{t("common.cancel")}</button>
-            <button onClick={save} disabled={saving} className="inline-flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-xl text-sm font-medium hover:bg-blue-700 disabled:opacity-50">
-              {saving && <Loader2 className="w-4 h-4 animate-spin" />} {t("common.save")}
-            </button>
-          </div>
-        </div>
+        )}
       </div>
     </div>
   );
@@ -99,6 +308,8 @@ export default function CvePage() {
   const [loading, setLoading] = useState(true);
   const [q, setQ] = useState("");
   const [vector, setVector] = useState("");
+  const [cwe, setCwe] = useState("");
+  const [publishedAfter, setPublishedAfter] = useState("");
   const [minCvss, setMinCvss] = useState("");
   const [relFilter, setRelFilter] = useState("");
   const [syncing, setSyncing] = useState(false);
@@ -107,18 +318,25 @@ export default function CvePage() {
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
-  const [annotating, setAnnotating] = useState<any | null>(null);
+  const [openCve, setOpenCve] = useState<string | null>(null);
   const [assetOptions, setAssetOptions] = useState<MultiSelectOption[]>([]);
+  const [cweSuggestions, setCweSuggestions] = useState<{ cwe_id: string; name: string }[]>([]);
 
   const PAGE_SIZE = 200;  // backend caps page_size at 200; "Load more" appends the rest
 
-  async function fetchPage(p: number) {
+  function buildParams(p: number) {
     const params: any = { page_size: PAGE_SIZE, page: p };
     if (q) params.q = q;
     if (vector) params.vector = vector;
+    if (cwe) params.cwe = cwe;
+    if (publishedAfter) params.published_after = `${publishedAfter}T00:00:00`;
     if (minCvss) params.min_cvss = parseFloat(minCvss);
     if (relFilter) params.relevance = relFilter;
-    const d = await cveApi.search(params);
+    return params;
+  }
+
+  async function fetchPage(p: number) {
+    const d = await cveApi.search(buildParams(p));
     return Array.isArray(d) ? d : [];
   }
 
@@ -150,13 +368,31 @@ export default function CvePage() {
     }).catch(() => setAssetOptions([]));
   }, []);
 
+  // Suggest weakness types as the user types, so the flaw-type filter can be
+  // driven by a name ("cross-site scripting") rather than a memorised code.
+  useEffect(() => {
+    const term = cwe.trim();
+    if (term.length < 2) { setCweSuggestions([]); return; }
+    const handle = setTimeout(() => {
+      cveApi.cwe(term, 12).then((d: any) => setCweSuggestions(Array.isArray(d) ? d : [])).catch(() => setCweSuggestions([]));
+    }, 250);
+    return () => clearTimeout(handle);
+  }, [cwe]);
+
   async function sync() {
     setSyncing(true); setSyncMsg("");
     try {
       const r = await cveApi.sync(7);
-      setSyncMsg(`Synced from NVD: ${r.added} added, ${r.updated} updated (${r.fetched} fetched).`);
+      const cweBit = r.cwe && !r.cwe.skipped
+        ? t("cve.sync_cwe", " MITRE CWE catalog {{version}}: {{n}} weaknesses.", { version: r.cwe.version || "", n: (r.cwe.added || 0) + (r.cwe.updated || 0) })
+        : "";
+      setSyncMsg(
+        t("cve.sync_result", "NVD: {{added}} added, {{updated}} updated, {{refreshed}} re-checked for new analysis.", {
+          added: r.added, updated: r.updated, refreshed: r.refreshed ?? 0,
+        }) + cweBit
+      );
       load();
-    } catch { setSyncMsg("Sync failed — NVD may be unreachable or rate-limited."); }
+    } catch { setSyncMsg(t("cve.sync_failed", "Sync failed — NVD may be unreachable or rate-limited.")); }
     finally { setSyncing(false); }
   }
 
@@ -169,6 +405,8 @@ export default function CvePage() {
       setItems((prev) => prev.map((c) => (c.cve_id === cve.cve_id ? { ...c, relevance } : c)));
     } catch {} finally { setBusy(""); }
   }
+
+  const inputCls = "border border-gray-200 rounded-xl text-sm px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500";
 
   return (
     <div className="p-8 max-w-7xl space-y-6">
@@ -190,26 +428,47 @@ export default function CvePage() {
       {syncMsg && <div className="p-3 rounded-xl text-sm bg-blue-50 text-blue-700">{syncMsg}</div>}
 
       <div className="flex items-center gap-3 flex-wrap">
-        <form onSubmit={(e) => { e.preventDefault(); load(); }} className="relative flex-1 max-w-md">
+        <form onSubmit={(e) => { e.preventDefault(); load(); }} className="relative flex-1 min-w-[16rem] max-w-md">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder={t("cve.search", "Search CVE id or description…")} className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder={t("cve.search", "Search CVE id or description…")} className={`w-full pl-10 pr-4 py-2 ${inputCls}`} />
         </form>
+        <div>
+          <input
+            list="cwe-suggestions"
+            value={cwe}
+            onChange={(e) => setCwe(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter") load(); }}
+            placeholder={t("cve.cwe_filter_placeholder", "Flaw type, e.g. CWE-79 or XSS")}
+            className={`${inputCls} w-56`}
+          />
+          <datalist id="cwe-suggestions">
+            {cweSuggestions.map((c) => <option key={c.cwe_id} value={c.cwe_id}>{`${c.cwe_id} — ${c.name}`}</option>)}
+          </datalist>
+        </div>
         <input
           value={vector}
           onChange={(e) => setVector(e.target.value)}
           onKeyDown={(e) => { if (e.key === "Enter") load(); }}
           placeholder={t("cve.vector_filter_placeholder", "CVSS vector, e.g. AV:N/AC:L/...")}
-          className="border border-gray-200 rounded-xl text-sm px-3 py-2 font-mono focus:outline-none focus:ring-2 focus:ring-blue-500"
+          className={`${inputCls} font-mono w-52`}
         />
-        <select value={minCvss} onChange={(e) => { setMinCvss(e.target.value); }} className="border border-gray-200 rounded-xl text-sm px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500">
+        <input
+          type="date"
+          value={publishedAfter}
+          onChange={(e) => setPublishedAfter(e.target.value)}
+          title={t("cve.published_after", "Published on or after")}
+          className={inputCls}
+        />
+        <select value={minCvss} onChange={(e) => { setMinCvss(e.target.value); }} className={inputCls}>
           <option value="">{t("cve.any_cvss", "Any CVSS")}</option>
           <option value="9">≥ 9.0 (critical)</option>
           <option value="7">≥ 7.0 (high+)</option>
           <option value="4">≥ 4.0 (medium+)</option>
         </select>
-        <select value={relFilter} onChange={(e) => setRelFilter(e.target.value)} className="border border-gray-200 rounded-xl text-sm px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500">
+        <select value={relFilter} onChange={(e) => setRelFilter(e.target.value)} className={inputCls}>
           <option value="">{t("cve.all_relevance", "All relevance")}</option>
           {RELEVANCE.map((r) => <option key={r} value={r}>{r.replace(/_/g, " ")}</option>)}
+          <option value="untriaged">{t("cve.untriaged", "untriaged")}</option>
         </select>
         <button onClick={load} className="inline-flex items-center gap-2 bg-white border border-gray-200 text-gray-700 px-4 py-2 rounded-xl text-sm font-medium hover:bg-gray-50">
           {t("cve.apply", "Search")}
@@ -230,18 +489,36 @@ export default function CvePage() {
               <thead><tr className="border-b border-gray-100 bg-gray-50/50">
                 <th className="text-left px-6 py-3 font-medium text-gray-500">{t("cve.col_id", "CVE")}</th>
                 <th className="text-left px-6 py-3 font-medium text-gray-500">{t("cve.col_cvss", "CVSS")}</th>
+                <th className="text-left px-6 py-3 font-medium text-gray-500">{t("cve.col_cwe", "Flaw type")}</th>
                 <th className="text-left px-6 py-3 font-medium text-gray-500">{t("cve.col_desc", "Description")}</th>
+                <th className="text-left px-6 py-3 font-medium text-gray-500">{t("cve.col_published", "Published")}</th>
                 <th className="text-left px-6 py-3 font-medium text-gray-500">{t("cve.col_rel", "Relevance")}</th>
                 <th className="text-center px-6 py-3 font-medium text-gray-500">{t("cve.col_notes", "Notes")}</th>
               </tr></thead>
               <tbody>
                 {items.map((c) => {
                   const hasAnnotation = !!(c.notes || c.linked_asset_ids?.length);
+                  const weaknesses: { cwe_id: string; name?: string | null }[] = c.cwe?.length ? c.cwe : (c.cwe_ids || []).map((id: string) => ({ cwe_id: id }));
                   return (
                     <tr key={c.id} className="border-b border-gray-50 hover:bg-gray-50/50">
-                      <td className="px-6 py-4 font-mono text-xs text-blue-700 whitespace-nowrap">{c.cve_id}</td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <button onClick={() => setOpenCve(c.cve_id)} className="font-mono text-xs text-blue-700 hover:underline">{c.cve_id}</button>
+                      </td>
                       <td className="px-6 py-4"><span className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold border ${CVSS_BADGE(c.cvss_score)}`}>{c.cvss_score ?? "—"}</span></td>
-                      <td className="px-6 py-4 text-gray-600 max-w-xl"><span className="line-clamp-2">{c.description || "—"}</span></td>
+                      <td className="px-6 py-4">
+                        {weaknesses.length === 0 ? <span className="text-gray-300">—</span> : (
+                          <div className="flex flex-col gap-0.5 max-w-[13rem]">
+                            {weaknesses.slice(0, 2).map((w) => (
+                              <span key={w.cwe_id} className="text-xs text-gray-600 truncate" title={w.name ? `${w.cwe_id} — ${w.name}` : w.cwe_id}>
+                                <span className="font-mono text-[11px] text-gray-400">{w.cwe_id}</span>
+                                {w.name ? <span className="ml-1.5">{w.name}</span> : null}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                      </td>
+                      <td className="px-6 py-4 text-gray-600 max-w-md"><span className="line-clamp-2">{c.description || "—"}</span></td>
+                      <td className="px-6 py-4 text-xs text-gray-500 whitespace-nowrap">{fmtDate(c.published_at)}</td>
                       <td className="px-6 py-4">
                         <select
                           value={c.relevance || ""}
@@ -255,8 +532,8 @@ export default function CvePage() {
                       </td>
                       <td className="px-6 py-4 text-center">
                         <button
-                          onClick={() => setAnnotating(c)}
-                          title={t("cve.notes_label", "Internal notes")}
+                          onClick={() => setOpenCve(c.cve_id)}
+                          title={t("cve.open_sheet", "Open the full sheet")}
                           className={`inline-flex items-center justify-center w-7 h-7 rounded-lg ${hasAnnotation ? "bg-blue-50 text-blue-600" : "text-gray-300 hover:bg-gray-100 hover:text-gray-500"}`}
                         >
                           <StickyNote className="w-4 h-4" />
@@ -287,12 +564,12 @@ export default function CvePage() {
         </div>
       )}
 
-      {annotating && (
-        <AnnotationModal
-          cve={annotating}
+      {openCve && (
+        <CveSheet
+          cveId={openCve}
           assetOptions={assetOptions}
-          onClose={() => setAnnotating(null)}
-          onSaved={(updated) => setItems((prev) => prev.map((c) => (c.cve_id === updated.cve_id ? updated : c)))}
+          onClose={() => setOpenCve(null)}
+          onSaved={(updated) => setItems((prev) => prev.map((c) => (c.cve_id === updated.cve_id ? { ...c, ...updated } : c)))}
         />
       )}
     </div>
