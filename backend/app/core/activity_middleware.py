@@ -2,6 +2,7 @@
 Activity Log Middleware — automatically logs all mutating API requests.
 Covers POST / PUT / PATCH / DELETE across all endpoints with zero per-endpoint code.
 """
+import asyncio
 import logging
 import re
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -14,6 +15,9 @@ from app.models.activity_log import ActivityLog
 from app.services.activity_chain import chain_and_add
 
 logger = logging.getLogger(__name__)
+
+# How long the audit write may wait for the write lock before giving up.
+_AUDIT_WRITE_TIMEOUT_S = 5.0
 
 # Only log write methods
 LOGGED_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
@@ -188,9 +192,20 @@ class ActivityLogMiddleware(BaseHTTPMiddleware):
         entity_id = _entity_id_from_path(path)
         ip = request.client.host if request.client else None
 
+        # Bounded on purpose. This opens a SECOND connection while the request's
+        # own session may still hold SQLite's single write lock (get_db commits
+        # at teardown, which runs after this middleware). A handler that forgets
+        # to commit would otherwise wedge the request here for the full 30s busy
+        # timeout — and, as seen in production, hold the lock long enough to
+        # block every other write including logins.
+        #
+        # An audit entry is important, but never more important than the request
+        # completing: a missed entry is a logged warning, a wedged worker is an
+        # outage. The handlers themselves commit (see risks.py); this is the net
+        # under that, not a substitute for it.
         try:
             async with AsyncSessionLocal() as db:
-                await chain_and_add(db, ActivityLog(
+                await asyncio.wait_for(chain_and_add(db, ActivityLog(
                     tenant_id=tenant_id,
                     user_id=user_id,
                     user_email=payload.get("email", ""),
@@ -201,7 +216,14 @@ class ActivityLogMiddleware(BaseHTTPMiddleware):
                     details={"method": request.method, "path": path},
                     ip_address=ip,
                     origin=classify_origin(request),
-                ))
+                )), timeout=_AUDIT_WRITE_TIMEOUT_S)
+        except asyncio.TimeoutError:
+            logger.error(
+                "ActivityLog write timed out after %ss for %s %s — the request's own "
+                "session is probably still holding the write lock (missing commit in "
+                "the handler). Audit entry NOT recorded.",
+                _AUDIT_WRITE_TIMEOUT_S, request.method, path,
+            )
         except Exception as exc:
             logger.warning("ActivityLog write failed: %s", exc)
 

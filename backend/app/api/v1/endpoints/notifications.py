@@ -125,6 +125,10 @@ async def mark_as_read(
     notif.status = NotificationStatus.READ
     notif.read_at = datetime.now(timezone.utc)
     await db.flush()
+    # Commit here rather than relying on get_db()'s teardown: that runs after
+    # ActivityLogMiddleware, which opens its own connection for the audit
+    # entry and would wait on the write lock this session still holds.
+    await db.commit()
     return NotificationOut.model_validate(notif)
 
 
@@ -251,6 +255,10 @@ async def update_preferences(
             ))
 
     await db.flush()
+    # Commit here rather than relying on get_db()'s teardown: that runs after
+    # ActivityLogMiddleware, which opens its own connection for the audit
+    # entry and would wait on the write lock this session still holds.
+    await db.commit()
 
     # Return updated full list
     result = await db.execute(

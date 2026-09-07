@@ -1178,6 +1178,10 @@ async def delete_assessment(
             detail="Only draft assessments can be deleted. Archive completed assessments instead."
         )
     await db.delete(assessment)
+    # Commit here rather than relying on get_db()'s teardown: that runs after
+    # ActivityLogMiddleware, which opens its own connection for the audit
+    # entry and would wait on the write lock this session still holds.
+    await db.commit()
 
 
 @router.post("/assessments/{assessment_id}/documents", status_code=status.HTTP_201_CREATED)
@@ -1755,6 +1759,10 @@ async def update_control_assessment(
         ca.not_applicable_justification = body.not_applicable_justification
 
     await db.flush()
+    # Commit here rather than relying on get_db()'s teardown: that runs after
+    # ActivityLogMiddleware, which opens its own connection for the audit
+    # entry and would wait on the write lock this session still holds.
+    await db.commit()
 
     # Recalculate compliance score
     all_cas = (await db.execute(
@@ -2044,6 +2052,10 @@ async def act_on_gap_recommendation(
         action_item_id = action_item.id
 
     await db.flush()
+    # Commit here rather than relying on get_db()'s teardown: that runs after
+    # ActivityLogMiddleware, which opens its own connection for the audit
+    # entry and would wait on the write lock this session still holds.
+    await db.commit()
     return {
         "gap_id": gap_id,
         "recommendation_status": gap.recommendation_status,
@@ -2108,6 +2120,10 @@ async def bulk_act_on_gaps(
         processed += 1
 
     await db.flush()
+    # Commit here rather than relying on get_db()'s teardown: that runs after
+    # ActivityLogMiddleware, which opens its own connection for the audit
+    # entry and would wait on the write lock this session still holds.
+    await db.commit()
     return {"processed": processed, "action": body.action + "ed"}
 
 
@@ -2409,6 +2425,7 @@ async def upload_control_evidence(
                             )
                             db.add(shared)
                             await db.flush()
+                            await db.commit()
                             await file_integrity.record_version(
                                 db, tenant_id=tenant_id,
                                 entity_type=file_integrity.EVIDENCE,

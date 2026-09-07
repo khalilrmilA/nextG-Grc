@@ -266,6 +266,10 @@ async def create_ticket(
     )
     db.add(ticket)
     await db.flush()
+    # Commit here rather than relying on get_db()'s teardown: that runs after
+    # ActivityLogMiddleware, which opens its own connection for the audit
+    # entry and would wait on the write lock this session still holds.
+    await db.commit()
     return await _fetch_full(ticket.id, db)
 
 
@@ -335,6 +339,10 @@ async def update_ticket(
     if body.priority is not None:
         ticket.priority = body.priority
     await db.flush()
+    # Commit here rather than relying on get_db()'s teardown: that runs after
+    # ActivityLogMiddleware, which opens its own connection for the audit
+    # entry and would wait on the write lock this session still holds.
+    await db.commit()
     return await _fetch_full(ticket_id, db)
 
 
@@ -348,6 +356,10 @@ async def delete_ticket(
     if not _is_support(current_user) and ticket.user_id != current_user.id:
         raise HTTPException(status_code=403, detail="Forbidden")
     await db.delete(ticket)
+    # Commit here rather than relying on get_db()'s teardown: that runs after
+    # ActivityLogMiddleware, which opens its own connection for the audit
+    # entry and would wait on the write lock this session still holds.
+    await db.commit()
 
 
 # ── Messages ─────────────────────────────────────────────────────────────────
@@ -392,6 +404,10 @@ async def post_message(
     elif not is_sup and ticket.status == TicketStatus.WAITING_USER:
         ticket.status = TicketStatus.IN_PROGRESS
     await db.flush()
+    # Commit here rather than relying on get_db()'s teardown: that runs after
+    # ActivityLogMiddleware, which opens its own connection for the audit
+    # entry and would wait on the write lock this session still holds.
+    await db.commit()
     await db.refresh(msg, ["sender"])
 
     payload = {
@@ -448,6 +464,10 @@ async def request_chat(
         db.add(session)
 
     await db.flush()
+    # Commit here rather than relying on get_db()'s teardown: that runs after
+    # ActivityLogMiddleware, which opens its own connection for the audit
+    # entry and would wait on the write lock this session still holds.
+    await db.commit()
     await db.refresh(session)
 
     # notify the ticket room that a chat was requested
@@ -491,6 +511,10 @@ async def update_chat(
         raise HTTPException(status_code=400, detail="action must be accept or end")
 
     await db.flush()
+    # Commit here rather than relying on get_db()'s teardown: that runs after
+    # ActivityLogMiddleware, which opens its own connection for the audit
+    # entry and would wait on the write lock this session still holds.
+    await db.commit()
     await db.refresh(session)
     return session
 

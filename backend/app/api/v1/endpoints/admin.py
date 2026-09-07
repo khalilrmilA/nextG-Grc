@@ -194,6 +194,10 @@ async def create_user(
     )
     db.add(user)
     await db.flush()
+    # Commit here rather than relying on get_db()'s teardown: that runs after
+    # ActivityLogMiddleware, which opens its own connection for the audit
+    # entry and would wait on the write lock this session still holds.
+    await db.commit()
     await db.refresh(user)  # load server-side defaults (created_at) on the async session
 
     logger.info("super-admin %s created user %s (role=%s, tenant=%s)",
@@ -238,6 +242,10 @@ async def update_user(
         user.role = new_role
 
     await db.flush()
+    # Commit here rather than relying on get_db()'s teardown: that runs after
+    # ActivityLogMiddleware, which opens its own connection for the audit
+    # entry and would wait on the write lock this session still holds.
+    await db.commit()
 
     tenant_result = await db.execute(select(Tenant).where(Tenant.id == user.tenant_id))
     tenant = tenant_result.scalar_one_or_none()
@@ -271,6 +279,10 @@ async def delete_user(
         raise HTTPException(status_code=404, detail="User not found")
 
     await db.delete(user)
+    # Commit here rather than relying on get_db()'s teardown: that runs after
+    # ActivityLogMiddleware, which opens its own connection for the audit
+    # entry and would wait on the write lock this session still holds.
+    await db.commit()
 
 
 # ── Tenant access control ─────────────────────────────────────────────────────
@@ -785,6 +797,10 @@ async def issue_license(
     )
     db.add(lic)
     await db.flush()
+    # Commit here rather than relying on get_db()'s teardown: that runs after
+    # ActivityLogMiddleware, which opens its own connection for the audit
+    # entry and would wait on the write lock this session still holds.
+    await db.commit()
 
     logger.info("super-admin %s issued %s license %s for %s (%s days)",
                 current_user.email, plan, lic.lid, lic.customer_name, body.duration_days)

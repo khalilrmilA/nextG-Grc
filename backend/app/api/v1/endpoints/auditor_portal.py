@@ -461,6 +461,10 @@ async def update_audit_verdict(
         ca.not_applicable_justification = f"[AUDITOR:observation] {body.auditor_notes}"
 
     await db.flush()
+    # Commit here rather than relying on get_db()'s teardown: that runs after
+    # ActivityLogMiddleware, which opens its own connection for the audit
+    # entry and would wait on the write lock this session still holds.
+    await db.commit()
     return {"control_assessment_id": ca.id, "verdict": body.verdict, "updated": True}
 
 

@@ -650,6 +650,10 @@ async def update_framework(
     if body.applicable_industries is not None: fw.applicable_industries = body.applicable_industries
 
     await db.flush()
+    # Commit here rather than relying on get_db()'s teardown: that runs after
+    # ActivityLogMiddleware, which opens its own connection for the audit
+    # entry and would wait on the write lock this session still holds.
+    await db.commit()
 
     count_result = await db.execute(
         select(func.count()).where(FrameworkControl.framework_id == framework_id)
@@ -681,6 +685,10 @@ async def create_framework(
     )
     db.add(fw)
     await db.flush()
+    # Commit here rather than relying on get_db()'s teardown: that runs after
+    # ActivityLogMiddleware, which opens its own connection for the audit
+    # entry and would wait on the write lock this session still holds.
+    await db.commit()
     resp = FrameworkResponse.model_validate(fw)
     resp.control_count = 0
 
@@ -723,6 +731,10 @@ async def add_control(
     )
     db.add(control)
     await db.flush()
+    # Commit here rather than relying on get_db()'s teardown: that runs after
+    # ActivityLogMiddleware, which opens its own connection for the audit
+    # entry and would wait on the write lock this session still holds.
+    await db.commit()
     return ControlResponse.model_validate(control)
 
 
@@ -789,6 +801,10 @@ async def update_control(
         control.tags = body.tags
 
     await db.flush()
+    # Commit here rather than relying on get_db()'s teardown: that runs after
+    # ActivityLogMiddleware, which opens its own connection for the audit
+    # entry and would wait on the write lock this session still holds.
+    await db.commit()
 
     # Get framework name for notification
     fw_result = await db.execute(
@@ -906,6 +922,10 @@ async def add_requirement(
     )
     db.add(req)
     await db.flush()
+    # Commit here rather than relying on get_db()'s teardown: that runs after
+    # ActivityLogMiddleware, which opens its own connection for the audit
+    # entry and would wait on the write lock this session still holds.
+    await db.commit()
     return {"id": req.id, "control_id": req.control_id, "text": req.requirement_text, "level": req.requirement_level}
 
 
