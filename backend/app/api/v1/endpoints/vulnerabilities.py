@@ -30,6 +30,8 @@ from app.models.vulnerability import (
     resolve_context_weight,
 )
 from app.models.vulnerability_impact_history import VulnerabilityImpactHistory
+from app.models.activity_log import ActivityLog
+from app.services.activity_chain import chain_and_add
 
 router = APIRouter()
 
@@ -209,12 +211,44 @@ async def update_vuln(
     r = await db.execute(select(Vulnerability).where(Vulnerability.id == vid, Vulnerability.tenant_id == tenant_id))
     v = r.scalar_one_or_none()
     if not v: raise HTTPException(404, "Vulnerability not found")
+
+    # Capture the before-state so the edit leaves a history. The client requires
+    # that a manually recorded vulnerability be modifiable only by authorised
+    # users *with a record of the modifications* — the role gate above covers
+    # the first half; without this the second half is missing, and the generic
+    # request log records only that a PATCH happened, not what changed.
+    tracked = ["title","description","cvss_score","affected_assets","affected_systems","remediation_plan","remediation_owner_id","remediation_due_date","fixed_by_controls","tags"] + ["severity", "status"]
+    before = {f: getattr(v, f, None) for f in tracked}
+
     for f in ["title","description","cvss_score","affected_assets","affected_systems","remediation_plan","remediation_owner_id","remediation_due_date","fixed_by_controls","tags"]:
         val = getattr(body, f, None)
         if val is not None: setattr(v, f, val)
     if body.severity: v.severity = body.severity
     if body.status: v.status = body.status
     await db.commit(); await db.refresh(v)
+
+    changed = {}
+    for f in tracked:
+        old, new = before[f], getattr(v, f, None)
+        old = old.value if hasattr(old, "value") else old
+        new = new.value if hasattr(new, "value") else new
+        if old != new:
+            changed[f] = {"from": old, "to": new}
+    if changed:
+        try:
+            await chain_and_add(db, ActivityLog(
+                tenant_id=tenant_id,
+                user_id=current_user.id,
+                user_email=current_user.email,
+                action="update",
+                entity_type="vulnerability",
+                entity_id=v.id,
+                entity_name=v.title,
+                details={"changed": changed, "source": v.source},
+                origin="api",
+            ))
+        except Exception:
+            pass
     return VulnOut.model_validate(v)
 
 @router.post("/{vid}/validate", response_model=VulnOut)

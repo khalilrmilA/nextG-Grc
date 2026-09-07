@@ -38,6 +38,46 @@ logger = logging.getLogger(__name__)
 POLL_SECONDS = 3600  # hourly poll — interval_hours is the finer-grained cadence
 
 
+async def _alert_sync_failure(db, conn, reason: str) -> None:
+    """Raise an alert when an automated import fails.
+
+    A scheduled sync that silently stops is worse than no sync: the
+    vulnerability register still looks current while nothing has refreshed it,
+    and nobody finds out until someone happens to read the journal. The client
+    asks for an alert on an unreachable tool or an unreadable format, so the
+    people who watch the register are told rather than the log file.
+
+    Best-effort — alerting must never break the sync loop that is already
+    handling a failure.
+    """
+    try:
+        from app.models.notification import NotificationType
+        from app.services.notification_generator import (
+            create_notification, get_recipients_for_tenant,
+        )
+
+        detail = (reason or "unknown error").strip()[:300]
+        for user in await get_recipients_for_tenant(db, conn.tenant_id):
+            await create_notification(
+                db,
+                user=user,
+                notif_type=NotificationType.SYSTEM,
+                title=f"Vulnerability scan import failed: {conn.name}",
+                message=(
+                    f"The scheduled import from {conn.tool} connector '{conn.name}' did not "
+                    f"complete: {detail}. The vulnerability register has not been refreshed "
+                    f"from this tool — check the connector and re-run the sync."
+                ),
+                entity_id=conn.id,
+                entity_type="scanner_connector",
+                link="/vulnerabilities",
+                severity="high",
+            )
+        await db.commit()
+    except Exception:  # noqa: BLE001
+        logger.warning("could not raise a sync-failure alert for connector %s", conn.id)
+
+
 async def _due_connectors(db: AsyncSession) -> list[ScannerConnector]:
     """Enabled, schedule_enabled connectors whose interval_hours has elapsed
     since last_sync_at (or that have never synced)."""
@@ -88,11 +128,13 @@ async def run_due_syncs(db: AsyncSession) -> dict:
             journal = await sync_connector(db, conn, created_by_id=None)
             if journal.status == SCAN_STATUS_FAILED:
                 failed += 1
+                await _alert_sync_failure(db, conn, journal.error or "the scan tool reported a failure")
             else:
                 synced += 1
         except Exception as exc:  # noqa: BLE001 — sync_connector shouldn't raise, but never kill the loop
             logger.error("Vuln scanner scheduler: sync failed for connector %s (%s): %s", conn.id, conn.name, exc)
             failed += 1
+            await _alert_sync_failure(db, conn, str(exc))
 
     return {
         "due": len(due), "synced": synced, "failed": failed,
