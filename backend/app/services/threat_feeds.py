@@ -5,6 +5,7 @@ Sources:
   2. CISA Known Exploited Vulnerabilities JSON
   3. SANS ISC daily RSS
 """
+import hashlib
 import logging
 import xml.etree.ElementTree as ET
 
@@ -14,6 +15,27 @@ from app.core.config import settings
 from app.models.threat import ThreatCategory
 
 logger = logging.getLogger(__name__)
+
+def stable_ref(item: dict) -> str:
+    """A reference for a feed item that means the same thing on every run.
+
+    Items that carry their own identifier (a CVE from CISA KEV) keep it. The
+    rest used to get ``AUTO-{SOURCE}-{position in this batch}``, which is not an
+    identifier at all: measured on the live register, ``AUTO-SANS-2`` had been
+    handed to 48 different threats across 396 rows. That broke two things at
+    once — the register's references were meaningless, and the duplicate check
+    that compares references matched unrelated items while missing real repeats.
+
+    Deriving it from the item's own identity makes it stable across runs and
+    across both uvicorn workers, which is what the duplicate check needs.
+    """
+    ref = (item.get("ref_id") or "").strip()
+    if ref:
+        return ref[:50]
+    source = (item.get("source") or "feed")
+    digest = hashlib.sha1(f"{source}|{item.get('name', '')}".encode("utf-8")).hexdigest()[:10].upper()
+    return f"FEED-{source[:4].upper()}-{digest}"
+
 
 OSM_BASE = "https://api.opensourcemalware.com/functions/v1"
 OSM_ECOSYSTEMS = ["npm", "pypi", "repositories", "github"]

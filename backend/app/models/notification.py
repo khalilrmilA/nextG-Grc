@@ -45,6 +45,7 @@ class NotificationType(str, enum.Enum):
     COMPLIANCE_ACTION_OVERDUE = "compliance_action_overdue"
     # Threat events
     THREAT_CRITICAL = "threat_critical"
+    THREAT_PROFILE_REVIEW_DUE = "threat_profile_review_due"
     # Asset events
     ASSET_EOL = "asset_eol"
     ASSET_REVIEW_DUE = "asset_review_due"

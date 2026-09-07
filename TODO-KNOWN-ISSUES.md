@@ -41,6 +41,7 @@ someone outside this repo answers a question.
 | 3.1 | Field-level before/after in the action trace | moderate | SQLAlchemy flush hook |
 | 3.2 | Remaining schedulers still log nothing | moderate | Helper exists — call it **after** the caller commits |
 | 4.1 | Asset cartography O(n²) + blocks the event loop | moderate | Latent; zero-impact today only because a row has a NULL owner |
+| 12.1 | Threat pending queue: 4,717 items nobody can triage | moderate | Rule works; the volume makes "Approve all" the only usable action |
 | 11.1 | CAPEC catalog (ids are bridged, names are not) | small | Near-copy of `mitre_cwe_sync.py`; only if STB asks for attack-pattern search |
 
 ### Decide, then act
@@ -572,4 +573,71 @@ propagation to be automatic, and then make it a suggestion the assessor accepts.
 | Manual override with documented justification | `POST /{id}/impact` returns 400 without one |
 | Impact tied to one or more risk scenarios | `GET`/`PUT /vulnerabilities/{id}/risk-scenarios`, writing through to `RiskScenario.vulnerability_ids` so there is one source of truth. Gated identically to `PATCH /risk-scenarios/{id}` |
 | Every score change historised with date, author, reason | `VulnerabilityImpactHistory`, now also snapshotting the scenario set the score was judged against |
+
+---
+
+## 12. Threat register and threat profiling (added 2026-09-07)
+
+Audited against the threat-register and threat-profiling requirements. The
+profiling fields existed but had never been used — **0 of 6,030 threats had a
+profile or a linked asset**, and built-in threats could not be profiled at all.
+
+### 12.1 The pending queue is unmanageable
+The feed creates a pending threat per tenant per item and nothing consumes the
+queue: **4,717 pending threats**, the oldest from 2026-04-14, across 11 tenants
+(1,827 in the largest). Validation before integration is the correct rule and it
+works, but at this volume "Approve all" is the only usable action, which makes
+the control theatre.
+
+What is needed is triage the feed can support: rank incoming items by whether
+they touch an asset or technology the tenant actually has, and let the rest
+expire unreviewed rather than accumulate. Effort: moderate. Nothing here is
+broken — it is a workflow that does not scale to the volume the feed produces.
+
+### 12.2 The scheduler still writes nothing to the activity chain
+Feed-created threats now write to `threat_history` with a null actor, but the
+scheduler remains one of the background writers that never touches the
+hash-chained activity log (§3.2). Same fix as the others: call the helper
+**after** the caller commits.
+
+### 12.3 CATEGORY_TO_TYPE is a mapping, not an assessment
+The four required families are derived from the existing nine-value category
+when a profile does not state one. The API marks a derived value as derived and
+the screen labels it, so nothing presents a guess as a judgement — but the
+mapping itself (supply chain → operational, insider → organisational) is a
+reasonable reading, not a standard. Confirm it with STB rather than assuming it.
+
+### 12.4 Verified as MET
+| Requirement | Evidence |
+|---|---|
+| Threats linked to assets **and** exploitable vulnerabilities | `linked_asset_ids` / `linked_vulnerability_ids`, now validated against the tenant — a forged or typo'd id is refused with 422 instead of stored |
+| Continuous update from an integrated watch | CISA KEV (CERT), SANS ISC (RSS) and opensourcemalware (sector) on a 24h scheduler, plus a manual fetch |
+| Classification by type and by likelihood | The four families as a first-class field with filters, alongside the probability and severity scales |
+| New threats validated before integration | Every new threat now starts pending; the opt-out that let API-created threats skip it is gone |
+| Change history per threat (add / update / delete) | `threat_history`, with before/after per field. A deletion is recorded **before** the row goes and keeps the reference and name, so it survives the threat |
+| Complete profile, signed off by a security lead | Sign-off is its own act, gated to CISO / risk manager, and refuses an incomplete profile naming what is missing. It used to be a side effect of any save, gated only by the Elite flag |
+| Minimum documentation | description, occurrence scenario, origin, attack vectors, probability, severity — enforced at validation, surfaced as `profile_missing` |
+| Probability scale (rare → quasiment certain) | Exact five levels, validated |
+| Severity scale (mineur → critique) | Exact five levels, validated |
+| Periodic revision | A cadence (default 12 months), a due date set on validation and review, an overdue filter, and reminders at 14/7/0 days and while overdue — capped at 30 days, matching the risk and asset checks |
+| All modifications historised | Editing a validated profile returns it to draft and records why, through either edit path |
+
+### 12.5 Fixed along the way — the feed was duplicating itself
+Both uvicorn workers run the feed scheduler, read the same "already known" set
+and commit independently (the split-brain in `multi-worker-state-split-brain`,
+now with evidence). Measured: **213 duplicate rows**.
+
+The fix is a unique index, and choosing its key needed the data rather than an
+assumption. Name alone rejects genuinely distinct threats — CISA publishes
+CVE-2026-25089 and CVE-2026-39808 under the identical title "Fortinet
+FortiSandbox OS Command Injection Vulnerability". Reference alone is worse
+(1,416 false collisions) because feed items without their own identifier were
+numbered by position in the batch, so `AUTO-SANS-2` had been given to **48
+different threats across 396 rows**. `(tenant_id, ref_id, name)` leaves 213, and
+those are real repeats. Feed references are now derived from the item's identity
+instead, so they mean the same thing on every run.
+
+**Not durable until the backend restarts.** The running process is on the old
+code and will keep producing duplicates; with the index now in place it will hit
+an IntegrityError and skip that feed cycle instead (logged, self-limiting).
 

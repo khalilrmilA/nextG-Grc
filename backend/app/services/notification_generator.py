@@ -23,7 +23,7 @@ Handles:
   échéances critiques des recommandations")
 """
 import json
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from sqlalchemy import select, and_
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -692,6 +692,72 @@ async def check_asset_eol(db: AsyncSession) -> int:
     return created
 
 
+async def check_threat_profile_reviews(db: AsyncSession) -> int:
+    """Remind security leads when a threat profile is due for its periodic review.
+
+    "Le profil de menace doit être révisé périodiquement" only means something if
+    somebody is told. The due date is set when a profile is validated or
+    reviewed (threat_registry.schedule_next_review); this turns it into a
+    reminder at 14 and 7 days out, on the day, and while overdue — the same
+    window the risk and asset review checks already use, so the three read
+    consistently in the notification list.
+    """
+    from app.models.threat import Threat
+
+    created = 0
+    today = datetime.utcnow().date()
+    horizon = (today + timedelta(days=14)).isoformat()
+
+    threats = (await db.execute(
+        select(Threat).where(
+            Threat.tenant_id.isnot(None),
+            Threat.is_pending == False,  # noqa: E712
+            Threat.next_review_due.isnot(None),
+            Threat.next_review_due <= horizon,
+        )
+    )).scalars().all()
+
+    for threat in threats:
+        try:
+            due = date.fromisoformat(str(threat.next_review_due)[:10])
+        except ValueError:
+            continue
+        days = (due - today).days
+        # Stop nagging after a month overdue, exactly as the risk and asset
+        # checks do — a permanent alert is one nobody reads.
+        if days < -30:
+            continue
+        if days < 0:
+            severity, when = "high", f"was due {abs(days)} day(s) ago"
+        elif days == 0:
+            severity, when = "high", "is due today"
+        else:
+            severity, when = "medium", f"is due in {days} day(s)"
+
+        for user in await get_recipients_for_tenant(db, threat.tenant_id):
+            if await notification_exists(
+                db, user.id, NotificationType.THREAT_PROFILE_REVIEW_DUE, threat.id, within_days=7
+            ):
+                continue
+            await create_notification(
+                db,
+                user=user,
+                notif_type=NotificationType.THREAT_PROFILE_REVIEW_DUE,
+                title=f"Threat profile review {when}: {threat.name[:50]}",
+                message=(
+                    f"The profile for '{threat.name}' {when} ({threat.next_review_due}). "
+                    f"Confirm it still holds against the current threat watch, or update it."
+                ),
+                entity_id=threat.id,
+                entity_type="threat",
+                link=f"/threats?highlight={threat.id}",
+                severity=severity,
+            )
+            created += 1
+
+    return created
+
+
 async def check_asset_review_deadlines(db: AsyncSession) -> int:
     """RFP gap fix: mandatory periodic asset review reminders. Mirrors
     check_risk_review_deadlines's day-window logic exactly (14/7/0 days, capped at
@@ -1131,6 +1197,7 @@ async def run_all_checks(db: AsyncSession) -> dict:
 
     try:
         results["asset_eol"] = await check_asset_eol(db)
+        results["threat_profile_review_due"] = await check_threat_profile_reviews(db)
     except Exception as e:
         print(f"Asset EOL check failed: {e}")
 

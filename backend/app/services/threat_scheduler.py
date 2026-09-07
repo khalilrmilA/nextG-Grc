@@ -8,13 +8,15 @@ import logging
 import os
 
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 
 from app.core.database import AsyncSessionLocal
 from app.models.threat import Threat, ThreatCategory
 from app.models.tenant import Tenant
 from app.models.notification import NotificationType
-from app.services.threat_feeds import fetch_all_threat_feeds
+from app.services.threat_feeds import fetch_all_threat_feeds, stable_ref
 from app.services.notification_generator import get_recipients_for_tenant, create_notification, notification_exists
+from app.services import threat_registry as registry
 
 logger = logging.getLogger(__name__)
 
@@ -61,8 +63,9 @@ async def _run_once() -> int:
             ]
 
             critical_threats: list[Threat] = []
-            for idx, item in enumerate(new_items):
-                ref = item["ref_id"] or f"AUTO-{item['source'][:4].upper()}-{idx+1}"
+            created_here = 0
+            for item in new_items:
+                ref = stable_ref(item)
                 threat = Threat(
                     ref_id=ref,
                     name=item["name"],
@@ -76,10 +79,24 @@ async def _run_once() -> int:
                     is_pending=True,
                     tenant_id=tenant.id,
                 )
-                db.add(threat)
+                # Two uvicorn workers run this loop, read the same name set and
+                # commit independently, which is how the register accumulated
+                # 250 duplicate rows. The unique (tenant_id, name) constraint is
+                # the actual fix; a savepoint per insert keeps one collision
+                # from aborting the rest of the tenant's batch.
+                try:
+                    async with db.begin_nested():
+                        db.add(threat)
+                        await db.flush()
+                except IntegrityError:
+                    continue
+                registry.record(db, threat, "created", actor=None,
+                                note=f"Ingested automatically from the {item.get('source', 'threat')} "
+                                     f"feed; awaiting validation.")
+                created_here += 1
                 if (item.get("severity") or "").lower() == "critical":
                     critical_threats.append(threat)
-            total_created += len(new_items)
+            total_created += created_here
 
             # Fan out critical-threat alerts to this tenant's CISO/admins.
             if critical_threats:

@@ -1173,7 +1173,7 @@ export const vulnerabilitiesApi = {
 
 // ─── Threats ────────────────────────────────
 export const threatsApi = {
-  list: (params?: { category?: string }) =>
+  list: (params?: { category?: string; threat_type?: string; probability_level?: string; severity_level?: string; review_overdue?: boolean }) =>
     apiClient.get("/threats", { params }).then((r) => r.data),
   create: (data: Record<string, unknown>) => apiClient.post("/threats", data).then((r) => r.data),
   delete: (id: string) => apiClient.delete(`/threats/${id}`),
@@ -1186,6 +1186,14 @@ export const threatsApi = {
   approve: (id: string) => apiClient.post(`/threats/${id}/approve`).then((r) => r.data),
   reject: (id: string) => apiClient.delete(`/threats/${id}/reject`),
   updateProfile: (id: string, data: Record<string, unknown>) => apiClient.put(`/threats/${id}/profile`, data).then((r) => r.data),
+  // Copy a built-in catalogue entry into this tenant's register so it can be profiled.
+  adopt: (id: string) => apiClient.post(`/threats/${id}/adopt`).then((r) => r.data),
+  // Sign a profile off (CISO / risk manager) and start the review clock.
+  validateProfile: (id: string) => apiClient.post(`/threats/${id}/profile/validate`).then((r) => r.data),
+  // Record a periodic review that found nothing to change.
+  reviewProfile: (id: string, note?: string) =>
+    apiClient.post(`/threats/${id}/profile/review`, { note: note || null }).then((r) => r.data),
+  history: (id: string) => apiClient.get(`/threats/${id}/history`).then((r) => r.data),
 };
 
 // ─── Risk Scenarios ─────────────────────────

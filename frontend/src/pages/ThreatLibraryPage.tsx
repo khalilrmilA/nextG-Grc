@@ -2,7 +2,8 @@ import { useState, useEffect } from "react";
 import {
   Plus, Search, X, Loader2, Filter, Shield, Trash2, Tag,
   Sparkles, Download, ThumbsUp, ThumbsDown, Clock, CheckCircle2, RefreshCw,
-  AlertTriangle, ExternalLink, CheckCheck, ChevronRight, Pencil, Lock,
+  AlertTriangle, ExternalLink, CheckCheck, ChevronRight, ChevronDown, Pencil, Lock,
+  BadgeCheck, CalendarClock, CopyPlus, History,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { threatsApi, assetsApi, vulnerabilitiesApi } from "@/api/endpoints";
@@ -10,6 +11,8 @@ import { MultiSelect, type MultiSelectOption } from "@/components/common/MultiSe
 
 const PROBABILITY_LEVELS = ["rare", "peu_probable", "possible", "probable", "quasiment_certain"];
 const SEVERITY_LEVELS = ["mineur", "notable", "fort", "tres_fort", "critique"];
+// The four families the threat register must be classifiable by.
+const THREAT_TYPES = ["operationnelle", "organisationnelle", "environnementale", "technologique"];
 
 const CATEGORY_OPTIONS = [
   "cyber_attack", "social_engineering", "insider_threat", "supply_chain",
@@ -50,6 +53,7 @@ const EMPTY_PROFILE_FORM = {
   mode_operatoire: "",
   probability_level: "",
   severity_level: "",
+  threat_type: "",
   linked_asset_ids: [] as string[],
   linked_vulnerability_ids: [] as string[],
 };
@@ -62,6 +66,31 @@ function ThreatDetailModal({ threat, onClose, onUpdated }: { threat: any; onClos
   const [saving, setSaving] = useState(false);
   const [assetOptions, setAssetOptions] = useState<MultiSelectOption[]>([]);
   const [vulnOptions, setVulnOptions] = useState<MultiSelectOption[]>([]);
+  const [busy, setBusy] = useState("");
+  const [showHistory, setShowHistory] = useState(false);
+  const [history, setHistory] = useState<any[] | null>(null);
+
+  async function runAction(kind: "adopt" | "validate" | "review") {
+    setBusy(kind); setProfileError("");
+    try {
+      const updated =
+        kind === "adopt" ? await threatsApi.adopt(threat.id)
+        : kind === "validate" ? await threatsApi.validateProfile(threat.id)
+        : await threatsApi.reviewProfile(threat.id);
+      onUpdated(updated);
+    } catch (err: any) {
+      const detail = err?.response?.data?.detail;
+      setProfileError(typeof detail === "string" ? detail : t("common.error", "Something went wrong."));
+    } finally { setBusy(""); }
+  }
+
+  async function toggleHistory() {
+    const next = !showHistory;
+    setShowHistory(next);
+    if (next && history === null) {
+      try { setHistory(await threatsApi.history(threat.id)); } catch { setHistory([]); }
+    }
+  }
 
   const hasProfile = !!(
     threat.origin || threat.objectives || threat.aggravating_factors || threat.occurrence_conditions ||
@@ -91,6 +120,9 @@ function ThreatDetailModal({ threat, onClose, onUpdated }: { threat: any; onClos
       mode_operatoire: threat.mode_operatoire || "",
       probability_level: threat.probability_level || "",
       severity_level: threat.severity_level || "",
+      // Only send a type the assessor actually chose. Sending back a derived
+      // default would silently promote a guess into a stated classification.
+      threat_type: threat.threat_type_derived ? "" : (threat.threat_type || ""),
       linked_asset_ids: threat.linked_asset_ids || [],
       linked_vulnerability_ids: threat.linked_vulnerability_ids || [],
     });
@@ -250,13 +282,139 @@ function ThreatDetailModal({ threat, onClose, onUpdated }: { threat: any; onClos
             </div>
 
             {threat.is_builtin && (
-              <div className="flex items-start gap-2 mb-4 text-xs text-gray-500 bg-gray-50 rounded-lg px-3 py-2">
-                <Lock className="w-3.5 h-3.5 shrink-0 mt-0.5" />
-                <span>{t("threats.profile_builtin_readonly")}</span>
+              <div className="flex items-start gap-2 mb-4 text-xs bg-gray-50 rounded-lg px-3 py-2.5">
+                <Lock className="w-3.5 h-3.5 shrink-0 mt-0.5 text-gray-400" />
+                <div className="flex-1">
+                  <p className="text-gray-500">
+                    {t("threats.builtin_shared", "This is a shared catalogue entry, so it cannot carry your organisation's assessment. Add it to your register to profile it.")}
+                  </p>
+                  <button
+                    onClick={() => runAction("adopt")}
+                    disabled={busy === "adopt"}
+                    className="mt-2 inline-flex items-center gap-1.5 bg-blue-600 text-white px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-blue-700 disabled:opacity-50"
+                  >
+                    {busy === "adopt" ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CopyPlus className="w-3.5 h-3.5" />}
+                    {t("threats.btn_adopt", "Add to my register")}
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {!threat.is_builtin && (
+              <div className="mb-4 space-y-2">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold border ${
+                    threat.profile_status === "validated"
+                      ? "bg-green-100 text-green-700 border-green-200"
+                      : "bg-amber-100 text-amber-700 border-amber-200"}`}>
+                    {threat.profile_status === "validated"
+                      ? <><BadgeCheck className="w-3 h-3" /> {t("threats.profile_validated", "Profile validated")}</>
+                      : <><Clock className="w-3 h-3" /> {t("threats.profile_draft", "Profile in draft")}</>}
+                  </span>
+                  {threat.threat_type && (
+                    <span className="inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium bg-gray-100 text-gray-600 border border-gray-200">
+                      {String(t(`threats.type_${threat.threat_type}` as never, threat.threat_type))}
+                      {threat.threat_type_derived && <span className="ml-1 text-gray-400">{t("threats.type_derived", "(from category)")}</span>}
+                    </span>
+                  )}
+                  {threat.next_review_due && (
+                    <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium border ${
+                      threat.review_overdue
+                        ? "bg-red-100 text-red-700 border-red-200"
+                        : "bg-gray-100 text-gray-600 border-gray-200"}`}>
+                      <CalendarClock className="w-3 h-3" />
+                      {threat.review_overdue
+                        ? t("threats.review_overdue", "Review overdue since {{date}}", { date: threat.next_review_due })
+                        : t("threats.review_due", "Review due {{date}}", { date: threat.next_review_due })}
+                    </span>
+                  )}
+                </div>
+
+                {threat.profile_missing?.length > 0 && (
+                  <p className="text-xs text-gray-500">
+                    {t("threats.profile_missing", "Still to document before it can be signed off:")}{" "}
+                    <span className="text-gray-700">
+                      {threat.profile_missing.map((f: string) => String(t(`threats.field_${f}` as never, f))).join(", ")}
+                    </span>
+                  </p>
+                )}
+
+                {!editingProfile && (
+                  <div className="flex items-center gap-2 flex-wrap">
+                    {threat.profile_status !== "validated" && (
+                      <button
+                        onClick={() => runAction("validate")}
+                        disabled={busy === "validate" || threat.profile_missing?.length > 0}
+                        title={threat.profile_missing?.length > 0 ? t("threats.validate_blocked", "Complete the profile first") : undefined}
+                        className="inline-flex items-center gap-1.5 bg-green-600 text-white px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-green-700 disabled:opacity-40"
+                      >
+                        {busy === "validate" ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <BadgeCheck className="w-3.5 h-3.5" />}
+                        {t("threats.btn_validate_profile", "Validate profile")}
+                      </button>
+                    )}
+                    {threat.profile_status === "validated" && (
+                      <button
+                        onClick={() => runAction("review")}
+                        disabled={busy === "review"}
+                        className="inline-flex items-center gap-1.5 bg-white border border-gray-200 text-gray-700 px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-gray-50 disabled:opacity-50"
+                      >
+                        {busy === "review" ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CalendarClock className="w-3.5 h-3.5" />}
+                        {t("threats.btn_review_profile", "Record a review")}
+                      </button>
+                    )}
+                  </div>
+                )}
               </div>
             )}
 
             {profileError && <div className="mb-3 p-2.5 bg-red-50 text-red-700 rounded-lg text-xs">{profileError}</div>}
+
+            {!threat.is_builtin && (
+              <div className="mb-4">
+                <button
+                  type="button"
+                  onClick={toggleHistory}
+                  className="inline-flex items-center gap-1.5 text-xs font-medium text-gray-500 hover:text-gray-700"
+                >
+                  {showHistory ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
+                  <History className="w-3.5 h-3.5" /> {t("threats.history_title", "Change history")}
+                </button>
+                {showHistory && (
+                  <div className="mt-2 space-y-1.5 max-h-56 overflow-y-auto">
+                    {history === null ? (
+                      <div className="flex justify-center py-3"><Loader2 className="w-4 h-4 animate-spin text-blue-400" /></div>
+                    ) : history.length === 0 ? (
+                      <p className="text-xs text-gray-400 italic">{t("threats.history_empty", "Nothing recorded yet.")}</p>
+                    ) : history.map((h: any) => (
+                      <div key={h.id} className="bg-gray-50 rounded-lg px-3 py-2">
+                        <div className="flex items-baseline justify-between gap-2">
+                          <span className="text-xs font-semibold text-gray-700">
+                            {String(t(`threats.action_${h.action}` as never, h.action.replace(/_/g, " ")))}
+                          </span>
+                          <span className="text-[11px] text-gray-400 whitespace-nowrap">
+                            {h.created_at ? new Date(h.created_at).toLocaleString() : ""}
+                          </span>
+                        </div>
+                        {h.actor_email && <p className="text-[11px] text-gray-400">{h.actor_email}</p>}
+                        {h.note && <p className="text-xs text-gray-500 italic mt-0.5">{h.note}</p>}
+                        {h.changes && Object.keys(h.changes).length > 0 && (
+                          <ul className="mt-1 space-y-0.5">
+                            {Object.entries(h.changes).slice(0, 6).map(([field, ch]: any) => (
+                              <li key={field} className="text-[11px] text-gray-600 break-words">
+                                <span className="text-gray-400">{String(t(`threats.field_${field}` as never, field))}:</span>{" "}
+                                <span className="line-through text-gray-400">{String(ch?.from ?? "—").slice(0, 40) || "—"}</span>
+                                {" → "}
+                                <span className="text-gray-800">{String(ch?.to ?? "—").slice(0, 40) || "—"}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
 
             {editingProfile ? (
               <div className="space-y-3">
@@ -299,6 +457,17 @@ function ThreatDetailModal({ threat, onClose, onUpdated }: { threat: any; onClos
                       {SEVERITY_LEVELS.map((s) => <option key={s} value={s}>{t(`threats.severity_${s}` as never)}</option>)}
                     </select>
                   </div>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">{t("threats.profile_threat_type", "Threat family")}</label>
+                  <select
+                    value={profileForm.threat_type}
+                    onChange={(e) => setProfileForm({ ...profileForm, threat_type: e.target.value })}
+                    className="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="">{t("threats.type_from_category", "Derive from the category")}</option>
+                    {THREAT_TYPES.map((ty) => <option key={ty} value={ty}>{String(t(`threats.type_${ty}` as never, ty))}</option>)}
+                  </select>
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-1">{t("threats.profile_linked_assets")}</label>
@@ -403,6 +572,10 @@ export default function ThreatLibraryPage() {
   const [detail, setDetail]         = useState<any | null>(null);
   const [search, setSearch]         = useState("");
   const [catFilter, setCatFilter]   = useState("");
+  const [typeFilter, setTypeFilter] = useState("");
+  const [probFilter, setProbFilter] = useState("");
+  const [sevFilter, setSevFilter]   = useState("");
+  const [overdueOnly, setOverdueOnly] = useState(false);
   const [error, setError]           = useState("");
   const [submitting, setSubmitting] = useState(false);
 
@@ -422,6 +595,10 @@ export default function ThreatLibraryPage() {
     try {
       const params: any = {};
       if (catFilter) params.category = catFilter;
+      if (typeFilter) params.threat_type = typeFilter;
+      if (probFilter) params.probability_level = probFilter;
+      if (sevFilter) params.severity_level = sevFilter;
+      if (overdueOnly) params.review_overdue = true;
       const [data, pend] = await Promise.all([
         threatsApi.list(params),
         threatsApi.listPending(),
@@ -436,7 +613,7 @@ export default function ThreatLibraryPage() {
     }
   }
 
-  useEffect(() => { load(); }, [catFilter]);
+  useEffect(() => { load(); }, [catFilter, typeFilter, probFilter, sevFilter, overdueOnly]);
 
   /* ── MITRE one-time import ── */
   async function handleImportMitre() {
@@ -698,6 +875,40 @@ export default function ThreatLibraryPage() {
             <option value="">{t("threats.all_categories")}</option>
             {CATEGORY_OPTIONS.map((c) => <option key={c} value={c}>{fmt(c)}</option>)}
           </select>
+          <select
+            value={typeFilter}
+            onChange={(e) => setTypeFilter(e.target.value)}
+            className="border border-gray-200 rounded-xl text-sm px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+          >
+            <option value="">{t("threats.all_types", "All families")}</option>
+            {THREAT_TYPES.map((ty) => <option key={ty} value={ty}>{String(t(`threats.type_${ty}` as never, ty))}</option>)}
+          </select>
+          <select
+            value={probFilter}
+            onChange={(e) => setProbFilter(e.target.value)}
+            className="border border-gray-200 rounded-xl text-sm px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+          >
+            <option value="">{t("threats.all_probability", "Any likelihood")}</option>
+            {PROBABILITY_LEVELS.map((lv) => <option key={lv} value={lv}>{String(t(`threats.probability_${lv}` as never, lv))}</option>)}
+          </select>
+          <select
+            value={sevFilter}
+            onChange={(e) => setSevFilter(e.target.value)}
+            className="border border-gray-200 rounded-xl text-sm px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+          >
+            <option value="">{t("threats.all_severity", "Any severity")}</option>
+            {SEVERITY_LEVELS.map((lv) => <option key={lv} value={lv}>{String(t(`threats.severity_${lv}` as never, lv))}</option>)}
+          </select>
+          <button
+            type="button"
+            onClick={() => setOverdueOnly((v) => !v)}
+            className={`inline-flex items-center gap-1.5 rounded-xl border px-3 py-2 text-sm font-medium ${
+              overdueOnly
+                ? "bg-red-50 border-red-200 text-red-700"
+                : "bg-white border-gray-200 text-gray-600 hover:bg-gray-50"}`}
+          >
+            <CalendarClock className="w-4 h-4" /> {t("threats.filter_overdue", "Review overdue")}
+          </button>
         </div>
       </div>
 
