@@ -119,7 +119,7 @@ def create_application() -> FastAPI:
         allow_origins=settings.ALLOWED_ORIGINS,
         allow_credentials=True,
         allow_methods=["GET", "POST", "PATCH", "PUT", "DELETE", "OPTIONS"],
-        allow_headers=["Authorization", "Content-Type", "X-Requested-With", "Accept", "Origin"],
+        allow_headers=["Authorization", "Content-Type", "X-Requested-With", "Accept", "Origin", "X-GRC-Client"],
         max_age=600,
     )
 

@@ -105,9 +105,26 @@ async def _journal_login(request: Request, email: str, success: bool, reason: st
         logger.warning("login journal write failed")
 
 
+# Non-browser clients, matched before the browser families so an API caller is
+# never labelled "Browser". "Terminaux utilisés" is only meaningful if a script
+# and a person are distinguishable in the session list.
+_NON_BROWSER_AGENTS = (
+    ("curl/", "curl"), ("Wget/", "Wget"), ("python-requests", "Python requests"),
+    ("python-httpx", "Python httpx"), ("httpie", "HTTPie"), ("PostmanRuntime", "Postman"),
+    ("insomnia", "Insomnia"), ("okhttp", "OkHttp"), ("Java/", "Java client"),
+    ("Go-http-client", "Go client"), ("axios/", "axios"), ("node-fetch", "Node fetch"),
+    ("PowerShell", "PowerShell"), ("libwww-perl", "Perl LWP"),
+)
+
+
 def _device_label(ua: str | None) -> str:
     """Human-readable device label from a User-Agent string (best effort)."""
     ua = ua or ""
+    if not ua.strip():
+        return "Unknown client"
+    for token, name in _NON_BROWSER_AGENTS:
+        if token.lower() in ua.lower():
+            return name
     browser = "Edge" if "Edg" in ua else next((b for b in ("Chrome", "Firefox", "Safari", "Opera") if b in ua), "Browser")
     for token, name in (
         ("Windows", "Windows"), ("Macintosh", "macOS"), ("Mac OS", "macOS"),

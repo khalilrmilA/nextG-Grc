@@ -105,6 +105,37 @@ def _decode_token(token: str) -> dict | None:
         return None
 
 
+# STB requires every logged operation to declare its origin: manuel / batch / API.
+# The SPA identifies itself with X-GRC-Client: web-ui, corroborated against the
+# User-Agent so a plain scripted call is not credited as human.
+#
+# Be clear about what this is worth: both signals are client-supplied, so a
+# caller that deliberately sends the header AND a browser User-Agent will be
+# recorded as "manual". This distinguishes ordinary automation from ordinary
+# people; it is not an authentication of humanity and must not be described as
+# one. What it does guarantee is the safe direction of error — anything that
+# does not actively claim to be the web UI is recorded as "api", so the log
+# understates human involvement rather than overstating it. The actor identity
+# on every entry is the JWT subject, which is authenticated.
+_BROWSER_MARKERS = ("Mozilla/", "AppleWebKit", "Gecko/", "Chrome/", "Safari/", "Firefox/", "Edg/")
+
+# Bulk data paths are machine work regardless of who kicked them off — this is
+# the "batch" STB asks to see distinguished from an interactive edit.
+_BATCH_PATH_MARKERS = ("/data/import", "/data/export", "/vuln-import", "/scanner-import")
+
+
+def classify_origin(request: Request) -> str:
+    """manual | batch | api — see the note above on why the hint is corroborated."""
+    path = request.url.path
+    if any(marker in path for marker in _BATCH_PATH_MARKERS):
+        return "batch"
+    client_hint = (request.headers.get("x-grc-client") or "").strip().lower()
+    ua = request.headers.get("user-agent") or ""
+    if client_hint == "web-ui" and any(m in ua for m in _BROWSER_MARKERS):
+        return "manual"
+    return "api"
+
+
 class ActivityLogMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         response = await call_next(request)
@@ -154,7 +185,7 @@ class ActivityLogMiddleware(BaseHTTPMiddleware):
                     entity_name=None,
                     details={"method": request.method, "path": path},
                     ip_address=ip,
-                    origin="api",
+                    origin=classify_origin(request),
                 ))
         except Exception as exc:
             logger.warning("ActivityLog write failed: %s", exc)

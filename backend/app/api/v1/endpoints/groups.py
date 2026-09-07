@@ -15,6 +15,8 @@ from app.models.user import User, UserRole, ASSIGNABLE_ROLES
 from app.models.group import Group
 from app.api.v1.dependencies.auth import require_roles
 from app.api.v1.dependencies import get_tenant_id
+from app.models.activity_log import ActivityLog
+from app.services.activity_chain import chain_and_add
 
 router = APIRouter()
 
@@ -103,7 +105,7 @@ async def create_group(
 async def update_group(
     group_id: str,
     body: GroupUpdate,
-    _: Annotated[User, Depends(require_roles(UserRole.TENANT_ADMIN))],
+    current_user: Annotated[User, Depends(require_roles(UserRole.TENANT_ADMIN))],
     tenant_id: Annotated[str, Depends(get_tenant_id)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
@@ -111,6 +113,16 @@ async def update_group(
     group = result.scalar_one_or_none()
     if group is None:
         raise HTTPException(404, "Group not found")
+
+    # A group grants its roles to every member (see services/authz.py), so
+    # editing its roles or its membership IS a rights change for real people —
+    # and it used to leave no audit entry at all. Capture before/after and name
+    # the users whose access moved, so "who could do what, when" is answerable
+    # from the log rather than only from today's group state.
+    before = {
+        "roles": list(group.roles or []),
+        "member_ids": list(group.member_ids or []),
+    }
 
     if body.name is not None:
         group.name = body.name
@@ -123,6 +135,36 @@ async def update_group(
 
     await db.commit()
     await db.refresh(group)
+
+    after = {"roles": list(group.roles or []), "member_ids": list(group.member_ids or [])}
+    if after != before:
+        added = sorted(set(after["member_ids"]) - set(before["member_ids"]))
+        removed = sorted(set(before["member_ids"]) - set(after["member_ids"]))
+        try:
+            await chain_and_add(db, ActivityLog(
+                tenant_id=tenant_id,
+                user_id=current_user.id,
+                user_email=current_user.email,
+                action="rights_change",
+                entity_type="group",
+                entity_id=group.id,
+                entity_name=group.name,
+                details={
+                    "changed": {
+                        k: {"from": before[k], "to": after[k]}
+                        for k in before if before[k] != after[k]
+                    },
+                    "members_added": added,
+                    "members_removed": removed,
+                    "affected_user_ids": sorted(set(added) | set(removed) | set(after["member_ids"]))
+                    if before["roles"] != after["roles"] else sorted(set(added) | set(removed)),
+                    "changed_by": current_user.email,
+                    "source": "group_admin",
+                },
+                origin="api",
+            ))
+        except Exception:
+            pass
     return group
 
 

@@ -24,7 +24,15 @@ class ApiClient {
   constructor() {
     this.client = axios.create({
       baseURL: API_BASE_URL,
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        // Declares that this request came from a person using the web UI, so
+        // the audit trail can record origin=manual instead of lumping every
+        // operation together as "api". The server treats it as a hint only and
+        // corroborates it against the User-Agent — a script that copies this
+        // header still logs as "api".
+        "X-GRC-Client": "web-ui",
+      },
     });
 
     this.setupInterceptors();

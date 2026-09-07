@@ -9,17 +9,24 @@ import asyncio
 import logging
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.core.config import settings
+from app.core.rate_limit import limiter
 from app.core.security import create_access_token, create_refresh_token
+# Reuse the password-login journaling helpers verbatim rather than reimplementing
+# them: a directory login has to land in exactly the same LoginEvent /
+# UserSession tables, or "journalisation des connexions" is true for one auth
+# path and silently false for the other.
+from app.api.v1.endpoints.auth import _create_session, _journal_login
 from app.models.user import User, UserRole
 from app.models.tenant import Tenant
 from app.models.subscription import Subscription
+from app.services.activity_chain import log_system_activity
 from app.services.directory_auth import (
     authenticate,
     group_map_configured,
@@ -79,9 +86,15 @@ async def ldap_sso_status(
 
 
 @router.post("/ldap/login", response_model=TokenResponse)
-async def ldap_login(body: LdapLoginRequest, db: Annotated[AsyncSession, Depends(get_db)]):
+# Same bound as password login. This endpoint writes a LoginEvent before any
+# credential is verified (a failed attempt must be journaled), so without a
+# limit an unauthenticated caller could flood the login history.
+@limiter.limit("10/minute")
+async def ldap_login(request: Request, body: LdapLoginRequest, db: Annotated[AsyncSession, Depends(get_db)]):
+    username = (body.username or "").strip()
     tenant = await _resolve_tenant(db, body.tenant_slug)
     if tenant is None:
+        await _journal_login(request, username, False, "sso_unknown_tenant")
         raise HTTPException(status_code=400, detail="Unknown organization for SSO login.")
 
     cfg = resolve_ldap_config(getattr(tenant, "settings", None))
@@ -107,8 +120,9 @@ async def ldap_login(body: LdapLoginRequest, db: Annotated[AsyncSession, Depends
 
     # Blocking ldap3 bind → run off the event loop.
     try:
-        dir_user = await asyncio.to_thread(authenticate, body.username.strip(), body.password, cfg)
+        dir_user = await asyncio.to_thread(authenticate, username, body.password, cfg)
     except DirectoryAuthError as exc:
+        await _journal_login(request, username, False, "sso_directory_rejected")
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=str(exc))
 
     # Entitlements from AD group membership, when a group→role map is
@@ -116,6 +130,7 @@ async def ldap_login(body: LdapLoginRequest, db: Annotated[AsyncSession, Depends
     # for identity: the role is recomputed on EVERY login, so moving someone
     # between groups in AD takes effect at their next sign-in with nothing to
     # do in the app.
+    rights_change: dict | None = None
     mapped_role_value = map_groups_to_role(dir_user.groups, cfg)
     try:
         default_role = UserRole(cfg.get("default_role", "viewer"))
@@ -139,6 +154,7 @@ async def ldap_login(body: LdapLoginRequest, db: Annotated[AsyncSession, Depends
         logger.warning(
             "LDAP login refused: %s resolves to a user in another organization", dir_user.email,
         )
+        await _journal_login(request, dir_user.email, False, "sso_wrong_tenant")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="This directory account belongs to another organization.",
@@ -174,6 +190,8 @@ async def ldap_login(body: LdapLoginRequest, db: Annotated[AsyncSession, Depends
         # is handled by the admin, not by a directory read that may just have
         # failed quietly.
         desired = mapped_role or default_role
+        before_role = user.role.value if hasattr(user.role, "value") else user.role
+        before_roles = list(user.roles or [])
         if user.role != desired:
             logger.info(
                 "LDAP role sync: user %s %s -> %s (%d directory groups)",
@@ -188,11 +206,55 @@ async def ldap_login(body: LdapLoginRequest, db: Annotated[AsyncSession, Depends
             logger.info("LDAP role sync: user %s roles %s -> [%s]", user.id, user.roles, desired.value)
             user.roles = [desired.value]
 
+        # The directory is the authority for entitlements here, so a sync is a
+        # rights change like any other and belongs in the audit trail — it was
+        # previously only a log line, invisible to anyone reviewing who held
+        # what. origin is "batch": the directory decided this, not a person
+        # editing the account.
+        after_role = user.role.value if hasattr(user.role, "value") else user.role
+        after_roles = list(user.roles or [])
+        if after_role != before_role or after_roles != before_roles:
+            # Recorded, not written yet. chain_and_add commits, so writing here
+            # would publish (or on failure roll back) a role change that is
+            # still pending — the log would assert a change the database never
+            # made. The entry goes out after the commit below.
+            rights_change = {
+                "role": {"from": before_role, "to": after_role},
+                "roles": {"from": before_roles, "to": after_roles},
+            }
+
     if not user.is_active:
+        await _journal_login(request, dir_user.email, False, "sso_account_disabled", user=user)
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Account disabled.")
 
     await db.commit()
-    token_data = {"sub": user.id, "tenant_id": user.tenant_id, "role": user.role}
+
+    # Now that the role change is durable, record it. The directory decided
+    # this, not a person editing the account, so the origin is batch.
+    if rights_change:
+        await log_system_activity(
+            tenant_id=user.tenant_id,
+            action="rights_change",
+            entity_type="user",
+            entity_id=user.id,
+            details={
+                "subject_user_id": user.id,
+                "changed": rights_change,
+                "source": "ldap_sync",
+                "directory_group_count": len(dir_user.groups),
+            },
+        )
+
+    # Journal the connection and open a session, exactly as password login does.
+    # Without these a directory user appeared in neither the login history nor
+    # Active Sessions, so they could not be reviewed or revoked — while the
+    # tender pack claimed both were covered.
+    await _journal_login(request, dir_user.email, True, "ok", user=user)
+    session = await _create_session(request, user, db)
+
+    token_data = {
+        "sub": user.id, "tenant_id": user.tenant_id, "role": user.role, "sid": session.id,
+    }
     return TokenResponse(
         access_token=create_access_token(token_data),
         refresh_token=create_refresh_token(token_data),

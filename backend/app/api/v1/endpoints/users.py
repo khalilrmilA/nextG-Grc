@@ -27,7 +27,7 @@ from app.models.password_reset import PasswordResetToken
 from app.models.compliance import ComplianceAssessment
 from app.models.auditor_assignment import AuditorAssignment
 from app.models.activity_log import ActivityLog
-from app.services.activity_chain import chain_and_add
+from app.services.activity_chain import chain_and_add, is_system_actor
 from app.services.authz import get_effective_roles
 from app.api.v1.dependencies import get_tenant_id
 from app.api.v1.dependencies.auth import get_current_user, require_roles
@@ -126,7 +126,15 @@ async def list_users(
     _: Annotated[User, Depends(require_roles(UserRole.TENANT_ADMIN))],
     tenant_id: Annotated[str, Depends(get_tenant_id)],
 ):
-    result = await db.execute(select(User).where(User.tenant_id == tenant_id).order_by(User.first_name))
+    # Exclude the automated-task principal (see services/activity_chain.py).
+    # It is an audit actor, not a person: showing it invites an admin to give
+    # it a password or activate it, which would let someone sign in AS the
+    # batch principal and launder their actions into "the system did it".
+    result = await db.execute(
+        select(User)
+        .where(User.tenant_id == tenant_id, User.email.notlike("system+%@grceye.local"))
+        .order_by(User.first_name)
+    )
     users = result.scalars().all()
 
     # Fetch the tenant's groups once and reuse across every row instead of
@@ -252,8 +260,20 @@ async def update_user(
     if user.role == UserRole.SUPER_ADMIN:
         raise HTTPException(403, "Cannot modify super admin accounts")
 
+    if is_system_actor(user.email):
+        raise HTTPException(403, "The automated-task account cannot be modified.")
     old_role = user.role.value if hasattr(user.role, "value") else user.role
     old_roles = list(user.roles or [])
+    # Everything that decides what this account may do. Watching only role/roles
+    # missed real rights changes: an excluded_roles-only edit revokes access and
+    # used to leave no trace, and deactivating an account is an authorisation
+    # change too.
+    old_entitlements = {
+        "role": old_role,
+        "roles": old_roles,
+        "excluded_roles": list(user.excluded_roles or []),
+        "is_active": user.is_active,
+    }
 
     if body.is_active is not None:
         user.is_active = body.is_active
@@ -301,22 +321,32 @@ async def update_user(
     # existing activity_chain service (mirrors the delete-reason entry added for
     # applied_controls.py). Best-effort: a logging failure must never roll back
     # the role change that already committed above.
-    if role_changed:
+    new_entitlements = {
+        "role": user.role.value if hasattr(user.role, "value") else user.role,
+        "roles": list(user.roles or []),
+        "excluded_roles": list(user.excluded_roles or []),
+        "is_active": user.is_active,
+    }
+    changed = {
+        field: {"from": old_entitlements[field], "to": new_entitlements[field]}
+        for field in old_entitlements
+        if old_entitlements[field] != new_entitlements[field]
+    }
+    if changed:
         try:
             await chain_and_add(db, ActivityLog(
                 tenant_id=tenant_id,
                 user_id=current_user.id,
                 user_email=current_user.email,
-                action="role_change",
+                action="rights_change",
                 entity_type="user",
                 entity_id=user.id,
                 entity_name=f"{user.first_name} {user.last_name}".strip(),
                 details={
-                    "old_role": old_role,
-                    "new_role": new_role,
-                    "old_roles": old_roles,
-                    "new_roles": user.roles,
+                    "subject_user_id": user.id,
+                    "changed": changed,
                     "changed_by": current_user.email,
+                    "source": "admin_ui",
                 },
                 origin="api",
             ))

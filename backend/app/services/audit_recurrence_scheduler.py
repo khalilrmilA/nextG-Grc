@@ -31,6 +31,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import AsyncSessionLocal
 from app.models.audit import Audit, AuditStatus
+from app.services.activity_chain import log_system_activity
 
 logger = logging.getLogger(__name__)
 
@@ -133,6 +134,24 @@ async def run_due_recurrences(db: AsyncSession) -> dict:
             await db.commit()
             if successor:
                 spawned += 1
+                # Logged only once the successor is durable, and from its own
+                # session. Writing it inside the transaction above would block
+                # on SQLite's single-writer lock (the caller still holds it
+                # after flush), and a failure there could take the audit with
+                # it — a scheduler creating a record is exactly the "batch"
+                # origin STB asks to see, but not at the price of the record.
+                await log_system_activity(
+                    tenant_id=successor.tenant_id,
+                    action="create",
+                    entity_type="audit",
+                    entity_id=successor.id,
+                    entity_name=successor.title,
+                    details={
+                        "reason": "recurrence",
+                        "spawned_from_audit_id": audit.id,
+                        "recurrence": str(audit.recurrence),
+                    },
+                )
                 logger.info(
                     "Audit recurrence: spawned next cycle %s (%s -> %s) from closed audit %s (%s)",
                     successor.id, successor.planned_start, successor.planned_end, audit.id, audit.recurrence,
