@@ -40,9 +40,6 @@ someone outside this repo answers a question.
 | 3.1 | Field-level before/after in the action trace | moderate | SQLAlchemy flush hook |
 | 3.2 | Remaining schedulers still log nothing | moderate | Helper exists — call it **after** the caller commits |
 | 4.1 | Asset cartography O(n²) + blocks the event loop | moderate | Latent; zero-impact today only because a row has a NULL owner |
-| 9.1 | Délégations — nothing exists | moderate | Named requirement for the Administrateur role |
-| 9.2 | Revues d'habilitations — nothing exists | moderate | Named requirement; also an ISO 27001 / SOC 2 control |
-| 9.3/9.4 | Propriétaire métier half-implemented, no perimeter scoping | moderate | Design the scoping once — three roles are defined "on their perimeter" |
 
 ### Decide, then act
 | # | Item | Blocked on |
@@ -382,7 +379,7 @@ The eight roles STB names all exist and are enforced. The gaps are in what the
 *Administrateur* role is required to manage, and in how far the *Propriétaire
 métier* role actually reaches.
 
-### 9.1 Délégations — **GAP**
+### 9.1 Délégations — **BUILT** (pending verification)
 **Required:** the Administrateur manages *les délégations*.
 **Verified:** no delegation model, endpoint or column exists anywhere —
 searched `delegat*` across models and endpoints; the only hits are unrelated
@@ -394,7 +391,7 @@ operational need, not an edge case.
 resolution inside `get_effective_roles`, automatic expiry, and an audit entry at
 grant and revoke.
 
-### 9.2 Revues d'habilitations — **GAP**
+### 9.2 Revues d'habilitations — **BUILT** (pending verification)
 **Required:** the Administrateur manages *les revues d'habilitations* — periodic
 access recertification.
 **Verified:** nothing exists — searched `access_review`, `recertif`,
@@ -408,7 +405,7 @@ finding.
 hash-chained log to record them. The rights-change audit built in `7da7578`
 already produces the "what changed since the last review" half.
 
-### 9.3 Propriétaire métier is only half implemented — **PARTIAL**
+### 9.3 Propriétaire métier is only half implemented — **BUILT** (pending verification)
 **Required:** *qualification des actifs, validation des risques et des plans de
 traitement sur son périmètre métier*.
 **Verified:** `BUSINESS_OWNER` is granted on 4 endpoints — three in `assets.py`
@@ -418,7 +415,7 @@ risks (200) but cannot act on them (403).
 **Cost:** two of the three responsibilities in the role definition are not
 implemented.
 
-### 9.4 No "périmètre métier" scoping — **GAP**
+### 9.4 No "périmètre métier" scoping — **BUILT** (pending verification)
 **Verified:** access is tenant-wide. There is no per-owner, per-scope or
 per-perimeter restriction on assets or risks — searched for owner-scoped
 filtering in `assets.py` and `risks.py`: none.

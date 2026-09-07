@@ -1,6 +1,7 @@
 """API v1 router — aggregates all endpoint routers."""
 from fastapi import APIRouter
 from app.api.v1.endpoints import (
+    access_governance,
     auth,
     ai_access,
     tenants,
@@ -64,6 +65,7 @@ api_router.include_router(ai_access.router, tags=["AI Access"])
 api_router.include_router(tenants.router, prefix="/tenants", tags=["Tenants"])
 api_router.include_router(users.router, prefix="/users", tags=["Users"])
 api_router.include_router(groups.router, prefix="/groups", tags=["Team Groups"])
+api_router.include_router(access_governance.router, prefix="/access-governance", tags=["Access Governance"])
 api_router.include_router(frameworks.router, prefix="/frameworks", tags=["Frameworks"])
 api_router.include_router(risks.router, prefix="/risks", tags=["Risk Management"])
 api_router.include_router(compliance.router, prefix="/compliance", tags=["Compliance"])
