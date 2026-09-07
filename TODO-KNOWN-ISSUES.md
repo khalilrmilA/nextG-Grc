@@ -37,6 +37,7 @@ someone outside this repo answers a question.
 | 2.1 | GDPR Art.17 erasure | large | 56 FKs, 1 `ondelete`, FKs off in SQLite. Log side is free — IP is not hashed |
 | 8.3 | Named / concurrent / unlimited licence models | moderate | Concurrent licensing has nothing to count against it; `user_sessions` already holds the data |
 | 8.1 | Per-table column and field preferences | moderate | Dashboard-layout model is the template |
+| 10.1 | Custom roles with their own permission set | large | 13 fixed roles today; Groups bundle built-ins. Scope the cheap path first |
 | 3.1 | Field-level before/after in the action trace | moderate | SQLAlchemy flush hook |
 | 3.2 | Remaining schedulers still log nothing | moderate | Helper exists — call it **after** the caller commits |
 | 4.1 | Asset cartography O(n²) + blocks the event loop | moderate | Latent; zero-impact today only because a row has a NULL owner |
@@ -455,3 +456,41 @@ unused constant as the enforcement and "simplifies" the real checks away.
 | Direction Générale = strategic read-only | Tested: dashboard 200, risks 200, create-risk **403**. Zero `require_roles(EXECUTIVE)` gates is correct by design — it reads through open endpoints and is write-blocked globally |
 | Habilitations are traçables | Rights changes now write a before/after entry to the hash-chained log across admin, group and LDAP paths (`7da7578`, `5e878fd`) |
 | Assistance corrective / évolutive / préventive | Contractual, not code |
+
+---
+
+## 10. Accounts, authentication, sessions (added 2026-09-04)
+
+Audited against the account-creation, login and session requirements. Almost
+all of it is already implemented and was verified by running it. **Two items
+believed to be missing are in fact present** — recorded below with the evidence,
+because assuming a gap that isn't there costs as much in a tender as missing one
+that is.
+
+### 10.1 Custom roles — **GAP** (the only real one in this block)
+**Required:** role management adapted to the organisation.
+**Verified:** `UserRole` is a fixed enum of 13 values. Groups
+(`models/group.py`) bundle **existing** roles onto members — `roles` is a JSON
+list of built-in role names — but there is no way to define a NEW role, and no
+permission or capability model anywhere: authorisation is role-name based
+throughout (`require_roles`).
+**So:** an organisation can name a group freely and combine built-in roles into
+it, which covers a good part of the need. What it cannot do is define a role
+with its own permission set.
+**Effort:** large if done properly — it means moving ~377 routes from role-name
+checks to capability checks. A cheaper middle path is a named, tenant-defined
+role that resolves to a set of built-in roles, which is what Groups already
+almost are; worth scoping before committing to the full model.
+
+### 10.2 Verified as MET — including two believed missing
+| Requirement | Evidence |
+|---|---|
+| **Lockout after failed logins, paramétrable** | **Present and working.** Measured: 5 wrong passwords → 401 each, 6th → **423 Locked**; the correct password is then still refused (423) and `locked_until` is set. Defaults are 5 attempts / 15 minutes and are **tenant-configurable** — `resolve_security_settings()` overlays `Tenant.settings["security"]`, exposed by `GET`/`PATCH /tenants/current/security` |
+| **MFA via the app, not email** | TOTP with `pyotp` verified against an enrolled device (`auth.py`), redeemed at `POST /auth/mfa-login`. No email-code path exists |
+| New-device sign-in alerts to user **and** admin | `notification_generator.check_new_device_login` notifies the user (severity high) **and** every CISO/admin recipient in the tenant, excluding the user |
+| Password-reset notice with cancel instructions | The reset email states "If you did not request this, you can safely ignore this email" |
+| Professional email domain enforced | `users.py` rejects a mismatch against `Tenant.domain` when the tenant has one configured; tenants without a fixed domain are not blocked |
+| Role required at account creation | `POST /users/create` requires a role |
+| Temporary password expiring at first login | `must_change_password` set at creation, cleared on first password change |
+| Enable / disable an account at any time | Verified: a deactivated account cannot log in (401) |
+| Secure sessions, logout, session revocation | `user_sessions` with device/IP/user-agent; refresh-token revocation is now cross-worker (`4a440c4`) |
