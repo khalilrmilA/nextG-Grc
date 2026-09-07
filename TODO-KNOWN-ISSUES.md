@@ -245,3 +245,80 @@ Recorded so these are not rediscovered and put into a tender document.
 | "Oracle `DateTime(timezone=True)` causes silent data loss" | False. Oracle fails at `create_all()` on JSON long before a row is written; those columns are second-precision and tz-naive already. The real Oracle blocker is JSON (1.1). |
 | "SQLite write lock is the ceiling for 300 users" | Measured floor ~155–180 writes/s at 30 writers against an observed peak of 1.8/s. Argue no scale-out / no HA / no PITR (1.4), **not** throughput. |
 | "Activity log stores an empty user identifier → the trail is anonymous" | Overstated. `user_email` is indeed empty, but `user_id` is populated on every row and 725 of 726 join to a real user. It is a denormalised display copy, not the actor identifier. |
+
+---
+
+## 8. Ergonomics, archiving, licensing, hosting (added 2026-09-04)
+
+Audited against the requirements on interface, archiving, licence models,
+hosting and maintenance. Most of this block is already met — only the items
+below are not.
+
+### 8.1 Screen personalization is dashboard-only — **GAP**
+**Required:** personalisation of screens covering *champs, positions,
+visibilité*.
+**Verified:** `dashboard_layouts` stores an ordered
+`[{"id": widget, "visible": bool}]` per user per dashboard, so **positions and
+visibility are covered for dashboard widgets**. There is no per-table column or
+field preference anywhere — searched for `column_prefs`, `visible_columns`,
+`field_config`, `column_config` across backend and frontend: no matches.
+**Cost:** a user cannot choose which columns appear on the Risks, Assets or
+Compliance tables, nor reorder or hide fields on a form. That is the larger half
+of what the requirement asks for.
+**Effort:** moderate. The dashboard-layout model is a good template — a
+per-user, per-table JSON preference plus a column-picker on the shared table
+component would cover it without touching each page.
+
+### 8.2 Labels cannot be adapted to the bank's vocabulary — **GAP**
+**Required:** *l'adaptation des libellés aux besoins de la banque*.
+**Verified:** no override mechanism exists — searched for `custom_label`,
+`label_override`, `terminology`, `custom_terms`: no matches. Text comes from
+`frontend/src/i18n/locales/{en,fr,ar}.ts`, which are build-time files. A bank
+that calls a "vendor" a *prestataire* or a "risk owner" a *pilote de risque*
+cannot change that without editing source and rebuilding.
+**Effort:** small-to-moderate, and it is a genuine differentiator. A per-tenant
+`label_overrides` JSON consulted by the i18n layer at runtime would do it; the
+tenant settings blob already exists to hold it.
+
+### 8.3 Licence models are not modelled — **GAP**
+**Required:** named-user, concurrent-user, and unlimited-global licences, with a
+clear tariff structure.
+**Verified:** `models/license.py` carries a `plan` string and issue/expiry
+dates. Seat limits live separately in `models/subscription.py`
+(`max_admin_users`: 10 / 50 / -1). Searched the licence model and service for
+`named`, `concurrent`, `unlimited`, `seat`: no matches.
+**What that means:** `max_admin_users` is the closest thing to a *named-user*
+licence and it is **enforced nowhere** (confirmed in the earlier audit).
+**Concurrent-user licensing does not exist at all** — nothing counts or caps
+simultaneous sessions, even though `user_sessions` already holds the data that
+would make it measurable.
+**Cost:** if STB chooses the concurrent model, there is nothing to enforce or
+report against it.
+
+### 8.4 GED integration — **GAP** (also listed at 1.x scope)
+**Required here again:** *l'intégration avec la GED existante*, this time for
+archived data specifically.
+**Verified:** no CMIS, SharePoint, Alfresco or Nuxeo connector exists;
+`.dockerignore` and the storage layer treat `uploads/` as local disk only.
+**Blocked:** needs STB to name the product. CMIS is the vendor-neutral standard
+and one adapter would cover Alfresco, Nuxeo and SharePoint.
+
+### 8.5 Not code — carry into the commercial response
+- **Tariff structure** (clear, transparent, detailed) — commercial.
+- **Hosting on G-Cloud / N-Cloud** — the app runs on-premise
+  (`docker-compose.onprem.yml`) and in public cloud (the current SaaS), so the
+  capability is there; hosting *in a compliant local datacentre* is a
+  deployment and contractual commitment, not a code property.
+- **3-year warranty; corrective / evolutive / preventive maintenance** —
+  contractual.
+
+### 8.6 Verified as MET — do not treat these as gaps
+| Requirement | Evidence |
+|---|---|
+| Response time < 2s for common operations | Measured 12 common endpoints, 5 runs each: worst case **325 ms**, median ≤ 137 ms, none over budget. Server-side only (excludes network and browser render), but the headroom is ~6x. |
+| Archivage automatique selon règles configurables | `archiving/rules` create/list/delete, evaluated by `archiving_engine` |
+| Consultation sans restauration manuelle | `GET /archiving/{id}` returns the JSON snapshot directly |
+| Paramétrage des durées de conservation | `ArchivingRule.retention_days` → `ArchiveRecord.retention_until` + `POST /purge-expired` |
+| Export PDF / Excel / CSV | All three verified working: csv 436 B/10 ms, xlsx 5.4 KB/39 ms, pdf 2.4 KB/34 ms; invalid format rejected 400 |
+| Homogénéité graphique | Single shared component set and Tailwind config across all modules |
+| Navigation claire et cohérente | One sidebar taxonomy, 4 groups, role-gated per item |
