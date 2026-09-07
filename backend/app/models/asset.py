@@ -18,6 +18,36 @@ class AssetType(str, enum.Enum):
     DATA = "data"
     PROCESS = "process"
     PERSON = "person"
+    # Support categories the client names explicitly and that had no equivalent:
+    # a physical location, a paper document, and a third party.
+    SITE = "site"                          # local / premises
+    PHYSICAL_DOCUMENT = "physical_document"
+    SUPPLIER = "supplier"                  # fournisseur
+
+
+class AssetCategory(str, enum.Enum):
+    """Vocabulary for ``Asset.asset_class`` — primary or support.
+
+    The column already existed and carried these two values as free text; this
+    names them so create/update can validate against something rather than
+    accepting any string.
+
+    A primary asset is what the organisation actually cares about — a business
+    process or the information itself. A support asset is what that depends on:
+    equipment, premises, applications, paper records, people, suppliers. Risk
+    analysis starts from the primary assets and reaches the support assets
+    through their dependencies, so a flat type list cannot express it.
+    """
+    PRIMARY = "primary"
+    SUPPORT = "support"
+
+
+# Default classification for each type, used when none is given. PROCESS and
+# DATA are the two primary kinds; everything else exists to support them.
+DEFAULT_CATEGORY_FOR_TYPE = {
+    "process": AssetCategory.PRIMARY,
+    "data": AssetCategory.PRIMARY,
+}
 
 
 class AssetCriticality(str, enum.Enum):
@@ -66,7 +96,11 @@ class Asset(Base):
 
     # ISO 27005 primary/support classification (Elite Pack).
     # 'primary' = process/information; 'support' = equipment/app/people/etc.
-    asset_class: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    # 'primary' (a business process or the information itself) or 'support'
+    # (what that depends on: equipment, premises, applications, paper records,
+    # people, suppliers). Validated against AssetCategory at the API boundary,
+    # and defaulted from asset_type when not supplied.
+    asset_class: Mapped[str | None] = mapped_column(String(20), nullable=True, index=True)
     # For a support asset: the primary asset id(s) it serves.
     serves_asset_ids: Mapped[list] = mapped_column(JSON, default=list)
 

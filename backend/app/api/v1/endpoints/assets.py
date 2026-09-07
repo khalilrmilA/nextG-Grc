@@ -14,7 +14,7 @@ from app.core.database import get_db
 from app.api.v1.dependencies.auth import get_current_user, get_tenant_id, require_roles
 from app.api.v1.dependencies.features import require_feature
 from app.models.user import User, UserRole
-from app.models.asset import Asset, AssetType, AssetCriticality
+from app.models.asset import Asset, AssetType, AssetCriticality, AssetCategory, DEFAULT_CATEGORY_FOR_TYPE
 from app.models.asset_history import AssetValuationHistory
 
 router = APIRouter()
@@ -140,6 +140,26 @@ class CiaHistoryOut(BaseModel):
     note: str | None = None
     created_at: datetime
     model_config = {"from_attributes": True}
+
+
+_VALID_CLASSES = {AssetCategory.PRIMARY.value, AssetCategory.SUPPORT.value}
+
+
+def _resolve_asset_class(given: str | None, asset_type: str) -> str:
+    """Primary or support, defaulted from the type when not supplied.
+
+    The client requires every asset to carry this classification, and the column
+    was free text and optional — so an asset could be created without one and
+    silently fall outside the primary/support split the risk methodology is
+    built on. A process or a piece of information is primary; everything else
+    supports them. The caller can still override, because whether a given
+    database is a primary asset is a judgement about the organisation.
+    """
+    if given is not None:
+        if given not in _VALID_CLASSES:
+            raise HTTPException(status_code=422, detail="asset_class must be 'primary' or 'support'")
+        return given
+    return DEFAULT_CATEGORY_FOR_TYPE.get(asset_type, AssetCategory.SUPPORT).value
 
 
 async def _get_asset(aid: str, tenant_id: str, db: AsyncSession) -> Asset:
@@ -272,7 +292,7 @@ async def create_asset(body: AssetCreate, db: AsyncSession = Depends(get_db), _:
         location=body.location, data_classification=body.data_classification,
         contains_pii=body.contains_pii, contains_phi=body.contains_phi,
         contains_pci=body.contains_pci, tags=body.tags,
-        asset_class=body.asset_class, serves_asset_ids=body.serves_asset_ids,
+        asset_class=_resolve_asset_class(body.asset_class, body.asset_type), serves_asset_ids=body.serves_asset_ids,
         business_process_id=body.business_process_id, org_entity_id=body.org_entity_id,
         lifecycle_state=body.lifecycle_state, acquired_at=body.acquired_at,
         end_of_life_at=body.end_of_life_at, business_value=body.business_value,
@@ -291,6 +311,17 @@ async def get_asset(aid: str, db: AsyncSession = Depends(get_db), _: User = Depe
 @router.patch("/{aid}", response_model=AssetOut)
 async def update_asset(aid: str, body: AssetUpdate, db: AsyncSession = Depends(get_db), _: User = Depends(require_roles(UserRole.BUSINESS_OWNER, UserRole.CISO)), tenant_id: str = Depends(get_tenant_id)):
     a = await _get_asset(aid, tenant_id, db)
+    # The business owner is mandatory, so an update must not be able to point it
+    # at someone outside the tenant. create_asset already checks this; the update
+    # path passed owner_id straight through the loop below.
+    if body.owner_id is not None:
+        owner = (await db.execute(
+            select(User).where(User.id == body.owner_id, User.tenant_id == tenant_id)
+        )).scalar_one_or_none()
+        if owner is None:
+            raise HTTPException(status_code=422, detail="owner_id must reference a user in this tenant")
+    if body.asset_class is not None and body.asset_class not in _VALID_CLASSES:
+        raise HTTPException(status_code=422, detail="asset_class must be 'primary' or 'support'")
     for f in ["name", "description", "owner_id", "hosting_type", "cloud_provider", "location",
               "data_classification", "contains_pii", "contains_phi", "contains_pci", "tags",
               "asset_class", "serves_asset_ids", "business_process_id", "org_entity_id",
