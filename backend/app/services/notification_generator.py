@@ -830,6 +830,73 @@ async def check_asset_review_deadlines(db: AsyncSession) -> int:
     return created
 
 
+async def check_unverified_controls(db: AsyncSession) -> int:
+    """Alert on controls in service that no security referent has signed off.
+
+    "Un systeme d'alerte peut notifier en cas de controle expire **ou non
+    verifie**." The expiry half existed; this is the other half, and it is the
+    more dangerous of the two — an expired control is visibly stale, whereas an
+    active-but-unverified one is counted as a mitigation by everything that
+    reads the register while nobody has confirmed it works.
+
+    Only controls that are actually operating are flagged. A planned control
+    has not been signed off because it does not exist yet, which is not a
+    finding.
+    """
+    from app.models.applied_control import AppliedControl
+
+    created = 0
+    grace = datetime.utcnow() - timedelta(days=30)
+
+    controls = (await db.execute(
+        select(AppliedControl).where(
+            AppliedControl.status.in_(("active", "in_progress")),
+            AppliedControl.validation_status != "validated",
+            AppliedControl.created_at <= grace,
+        )
+    )).scalars().all()
+
+    for control in controls:
+        state = (control.validation_status.value
+                 if hasattr(control.validation_status, "value")
+                 else str(control.validation_status or "pending"))
+        rejected = state == "rejected"
+
+        recipients = {u.id: u for u in await get_recipients_for_tenant(db, control.tenant_id)}
+        if control.owner_id and control.owner_id not in recipients:
+            owner = (await db.execute(
+                select(User).where(User.id == control.owner_id, User.is_active == True)  # noqa: E712
+            )).scalar_one_or_none()
+            if owner:
+                recipients[owner.id] = owner
+
+        label = control.ref_id or control.name[:30]
+        for user in recipients.values():
+            if await notification_exists(
+                db, user.id, NotificationType.CONTROL_UNVERIFIED, control.id, within_days=14
+            ):
+                continue
+            await create_notification(
+                db,
+                user=user,
+                notif_type=NotificationType.CONTROL_UNVERIFIED,
+                title=(f"Control rejected but still in service: {label}" if rejected
+                       else f"Control in service without sign-off: {label}"),
+                message=(
+                    f"'{control.name}' is {state.replace('_', ' ')} and has been operating "
+                    f"for over 30 days without validation by a security referent. "
+                    f"Everything that reads the register counts it as a mitigation."
+                ),
+                entity_id=control.id,
+                entity_type="applied_control",
+                link=f"/applied-controls?highlight={control.id}",
+                severity="high" if rejected else "medium",
+            )
+            created += 1
+
+    return created
+
+
 async def check_control_evaluations_due(db: AsyncSession) -> int:
     """Remind the control owner and the CISO when an effectiveness evaluation is due.
 
@@ -1354,6 +1421,7 @@ async def run_all_checks(db: AsyncSession) -> dict:
         results["threat_profile_review_due"] = await check_threat_profile_reviews(db)
         results["scenario_priority_alert"] = await check_scenario_priority_alerts(db)
         results["control_evaluation_due"] = await check_control_evaluations_due(db)
+        results["control_unverified"] = await check_unverified_controls(db)
     except Exception as e:
         print(f"Asset EOL check failed: {e}")
 

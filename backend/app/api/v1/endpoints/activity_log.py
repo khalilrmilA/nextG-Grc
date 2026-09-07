@@ -6,9 +6,9 @@ from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
-from app.api.v1.dependencies.auth import get_current_user, get_tenant_id
+from app.api.v1.dependencies.auth import get_current_user, get_tenant_id, require_roles
 from app.api.v1.dependencies.features import require_feature
-from app.models.user import User
+from app.models.user import User, UserRole
 from app.models.activity_log import ActivityLog
 from app.models.login_event import LoginEvent
 from app.services.activity_chain import compute_entry_hash, _utcnow
@@ -38,6 +38,24 @@ class LogListResponse(BaseModel):
     total: int
 
 
+# Who may read the audit trail. "Seules les personnes autorisées peuvent
+# consulter ces informations, comme les auditeurs externes quand ils ont la
+# permission" — every endpoint here was open to any authenticated user, so a
+# viewer could read who did what across the whole organisation. The trail
+# records security actions, account changes and their actors; it is not
+# general-purpose reporting.
+#
+# The auditor role is included deliberately: an external auditor is exactly the
+# reader the requirement names, and they already reach the platform through the
+# auditor portal. require_roles() also auto-passes tenant_admin and super_admin.
+AUDIT_READERS = (
+    UserRole.CISO,
+    UserRole.COMPLIANCE_MANAGER,
+    UserRole.AUDITOR,
+    UserRole.RISK_MANAGER,
+)
+
+
 @router.get("", response_model=LogListResponse)
 async def list_activity_logs(
     entity_type: str | None = None,
@@ -46,7 +64,7 @@ async def list_activity_logs(
     limit: int = 50,
     offset: int = 0,
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(get_current_user),
+    _: User = Depends(require_roles(*AUDIT_READERS)),
     tenant_id: str = Depends(get_tenant_id),
 ):
     """List activity logs with optional filtering."""
@@ -75,7 +93,10 @@ async def list_activity_logs(
 @router.get("/verify")
 async def verify_chain(
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(require_feature("tamper_evident_log")),
+    # Feature entitlement AND role. require_feature alone is a billing check —
+    # it says the tenant bought the capability, not that this user may use it.
+    _feature: User = Depends(require_feature("tamper_evident_log")),
+    _: User = Depends(require_roles(*AUDIT_READERS)),
     tenant_id: str = Depends(get_tenant_id),
 ):
     """Recompute the tenant's activity-log hash chain and report its integrity (Elite Pack).
@@ -141,7 +162,11 @@ async def list_login_events(
     limit: int = 100,
     offset: int = 0,
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(require_feature("tamper_evident_log")),
+    # Who signed in, when and from where is exactly the data the requirement
+    # restricts. The feature flag says the tenant bought the capability; the
+    # role says this person may read it.
+    _feature: User = Depends(require_feature("tamper_evident_log")),
+    _: User = Depends(require_roles(*AUDIT_READERS)),
     tenant_id: str = Depends(get_tenant_id),
 ):
     """List authentication attempts for the tenant, newest first (Elite Pack).

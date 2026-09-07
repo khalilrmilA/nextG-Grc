@@ -2,7 +2,7 @@
 from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func
+from sqlalchemy import String, cast, select, func
 from pydantic import BaseModel
 from typing import Any
 
@@ -15,7 +15,8 @@ from app.models.user import UserRole
 from app.api.v1.dependencies import get_current_user, require_roles, get_tenant_id, PaginationParams
 from app.api.v1.dependencies.features import require_feature
 from app.models.user import User
-from app.services import risk_scoring
+from app.services import risk_scoring, residual_risk
+from app.models.applied_control import AppliedControl
 from app.services.notification_generator import create_notification, get_recipients_for_tenant, notification_exists
 from app.services import perimeter
 from app.services.authz import get_effective_roles
@@ -556,6 +557,74 @@ class RiskQuantResult(BaseModel):
     p95: float           # 95th percentile
     simulations: int
     distribution: list[dict]
+
+
+class ResidualSuggestion(BaseModel):
+    """What the control evidence implies the residual risk should be."""
+    risk_id: str
+    inherent_score: float | None = None
+    current_residual_score: float | None = None
+    control_count: int = 0
+    evaluated_count: int = 0
+    effectiveness: float | None = None
+    coverage: float | None = None
+    mitigation: float | None = None
+    suggested_residual_score: float | None = None
+    controls: list = []
+
+
+@router.get("/{risk_id}/residual-suggestion", response_model=ResidualSuggestion)
+async def residual_suggestion(
+    risk_id: str,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(get_current_user),
+    tenant_id: str = Depends(get_tenant_id),
+):
+    """Residual risk implied by the effectiveness of the controls in place.
+
+    The requirement names control effectiveness as an input to residual risk;
+    residual likelihood and impact were entered by hand with no connection to
+    the controls, so a risk whose every control evaluated non-performant kept
+    whatever residual figure someone had typed.
+
+    Returned as a suggestion with its workings, never written to the risk. The
+    computed figure says what the evidence implies; the stored one is the
+    assessor's judgement having seen the context. Overwriting the second with
+    the first would erase a judgement and leave no record that they differed.
+    """
+    risk = (await db.execute(
+        select(Risk).where(Risk.id == risk_id, Risk.tenant_id == tenant_id)
+    )).scalar_one_or_none()
+    if not risk:
+        raise HTTPException(status_code=404, detail="Risk not found")
+
+    # Controls attached to the risk directly, plus those attached to any
+    # scenario consolidated into it — both are mitigations of this risk.
+    control_ids: list[str] = []
+    direct = (await db.execute(
+        select(AppliedControl.id).where(
+            AppliedControl.tenant_id == tenant_id,
+            cast(AppliedControl.risk_ids, String).ilike(f'%"{risk_id}"%'),
+        )
+    )).all()
+    control_ids.extend(r[0] for r in direct)
+
+    scenarios = (await db.execute(
+        select(RiskScenario).where(
+            RiskScenario.tenant_id == tenant_id, RiskScenario.linked_risk_id == risk_id
+        )
+    )).scalars().all()
+    for sc in scenarios:
+        control_ids.extend(sc.applied_control_ids or [])
+
+    result = await residual_risk.compute(
+        db, tenant_id, list(dict.fromkeys(control_ids)), risk.inherent_risk_score
+    )
+    return ResidualSuggestion(
+        risk_id=risk_id,
+        current_residual_score=risk.residual_risk_score,
+        **result,
+    )
 
 
 @router.post("/quantify", response_model=RiskQuantResult)

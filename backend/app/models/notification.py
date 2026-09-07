@@ -53,6 +53,7 @@ class NotificationType(str, enum.Enum):
     # Applied control events
     CONTROL_EXPIRED = "control_expired"
     CONTROL_EVALUATION_DUE = "control_evaluation_due"
+    CONTROL_UNVERIFIED = "control_unverified"
     # Auth / security events
     NEW_DEVICE_LOGIN = "new_device_login"
     # General

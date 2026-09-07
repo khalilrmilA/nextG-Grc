@@ -43,6 +43,7 @@ someone outside this repo answers a question.
 | 4.1 | Asset cartography O(n²) + blocks the event loop | moderate | Latent; zero-impact today only because a row has a NULL owner |
 | 12.1 | ~~Threat pending queue~~ | done | Feeds now land in the threat watch, not the register |
 | 14.3 | Applied-control create/edit/delete take any authenticated user | small | Validation is gated; the control itself is not |
+| 15.4 | Audit-trail retention: seal-then-purge, if STB requires destruction | moderate | Naive deletion breaks the hash chain — design it, do not switch it on |
 | 11.1 | CAPEC catalog (ids are bridged, names are not) | small | Near-copy of `mitre_cwe_sync.py`; only if STB asks for attack-pattern search |
 
 ### Decide, then act
@@ -755,4 +756,84 @@ deployment and belongs with the wider role review, not inside a requirements
 pass. Effort: small. Recommended gate: the same CISO / risk-manager tuple the
 validation endpoints already use, with `security_analyst` able to edit but not
 delete.
+
+---
+
+## 15. Control traceability, inherent/residual risk (added 2026-09-07)
+
+Audited against the four blocks: control traceability, inherent risk, applied
+controls, residual risk. Much was already built. Four gaps closed, two
+decisions recorded.
+
+### 15.1 The audit trail was readable by every authenticated user — **FIXED**
+`GET /activity-log` was gated by `get_current_user`, so any account — a viewer,
+an executive, any of the 300 users — could read who did what across the whole
+organisation. `/activity-log/login-events` and `/verify` were gated by
+`require_feature("tamper_evident_log")`, which is a *billing* check: it says the
+tenant bought the capability, not that this user may use it. Login history —
+who signed in, when, from where — was therefore readable by anyone in an Elite
+tenant.
+
+All three now require CISO, compliance manager, auditor or risk manager
+(tenant_admin and super_admin auto-pass). The auditor role is deliberately
+included: an external auditor is exactly the reader the requirement names.
+
+### 15.2 Verified as MET
+| Requirement | Evidence |
+|---|---|
+| Every control action recorded with timestamp and actor | Hash-chained `activity_logs`, plus per-entity history on threats, controls and scenarios |
+| Only authorised people may read it | 15.1 |
+| Traces cannot be altered without trace | No mutating endpoint exists on the trail (PATCH/PUT/DELETE all return 405), and `GET /activity-log/verify` recomputes the chain |
+| Inherent risk = severity x frequency | `likelihood * impact`, through the tenant's matrix |
+| Matrix customisable (scale, weights, thresholds) | `risk_matrices` — grid, labels, level bands, all tenant-defined |
+| Matrix change validated by SSI governance and documented | Role-gated to risk manager / CISO (the validation), and every create, activation and withdrawal now demands a written reason recorded in the hash-chained trail (the documentation) |
+| Controls linked precisely to risks or scenarios | `risk_ids` and `risk_scenario_ids`, both validated |
+| Annual control review | Evaluation cadence with reminders (§14) |
+| Modifications historised with justification | `applied_control_history`; deletion demands a reason |
+| Alert on expired **or unverified** control | Expiry existed; unverified is new — a control active for over 30 days that no referent has signed off, or one rejected and still in service. The second is the more dangerous: an expired control is visibly stale, an active-but-unverified one is counted as a mitigation by everything that reads the register |
+| Residual compared to acceptability thresholds | Appetite thresholds with alerts, on both risks and scenarios |
+| Residual calculation historised | `risk_snapshots` |
+
+### 15.3 Residual risk now has control effectiveness as an input
+The rule names the inputs as impact, probability **and control effectiveness**.
+Residual likelihood and impact were hand-entered with no connection to the
+controls, so a risk whose every control evaluated non-performant kept whatever
+residual figure someone had typed.
+
+`GET /risks/{id}/residual-suggestion` computes it from the controls attached to
+the risk directly and through its scenarios:
+
+    effectiveness  = mean of the controls' latest evaluations
+                     (performant 1.0 / moyennement 0.5 / non-performant 0.1)
+    coverage       = fraction that are active AND validated
+    residual       = inherent x (1 - effectiveness x coverage)
+
+It returns the workings, not just a number — a residual figure nobody can
+account for is one nobody will defend in an audit. **It is never written to the
+risk.** The computed figure says what the evidence implies; the stored one is
+the assessor's judgement having seen the context. Overwriting the second with
+the first would erase a judgement and leave no record they differed.
+
+With no controls, or none evaluated, it returns no figure rather than claiming
+a mitigation it cannot evidence.
+
+### 15.4 Retention is a policy surface, not an automatic purge — decision
+"Les traces sont conservées selon la durée prévue par les règles de
+l'entreprise." `data_retention_days` exists in tenant settings and nothing
+enforces it against `activity_logs`.
+
+Left that way deliberately. The trail is hash-chained: deleting entries breaks
+the chain, and `/verify` would then report tampering on a purge the platform
+performed itself — the integrity guarantee and an automatic purge are in direct
+conflict. For a bank the obligation is normally to *keep* for a period, not to
+destroy after one.
+
+If STB does require destruction, it needs to be designed rather than
+switched on: seal the period, record the seal in the chain, then purge.
+Effort: moderate. Do not enable a naive delete.
+
+### 15.5 Still open
+Backup of the audit trail (rule 5 of the traceability block) is the same gap as
+§1.2 / §6.1: no scheduled backup exists on the deployment. The configuration is
+in the production runbook; it has not been applied.
 
