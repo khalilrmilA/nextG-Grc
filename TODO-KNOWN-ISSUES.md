@@ -43,7 +43,6 @@ someone outside this repo answers a question.
 | 4.1 | Asset cartography O(n²) + blocks the event loop | moderate | Latent; zero-impact today only because a row has a NULL owner |
 | 12.1 | ~~Threat pending queue~~ | done | Feeds now land in the threat watch, not the register |
 | 14.3 | Applied-control create/edit/delete take any authenticated user | small | Validation is gated; the control itself is not |
-| 15.4 | Audit-trail retention: seal-then-purge, if STB requires destruction | moderate | Naive deletion breaks the hash chain — design it, do not switch it on |
 | 11.1 | CAPEC catalog (ids are bridged, names are not) | small | Near-copy of `mitre_cwe_sync.py`; only if STB asks for attack-pattern search |
 
 ### Decide, then act
@@ -817,20 +816,38 @@ the first would erase a judgement and leave no record they differed.
 With no controls, or none evaluated, it returns no figure rather than claiming
 a mitigation it cannot evidence.
 
-### 15.4 Retention is a policy surface, not an automatic purge — decision
+### 15.4 Retention — **BUILT** as seal-then-purge
 "Les traces sont conservées selon la durée prévue par les règles de
-l'entreprise." `data_retention_days` exists in tenant settings and nothing
-enforces it against `activity_logs`.
+l'entreprise." A plain delete was not an option: the trail is hash-chained, so
+removing entries breaks it and `/verify` would report tampering on a purge the
+platform performed itself. An organisation exercising its own retention policy
+would be unable to prove its audit trail intact.
 
-Left that way deliberately. The trail is hash-chained: deleting entries breaks
-the chain, and `/verify` would then report tampering on a purge the platform
-performed itself — the integrity guarantee and an automatic purge are in direct
-conflict. For a bank the obligation is normally to *keep* for a period, not to
-destroy after one.
+`audit_log_seals` resolves it. Before a range is removed it is summarised —
+sequence range, period, entry count, the closing hash, and a SHA-256 digest
+over every entry hash in the range — and the seal is chained to the previous
+one. Verification then walks *across* the seal: the surviving entry after a
+sealed range must still carry that range's closing hash as its `prev_hash`.
 
-If STB does require destruction, it needs to be designed rather than
-switched on: seal the period, record the seal in the chain, then purge.
-Effort: moderate. Do not enable a naive delete.
+Measured end to end: 131 chained entries, 40 sealed and purged, and
+`/verify` still returns `valid: true` reporting **93 live + 40 sealed = 133
+accounted for**. Altering a seal is caught ("seal hash mismatch"); deleting one
+to hide a purge is caught ("sequence gap").
+
+Safety, because this is the only operation that destroys evidence:
+* dry run by default — `confirm: true` is required to proceed;
+* a written reason of at least 20 characters, stored in the seal;
+* tenant-admin only, and the CISO is deliberately **not** enough;
+* an absolute floor of 365 days regardless of the configured policy, so a
+  mistyped retention cannot erase last week;
+* the seal is committed **before** the delete, so an interruption leaves a seal
+  covering entries that still exist — visible and harmless — rather than a gap
+  covered by nothing;
+* the default policy is 10 years and disabled, so nothing happens unless STB
+  turns it on.
+
+The digest is what makes a restore checkable: replay from backup, recompute,
+and it either matches the seal or the restored set is not what was purged.
 
 ### 15.5 Still open
 Backup of the audit trail (rule 5 of the traceability block) is the same gap as
