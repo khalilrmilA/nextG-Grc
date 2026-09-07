@@ -326,6 +326,13 @@ async def update_ldap_settings(
         if str(patch["default_role"]).strip().lower() not in assignable:
             raise HTTPException(422, f"default_role must be one of {sorted(assignable)}")
 
+    if "server_uri" in patch and patch["server_uri"]:
+        from app.services.directory_auth import DirectoryAuthError, parse_server_uri
+        try:
+            parse_server_uri(patch["server_uri"])
+        except DirectoryAuthError as exc:
+            raise HTTPException(422, str(exc))
+
     if "user_filter" in patch and patch["user_filter"]:
         if "{username}" not in patch["user_filter"]:
             # Without the placeholder the filter matches the same entry for

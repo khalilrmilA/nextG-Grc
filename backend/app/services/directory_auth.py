@@ -10,11 +10,18 @@ second SaaS tenant can enable SSO with a settings write and no migration.
 than breaking app startup. The bind calls block, so the endpoint runs
 :func:`authenticate` in a worker thread.
 """
+import ipaddress
 import json
 import re
+import socket
 from dataclasses import dataclass, field
+from urllib.parse import urlparse
 
 from app.core.config import settings
+
+# Schemes a directory URI may use. Anything else means the field is being used
+# to reach something that is not a directory.
+ALLOWED_SCHEMES = ("ldap", "ldaps")
 
 
 @dataclass
@@ -237,6 +244,67 @@ def map_groups_to_role(groups: list[str], cfg: dict) -> str | None:
     return min(matched, key=precedence.index)
 
 
+def parse_server_uri(server_uri: str) -> tuple[str, str, int]:
+    """(scheme, host, port) for an LDAP URI. Raises DirectoryAuthError if malformed."""
+    raw = (server_uri or "").strip()
+    if not raw:
+        raise DirectoryAuthError("No server URI is set.")
+    parsed = urlparse(raw if "://" in raw else f"ldap://{raw}")
+    scheme = (parsed.scheme or "").lower()
+    if scheme not in ALLOWED_SCHEMES:
+        raise DirectoryAuthError(f"Server URI must start with ldap:// or ldaps:// (got {scheme or 'nothing'}://).")
+    host = parsed.hostname or ""
+    if not host:
+        raise DirectoryAuthError("Server URI has no host.")
+    port = parsed.port or (636 if scheme == "ldaps" else 389)
+    return scheme, host, port
+
+
+def target_is_internal(server_uri: str) -> bool:
+    """Whether the URI resolves to an address on the host's own network.
+
+    The connection test takes a server address from whoever is configuring it
+    and reports, step by step, what happened — which on a shared deployment is
+    also a way for one customer's administrator to learn which internal hosts
+    and ports answer. On a single-tenant install the directory *is* on a private
+    network, so this is a question the deployment has to answer rather than
+    something to block outright; see LDAP_ALLOW_PRIVATE_TARGETS.
+
+    Resolution failures count as not-internal: the connection will fail anyway,
+    and reporting "blocked" for a typo'd hostname would be a confusing answer to
+    the wrong question.
+    """
+    try:
+        _scheme, host, port = parse_server_uri(server_uri)
+    except DirectoryAuthError:
+        return False
+    try:
+        infos = socket.getaddrinfo(host, port, proto=socket.IPPROTO_TCP)
+    except OSError:
+        return False
+    for info in infos:
+        address = info[4][0]
+        try:
+            ip = ipaddress.ip_address(address)
+        except ValueError:
+            continue
+        if (ip.is_private or ip.is_loopback or ip.is_link_local
+                or ip.is_multicast or ip.is_reserved or ip.is_unspecified):
+            return True
+    return False
+
+
+def private_targets_allowed() -> bool:
+    """Whether the test may reach private addresses (default: yes).
+
+    True suits the single-tenant installs this product ships as, where the
+    directory sits at 10.x or 192.168.x and blocking it would break the only
+    configuration that matters. A multi-tenant deployment should set
+    LDAP_ALLOW_PRIVATE_TARGETS=0, which is what grceye.com wants.
+    """
+    return bool(getattr(settings, "LDAP_ALLOW_PRIVATE_TARGETS", True))
+
+
 def test_connection(cfg: dict, probe_username: str | None = None) -> dict:
     """Dry-run a directory configuration without logging anyone in.
 
@@ -263,10 +331,23 @@ def test_connection(cfg: dict, probe_username: str | None = None) -> dict:
     def step(name: str, ok: bool, detail: str = "") -> None:
         result["steps"].append({"step": name, "ok": ok, "detail": detail})
 
-    if not cfg.get("server_uri"):
-        step("configuration", False, "No server URI is set.")
+    try:
+        scheme, host, port = parse_server_uri(cfg.get("server_uri", ""))
+    except DirectoryAuthError as exc:
+        step("configuration", False, str(exc))
         return result
-    step("configuration", True, f"{cfg['server_uri']} (SSL: {'on' if cfg.get('use_ssl') else 'off'})")
+    step("configuration", True, f"{scheme}://{host}:{port} (SSL: {'on' if cfg.get('use_ssl') else 'off'})")
+
+    if not private_targets_allowed() and target_is_internal(cfg.get("server_uri", "")):
+        # Refused before a socket is opened, so nothing about the target is
+        # revealed — not even whether it exists.
+        step(
+            "target address", False,
+            "This deployment does not allow testing against private or loopback addresses. "
+            "Use the directory's public hostname, or ask your administrator to enable "
+            "private targets.",
+        )
+        return result
 
     try:
         ldap3 = _ldap3()

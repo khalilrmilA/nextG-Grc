@@ -65,6 +65,13 @@ class Settings(BaseSettings):
     LDAP_DEFAULT_ROLE: str = "viewer"      # role for auto-provisioned directory users
     LDAP_AUTO_CREATE: bool = True          # create a local account on first SSO login
     LDAP_ATTR_GROUPS: str = "memberOf"     # AD group membership attribute
+    # Whether Settings > Directory's "Test connection" may target private /
+    # loopback addresses. True suits a single-tenant install, where the
+    # directory is on the internal network and blocking it would break the only
+    # configuration that matters. Set to 0 on a multi-tenant deployment: the
+    # test reports step by step what happened, which there also lets one
+    # customer's admin probe the provider's internal network.
+    LDAP_ALLOW_PRIVATE_TARGETS: bool = True
     # JSON object mapping an AD group to an app role, so entitlements are
     # administered in AD rather than re-entered here. Keys match either the
     # group's CN or its full DN, case-insensitively:
