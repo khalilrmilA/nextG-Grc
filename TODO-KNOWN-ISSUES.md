@@ -7,6 +7,53 @@ false, it is in the last section so nobody re-raises it.
 
 Written 2026-09-04. Re-verify before quoting any of it in a tender response.
 
+## Index — what to do, in order
+
+Effort is engineering effort only. "Blocked" means it cannot start until
+someone outside this repo answers a question.
+
+### Do before the tender is submitted
+| # | Item | Effort | Note |
+|---|---|---|---|
+| 1.2 | Fix the RPO contradiction in the delivered PDFs | hours | Schedule the backup **or** regenerate the two PDFs. Your own System Check screen shows the mismatch today. |
+| 1.5 | Export the REST API specification as a deliverable | hours | FastAPI already emits OpenAPI 3 |
+| 1.1 | Oracle 19c — 42/84 tables fail to create | project | Eliminatory. Decide whether to bid it |
+| 1.3 | WebSphere / WebLogic / JBoss | none (commercial) | Cannot be built. Needs a positioning answer |
+| 8.5 | Tariffs, G-Cloud/N-Cloud hosting, 3-year warranty | none (commercial) | Contractual |
+
+### Highest value for the effort
+| # | Item | Effort | Why |
+|---|---|---|---|
+| 8.2 | Per-tenant label overrides | small | Explicit requirement, visible in a demo, tenant settings blob already exists to hold it |
+| 4.3 | `asyncio.to_thread` around Argon2 | one line | Largest blocking call in the request path |
+| 5.4 | Arabic in the last two PDF generators | small | Helper exists; one call per client-data field |
+| 5.3 | Restore for the other version tables | small | Same append-don't-rewrite pattern as policies |
+| 3.5 | Send `X-GRC-Client` from `_streamAi` | small | Closes a hole in the origin field just built |
+
+### Real gaps, larger builds
+| # | Item | Effort | Note |
+|---|---|---|---|
+| 2.1 | GDPR Art.17 erasure | large | 56 FKs, 1 `ondelete`, FKs off in SQLite. Log side is free — IP is not hashed |
+| 8.3 | Named / concurrent / unlimited licence models | moderate | Concurrent licensing has nothing to count against it; `user_sessions` already holds the data |
+| 8.1 | Per-table column and field preferences | moderate | Dashboard-layout model is the template |
+| 3.1 | Field-level before/after in the action trace | moderate | SQLAlchemy flush hook |
+| 3.2 | Remaining schedulers still log nothing | moderate | Helper exists — call it **after** the caller commits |
+| 4.1 | Asset cartography O(n²) + blocks the event loop | moderate | Latent; zero-impact today only because a row has a NULL owner |
+
+### Decide, then act
+| # | Item | Blocked on |
+|---|---|---|
+| 2.2 | Live DB + snapshot are in git history | Repository owner — needs a history rewrite |
+| 8.4 / GED | CMIS or vendor connector | STB naming their GED product |
+| 6.2 | Production runs in development mode | A maintenance window |
+| 5.1 | ~35 unreferenced files on disk | Judgement — **never auto-delete**, they predate checksums |
+
+### Standing
+| # | Item |
+|---|---|
+| 6.1 | `pm2 restart grceye-backend` — none of the recent backend work is live, including the evidence-upload fix |
+| 6.3 | Watch for a third occurrence of the schema drift; instrument it if it recurs |
+
 ---
 
 ## 1. Blocks the STB tender
