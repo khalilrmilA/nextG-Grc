@@ -13,6 +13,7 @@ from app.api.v1.dependencies.auth import get_current_user, get_tenant_id, requir
 from app.models.user import User, UserRole
 from app.models.policy import Policy, PolicyVersion, PolicyAttestation, PolicyStatus, AttestationStatus
 from app.models.org_unit import OrgEntity, BusinessProcess
+from app.services import pdf_arabic
 
 router = APIRouter()
 
@@ -265,7 +266,7 @@ async def export_policy_pdf(pid: str, db: AsyncSession = Depends(get_db), _: Use
     label_style = ParagraphStyle("Label", parent=styles["Normal"], fontSize=9, textColor=colors.HexColor("#64748b"))
 
     story = []
-    story.append(Paragraph(p.title, h1))
+    story.append(Paragraph(pdf_arabic.paragraph_markup(p.title, bold=True), h1))
     if p.policy_number:
         story.append(Paragraph(f"Policy No. {p.policy_number}", label_style))
     story.append(Spacer(1, 0.3*cm))
@@ -292,16 +293,16 @@ async def export_policy_pdf(pid: str, db: AsyncSession = Depends(get_db), _: Use
 
     if p.description:
         story.append(Paragraph("Description", h2))
-        story.append(Paragraph(p.description, body))
+        story.append(Paragraph(pdf_arabic.paragraph_markup(p.description), body))
 
     if cv:
         story.append(Paragraph(f"Policy Content — v{cv.version_number}", h2))
         if cv.change_summary:
-            story.append(Paragraph(f"Change summary: {cv.change_summary}", label_style))
+            story.append(Paragraph("Change summary: " + pdf_arabic.paragraph_markup(cv.change_summary), label_style))
         story.append(Spacer(1, 0.3*cm))
         for line in cv.content.split("\n"):
             if line.strip():
-                story.append(Paragraph(line.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;"), body))
+                story.append(Paragraph(pdf_arabic.paragraph_markup(line), body))
             else:
                 story.append(Spacer(1, 0.25*cm))
 

@@ -23,6 +23,7 @@ from app.models.user import User, UserRole
 from app.models.risk import Risk
 from app.models.risk_cartography import RiskCartography
 from app.models.tenant import Tenant
+from app.services import pdf_arabic
 
 router = APIRouter()
 
@@ -447,9 +448,9 @@ def _build_cartography_pdf(
 
     # ── Title block
     now = datetime.now(timezone.utc).strftime("%d %b %Y")
-    story.append(Paragraph(cartography.name, st["RCH1"]))
+    story.append(Paragraph(pdf_arabic.paragraph_markup(cartography.name, bold=True), st["RCH1"]))
     if cartography.description:
-        story.append(Paragraph(cartography.description, st["RCBody"]))
+        story.append(Paragraph(pdf_arabic.paragraph_markup(cartography.description), st["RCBody"]))
     story.append(Paragraph(f"{tenant_name}  ·  Exported {now}  ·  {rows}×{cols} grid", st["RCSmall"]))
     story.append(HRFlowable(width="100%", thickness=1, color=colors.HexColor("#e5e7eb"), spaceAfter=10))
 

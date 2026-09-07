@@ -22,6 +22,7 @@ from app.models.vendor import Vendor, VendorContract, ContractValidationStatus
 from app.models.compliance import ComplianceAssessment, ComplianceGap
 from app.models.audit import Audit, AuditFinding
 from app.models.tenant import Tenant
+from app.services import pdf_arabic
 
 
 # ── Colors ────────────────────────────────────────────────────────────────
@@ -118,12 +119,29 @@ def _kpi_bar(kpis: list[dict]):
     return t
 
 
+_AR_CELL = ParagraphStyle("_arcell", fontName="Helvetica", fontSize=8, leading=10, alignment=TA_RIGHT)
+
+
+def _cell(value):
+    """Table cell, promoted to a right-aligned Arabic Paragraph when needed.
+
+    Client data (risk titles, asset and vendor names) is where Arabic actually
+    turns up, and a plain string cell renders through the table's Helvetica —
+    which has no Arabic glyphs, so the text came out as solid boxes. Latin
+    values are returned untouched so existing reports are unchanged.
+    """
+    if not isinstance(value, str) or not pdf_arabic.has_arabic(value):
+        return value
+    return Paragraph(pdf_arabic.paragraph_markup(value), _AR_CELL)
+
+
 def _table(headers: list[str], rows: list[list], widths=None):
     """Clean data table with subtle styling."""
     if not rows:
         return Paragraph("<i>No data available.</i>", ParagraphStyle("_nd", fontName="Helvetica-Oblique", fontSize=9, textColor=GRAY_500))
 
-    data = [headers] + rows
+    rows = [[_cell(c) for c in row] for row in rows]
+    data = [[_cell(h) for h in headers]] + rows
     if not widths:
         widths = [PAGE_W / len(headers)] * len(headers)
 
@@ -470,11 +488,11 @@ async def generate_single_audit_report(db: AsyncSession, audit: Audit, org: str)
 
     if audit.scope:
         els.append(_section(st, "Scope"))
-        els.append(Paragraph(audit.scope, st["Body"]))
+        els.append(Paragraph(pdf_arabic.paragraph_markup(audit.scope), st["Body"]))
 
     if audit.executive_summary:
         els.append(_section(st, "Executive Summary"))
-        els.append(Paragraph(audit.executive_summary, st["Body"]))
+        els.append(Paragraph(pdf_arabic.paragraph_markup(audit.executive_summary), st["Body"]))
 
     els.append(_section(st, "Findings"))
     f_rows = []
