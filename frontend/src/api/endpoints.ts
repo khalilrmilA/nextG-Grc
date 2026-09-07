@@ -1229,6 +1229,10 @@ export const scenarioVersionsApi = {
 
 // ─── Applied Controls ───────────────────────
 export const appliedControlsApi = {
+  // The register, for reporting or an audit — carries each control's latest
+  // effectiveness evaluation on the same row.
+  exportUrl: (format: "csv" | "xml" = "csv") => `/data/export/applied-controls?format=${format}`,
+  history: (id: string) => apiClient.get(`/applied-controls/${id}/history`).then((r) => r.data),
   list: (params?: { status?: string }) =>
     apiClient.get("/applied-controls", { params }).then((r) => r.data),
   get: (id: string) => apiClient.get(`/applied-controls/${id}`).then((r) => r.data),
@@ -1576,6 +1580,10 @@ export const controlEvalApi = {
   due: () => apiClient.get("/control-evaluations/due").then((r) => r.data),
   create: (data: Record<string, unknown>) => apiClient.post("/control-evaluations", data).then((r) => r.data),
   controls: () => apiClient.get("/applied-controls").then((r) => r.data),
+  // Controls declared ineffective whose follow-up is still open.
+  actionRequired: () => apiClient.get("/control-evaluations/action-required").then((r) => r.data),
+  setRemediation: (id: string, data: Record<string, unknown>) =>
+    apiClient.patch(`/control-evaluations/${id}/remediation`, data).then((r) => r.data),
 };
 
 // ── Vulnerability scanner import (Elite Pack) ────────────────────────────────

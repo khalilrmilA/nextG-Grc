@@ -52,6 +52,7 @@ class NotificationType(str, enum.Enum):
     ASSET_REVIEW_DUE = "asset_review_due"
     # Applied control events
     CONTROL_EXPIRED = "control_expired"
+    CONTROL_EVALUATION_DUE = "control_evaluation_due"
     # Auth / security events
     NEW_DEVICE_LOGIN = "new_device_login"
     # General

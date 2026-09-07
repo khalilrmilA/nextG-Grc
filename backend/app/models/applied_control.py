@@ -75,6 +75,10 @@ class AppliedControl(Base):
     framework_control_ids: Mapped[list] = mapped_column(JSON, default=list)  # Multiple framework controls
     evidence_ids: Mapped[list] = mapped_column(JSON, default=list)  # Evidence proving this control
     risk_scenario_ids: Mapped[list] = mapped_column(JSON, default=list)  # Scenarios this control mitigates
+    # Risks from the register this control mitigates. The requirement says a
+    # control is linked to "un ou plusieurs risques *ou* scenarios"; scenarios
+    # were covered, the register itself was not.
+    risk_ids: Mapped[list] = mapped_column(JSON, default=list)
     vulnerability_ids: Mapped[list] = mapped_column(JSON, default=list)  # Vulnerabilities this control fixes
 
     # Ownership

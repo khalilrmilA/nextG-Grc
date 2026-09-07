@@ -14,7 +14,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.models.user import User
-from app.models.control_evaluation import ControlEvaluation, derive_performance_level
+from app.models.control_evaluation import (
+    ControlEvaluation, derive_performance_level, EVALUATION_METHODS,
+    NON_PERFORMANT, REMEDIATION_STATUSES,
+)
+from app.models.audit import Audit
+from app.services import control_registry
 from app.models.applied_control import AppliedControl
 from app.api.v1.dependencies.auth import get_tenant_id
 from app.api.v1.dependencies.features import require_feature
@@ -37,6 +42,21 @@ class EvaluationCreate(BaseModel):
     quatre_yeux: int = Field(0, ge=0, le=2)
     next_evaluation_at: datetime | None = None
     notes: str | None = None
+    # What the score rests on. The requirement names internal audits, technical
+    # tests and performance indicators explicitly; without recording which, an
+    # 8/10 from a documented penetration test looks identical to one given from
+    # memory in a meeting.
+    method: str | None = None
+    evidence_ref: str | None = None
+    audit_id: str | None = None
+
+
+class RemediationUpdate(BaseModel):
+    """The follow-up on a control that evaluated badly."""
+    remediation_status: str | None = None
+    remediation_plan: str | None = None
+    remediation_owner_id: str | None = None
+    remediation_due_date: str | None = None
 
 
 class EvaluationOut(BaseModel):
@@ -51,6 +71,14 @@ class EvaluationOut(BaseModel):
     evaluated_at: datetime | None = None
     next_evaluation_at: datetime | None = None
     notes: str | None = None
+    method: str | None = None
+    evidence_ref: str | None = None
+    audit_id: str | None = None
+    remediation_status: str = "not_required"
+    remediation_plan: str | None = None
+    remediation_owner_id: str | None = None
+    remediation_due_date: str | None = None
+    evaluated_by_id: str | None = None
     model_config = {"from_attributes": True}
 
 
@@ -68,10 +96,21 @@ async def create_evaluation(
             AppliedControl.tenant_id == tenant_id,
         )
     )
-    if ctrl.scalar_one_or_none() is None:
+    control = ctrl.scalar_one_or_none()
+    if control is None:
         raise HTTPException(status_code=404, detail="Applied control not found")
 
+    if body.method and body.method not in EVALUATION_METHODS:
+        raise HTTPException(422, f"method must be one of {EVALUATION_METHODS}")
+    if body.audit_id:
+        found = (await db.execute(
+            select(Audit.id).where(Audit.id == body.audit_id, Audit.tenant_id == tenant_id)
+        )).scalar_one_or_none()
+        if found is None:
+            raise HTTPException(422, "Unknown audit for this tenant")
+
     total = body.formalisme + body.type_controle + body.timing + body.tracabilite + body.quatre_yeux
+    level = derive_performance_level(total)
     evaluation = ControlEvaluation(
         tenant_id=tenant_id,
         applied_control_id=body.applied_control_id,
@@ -82,11 +121,27 @@ async def create_evaluation(
         timing=body.timing,
         tracabilite=body.tracabilite,
         quatre_yeux=body.quatre_yeux,
-        performance_level=derive_performance_level(total),
+        performance_level=level,
         next_evaluation_at=body.next_evaluation_at,
         notes=body.notes,
+        method=body.method,
+        evidence_ref=body.evidence_ref,
+        audit_id=body.audit_id,
+        # A control that comes out non-performant opens its follow-up here
+        # rather than waiting for someone to remember. The requirement asks for
+        # specific tracking of controls declared ineffective, and a follow-up
+        # that depends on the evaluator also filing it is one that gets skipped
+        # exactly when the result is bad.
+        remediation_status="open" if level == NON_PERFORMANT else "not_required",
     )
     db.add(evaluation)
+    control_registry.record(
+        db, control, "evaluated", actor=current_user,
+        changes={"performance_level": {"from": None, "to": level}},
+        note=(f"Scored {total}/10"
+              + (f" by {body.method.replace('_', ' ')}" if body.method else "")
+              + ("; follow-up opened" if level == NON_PERFORMANT else "")),
+    )
     await db.commit()
     await db.refresh(evaluation)
     return evaluation
@@ -105,6 +160,79 @@ async def list_evaluations(
     stmt = stmt.order_by(ControlEvaluation.created_at.desc())
     result = await db.execute(stmt)
     return list(result.scalars().all())
+
+
+@router.get("/action-required", response_model=list[EvaluationOut])
+async def list_action_required(
+    current_user: Annotated[User, Depends(_GATE)],
+    tenant_id: Annotated[str, Depends(get_tenant_id)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    """Controls declared ineffective whose follow-up is still open.
+
+    Declared before "/{...}" style routes so the literal path is not captured.
+    This is the working list the requirement asks for: not every bad score
+    ever recorded, but the ones nobody has closed out yet.
+    """
+    rows = (await db.execute(
+        select(ControlEvaluation)
+        .where(
+            ControlEvaluation.tenant_id == tenant_id,
+            ControlEvaluation.remediation_status.in_(("open", "in_progress")),
+        )
+        .order_by(ControlEvaluation.evaluated_at.desc().nullslast())
+    )).scalars().all()
+    return [EvaluationOut.model_validate(r) for r in rows]
+
+
+@router.patch("/{evaluation_id}/remediation", response_model=EvaluationOut)
+async def update_remediation(
+    evaluation_id: str,
+    body: RemediationUpdate,
+    current_user: Annotated[User, Depends(_GATE)],
+    tenant_id: Annotated[str, Depends(get_tenant_id)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    """Record or close the action plan attached to a poor evaluation."""
+    evaluation = (await db.execute(
+        select(ControlEvaluation).where(
+            ControlEvaluation.id == evaluation_id,
+            ControlEvaluation.tenant_id == tenant_id,
+        )
+    )).scalar_one_or_none()
+    if evaluation is None:
+        raise HTTPException(status_code=404, detail="Evaluation not found")
+
+    if body.remediation_status and body.remediation_status not in REMEDIATION_STATUSES:
+        raise HTTPException(422, f"remediation_status must be one of {REMEDIATION_STATUSES}")
+    if body.remediation_status == "done" and not (
+        body.remediation_plan or evaluation.remediation_plan
+    ):
+        # Closing a follow-up with no record of what was done leaves the audit
+        # trail asserting a remediation that cannot be evidenced.
+        raise HTTPException(422, "Describe what was done before closing the follow-up")
+
+    before = {
+        "remediation_status": evaluation.remediation_status,
+        "remediation_plan": evaluation.remediation_plan,
+    }
+    for field, value in body.model_dump(exclude_unset=True).items():
+        if value is not None:
+            setattr(evaluation, field, value)
+
+    control = (await db.execute(
+        select(AppliedControl).where(AppliedControl.id == evaluation.applied_control_id)
+    )).scalar_one_or_none()
+    if control is not None:
+        control_registry.record(
+            db, control, "updated", actor=current_user,
+            changes={k: {"from": v, "to": getattr(evaluation, k)}
+                     for k, v in before.items() if v != getattr(evaluation, k)},
+            note="Evaluation follow-up updated",
+        )
+    await db.commit()
+    await db.refresh(evaluation)
+    return evaluation
 
 
 @router.get("/due", response_model=list[EvaluationOut])

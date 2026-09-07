@@ -10,6 +10,24 @@
  * existing translation. Placeholders ({{n}}) preserved; proper nouns (CVE/PDF/OCR) kept.
  */
 export const gapEn = {
+  ctrleval: {
+    method_label: "What this evaluation is based on",
+    method_none: "Not stated",
+    method_internal_audit: "Internal audit",
+    method_technical_test: "Technical test",
+    method_performance_indicator: "Performance indicator",
+    method_document_review: "Document review",
+    method_interview: "Interview",
+    evidence_label: "Evidence reference",
+    evidence_ph: "Audit report, test ticket or indicator",
+    stat_action: "Follow-up open",
+    action_title: "Controls declared ineffective — follow-up open",
+    action_no_plan: "No action plan recorded yet",
+    action_due: "due",
+    remediation_open: "open",
+    remediation_in_progress: "in progress",
+    remediation_done: "done",
+  },
   threats: {
     watch_title: "Threat watch",
     watch_subtitle: "{{n}} item(s) from CISA, SANS and supply-chain feeds — read here, not filed in the register",
@@ -269,6 +287,24 @@ export const gapEn = {
 };
 
 export const gapFr = {
+  ctrleval: {
+    method_label: "Sur quoi repose cette évaluation",
+    method_none: "Non précisé",
+    method_internal_audit: "Audit interne",
+    method_technical_test: "Test technique",
+    method_performance_indicator: "Indicateur de performance",
+    method_document_review: "Revue documentaire",
+    method_interview: "Entretien",
+    evidence_label: "Référence de la preuve",
+    evidence_ph: "Rapport d'audit, ticket de test ou indicateur",
+    stat_action: "Suivi ouvert",
+    action_title: "Contrôles déclarés inefficaces — suivi ouvert",
+    action_no_plan: "Aucun plan d'action enregistré",
+    action_due: "échéance",
+    remediation_open: "ouvert",
+    remediation_in_progress: "en cours",
+    remediation_done: "clôturé",
+  },
   threats: {
     watch_title: "Veille des menaces",
     watch_subtitle: "{{n}} élément(s) issus des flux CISA, SANS et chaîne d'approvisionnement — à lire ici, non versés au registre",
@@ -528,6 +564,24 @@ export const gapFr = {
 };
 
 export const gapAr = {
+  ctrleval: {
+    method_label: "على ماذا يستند هذا التقييم",
+    method_none: "غير محدَّد",
+    method_internal_audit: "تدقيق داخلي",
+    method_technical_test: "اختبار تقني",
+    method_performance_indicator: "مؤشر أداء",
+    method_document_review: "مراجعة وثائقية",
+    method_interview: "مقابلة",
+    evidence_label: "مرجع الدليل",
+    evidence_ph: "تقرير تدقيق أو تذكرة اختبار أو مؤشر",
+    stat_action: "متابعة مفتوحة",
+    action_title: "ضوابط أُعلن عدم فعاليتها — متابعة مفتوحة",
+    action_no_plan: "لم تُسجَّل خطة عمل بعد",
+    action_due: "الاستحقاق",
+    remediation_open: "مفتوح",
+    remediation_in_progress: "قيد التنفيذ",
+    remediation_done: "مغلق",
+  },
   threats: {
     watch_title: "رصد التهديدات",
     watch_subtitle: "{{n}} عنصرًا من تدفقات CISA وSANS وسلسلة التوريد — تُقرأ هنا ولا تُدرج في السجل",

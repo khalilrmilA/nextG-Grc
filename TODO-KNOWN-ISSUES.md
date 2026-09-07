@@ -42,6 +42,7 @@ someone outside this repo answers a question.
 | 3.2 | Remaining schedulers still log nothing | moderate | Helper exists — call it **after** the caller commits |
 | 4.1 | Asset cartography O(n²) + blocks the event loop | moderate | Latent; zero-impact today only because a row has a NULL owner |
 | 12.1 | ~~Threat pending queue~~ | done | Feeds now land in the threat watch, not the register |
+| 14.3 | Applied-control create/edit/delete take any authenticated user | small | Validation is gated; the control itself is not |
 | 11.1 | CAPEC catalog (ids are bridged, names are not) | small | Near-copy of `mitre_cwe_sync.py`; only if STB asks for attack-pattern search |
 
 ### Decide, then act
@@ -705,4 +706,53 @@ returned 500 for the whole tenant rather than skipping the row.
 
 Found while seeding a test incident. `ThreatOut` already carried exactly this
 guard, for exactly this reason; `IncidentOut` now does too.
+
+---
+
+## 14. Applied-controls register and effectiveness evaluation (added 2026-09-07)
+
+Audited against the security-measures register and the control-effectiveness
+blocks. The five evaluation criteria and their performance levels were already
+built and correct; five other rules had nothing behind them.
+
+### 14.1 Verified as MET
+| Requirement | Evidence |
+|---|---|
+| Controls linked to risks or risk scenarios | `risk_scenario_ids` already; `risk_ids` added so the register itself is covered too |
+| Validation by a security referent | `POST /{id}/validate` gated to CISO / risk manager, with notes. Verified: a viewer gets 403 |
+| Regular follow-up on operational condition | Effectiveness evaluations on a cadence, plus reminders at 14/7/0 days and while overdue, capped at 30 days |
+| Modifications historised | `applied_control_history` with before/after per field. A status change is recorded as `status_changed` rather than `updated`, because the requirement singles that out and a reviewer wants to find them without reading every diff |
+| Register exports for reporting or audit | `GET /data/export/applied-controls` (CSV/XML), carrying each control's **latest evaluation on the same row** — an auditor asking for the register always asks how well each measure works, and joining two exports by hand is how transcription errors happen |
+| Five criteria → performance level | Formalisme, type, timing, traçabilité, quatre-yeux, each 0-2, summed to performant (≥8) / moyennement (≥5) / non performant |
+| Periodic evaluations, mandatory | `next_evaluation_at` with the reminder above — it was stored and listed, but nothing told anyone, and an obligation that only surfaces when someone opens the screen is not scheduled |
+| Results documented and tracked | Evaluation history per control, plus the register export |
+| Specific follow-up for ineffective controls, with action plan | Opens **automatically** when a score comes out non-performant, so it does not depend on the evaluator also remembering to file it. `GET /control-evaluations/action-required` is the working queue; closing one without describing what was done is refused |
+| Status changes fully traced | `status_changed` entries, and `validated` / `rejected` / `evaluated` as their own actions |
+| Evaluations based on audits, technical tests or indicators | `method` (five values, validated), `evidence_ref`, and `audit_id` linked to an audit held here. Without it, an 8/10 from a documented penetration test was indistinguishable from one given from memory in a meeting |
+
+### 14.2 Fixed along the way — evaluations outlived their controls
+There is no FK cascade from `applied_controls` to `control_evaluations`, so
+deleting a control left its evaluations behind. Those are not history — they
+are live rows that keep appearing in the evaluation list and, when the
+follow-up was still open, in the action-required queue, pointing at a control
+that no longer exists. Reproduced: 2 orphans after one delete.
+
+Evaluations are now removed with their control. The record that the control
+existed and was evaluated is kept in `applied_control_history`, which is where
+it belongs — and which survives the deletion by design.
+
+**Live database was clean** (0 orphans) — this had not bitten yet.
+
+### 14.3 Still open: control edits are ungated
+`POST`, `PATCH` and `DELETE /applied-controls` take any authenticated user.
+Validation is correctly restricted to CISO / risk manager, but the control
+itself — a deployed security measure — can be created, edited or deleted by
+anyone with a login. Deletion at least demands a written reason, and every
+change is now in the history, so it is traceable rather than silent.
+
+Not changed here because tightening it is a behaviour change on a live
+deployment and belongs with the wider role review, not inside a requirements
+pass. Effort: small. Recommended gate: the same CISO / risk-manager tuple the
+validation endpoints already use, with `security_analyst` able to edit but not
+delete.
 

@@ -17,6 +17,9 @@ from app.core.database import get_db
 from app.api.v1.dependencies.auth import get_current_user, get_tenant_id, require_roles
 from app.models.user import User, UserRole
 from app.models.applied_control import AppliedControl, ControlValidationStatus
+from app.models.applied_control_history import AppliedControlHistory
+from app.models.control_evaluation import ControlEvaluation
+from app.services import control_registry as registry
 from app.models.activity_log import ActivityLog
 from app.services.activity_chain import chain_and_add
 
@@ -75,7 +78,10 @@ async def create_control(body: ACCreate, db: AsyncSession = Depends(get_db), use
                        effort=body.effort, cost=body.cost, recurring_cost=body.recurring_cost,
                        framework_control_ids=body.framework_control_ids,
                        owner_id=body.owner_id or user.id, link=body.link, tags=body.tags)
-    db.add(c); await db.flush(); await db.commit(); await db.refresh(c)
+    db.add(c); await db.flush()
+    registry.record(db, c, "created", actor=user,
+                    changes=registry.diff({}, registry.snapshot(c)))
+    await db.commit(); await db.refresh(c)
     return ACOut.model_validate(c)
 
 @router.get("/{cid}", response_model=ACOut)
@@ -86,15 +92,19 @@ async def get_control(cid: str, db: AsyncSession = Depends(get_db), _: User = De
     return ACOut.model_validate(c)
 
 @router.patch("/{cid}", response_model=ACOut)
-async def update_control(cid: str, body: ACUpdate, db: AsyncSession = Depends(get_db), _: User = Depends(get_current_user), tenant_id: str = Depends(get_tenant_id)):
+async def update_control(cid: str, body: ACUpdate, db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user), tenant_id: str = Depends(get_tenant_id)):
     r = await db.execute(select(AppliedControl).where(AppliedControl.id == cid, AppliedControl.tenant_id == tenant_id))
     c = r.scalar_one_or_none()
     if not c: raise HTTPException(404, "Control not found")
+    before = registry.snapshot(c)
     for f in ["name","description","category","csf_function","status","progress","eta","expiration",
               "effort","cost","recurring_cost","framework_control_ids","evidence_ids",
-              "risk_scenario_ids","vulnerability_ids","owner_id","link","tags"]:
+              "risk_scenario_ids","risk_ids","vulnerability_ids","owner_id","link","tags"]:
         v = getattr(body, f, None)
         if v is not None: setattr(c, f, v)
+    changes = registry.diff(before, registry.snapshot(c))
+    if changes:
+        registry.record(db, c, registry.action_for(changes), actor=user, changes=changes)
     await db.commit(); await db.refresh(c)
     return ACOut.model_validate(c)
 
@@ -110,6 +120,21 @@ async def delete_control(
     c = r.scalar_one_or_none()
     if not c: raise HTTPException(404, "Control not found")
     control_name = c.name
+    # Recorded before the delete, with the full final state: once the row is
+    # gone this entry is the only evidence the control ever existed.
+    registry.record(db, c, "deleted", actor=user,
+                    changes=registry.diff(registry.snapshot(c), {}), note=reason)
+    # Remove this control's effectiveness evaluations with it. There is no FK
+    # cascade, and an evaluation whose control no longer exists is not history —
+    # it is a live row that keeps appearing in the evaluation list and, if its
+    # follow-up was still open, in the action-required queue, pointing at
+    # nothing. The record that the control existed and was evaluated is kept in
+    # applied_control_history, which is where it belongs.
+    orphans = (await db.execute(
+        select(ControlEvaluation).where(ControlEvaluation.applied_control_id == c.id)
+    )).scalars().all()
+    for ev in orphans:
+        await db.delete(ev)
     await db.delete(c); await db.commit()
 
     # The generic ActivityLogMiddleware only records {method, path} for every mutating
@@ -129,6 +154,37 @@ async def delete_control(
         ))
     except Exception:
         pass
+
+
+class ControlHistoryOut(BaseModel):
+    id: str; applied_control_id: str; action: str; changes: dict
+    control_ref_id: str | None = None; control_name: str | None = None
+    note: str | None = None
+    actor_id: str | None = None; actor_email: str | None = None
+    created_at: datetime
+    model_config = {"from_attributes": True}
+
+
+@router.get("/{cid}/history", response_model=list[ControlHistoryOut])
+async def get_control_history(
+    cid: str,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(get_current_user),
+    tenant_id: str = Depends(get_tenant_id),
+):
+    """Everything that has happened to this control, newest first.
+
+    Scoped on the history rows rather than by loading the control first,
+    because the entry that matters most is the one written for a control that
+    no longer exists.
+    """
+    rows = (await db.execute(
+        select(AppliedControlHistory)
+        .where(AppliedControlHistory.tenant_id == tenant_id,
+               AppliedControlHistory.applied_control_id == cid)
+        .order_by(AppliedControlHistory.created_at.desc())
+    )).scalars().all()
+    return [ControlHistoryOut.model_validate(r) for r in rows]
 
 
 # ── Security-referent validation workflow (Elite Pack) ─────────────────────
@@ -154,11 +210,17 @@ async def validate_control(
     c = r.scalar_one_or_none()
     if not c:
         raise HTTPException(404, "Control not found")
+    previous = c.validation_status
     c.validation_status = ControlValidationStatus.VALIDATED.value
     c.validated_by_id = current_user.id
     c.validated_at = _utcnow()
     if body.notes is not None:
         c.validation_notes = body.notes
+    registry.record(
+        db, c, "validated", actor=current_user,
+        changes={"validation_status": {"from": previous, "to": c.validation_status}},
+        note=body.notes,
+    )
     await db.commit(); await db.refresh(c)
     return ACOut.model_validate(c)
 
@@ -176,10 +238,16 @@ async def reject_control(
     c = r.scalar_one_or_none()
     if not c:
         raise HTTPException(404, "Control not found")
+    previous = c.validation_status
     c.validation_status = ControlValidationStatus.REJECTED.value
     c.validated_by_id = current_user.id
     c.validated_at = _utcnow()
     if body.notes is not None:
         c.validation_notes = body.notes
+    registry.record(
+        db, c, "rejected", actor=current_user,
+        changes={"validation_status": {"from": previous, "to": c.validation_status}},
+        note=body.notes,
+    )
     await db.commit(); await db.refresh(c)
     return ACOut.model_validate(c)

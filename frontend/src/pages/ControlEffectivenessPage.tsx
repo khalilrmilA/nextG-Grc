@@ -1,7 +1,12 @@
 import { useState, useEffect } from "react";
-import { Plus, X, Loader2, Crown, Gauge, AlertTriangle } from "lucide-react";
+import { Plus, X, Loader2, Crown, Gauge, AlertTriangle, Wrench } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { controlEvalApi } from "@/api/endpoints";
+
+// The sources the requirement names: internal audits, technical tests,
+// performance indicators. Recorded so a score from a documented test is
+// distinguishable from one given from memory.
+const EVAL_METHODS = ["internal_audit", "technical_test", "performance_indicator", "document_review", "interview"];
 
 const PERF_BADGE: Record<string, string> = {
   performant: "bg-green-100 text-green-700 border-green-200",
@@ -25,6 +30,7 @@ export default function ControlEffectivenessPage() {
   const { t } = useTranslation();
   const [evals, setEvals] = useState<any[]>([]);
   const [due, setDue] = useState<any[]>([]);
+  const [actionRequired, setActionRequired] = useState<any[]>([]);
   const [controls, setControls] = useState<ControlLite[]>([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
@@ -35,13 +41,18 @@ export default function ControlEffectivenessPage() {
     applied_control_id: "",
     formalisme: 1, type_controle: 1, timing: 1, tracabilite: 1, quatre_yeux: 1,
     next_evaluation_at: "",
+    method: "",
+    evidence_ref: "",
     notes: "",
   };
   const [form, setForm] = useState({ ...emptyForm });
 
   async function load() {
     try {
-      const [list, dueList] = await Promise.all([controlEvalApi.list(), controlEvalApi.due()]);
+      const [list, dueList, todoList] = await Promise.all([
+        controlEvalApi.list(), controlEvalApi.due(), controlEvalApi.actionRequired(),
+      ]);
+      setActionRequired(Array.isArray(todoList) ? todoList : []);
       setEvals(Array.isArray(list) ? list : []);
       setDue(Array.isArray(dueList) ? dueList : []);
     } catch {
@@ -76,6 +87,8 @@ export default function ControlEffectivenessPage() {
         timing: form.timing, tracabilite: form.tracabilite, quatre_yeux: form.quatre_yeux,
         next_evaluation_at: form.next_evaluation_at || null,
         notes: form.notes || null,
+        method: form.method || null,
+        evidence_ref: form.evidence_ref || null,
       });
       setShowModal(false); setForm({ ...emptyForm }); setLoading(true); load();
     } catch (err: any) {
@@ -102,10 +115,11 @@ export default function ControlEffectivenessPage() {
         </button>
       </div>
 
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-3 gap-4">
         {[
           { label: t("ctrleval.stat_total", "Evaluations"), value: evals.length, icon: Gauge, color: "text-blue-600 bg-blue-50" },
           { label: t("ctrleval.stat_due", "Due for re-assessment"), value: due.length, icon: AlertTriangle, color: "text-amber-600 bg-amber-50" },
+          { label: t("ctrleval.stat_action", "Follow-up open"), value: actionRequired.length, icon: Wrench, color: "text-red-600 bg-red-50" },
         ].map((s) => (
           <div key={s.label} className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
             <div className="flex items-center gap-3">
@@ -115,6 +129,35 @@ export default function ControlEffectivenessPage() {
           </div>
         ))}
       </div>
+
+      {actionRequired.length > 0 && (
+        <div className="bg-white rounded-2xl border border-red-200 shadow-sm overflow-hidden">
+          <div className="flex items-center gap-2 px-6 py-4 border-b border-red-100 bg-red-50/60">
+            <Wrench className="w-4 h-4 text-red-600" />
+            <span className="text-sm font-semibold text-gray-800">
+              {t("ctrleval.action_title", "Controls declared ineffective — follow-up open")}
+            </span>
+          </div>
+          <div className="divide-y divide-gray-50">
+            {actionRequired.map((ev: any) => (
+              <div key={ev.id} className="px-6 py-3 flex items-start gap-3">
+                <span className="mt-0.5 shrink-0 inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold border bg-red-100 text-red-700 border-red-200">
+                  {String(t(`ctrleval.remediation_${ev.remediation_status}` as never, ev.remediation_status))}
+                </span>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm text-gray-800">
+                    {controlName(ev.applied_control_id)}
+                  </p>
+                  <p className="text-xs text-gray-500">
+                    {ev.remediation_plan || t("ctrleval.action_no_plan", "No action plan recorded yet")}
+                    {ev.remediation_due_date ? ` · ${t("ctrleval.action_due", "due")} ${ev.remediation_due_date}` : ""}
+                  </p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
         {loading ? (
@@ -184,6 +227,32 @@ export default function ControlEffectivenessPage() {
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">{t("ctrleval.next", "Next evaluation")}</label>
                   <input type="date" value={form.next_evaluation_at} onChange={(e) => setForm({ ...form, next_evaluation_at: e.target.value })} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    {t("ctrleval.method_label", "What this evaluation is based on")}
+                  </label>
+                  <select
+                    value={form.method}
+                    onChange={(e) => setForm({ ...form, method: e.target.value })}
+                    className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="">{t("ctrleval.method_none", "Not stated")}</option>
+                    {EVAL_METHODS.map((mth) => (
+                      <option key={mth} value={mth}>{String(t(`ctrleval.method_${mth}` as never, mth.replace(/_/g, " ")))}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    {t("ctrleval.evidence_label", "Evidence reference")}
+                  </label>
+                  <input
+                    value={form.evidence_ref}
+                    onChange={(e) => setForm({ ...form, evidence_ref: e.target.value })}
+                    placeholder={t("ctrleval.evidence_ph", "Audit report, test ticket or indicator")}
+                    className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
                 </div>
               </div>
               <div>

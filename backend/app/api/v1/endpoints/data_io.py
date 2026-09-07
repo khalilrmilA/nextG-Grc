@@ -28,6 +28,8 @@ from app.models.audit import Audit
 from app.models.policy import Policy
 from app.models.compliance import ComplianceAssessment
 from app.models.threat import Threat
+from app.models.applied_control import AppliedControl
+from app.models.control_evaluation import ControlEvaluation
 from app.services.xml_export import rows_to_xml, xml_to_rows
 
 router = APIRouter()
@@ -271,6 +273,67 @@ async def export_threats(format: str = "csv", db: AsyncSession = Depends(get_db)
         "created_at": t.created_at.isoformat() if t.created_at else "",
     } for t in threats]
     return _export_response(rows, "threats_export", "threats", "threat", format)
+
+
+@router.get("/export/applied-controls")
+async def export_applied_controls(format: str = "csv", db: AsyncSession = Depends(get_db), _: User = Depends(get_current_user), tenant_id: str = Depends(get_tenant_id)):
+    """The security-measures register, for reporting or an audit.
+
+    "Le registre permet des exports pour reporting ou audits" — applied
+    controls were the one register with no export, so the only way to hand an
+    auditor the list of deployed measures was a screenshot.
+
+    Carries the latest effectiveness evaluation alongside each control, because
+    an auditor asking for the register invariably asks how well each measure
+    works, and joining two exports by hand is how transcription errors happen.
+    """
+    controls = list((await db.execute(
+        select(AppliedControl).where(AppliedControl.tenant_id == tenant_id)
+        .order_by(AppliedControl.ref_id)
+    )).scalars().all())
+
+    # Latest evaluation per control, in one pass.
+    evaluations = list((await db.execute(
+        select(ControlEvaluation).where(ControlEvaluation.tenant_id == tenant_id)
+        .order_by(ControlEvaluation.evaluated_at.desc().nullslast())
+    )).scalars().all())
+    latest: dict = {}
+    for ev in evaluations:
+        latest.setdefault(ev.applied_control_id, ev)
+
+    def _v(x):
+        return x.value if hasattr(x, "value") else ("" if x is None else str(x))
+
+    rows = []
+    for c in controls:
+        ev = latest.get(c.id)
+        rows.append({
+            "ref_id": c.ref_id or "", "name": c.name, "description": c.description or "",
+            "category": _v(c.category), "csf_function": _v(c.csf_function),
+            "status": _v(c.status), "progress": c.progress if c.progress is not None else "",
+            "validation_status": _v(c.validation_status),
+            "validated_at": c.validated_at.isoformat() if c.validated_at else "",
+            "owner_id": c.owner_id or "",
+            "eta": c.eta or "", "expiration": c.expiration or "",
+            "cost": c.cost if c.cost is not None else "",
+            "recurring_cost": c.recurring_cost if c.recurring_cost is not None else "",
+            "linked_risks": "; ".join(c.risk_ids or []),
+            "linked_risk_scenarios": "; ".join(c.risk_scenario_ids or []),
+            "linked_vulnerabilities": "; ".join(c.vulnerability_ids or []),
+            "framework_controls": "; ".join(c.framework_control_ids or []),
+            # Latest effectiveness evaluation, on the same row.
+            "performance_level": ev.performance_level if ev else "",
+            "evaluation_score": (
+                ev.formalisme + ev.type_controle + ev.timing + ev.tracabilite + ev.quatre_yeux
+            ) if ev else "",
+            "evaluation_method": (ev.method or "") if ev else "",
+            "evaluation_evidence": (ev.evidence_ref or "") if ev else "",
+            "evaluated_at": ev.evaluated_at.isoformat() if ev and ev.evaluated_at else "",
+            "next_evaluation_at": ev.next_evaluation_at.isoformat() if ev and ev.next_evaluation_at else "",
+            "remediation_status": (ev.remediation_status or "") if ev else "",
+            "created_at": c.created_at.isoformat() if c.created_at else "",
+        })
+    return _export_response(rows, "applied_controls_export", "applied_controls", "applied_control", format)
 
 
 # ── IMPORTS ──────────────────────────────────────────────────────────────

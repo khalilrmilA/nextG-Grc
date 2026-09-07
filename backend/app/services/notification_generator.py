@@ -830,6 +830,92 @@ async def check_asset_review_deadlines(db: AsyncSession) -> int:
     return created
 
 
+async def check_control_evaluations_due(db: AsyncSession) -> int:
+    """Remind the control owner and the CISO when an effectiveness evaluation is due.
+
+    "Des evaluations periodiques, planifiees selon une frequence definie, sont
+    obligatoires pour chaque controle." The due date was stored and a /due
+    endpoint listed it, but nothing told anybody — an obligation that only
+    surfaces when somebody thinks to open the screen is not scheduled.
+
+    Same 14/7/0-day window and 30-day overdue cap as the risk, asset and threat
+    review checks, so the notification list reads consistently.
+    """
+    from app.models.applied_control import AppliedControl
+    from app.models.control_evaluation import ControlEvaluation
+
+    created = 0
+    today = datetime.utcnow().date()
+    horizon = datetime.utcnow() + timedelta(days=14)
+
+    # The latest evaluation per control carries the schedule; earlier ones are
+    # superseded and must not raise a second reminder.
+    rows = (await db.execute(
+        select(ControlEvaluation)
+        .where(ControlEvaluation.next_evaluation_at.isnot(None),
+               ControlEvaluation.next_evaluation_at <= horizon)
+        .order_by(ControlEvaluation.evaluated_at.desc().nullslast())
+    )).scalars().all()
+
+    seen: set[str] = set()
+    for ev in rows:
+        if ev.applied_control_id in seen:
+            continue
+        seen.add(ev.applied_control_id)
+
+        due = ev.next_evaluation_at.date()
+        days = (due - today).days
+        if days < -30:
+            continue
+        if days < 0:
+            severity, when = "high", f"was due {abs(days)} day(s) ago"
+        elif days == 0:
+            severity, when = "high", "is due today"
+        else:
+            severity, when = "medium", f"is due in {days} day(s)"
+
+        control = (await db.execute(
+            select(AppliedControl).where(AppliedControl.id == ev.applied_control_id)
+        )).scalar_one_or_none()
+        if control is None:
+            # An evaluation left behind by a control deleted before this was
+            # cleaned up. Nothing to remind anyone about.
+            continue
+
+        recipients = {u.id: u for u in await get_recipients_for_tenant(db, ev.tenant_id)}
+        if control.owner_id and control.owner_id not in recipients:
+            owner = (await db.execute(
+                select(User).where(User.id == control.owner_id, User.is_active == True)  # noqa: E712
+            )).scalar_one_or_none()
+            if owner:
+                recipients[owner.id] = owner
+
+        label = control.ref_id or control.name[:30]
+        for user in recipients.values():
+            if await notification_exists(
+                db, user.id, NotificationType.CONTROL_EVALUATION_DUE, control.id, within_days=7
+            ):
+                continue
+            await create_notification(
+                db,
+                user=user,
+                notif_type=NotificationType.CONTROL_EVALUATION_DUE,
+                title=f"Control evaluation {when}: {label}",
+                message=(
+                    f"The effectiveness evaluation for '{control.name}' {when} "
+                    f"({due.isoformat()}). Last result: "
+                    f"{(ev.performance_level or 'not recorded').replace('_', ' ')}."
+                ),
+                entity_id=control.id,
+                entity_type="applied_control",
+                link=f"/applied-controls?highlight={control.id}",
+                severity=severity,
+            )
+            created += 1
+
+    return created
+
+
 async def check_scenario_priority_alerts(db: AsyncSession) -> int:
     """Notify when a scenario reaches the tenant's configured priority threshold.
 
@@ -1267,6 +1353,7 @@ async def run_all_checks(db: AsyncSession) -> dict:
         results["asset_eol"] = await check_asset_eol(db)
         results["threat_profile_review_due"] = await check_threat_profile_reviews(db)
         results["scenario_priority_alert"] = await check_scenario_priority_alerts(db)
+        results["control_evaluation_due"] = await check_control_evaluations_due(db)
     except Exception as e:
         print(f"Asset EOL check failed: {e}")
 
