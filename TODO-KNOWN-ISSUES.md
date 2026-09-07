@@ -17,6 +17,7 @@ someone outside this repo answers a question.
 |---|---|---|---|
 | 1.2 | Fix the RPO contradiction in the delivered PDFs | hours | Schedule the backup **or** regenerate the two PDFs. Your own System Check screen shows the mismatch today. |
 | 1.5 | Export the REST API specification as a deliverable | hours | FastAPI already emits OpenAPI 3 |
+| 9.5 | Training plan is 2 pages; regenerate to STB's 4-profile structure | hours | Documentation only |
 | 1.1 | Oracle 19c — 42/84 tables fail to create | project | Eliminatory. Decide whether to bid it |
 | 1.3 | WebSphere / WebLogic / JBoss | none (commercial) | Cannot be built. Needs a positioning answer |
 | 8.5 | Tariffs, G-Cloud/N-Cloud hosting, 3-year warranty | none (commercial) | Contractual |
@@ -39,6 +40,9 @@ someone outside this repo answers a question.
 | 3.1 | Field-level before/after in the action trace | moderate | SQLAlchemy flush hook |
 | 3.2 | Remaining schedulers still log nothing | moderate | Helper exists — call it **after** the caller commits |
 | 4.1 | Asset cartography O(n²) + blocks the event loop | moderate | Latent; zero-impact today only because a row has a NULL owner |
+| 9.1 | Délégations — nothing exists | moderate | Named requirement for the Administrateur role |
+| 9.2 | Revues d'habilitations — nothing exists | moderate | Named requirement; also an ISO 27001 / SOC 2 control |
+| 9.3/9.4 | Propriétaire métier half-implemented, no perimeter scoping | moderate | Design the scoping once — three roles are defined "on their perimeter" |
 
 ### Decide, then act
 | # | Item | Blocked on |
@@ -369,3 +373,88 @@ and one adapter would cover Alfresco, Nuxeo and SharePoint.
 | Export PDF / Excel / CSV | All three verified working: csv 436 B/10 ms, xlsx 5.4 KB/39 ms, pdf 2.4 KB/34 ms; invalid format rejected 400 |
 | Homogénéité graphique | Single shared component set and Tailwind config across all modules |
 | Navigation claire et cohérente | One sidebar taxonomy, 4 groups, role-gated per item |
+
+---
+
+## 9. Habilitations and training (added 2026-09-04)
+
+The eight roles STB names all exist and are enforced. The gaps are in what the
+*Administrateur* role is required to manage, and in how far the *Propriétaire
+métier* role actually reaches.
+
+### 9.1 Délégations — **GAP**
+**Required:** the Administrateur manages *les délégations*.
+**Verified:** no delegation model, endpoint or column exists anywhere —
+searched `delegat*` across models and endpoints; the only hits are unrelated
+prose in a docstring and a comment.
+**Cost:** there is no way to hand someone else your authority for a holiday or
+an absence, and no record that it happened. In a bank this is a routine
+operational need, not an edge case.
+**Effort:** moderate. Needs a delegation record (from, to, scope, start, end),
+resolution inside `get_effective_roles`, automatic expiry, and an audit entry at
+grant and revoke.
+
+### 9.2 Revues d'habilitations — **GAP**
+**Required:** the Administrateur manages *les revues d'habilitations* — periodic
+access recertification.
+**Verified:** nothing exists — searched `access_review`, `recertif`,
+`entitlement_review`, `attestation_campaign`: no matches. `PolicyAttestation`
+is unrelated (it attests to reading a policy, not to holding an entitlement).
+**Cost:** this is a named ISO 27001 / SOC 2 control and a standing audit
+question. A GRC platform that cannot recertify its *own* access is an awkward
+finding.
+**Effort:** moderate, and the pieces exist. A campaign over
+`get_effective_roles` output, per-user approve/revoke decisions, and the
+hash-chained log to record them. The rights-change audit built in `7da7578`
+already produces the "what changed since the last review" half.
+
+### 9.3 Propriétaire métier is only half implemented — **PARTIAL**
+**Required:** *qualification des actifs, validation des risques et des plans de
+traitement sur son périmètre métier*.
+**Verified:** `BUSINESS_OWNER` is granted on 4 endpoints — three in `assets.py`
+(asset qualification, which matches) and one in `data_io.py`. No risk or
+treatment-plan endpoint grants it. Confirmed by test: a business owner reads
+risks (200) but cannot act on them (403).
+**Cost:** two of the three responsibilities in the role definition are not
+implemented.
+
+### 9.4 No "périmètre métier" scoping — **GAP**
+**Verified:** access is tenant-wide. There is no per-owner, per-scope or
+per-perimeter restriction on assets or risks — searched for owner-scoped
+filtering in `assets.py` and `risks.py`: none.
+**Cost:** a business owner sees and (where permitted) acts on the entire
+tenant's data, not their own scope. Every role definition in this requirement
+block is scoped by responsibility; the implementation is scoped only by tenant.
+**Note:** this is the structural half of 9.3 — worth designing once, since
+Responsable Risques and Analyste sécurité have the same "on their perimeter"
+character.
+
+### 9.5 Training plan is thin against what is asked — **PARTIAL**
+**Verified:** `deliverables/STB_Training_Plan{,_FR}.pdf` exists in both
+languages, but is **2 pages / ~4,900 characters**. It mentions hours,
+installation, exploitation, sauvegarde and restauration, and names Direction,
+auditeurs, support and escalade — but does not mention *paramétrage*, and does
+not use STB's own four-profile taxonomy (Administrateurs techniques (DSI, RSSI
+adjoint) / Utilisateurs fonctionnels / Direction et décideurs / Équipe support).
+**Required and not evidently covered:** hours per business profile, the training
+materials and tools, detailed session content per profile, the five named
+technical sessions (architecture, server installation, exploitation, workstation
+install transfer, application configuration transfer), and the 20 working days
+of go-live assistance.
+**Effort:** documentation only — regenerate from
+`scripts/generate_stb_deliverables.py` against STB's structure.
+
+### 9.6 `READ_ONLY_ROLES` is dead code — cosmetic
+`models/user.py:45` defines it; nothing imports it. The behaviour is correct and
+enforced — `dependencies/auth.py:76,84` block writes for VIEWER and EXECUTIVE
+explicitly — so this is a tidy-up, not a hole. Noted only so nobody reads the
+unused constant as the enforcement and "simplifies" the real checks away.
+
+### 9.7 Verified as MET — do not treat these as gaps
+| Requirement | Evidence |
+|---|---|
+| All 8 STB roles exist | `super_admin, tenant_admin, risk_manager, business_owner, security_analyst, ciso, auditor, executive` all in `UserRole` (13 defined in total) |
+| Roles are actually enforced | Endpoint gate counts: CISO 110, tenant_admin 26, risk_manager 17, super_admin 16, auditor 13, security_analyst 10, business_owner 4 |
+| Direction Générale = strategic read-only | Tested: dashboard 200, risks 200, create-risk **403**. Zero `require_roles(EXECUTIVE)` gates is correct by design — it reads through open endpoints and is write-blocked globally |
+| Habilitations are traçables | Rights changes now write a before/after entry to the hash-chained log across admin, group and LDAP paths (`7da7578`, `5e878fd`) |
+| Assistance corrective / évolutive / préventive | Contractual, not code |
