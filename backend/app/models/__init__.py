@@ -54,7 +54,7 @@ from app.models.governance import (
 from app.models.archive import ArchiveRecord, ArchivingRule
 from app.models.scenario_version import RiskScenarioVersion
 from app.models.stored_file_version import StoredFileVersion
-from app.models.access_governance import AccessDelegation, AccessReviewCampaign, AccessReviewItem
+from app.models.access_governance import AccessDelegation, AccessReviewCampaign, AccessReviewItem, CustomRole
 from app.models.scanner_connector import ScannerConnector
 from app.models.report_schedule import ReportSchedule, ReportFrequency
 from app.models.login_event import LoginEvent
@@ -75,7 +75,7 @@ __all__ = [
     "Audit", "AuditFinding", "AuditEvidence",
     "Policy", "PolicyVersion", "PolicyAttestation",
     "StoredFileVersion",
-    "AccessDelegation", "AccessReviewCampaign", "AccessReviewItem",
+    "AccessDelegation", "AccessReviewCampaign", "AccessReviewItem", "CustomRole",
     "Vendor", "VendorAssessment", "VendorRisk", "VendorContract",
     "Asset",
     "ActivityLog",

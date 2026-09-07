@@ -462,3 +462,222 @@ async def complete_campaign(
     await _audit(db, tenant_id=tenant_id, actor=current_user, action="access_review_completed",
                  entity_type="access_review", entity_id=c.id, details={"name": c.name})
     return await _campaign_out(db, c)
+
+
+# ── Custom roles (rôles personnalisés) ───────────────────────────────────────
+# An organisation names the jobs it actually has and says which built-in roles
+# each one needs. See models/access_governance.py for why these compose the
+# built-ins rather than defining permissions from scratch.
+
+class CustomRoleIn(BaseModel):
+    name: str
+    base_roles: list[str]
+    description: str | None = None
+    is_active: bool = True
+
+
+class CustomRoleUpdate(BaseModel):
+    name: str | None = None
+    base_roles: list[str] | None = None
+    description: str | None = None
+    is_active: bool | None = None
+
+
+class CustomRoleOut(BaseModel):
+    id: str
+    name: str
+    description: str | None
+    base_roles: list
+    is_active: bool
+    assigned_users: int = 0
+
+    model_config = {"from_attributes": True}
+
+
+def _validate_base_roles(roles: list[str]) -> list[str]:
+    """Only delegable built-ins may be composed.
+
+    tenant_admin and super_admin are excluded for the same reason they cannot be
+    delegated or granted through a group: a custom role would otherwise be a way
+    to mint an administrator without going through the checks that exist to stop
+    exactly that.
+    """
+    if not roles:
+        raise HTTPException(400, "A custom role must grant at least one built-in role.")
+    assignable = {r.value for r in ASSIGNABLE_ROLES}
+    wanted = {str(r).strip().lower() for r in roles}
+    refused = wanted - assignable
+    if refused:
+        raise HTTPException(403, f"These roles cannot be composed into a custom role: {sorted(refused)}")
+    return sorted(wanted)
+
+
+async def _custom_role_out(db, cr) -> CustomRoleOut:
+    holders = (await db.execute(select(User).where(User.tenant_id == cr.tenant_id))).scalars().all()
+    return CustomRoleOut(
+        id=cr.id, name=cr.name, description=cr.description,
+        base_roles=list(cr.base_roles or []), is_active=cr.is_active,
+        assigned_users=sum(1 for u in holders if cr.id in (u.custom_role_ids or [])),
+    )
+
+
+@router.post("/custom-roles", response_model=CustomRoleOut, status_code=201)
+async def create_custom_role(
+    body: CustomRoleIn,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: Annotated[User, Depends(require_roles(UserRole.TENANT_ADMIN))],
+    tenant_id: Annotated[str, Depends(get_tenant_id)],
+):
+    """Define a role in the organisation's own vocabulary."""
+    from app.models.access_governance import CustomRole
+
+    name = (body.name or "").strip()
+    if not name:
+        raise HTTPException(400, "A name is required.")
+    clash = (await db.execute(select(CustomRole).where(
+        CustomRole.tenant_id == tenant_id, CustomRole.name == name))).scalar_one_or_none()
+    if clash:
+        raise HTTPException(409, f"A custom role named '{name}' already exists.")
+
+    base = _validate_base_roles(body.base_roles)
+    cr = CustomRole(tenant_id=tenant_id, name=name, description=body.description,
+                    base_roles=base, is_active=body.is_active, created_by_id=current_user.id)
+    db.add(cr)
+    await db.commit()
+    await db.refresh(cr)
+
+    await _audit(db, tenant_id=tenant_id, actor=current_user, action="custom_role_created",
+                 entity_type="custom_role", entity_id=cr.id,
+                 details={"name": name, "base_roles": base})
+    return await _custom_role_out(db, cr)
+
+
+@router.get("/custom-roles", response_model=list[CustomRoleOut])
+async def list_custom_roles(
+    db: Annotated[AsyncSession, Depends(get_db)],
+    _: Annotated[User, Depends(require_roles(UserRole.TENANT_ADMIN, UserRole.CISO, UserRole.AUDITOR))],
+    tenant_id: Annotated[str, Depends(get_tenant_id)],
+):
+    from app.models.access_governance import CustomRole
+
+    rows = (await db.execute(select(CustomRole).where(
+        CustomRole.tenant_id == tenant_id).order_by(CustomRole.name))).scalars().all()
+    return [await _custom_role_out(db, cr) for cr in rows]
+
+
+@router.patch("/custom-roles/{role_id}", response_model=CustomRoleOut)
+async def update_custom_role(
+    role_id: str,
+    body: CustomRoleUpdate,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: Annotated[User, Depends(require_roles(UserRole.TENANT_ADMIN))],
+    tenant_id: Annotated[str, Depends(get_tenant_id)],
+):
+    """Change a custom role. Takes effect immediately for everyone holding it."""
+    from app.models.access_governance import CustomRole
+
+    cr = (await db.execute(select(CustomRole).where(
+        CustomRole.id == role_id, CustomRole.tenant_id == tenant_id))).scalar_one_or_none()
+    if not cr:
+        raise HTTPException(404, "Custom role not found")
+
+    before = {"name": cr.name, "base_roles": list(cr.base_roles or []), "is_active": cr.is_active}
+    if body.name is not None:
+        cr.name = body.name.strip()
+    if body.description is not None:
+        cr.description = body.description
+    if body.base_roles is not None:
+        cr.base_roles = _validate_base_roles(body.base_roles)
+    if body.is_active is not None:
+        cr.is_active = body.is_active
+    await db.commit()
+    await db.refresh(cr)
+
+    after = {"name": cr.name, "base_roles": list(cr.base_roles or []), "is_active": cr.is_active}
+    if after != before:
+        # Editing a role silently changes what every holder may do, so it is a
+        # rights change and belongs in the audit trail as one.
+        await _audit(db, tenant_id=tenant_id, actor=current_user, action="rights_change",
+                     entity_type="custom_role", entity_id=cr.id,
+                     details={"changed": {k: {"from": before[k], "to": after[k]}
+                                          for k in before if before[k] != after[k]},
+                              "source": "custom_role_edit"})
+    return await _custom_role_out(db, cr)
+
+
+@router.delete("/custom-roles/{role_id}", status_code=204)
+async def delete_custom_role(
+    role_id: str,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: Annotated[User, Depends(require_roles(UserRole.TENANT_ADMIN))],
+    tenant_id: Annotated[str, Depends(get_tenant_id)],
+):
+    """Delete a custom role and strip it from everyone holding it.
+
+    Removing the assignments matters: a dangling id would resolve to nothing and
+    the user would quietly lose access with no record of why.
+    """
+    from app.models.access_governance import CustomRole
+
+    cr = (await db.execute(select(CustomRole).where(
+        CustomRole.id == role_id, CustomRole.tenant_id == tenant_id))).scalar_one_or_none()
+    if not cr:
+        raise HTTPException(404, "Custom role not found")
+
+    holders = [u for u in (await db.execute(select(User).where(
+        User.tenant_id == tenant_id))).scalars().all() if role_id in (u.custom_role_ids or [])]
+    for u in holders:
+        u.custom_role_ids = [c for c in (u.custom_role_ids or []) if c != role_id]
+
+    name, base = cr.name, list(cr.base_roles or [])
+    await db.delete(cr)
+    await db.commit()
+
+    await _audit(db, tenant_id=tenant_id, actor=current_user, action="custom_role_deleted",
+                 entity_type="custom_role", entity_id=role_id,
+                 details={"name": name, "base_roles": base,
+                          "unassigned_user_ids": [u.id for u in holders]})
+
+
+class AssignCustomRolesIn(BaseModel):
+    custom_role_ids: list[str]
+
+
+@router.put("/users/{user_id}/custom-roles", response_model=list[str])
+async def assign_custom_roles(
+    user_id: str,
+    body: AssignCustomRolesIn,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: Annotated[User, Depends(require_roles(UserRole.TENANT_ADMIN))],
+    tenant_id: Annotated[str, Depends(get_tenant_id)],
+):
+    """Replace the set of custom roles a user holds."""
+    from app.models.access_governance import CustomRole
+    from app.services.activity_chain import is_system_actor
+
+    user = (await db.execute(select(User).where(
+        User.id == user_id, User.tenant_id == tenant_id))).scalar_one_or_none()
+    if not user:
+        raise HTTPException(404, "User not found")
+    if is_system_actor(user.email):
+        raise HTTPException(403, "The automated-task account cannot be modified.")
+
+    wanted = sorted(set(body.custom_role_ids or []))
+    if wanted:
+        found = (await db.execute(select(CustomRole).where(
+            CustomRole.id.in_(wanted), CustomRole.tenant_id == tenant_id))).scalars().all()
+        missing = set(wanted) - {c.id for c in found}
+        if missing:
+            raise HTTPException(404, f"Unknown custom role(s): {sorted(missing)}")
+
+    before = list(user.custom_role_ids or [])
+    user.custom_role_ids = wanted
+    await db.commit()
+
+    if before != wanted:
+        await _audit(db, tenant_id=tenant_id, actor=current_user, action="rights_change",
+                     entity_type="user", entity_id=user.id,
+                     details={"subject_user_id": user.id,
+                              "changed": {"custom_role_ids": {"from": before, "to": wanted}},
+                              "source": "custom_role_assignment"})
+    return wanted

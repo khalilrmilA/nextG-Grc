@@ -65,6 +65,11 @@ class User(Base):
     # when granted by a Group they belong to (see app/services/authz.py). Lets an
     # admin carve out an exception for one member without touching the group.
     excluded_roles: Mapped[list] = mapped_column(JSON, nullable=False, default=list, server_default="[]")
+
+    # Tenant-defined roles held by this user (see models/access_governance.py).
+    # Expanded to their built-in roles by get_effective_roles, so custom roles
+    # need no change to any require_roles check.
+    custom_role_ids: Mapped[list] = mapped_column(JSON, nullable=False, default=list, server_default="[]")
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     is_verified: Mapped[bool] = mapped_column(Boolean, default=False)
     expires_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)

@@ -467,7 +467,7 @@ believed to be missing are in fact present** — recorded below with the evidenc
 because assuming a gap that isn't there costs as much in a tender as missing one
 that is.
 
-### 10.1 Custom roles — **GAP** (the only real one in this block)
+### 10.1 Custom roles — **BUILT** (composition model; see note)
 **Required:** role management adapted to the organisation.
 **Verified:** `UserRole` is a fixed enum of 13 values. Groups
 (`models/group.py`) bundle **existing** roles onto members — `roles` is a JSON
@@ -477,10 +477,17 @@ throughout (`require_roles`).
 **So:** an organisation can name a group freely and combine built-in roles into
 it, which covers a good part of the need. What it cannot do is define a role
 with its own permission set.
-**Effort:** large if done properly — it means moving ~377 routes from role-name
-checks to capability checks. A cheaper middle path is a named, tenant-defined
-role that resolves to a set of built-in roles, which is what Groups already
-almost are; worth scoping before committing to the full model.
+**Built:** the composition model — a tenant defines a role in its own
+vocabulary ("Analyste Conformité STB") that resolves to a set of built-in roles,
+expanded in `get_effective_roles` so every `require_roles` check honours it
+unchanged. Composed roles are restricted to ASSIGNABLE_ROLES, so a custom role
+cannot mint an administrator.
+
+**Still not possible, deliberately:** a role with a genuinely bespoke permission
+set. That needs ~377 routes moved from role-name checks to capability checks,
+which would put every existing authorisation decision at risk for a requirement
+the composition model already answers in practice. Revisit only if the client
+asks for permissions the built-in roles cannot express between them.
 
 ### 10.2 Verified as MET — including two believed missing
 | Requirement | Evidence |

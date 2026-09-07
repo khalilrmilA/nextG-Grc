@@ -15,8 +15,9 @@ def _utcnow() -> datetime:
 async def get_effective_roles(user: User, db: AsyncSession) -> set[str]:
     """A user's effective role set.
 
-    Personal roles, plus roles granted by any Group they belong to, plus roles
-    currently delegated to them, minus their own excluded_roles carve-outs.
+    Personal roles, plus the built-in roles composed by any tenant-defined
+    custom role they hold, plus roles granted by any Group they belong to, plus
+    roles currently delegated to them, minus their own excluded_roles carve-outs.
 
     Delegations are resolved here so every existing ``require_roles`` check
     honours them without being modified, and their window is evaluated now
@@ -26,7 +27,7 @@ async def get_effective_roles(user: User, db: AsyncSession) -> set[str]:
     excluded_roles is applied last and therefore also overrides a delegation:
     an explicit carve-out on an account must not be reachable by lending.
     """
-    from app.models.access_governance import AccessDelegation
+    from app.models.access_governance import AccessDelegation, CustomRole
 
     base = set(user.roles or [user.role.value if hasattr(user.role, "value") else user.role])
 
@@ -36,6 +37,22 @@ async def get_effective_roles(user: User, db: AsyncSession) -> set[str]:
     for g in groups:
         if user.id in (g.member_ids or []):
             base |= set(g.roles or [])
+
+    # Tenant-defined roles resolve to the built-in roles they compose, so a
+    # custom role needs no change to any require_roles check. Inactive ones
+    # grant nothing — disabling a role must take effect without having to strip
+    # it from every user who holds it.
+    custom_ids = list(user.custom_role_ids or [])
+    if custom_ids:
+        customs = (await db.execute(
+            select(CustomRole).where(
+                CustomRole.id.in_(custom_ids),
+                CustomRole.tenant_id == user.tenant_id,
+                CustomRole.is_active == True,  # noqa: E712
+            )
+        )).scalars().all()
+        for cr in customs:
+            base |= set(cr.base_roles or [])
 
     now = _utcnow()
     delegations = (await db.execute(

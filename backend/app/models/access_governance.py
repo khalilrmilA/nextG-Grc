@@ -113,3 +113,41 @@ class AccessReviewItem(Base):
     # decision that is recorded but never enforced is the failure mode that
     # makes access reviews theatre.
     applied: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+
+
+class CustomRole(Base):
+    """A role the organisation defines for itself, in its own vocabulary.
+
+    The built-in roles are a fixed set chosen for a generic GRC product; a bank
+    has its own job titles and its own idea of what each one may do. A custom
+    role carries the organisation's name for a job ("Analyste Conformité",
+    "Pilote de Risque") and resolves to the built-in roles that job needs.
+
+    It composes built-ins rather than defining permissions from scratch, and
+    that is a deliberate limit: authorisation across the application is
+    role-name based, so a role with a genuinely bespoke permission set would
+    mean rewriting every route's check. Composition gives an organisation its
+    own vocabulary and its own combinations today, without a rewrite that would
+    put every existing authorisation decision at risk.
+
+    Resolution happens in :func:`app.services.authz.get_effective_roles`, so
+    every existing ``require_roles`` check honours a custom role without being
+    modified.
+    """
+    __tablename__ = "custom_roles"
+
+    __table_args__ = (
+        Index("ix_custom_role_tenant_name", "tenant_id", "name", unique=True),
+    )
+
+    tenant_id: Mapped[str] = mapped_column(String(36), ForeignKey("tenants.id"), nullable=False, index=True)
+    name: Mapped[str] = mapped_column(String(100), nullable=False)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    # Built-in roles this custom role grants. Always a subset of
+    # ASSIGNABLE_ROLES — tenant_admin and super_admin are never composable, or a
+    # custom role would be a way to mint an administrator.
+    base_roles: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    created_by_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
