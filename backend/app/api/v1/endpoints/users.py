@@ -278,7 +278,6 @@ async def update_user(
     if body.is_active is not None:
         user.is_active = body.is_active
 
-    role_changed = False
     if body.roles is not None:
         if not body.roles:
             raise HTTPException(400, "At least one role is required")
@@ -293,8 +292,6 @@ async def update_user(
             validated.append(role_enum)
         user.role = validated[0]
         user.roles = [r.value for r in validated]
-        new_role = user.role.value if hasattr(user.role, "value") else user.role
-        role_changed = new_role != old_role or user.roles != old_roles
 
     if body.excluded_roles is not None:
         validated_excl: list[str] = []

@@ -120,8 +120,8 @@ async def update_group(
     # the users whose access moved, so "who could do what, when" is answerable
     # from the log rather than only from today's group state.
     before = {
-        "roles": list(group.roles or []),
-        "member_ids": list(group.member_ids or []),
+        "roles": sorted(group.roles or []),
+        "member_ids": sorted(group.member_ids or []),
     }
 
     if body.name is not None:
@@ -136,7 +136,10 @@ async def update_group(
     await db.commit()
     await db.refresh(group)
 
-    after = {"roles": list(group.roles or []), "member_ids": list(group.member_ids or [])}
+    # Sorted on both sides: membership and roles are sets, so re-submitting the
+    # same ids in a different order is not a rights change and must not
+    # manufacture an audit entry.
+    after = {"roles": sorted(group.roles or []), "member_ids": sorted(group.member_ids or [])}
     if after != before:
         added = sorted(set(after["member_ids"]) - set(before["member_ids"]))
         removed = sorted(set(before["member_ids"]) - set(after["member_ids"]))
