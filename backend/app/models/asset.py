@@ -50,6 +50,21 @@ DEFAULT_CATEGORY_FOR_TYPE = {
 }
 
 
+class AssetLifecycleState(str, enum.Enum):
+    """The phases an asset moves through, from acquisition to disposal.
+
+    The column was free text, so the phases the methodology names could not be
+    tracked consistently — "retired", "Retired" and "retire" were three states.
+    These values are chosen to keep the data already in use valid (in_use,
+    maintenance, retired) while naming the two ends that were missing.
+    """
+    ACQUISITION = "acquisition"       # ordered / received, not yet in service
+    IN_USE = "in_use"                 # exploitation
+    MAINTENANCE = "maintenance"
+    RETIRED = "retired"               # retrait — withdrawn from service
+    DECOMMISSIONED = "decommissioned" # désaffectation — disposed of
+
+
 class AssetCriticality(str, enum.Enum):
     CRITICAL = "critical"
     HIGH = "high"
@@ -113,7 +128,10 @@ class Asset(Base):
     )
 
     # Lifecycle (Elite Pack): acquisition -> in_use -> maintenance -> retired.
-    lifecycle_state: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    # One of AssetLifecycleState, validated at the API boundary. A change is
+    # written to the hash-chained activity log with its before/after, so the
+    # phase history is auditable without a second table.
+    lifecycle_state: Mapped[str | None] = mapped_column(String(20), nullable=True, index=True)
     acquired_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     end_of_life_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 

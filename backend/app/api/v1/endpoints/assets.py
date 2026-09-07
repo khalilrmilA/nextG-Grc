@@ -14,8 +14,13 @@ from app.core.database import get_db
 from app.api.v1.dependencies.auth import get_current_user, get_tenant_id, require_roles
 from app.api.v1.dependencies.features import require_feature
 from app.models.user import User, UserRole
-from app.models.asset import Asset, AssetType, AssetCriticality, AssetCategory, DEFAULT_CATEGORY_FOR_TYPE
+from app.models.asset import (
+    Asset, AssetType, AssetCriticality, AssetCategory, AssetLifecycleState,
+    DEFAULT_CATEGORY_FOR_TYPE,
+)
 from app.models.asset_history import AssetValuationHistory
+from app.models.activity_log import ActivityLog
+from app.services.activity_chain import chain_and_add
 
 router = APIRouter()
 
@@ -143,6 +148,15 @@ class CiaHistoryOut(BaseModel):
 
 
 _VALID_CLASSES = {AssetCategory.PRIMARY.value, AssetCategory.SUPPORT.value}
+_VALID_LIFECYCLE = {s.value for s in AssetLifecycleState}
+
+
+def _validate_lifecycle(state: str | None) -> None:
+    if state is not None and state not in _VALID_LIFECYCLE:
+        raise HTTPException(
+            status_code=422,
+            detail=f"lifecycle_state must be one of {sorted(_VALID_LIFECYCLE)}",
+        )
 
 
 def _resolve_asset_class(given: str | None, asset_type: str) -> str:
@@ -285,6 +299,8 @@ async def create_asset(body: AssetCreate, db: AsyncSession = Depends(get_db), _:
     if owner is None:
         raise HTTPException(status_code=422, detail="owner_id must reference a user in this tenant")
 
+    _validate_lifecycle(body.lifecycle_state)
+
     a = Asset(
         tenant_id=tenant_id, name=body.name, asset_type=AssetType(body.asset_type),
         criticality=AssetCriticality(body.criticality), description=body.description,
@@ -309,7 +325,7 @@ async def get_asset(aid: str, db: AsyncSession = Depends(get_db), _: User = Depe
 
 
 @router.patch("/{aid}", response_model=AssetOut)
-async def update_asset(aid: str, body: AssetUpdate, db: AsyncSession = Depends(get_db), _: User = Depends(require_roles(UserRole.BUSINESS_OWNER, UserRole.CISO)), tenant_id: str = Depends(get_tenant_id)):
+async def update_asset(aid: str, body: AssetUpdate, db: AsyncSession = Depends(get_db), current_user: User = Depends(require_roles(UserRole.BUSINESS_OWNER, UserRole.CISO)), tenant_id: str = Depends(get_tenant_id)):
     a = await _get_asset(aid, tenant_id, db)
     # The business owner is mandatory, so an update must not be able to point it
     # at someone outside the tenant. create_asset already checks this; the update
@@ -322,6 +338,8 @@ async def update_asset(aid: str, body: AssetUpdate, db: AsyncSession = Depends(g
             raise HTTPException(status_code=422, detail="owner_id must reference a user in this tenant")
     if body.asset_class is not None and body.asset_class not in _VALID_CLASSES:
         raise HTTPException(status_code=422, detail="asset_class must be 'primary' or 'support'")
+    _validate_lifecycle(body.lifecycle_state)
+    previous_lifecycle = a.lifecycle_state
     for f in ["name", "description", "owner_id", "hosting_type", "cloud_provider", "location",
               "data_classification", "contains_pii", "contains_phi", "contains_pci", "tags",
               "asset_class", "serves_asset_ids", "business_process_id", "org_entity_id",
@@ -335,6 +353,27 @@ async def update_asset(aid: str, body: AssetUpdate, db: AsyncSession = Depends(g
     if body.criticality:
         a.criticality = AssetCriticality(body.criticality)
     await db.commit(); await db.refresh(a)
+
+    # A phase change is the thing the lifecycle requirement asks to be able to
+    # trace — when an asset entered maintenance, when it was retired, and who
+    # moved it. The generic request log records only that a PATCH happened, so
+    # the before/after is written explicitly to the same hash-chained trail.
+    if a.lifecycle_state != previous_lifecycle:
+        try:
+            await chain_and_add(db, ActivityLog(
+                tenant_id=tenant_id,
+                user_id=current_user.id,
+                user_email=current_user.email,
+                action="lifecycle_change",
+                entity_type="asset",
+                entity_id=a.id,
+                entity_name=a.name,
+                details={"changed": {"lifecycle_state": {
+                    "from": previous_lifecycle, "to": a.lifecycle_state}}},
+                origin="api",
+            ))
+        except Exception:
+            pass
     return AssetOut.model_validate(a)
 
 
@@ -392,6 +431,69 @@ async def cia_history(
         ).order_by(AssetValuationHistory.created_at.desc())
     )).scalars().all()
     return list(rows)
+
+
+class AssetIncidentOut(BaseModel):
+    id: str
+    title: str
+    category: str | None = None
+    severity: str | None = None
+    status: str | None = None
+    detected_at: str | None = None
+    resolved_at: str | None = None
+    financial_impact: float | None = None
+    linked_via: str          # "asset_link" | "free_text"
+
+    model_config = {"from_attributes": True}
+
+
+@router.get("/{aid}/incidents", response_model=list[AssetIncidentOut])
+async def asset_incident_history(
+    aid: str,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    _: Annotated[User, Depends(get_current_user)],
+    tenant_id: Annotated[str, Depends(get_tenant_id)],
+):
+    """Incidents that hit this asset — "historique des incidents liés à l'actif".
+
+    Incidents already recorded which assets they affected, but nothing let you
+    ask the question from the asset's side, which is the direction that matters
+    when judging whether a piece of equipment should be replaced.
+
+    Two links are reported and distinguished rather than merged. ``asset_link``
+    is the validated reference in ``affected_asset_ids``. ``free_text`` is a
+    name match against ``affected_systems``, which existed before that link did
+    and still carries older incidents — including it means the history is not
+    silently missing everything recorded before the link was introduced, and
+    labelling it means nobody mistakes a name match for a confirmed reference.
+    """
+    from app.models.incident import Incident
+
+    asset = await _get_asset(aid, tenant_id, db)
+    rows = (await db.execute(
+        select(Incident).where(Incident.tenant_id == tenant_id)
+        .order_by(Incident.detected_at.desc())
+    )).scalars().all()
+
+    name = (asset.name or "").strip().lower()
+    out: list[AssetIncidentOut] = []
+    for inc in rows:
+        linked = aid in (inc.affected_asset_ids or [])
+        by_name = bool(name) and any(
+            name == str(sysname).strip().lower() for sysname in (inc.affected_systems or [])
+        )
+        if not (linked or by_name):
+            continue
+        out.append(AssetIncidentOut(
+            id=inc.id, title=inc.title,
+            category=inc.category.value if hasattr(inc.category, "value") else inc.category,
+            severity=inc.severity.value if hasattr(inc.severity, "value") else inc.severity,
+            status=inc.status.value if hasattr(inc.status, "value") else inc.status,
+            detected_at=inc.detected_at, resolved_at=inc.resolved_at,
+            financial_impact=inc.financial_impact,
+            linked_via="asset_link" if linked else "free_text",
+        ))
+    return out
 
 
 @router.delete("/{aid}", status_code=204)
