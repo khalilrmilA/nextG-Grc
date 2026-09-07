@@ -1212,6 +1212,13 @@ export const riskScenariosApi = {
   delete: (id: string) => apiClient.delete(`/risk-scenarios/${id}`),
 };
 
+export const scenarioPriorityApi = {
+  // How this organisation ranks its scenarios; changing it re-scores them all.
+  get: () => apiClient.get("/risk-scenarios/priority-criteria").then((r) => r.data),
+  update: (data: Record<string, unknown>) =>
+    apiClient.patch("/risk-scenarios/priority-criteria", data).then((r) => r.data),
+};
+
 export const scenarioVersionsApi = {
   list: (scenarioId: string) => apiClient.get(`/scenario-versions/${scenarioId}`).then((r) => r.data),
   snapshot: (scenarioId: string, change_reason?: string) =>

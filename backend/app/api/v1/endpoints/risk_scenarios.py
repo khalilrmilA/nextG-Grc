@@ -12,8 +12,12 @@ from app.models.risk_scenario import RiskScenario
 from app.models.risk import Risk
 from app.models.scenario_version import RiskScenarioVersion
 from app.models.subscription import Subscription
+from app.models.tenant import Tenant
+from app.models.asset import Asset
+from app.models.incident import Incident
 from app.models.notification import NotificationType
-from app.services import risk_scoring
+from app.models.activity_log import ActivityLog
+from app.services import risk_scoring, scenario_priority
 from app.services.notification_generator import create_notification, get_recipients_for_tenant, notification_exists
 from app.api.v1.endpoints.risks import _apply_scoring, _assert_feature
 from app.api.v1.endpoints.scenario_versions import _snapshot as _version_snapshot
@@ -53,6 +57,7 @@ class ScenarioUpdate(BaseModel):
     appetite_threshold: float | None = None
     next_review_date: str | None = None
     regulatory_exposure_weight: float | None = None
+    linked_incident_ids: list[str] | None = None
 
 class ScenarioOut(BaseModel):
     id: str; tenant_id: str; name: str; description: str | None; treatment: str
@@ -64,12 +69,55 @@ class ScenarioOut(BaseModel):
     estimated_loss_max: float | None; estimated_loss_likely: float | None
     justification: str | None; owner_id: str | None; tags: list
     linked_risk_id: str | None = None
+    ref_id: str | None = None
+    linked_incident_ids: list = []
     appetite_threshold: float | None = None
     next_review_date: str | None = None
     regulatory_exposure_weight: float | None = None
     priority_score: float | None = None
+    # True when the score has reached the tenant's configured alert threshold.
+    over_priority_threshold: bool = False
     created_at: datetime; updated_at: datetime
     model_config = {"from_attributes": True}
+
+async def _assert_incidents_in_tenant(db: AsyncSession, tenant_id: str, incident_ids: list) -> None:
+    """Every linked incident must be a real one this tenant owns.
+
+    A scenario is adjusted in light of what actually happened, so these links
+    carry weight in the annual review. An unchecked id would put a dangling
+    reference into that evidence.
+    """
+    if not incident_ids:
+        return
+    rows = (await db.execute(
+        select(Incident.id).where(Incident.tenant_id == tenant_id, Incident.id.in_(list(incident_ids)))
+    )).all()
+    found = {r[0] for r in rows}
+    missing = [i for i in incident_ids if i not in found]
+    if missing:
+        raise HTTPException(422, f"Unknown incident id(s) for this tenant: {', '.join(missing)}")
+
+
+async def _next_ref_id(db: AsyncSession, tenant_id: str) -> str:
+    """Next free "RS-000n" for this tenant.
+
+    Derived from the highest existing number rather than a count, so deleting a
+    scenario never causes a reference to be reused — a reused identifier in an
+    audit trail is worse than a gap in the sequence.
+    """
+    rows = (await db.execute(
+        select(RiskScenario.ref_id).where(
+            RiskScenario.tenant_id == tenant_id, RiskScenario.ref_id.isnot(None)
+        )
+    )).all()
+    highest = 0
+    for (ref,) in rows:
+        try:
+            highest = max(highest, int(str(ref).rsplit("-", 1)[-1]))
+        except (ValueError, IndexError):
+            continue
+    return f"RS-{highest + 1:04d}"
+
 
 def _level(definition, prob, impact):
     """Qualitative risk level from the tenant's active matrix (unified with the risk register)."""
@@ -82,21 +130,50 @@ def _clamp01(v: float | None) -> float | None:
         return None
     return max(0.0, min(1.0, v))
 
-def _priority_score(definition, prob, impact, weight: float | None) -> float | None:
-    """M5.3: weighted prioritization criterion on top of the matrix score.
+async def _tenant_criteria(db: AsyncSession, tenant_id: str) -> dict:
+    """The tenant's prioritisation criteria, defaults applied.
 
-    Business rule (deliberately simple, documented since it's non-obvious):
-    priority_score = matrix_score * (1 + regulatory_exposure_weight). weight=0 (or
-    unset) leaves the score unchanged; weight=1 (max regulatory exposure — e.g. the
-    scenario touches PCI-DSS/GDPR/central-bank-reportable data) doubles it. This lets
-    two scenarios with an identical probability x impact score be ranked apart by
-    regulatory exposure without discarding the underlying matrix score. None if the
-    scenario has no current probability/impact yet (nothing to rank).
+    The formula used to be fixed: matrix_score x (1 + regulatory_exposure).
+    Two organisations with different risk policies got the same ranking, which
+    the requirement explicitly rules out. The defaults reproduce that formula
+    exactly, so a tenant that never configures anything is unaffected.
     """
-    score, _ = risk_scoring.score_and_level(definition, prob, impact)
-    if score is None:
+    t = (await db.execute(select(Tenant).where(Tenant.id == tenant_id))).scalar_one_or_none()
+    return scenario_priority.resolve_criteria(getattr(t, "settings", None))
+
+
+async def _max_asset_criticality(db: AsyncSession, tenant_id: str, asset_ids: list) -> str | None:
+    """Highest criticality among the scenario's assets — an optional criterion.
+
+    Only queried when the tenant has actually enabled it, so the default
+    configuration costs no extra round trip.
+    """
+    if not asset_ids:
         return None
-    return round(score * (1 + (weight or 0.0)), 2)
+    rows = (await db.execute(
+        select(Asset.criticality).where(Asset.tenant_id == tenant_id, Asset.id.in_(list(asset_ids)))
+    )).all()
+    order = ["low", "medium", "high", "critical"]
+    best, rank = None, -1
+    for (value,) in rows:
+        key = (value if isinstance(value, str) else getattr(value, "value", "") or "").strip().lower()
+        if key in order and order.index(key) > rank:
+            best, rank = key, order.index(key)
+    return best
+
+
+async def _priority_for(
+    db: AsyncSession, tenant_id: str, definition, prob, impact,
+    weight: float | None, asset_ids: list | None = None,
+) -> tuple[float | None, dict]:
+    """(priority_score, criteria) under this tenant's configured criteria."""
+    criteria = await _tenant_criteria(db, tenant_id)
+    criticality = None
+    if criteria.get("asset_criticality_multiplier"):
+        criticality = await _max_asset_criticality(db, tenant_id, asset_ids or [])
+    return scenario_priority.compute(
+        definition, prob, impact, weight, criteria, criticality
+    ), criteria
 
 def _new_linked_risk(tenant_id: str, s: RiskScenario) -> Risk:
     """RFP rule: auto-consolidate a scenario into the risk register (additive only —
@@ -189,6 +266,121 @@ async def _auto_snapshot_if_changed(db: AsyncSession, tenant_id: str, s: RiskSce
         author_id=author_id,
     ))
 
+class PriorityCriteriaOut(BaseModel):
+    """How this organisation ranks its risk scenarios."""
+    regulatory_multiplier: float
+    asset_criticality_multiplier: float
+    alert_threshold: float | None = None
+    # Which keys this tenant has actually set, as opposed to inherited.
+    configured_keys: list[str] = []
+
+
+class PriorityCriteriaUpdate(BaseModel):
+    regulatory_multiplier: float | None = None
+    asset_criticality_multiplier: float | None = None
+    alert_threshold: float | None = None
+    # Clearing the threshold is a real configuration ("stop alerting"), and it
+    # cannot be expressed by omitting the field, which means "leave unchanged".
+    clear_alert_threshold: bool = False
+
+
+@router.get("/priority-criteria", response_model=PriorityCriteriaOut)
+async def get_priority_criteria(
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(get_current_user),
+    tenant_id: str = Depends(get_tenant_id),
+):
+    """The prioritisation criteria in force. Declared before "/{sid}" so the
+    path parameter does not capture it."""
+    t = (await db.execute(select(Tenant).where(Tenant.id == tenant_id))).scalar_one_or_none()
+    stored = ((t.settings or {}).get("risk_priority") or {}) if t and isinstance(t.settings, dict) else {}
+    criteria = scenario_priority.resolve_criteria(getattr(t, "settings", None))
+    return PriorityCriteriaOut(**criteria, configured_keys=sorted(stored))
+
+
+@router.patch("/priority-criteria", response_model=PriorityCriteriaOut)
+async def set_priority_criteria(
+    body: PriorityCriteriaUpdate,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_roles(UserRole.RISK_MANAGER, UserRole.CISO)),
+    tenant_id: str = Depends(get_tenant_id),
+):
+    """Change how scenarios are ranked, and re-score every scenario at once.
+
+    Re-scoring here is the point: the requirement asks for scores to be
+    recalculated on every update, and a criteria change updates all of them.
+    Leaving existing scenarios on their old scores would mean the register
+    ranks by two different policies at the same time.
+    """
+    t = (await db.execute(select(Tenant).where(Tenant.id == tenant_id))).scalar_one_or_none()
+    if not t:
+        raise HTTPException(404, "Tenant not found")
+
+    patch = body.model_dump(exclude_unset=True)
+    for key in ("regulatory_multiplier", "asset_criticality_multiplier"):
+        if key in patch and patch[key] is not None and not (0.0 <= float(patch[key]) <= 5.0):
+            raise HTTPException(422, f"{key} must be between 0 and 5")
+
+    settings_dict = dict(t.settings or {})
+    block = dict(settings_dict.get("risk_priority") or {})
+    for key in ("regulatory_multiplier", "asset_criticality_multiplier", "alert_threshold"):
+        if key in patch and patch[key] is not None:
+            block[key] = patch[key]
+    if body.clear_alert_threshold:
+        block.pop("alert_threshold", None)
+    settings_dict["risk_priority"] = block
+    t.settings = settings_dict
+
+    # Re-score every scenario under the new criteria, and record that it
+    # happened — "toute modification des criteres ou des scores doit etre
+    # historisee" covers the criteria change itself, not only per-scenario edits.
+    definition, _name = await risk_scoring.resolve_matrix(db, tenant_id)
+    criteria = scenario_priority.resolve_criteria(settings_dict)
+    scenarios = (await db.execute(
+        select(RiskScenario).where(RiskScenario.tenant_id == tenant_id)
+    )).scalars().all()
+    versioning_on = await _scenario_versioning_enabled(db, tenant_id)
+    rescored = 0
+    for sc in scenarios:
+        criticality = None
+        if criteria.get("asset_criticality_multiplier"):
+            criticality = await _max_asset_criticality(db, tenant_id, sc.asset_ids or [])
+        new_score = scenario_priority.compute(
+            definition, sc.current_probability, sc.current_impact,
+            sc.regulatory_exposure_weight, criteria, criticality,
+        )
+        if new_score != sc.priority_score:
+            # Snapshot the pre-change state on each scenario whose score
+            # actually moved. Recording only the criteria change would leave a
+            # reviewer looking at one scenario's timeline seeing its score jump
+            # with nothing to explain it — and the rule is that any change to
+            # the criteria *or the scores* is historised.
+            if versioning_on:
+                count = (await db.execute(
+                    select(func.count()).select_from(RiskScenarioVersion)
+                    .where(RiskScenarioVersion.scenario_id == sc.id)
+                )).scalar() or 0
+                db.add(RiskScenarioVersion(
+                    scenario_id=sc.id, version_number=int(count) + 1,
+                    snapshot=_version_snapshot(sc), author_id=user.id,
+                    change_reason=(
+                        f"Prioritisation criteria changed; score "
+                        f"{sc.priority_score} -> {new_score}"
+                    ),
+                ))
+            sc.priority_score = new_score
+            rescored += 1
+
+    db.add(ActivityLog(
+        tenant_id=tenant_id, user_id=user.id, user_email=user.email,
+        action="update", entity_type="risk_priority_criteria", entity_id=tenant_id,
+        entity_name="Risk prioritisation criteria",
+        details={"criteria": block, "scenarios_rescored": rescored},
+    ))
+    await db.commit()
+    return PriorityCriteriaOut(**criteria, configured_keys=sorted(block))
+
+
 @router.get("", response_model=list[ScenarioOut])
 async def list_scenarios(
     treatment: str | None = None,
@@ -202,7 +394,13 @@ async def list_scenarios(
         # M5.3: rank by the weighted priority_score instead of creation order.
         # Scenarios with no score yet (no current probability/impact) sort last.
         scenarios.sort(key=lambda s: s.priority_score if s.priority_score is not None else -1.0, reverse=True)
-    return [ScenarioOut.model_validate(s) for s in scenarios]
+    criteria = await _tenant_criteria(db, tenant_id)
+    out = []
+    for sc in scenarios:
+        item = ScenarioOut.model_validate(sc)
+        item.over_priority_threshold = scenario_priority.over_threshold(sc.priority_score, criteria)
+        out.append(item)
+    return out
 
 @router.post("", response_model=ScenarioOut, status_code=201)
 async def create_scenario(body: ScenarioCreate, db: AsyncSession = Depends(get_db), user: User = Depends(require_roles(UserRole.RISK_MANAGER, UserRole.CISO)), tenant_id: str = Depends(get_tenant_id)):
@@ -212,6 +410,7 @@ async def create_scenario(body: ScenarioCreate, db: AsyncSession = Depends(get_d
         await _assert_feature(db, tenant_id, user, "risk_appetite")
 
     definition, _ = await risk_scoring.resolve_matrix(db, tenant_id)
+    ref_id = await _next_ref_id(db, tenant_id)
     reg_weight = _clamp01(body.regulatory_exposure_weight)
     s = RiskScenario(
         tenant_id=tenant_id, name=body.name, description=body.description,
@@ -229,7 +428,10 @@ async def create_scenario(body: ScenarioCreate, db: AsyncSession = Depends(get_d
         tags=body.tags, appetite_threshold=body.appetite_threshold,
         next_review_date=body.next_review_date,
         regulatory_exposure_weight=reg_weight,
-        priority_score=_priority_score(definition, body.current_probability, body.current_impact, reg_weight),
+        ref_id=ref_id,
+        priority_score=(await _priority_for(
+            db, tenant_id, definition, body.current_probability,
+            body.current_impact, reg_weight, body.asset_ids))[0],
     )
     db.add(s); await db.flush()
 
@@ -277,9 +479,11 @@ async def update_scenario(sid: str, body: ScenarioUpdate, db: AsyncSession = Dep
               "current_probability","current_impact","target_probability","target_impact","strength_of_knowledge",
               "threat_actor","owner_id","estimated_loss_min","estimated_loss_max","estimated_loss_likely",
               "justification","existing_controls_description","tags","appetite_threshold","next_review_date",
-              "regulatory_exposure_weight"]:
+              "regulatory_exposure_weight","linked_incident_ids"]:
         v = getattr(body, f, None)
         if v is not None: setattr(s, f, v)
+    if body.linked_incident_ids is not None:
+        await _assert_incidents_in_tenant(db, tenant_id, body.linked_incident_ids)
     if body.regulatory_exposure_weight is not None:
         s.regulatory_exposure_weight = _clamp01(s.regulatory_exposure_weight)
     definition, _ = await risk_scoring.resolve_matrix(db, tenant_id)
@@ -287,7 +491,10 @@ async def update_scenario(sid: str, body: ScenarioUpdate, db: AsyncSession = Dep
     s.target_risk_level = _level(definition, s.target_probability, s.target_impact)
     # M5.3: keep priority_score in sync whenever the score inputs (probability,
     # impact) or the weight itself change.
-    s.priority_score = _priority_score(definition, s.current_probability, s.current_impact, s.regulatory_exposure_weight)
+    s.priority_score, _criteria = await _priority_for(
+        db, tenant_id, definition, s.current_probability, s.current_impact,
+        s.regulatory_exposure_weight, s.asset_ids,
+    )
 
     # RFP rule: keep the linked risk-register entry's likelihood/impact (and
     # matrix-derived severity) in sync with the scenario's current probability/impact.

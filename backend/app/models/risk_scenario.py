@@ -35,6 +35,13 @@ class RiskScenario(Base):
     )
 
     # Core info
+    # Human-readable reference, unique within the tenant: "RS-0001".
+    # The primary key is a uuid, which is unique but not traceable — nobody
+    # cites a uuid in a committee paper, an audit finding or an email. The
+    # requirement asks for an identifier that guarantees traceability, and that
+    # means one a person can carry between the platform and a document.
+    ref_id: Mapped[str | None] = mapped_column(String(30), nullable=True, index=True)
+
     name: Mapped[str] = mapped_column(String(500), nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     treatment: Mapped[ScenarioTreatment] = mapped_column(
@@ -47,6 +54,13 @@ class RiskScenario(Base):
     vulnerability_ids: Mapped[list] = mapped_column(JSON, default=list)  # linked Vulnerability IDs
     asset_ids: Mapped[list] = mapped_column(JSON, default=list)        # linked Asset IDs
     applied_control_ids: Mapped[list] = mapped_column(JSON, default=list)  # controls mitigating this scenario
+
+    # Incidents that actually happened and belong to this scenario. Both
+    # requirement blocks ask for it: a scenario is a documented hypothesis, and
+    # the whole point of recording what really occurred against it is to adjust
+    # the hypothesis. Without this the annual review has nothing to review
+    # against except the assessor's memory.
+    linked_incident_ids: Mapped[list] = mapped_column(JSON, default=list)
 
     # Current risk level (inherent — before controls)
     current_probability: Mapped[int | None] = mapped_column(Integer, nullable=True)  # 1-5 (or custom scale)

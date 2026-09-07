@@ -14,6 +14,7 @@ class NotificationType(str, enum.Enum):
     RISK_OVER_APPETITE = "risk_over_appetite"
     RISK_TARGET_OVER_APPETITE = "risk_target_over_appetite"
     SCENARIO_OVER_APPETITE = "scenario_over_appetite"
+    SCENARIO_PRIORITY_THRESHOLD = "scenario_priority_threshold"
     TREATMENT_OVERDUE = "treatment_overdue"
     TREATMENT_BUDGET_OVERRUN = "treatment_budget_overrun"
     # Audit events

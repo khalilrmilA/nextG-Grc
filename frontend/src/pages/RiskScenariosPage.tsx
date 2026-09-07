@@ -1,8 +1,8 @@
 import { useState, useEffect } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { Plus, Search, X, Loader2, Filter, History, GitCommitHorizontal, AlertTriangle, ArrowUpDown } from "lucide-react";
+import { Plus, Search, X, Loader2, Filter, History, GitCommitHorizontal, AlertTriangle, ArrowUpDown, SlidersHorizontal } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { riskScenariosApi, scenarioVersionsApi, assetsApi, vulnerabilitiesApi, threatsApi, appliedControlsApi } from "@/api/endpoints";
+import { riskScenariosApi, scenarioVersionsApi, scenarioPriorityApi, assetsApi, vulnerabilitiesApi, threatsApi, appliedControlsApi, incidentsApi } from "@/api/endpoints";
 import { MultiSelect, type MultiSelectOption as Option } from "@/components/common/MultiSelect";
 
 // ─── Version timeline modal (RFP mod 5.2) ──────────────────────────────────────
@@ -215,6 +215,7 @@ const EMPTY_FORM = {
   justification: "",
   next_review_date: "",
   regulatory_exposure_weight: 0,
+  linked_incident_ids: [] as string[],
   asset_ids: [] as string[],
   vulnerability_ids: [] as string[],
   threat_ids: [] as string[],
@@ -238,6 +239,9 @@ export default function RiskScenariosPage() {
   const [vulnOptions, setVulnOptions] = useState<Option[]>([]);
   const [threatOptions, setThreatOptions] = useState<Option[]>([]);
   const [controlOptions, setControlOptions] = useState<Option[]>([]);
+  const [incidentOptions, setIncidentOptions] = useState<Option[]>([]);
+  const [criteria, setCriteria] = useState<any | null>(null);
+  const [showCriteria, setShowCriteria] = useState(false);
   const [historyFor, setHistoryFor] = useState<{ id: string; name: string } | null>(null);
 
   const [form, setForm] = useState(EMPTY_FORM);
@@ -283,8 +287,9 @@ export default function RiskScenariosPage() {
       vulnerabilitiesApi.list(),
       threatsApi.list(),
       appliedControlsApi.list(),
+      incidentsApi.list(),
     ]);
-    const [assetsRes, vulnsRes, threatsRes, controlsRes] = results;
+    const [assetsRes, vulnsRes, threatsRes, controlsRes, incidentsRes] = results;
 
     const unwrap = (r: PromiseSettledResult<any>): any[] => {
       if (r.status !== "fulfilled") return [];
@@ -296,6 +301,18 @@ export default function RiskScenariosPage() {
     setVulnOptions(unwrap(vulnsRes).map((v: any) => ({ id: v.id, label: v.title })));
     setThreatOptions(unwrap(threatsRes).map((th: any) => ({ id: th.id, label: th.name })));
     setControlOptions(unwrap(controlsRes).map((c: any) => ({ id: c.id, label: c.name })));
+    setIncidentOptions(unwrap(incidentsRes).map((i: any) => ({ id: i.id, label: i.title })));
+  }
+
+  async function loadCriteria() {
+    try { setCriteria(await scenarioPriorityApi.get()); } catch { setCriteria(null); }
+  }
+
+  async function saveCriteria(patch: Record<string, unknown>) {
+    try {
+      setCriteria(await scenarioPriorityApi.update(patch));
+      await load();   // every score may have moved
+    } catch { /* keep the current values on screen */ }
   }
 
   useEffect(() => {
@@ -304,6 +321,7 @@ export default function RiskScenariosPage() {
 
   useEffect(() => {
     loadOptions();
+    loadCriteria();
   }, []);
 
   async function handleSubmit(e: React.FormEvent) {
@@ -383,7 +401,81 @@ export default function RiskScenariosPage() {
             <option value="priority">{t("risk_scenarios.sort_priority", "Sort: Priority")}</option>
           </select>
         </div>
+        <button
+          type="button"
+          onClick={() => setShowCriteria((v) => !v)}
+          className="inline-flex items-center gap-2 border border-gray-200 rounded-xl text-sm px-3 py-2 text-gray-700 hover:bg-gray-50"
+        >
+          <SlidersHorizontal className="w-4 h-4 text-gray-400" />
+          {t("risk_scenarios.criteria_btn", "Prioritisation criteria")}
+        </button>
       </div>
+
+      {showCriteria && criteria && (
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 space-y-4">
+          <div>
+            <h3 className="text-sm font-semibold text-gray-900">
+              {t("risk_scenarios.criteria_title", "How this organisation ranks its scenarios")}
+            </h3>
+            <p className="text-xs text-gray-500 mt-1 max-w-2xl">
+              {t("risk_scenarios.criteria_sub", "Probability and impact come from your risk matrix. These settings control what is applied on top. Changing them re-scores every scenario immediately and is recorded in each scenario's history.")}
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">
+                {t("risk_scenarios.criteria_regulatory", "Regulatory exposure weight")}
+              </label>
+              <input
+                type="number" min={0} max={5} step={0.1}
+                value={criteria.regulatory_multiplier}
+                onChange={(e) => setCriteria({ ...criteria, regulatory_multiplier: parseFloat(e.target.value) })}
+                onBlur={(e) => saveCriteria({ regulatory_multiplier: parseFloat(e.target.value) })}
+                className="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+              <p className="text-[11px] text-gray-400 mt-1">
+                {t("risk_scenarios.criteria_regulatory_hint", "0 ignores it · 1 doubles a fully exposed scenario")}
+              </p>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">
+                {t("risk_scenarios.criteria_asset", "Asset criticality weight")}
+              </label>
+              <input
+                type="number" min={0} max={5} step={0.1}
+                value={criteria.asset_criticality_multiplier}
+                onChange={(e) => setCriteria({ ...criteria, asset_criticality_multiplier: parseFloat(e.target.value) })}
+                onBlur={(e) => saveCriteria({ asset_criticality_multiplier: parseFloat(e.target.value) })}
+                className="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+              <p className="text-[11px] text-gray-400 mt-1">
+                {t("risk_scenarios.criteria_asset_hint", "0 ignores the assets in the chain")}
+              </p>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">
+                {t("risk_scenarios.criteria_threshold", "Alert threshold")}
+              </label>
+              <div className="flex items-center gap-2">
+                <input
+                  type="number" min={0} step={0.5}
+                  value={criteria.alert_threshold ?? ""}
+                  placeholder={t("risk_scenarios.criteria_threshold_off", "off")}
+                  onChange={(e) => setCriteria({ ...criteria, alert_threshold: e.target.value === "" ? null : parseFloat(e.target.value) })}
+                  onBlur={(e) => saveCriteria(e.target.value === ""
+                    ? { clear_alert_threshold: true }
+                    : { alert_threshold: parseFloat(e.target.value) })}
+                  className="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+              <p className="text-[11px] text-gray-400 mt-1">
+                {t("risk_scenarios.criteria_threshold_hint", "Owners and the CISO are notified at or above this score")}
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Table */}
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
@@ -418,7 +510,9 @@ export default function RiskScenariosPage() {
                 const linked = linkedCount(item);
                 return (
                   <tr key={item.id} className="border-b border-gray-50 hover:bg-gray-50/50 transition-colors">
-                    <td className="px-6 py-4 font-medium text-gray-900">{item.name}</td>
+                    <td className="px-6 py-4 font-medium text-gray-900">{item.ref_id && (
+                        <span className="mr-2 font-mono text-[11px] text-gray-400">{item.ref_id}</span>
+                      )}{item.name}</td>
                     <td className="px-6 py-4">
                       <span className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold border ${TREATMENT_BADGE[item.treatment] || "bg-gray-100 text-gray-600"}`}>
                         {item.treatment}
@@ -439,9 +533,15 @@ export default function RiskScenariosPage() {
                     <td className="px-6 py-4 text-center">
                       {item.priority_score != null ? (
                         <span
-                          title={t("risk_scenarios.priority_hint", "probability x impact, weighted by regulatory exposure")}
-                          className="inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold bg-indigo-100 text-indigo-700"
+                          title={item.over_priority_threshold
+                            ? t("risk_scenarios.priority_over", "At or above your alert threshold")
+                            : t("risk_scenarios.priority_hint", "probability x impact, weighted by your prioritisation criteria")}
+                          className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold ${
+                            item.over_priority_threshold
+                              ? "bg-red-100 text-red-700 border border-red-200"
+                              : "bg-indigo-100 text-indigo-700"}`}
                         >
+                          {item.over_priority_threshold && <AlertTriangle className="w-3 h-3" />}
                           {item.priority_score}
                         </span>
                       ) : "-"}
@@ -534,6 +634,21 @@ export default function RiskScenariosPage() {
                     placeholder={t("risk_scenarios.select_placeholder")}
                     emptyLabel={t("risk_scenarios.no_options")}
                   />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    {t("risk_scenarios.form_incidents_label", "Incidents that actually occurred")}
+                  </label>
+                  <MultiSelect
+                    options={incidentOptions}
+                    selected={form.linked_incident_ids}
+                    onChange={(ids) => setForm({ ...form, linked_incident_ids: ids })}
+                    placeholder={t("risk_scenarios.select_placeholder")}
+                    emptyLabel={t("risk_scenarios.no_options")}
+                  />
+                  <p className="text-xs text-gray-400 mt-1">
+                    {t("risk_scenarios.form_incidents_hint", "What really happened against this hypothesis — the evidence the annual review is judged on.")}
+                  </p>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">{t("risk_scenarios.form_controls_label")}</label>

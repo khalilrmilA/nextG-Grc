@@ -830,6 +830,74 @@ async def check_asset_review_deadlines(db: AsyncSession) -> int:
     return created
 
 
+async def check_scenario_priority_alerts(db: AsyncSession) -> int:
+    """Notify when a scenario reaches the tenant's configured priority threshold.
+
+    "Un seuil d'alerte peut etre defini pour generer des notifications aux
+    responsables." The threshold was configurable and the score was computed,
+    but nothing compared them — the appetite check next door only ever looked at
+    the risk register, never at scenarios.
+
+    Notifies the scenario owner as well as the CISO and admins: the owner is the
+    person the requirement means by "responsables", and they are not necessarily
+    among the tenant-wide recipients.
+    """
+    from app.models.risk_scenario import RiskScenario
+    from app.models.tenant import Tenant
+    from app.services import scenario_priority
+
+    created = 0
+    tenants = (await db.execute(select(Tenant).where(Tenant.is_active == True))).scalars().all()  # noqa: E712
+    for tenant in tenants:
+        criteria = scenario_priority.resolve_criteria(getattr(tenant, "settings", None))
+        if criteria.get("alert_threshold") is None:
+            continue
+
+        scenarios = (await db.execute(
+            select(RiskScenario).where(
+                RiskScenario.tenant_id == tenant.id,
+                RiskScenario.priority_score.isnot(None),
+            )
+        )).scalars().all()
+
+        for sc in scenarios:
+            if not scenario_priority.over_threshold(sc.priority_score, criteria):
+                continue
+
+            recipients = {u.id: u for u in await get_recipients_for_tenant(db, tenant.id)}
+            if sc.owner_id and sc.owner_id not in recipients:
+                owner = (await db.execute(
+                    select(User).where(User.id == sc.owner_id, User.is_active == True)  # noqa: E712
+                )).scalar_one_or_none()
+                if owner:
+                    recipients[owner.id] = owner
+
+            label = sc.ref_id or sc.name[:20]
+            for user in recipients.values():
+                if await notification_exists(
+                    db, user.id, NotificationType.SCENARIO_PRIORITY_THRESHOLD, sc.id, within_days=7
+                ):
+                    continue
+                await create_notification(
+                    db,
+                    user=user,
+                    notif_type=NotificationType.SCENARIO_PRIORITY_THRESHOLD,
+                    title=f"Priority threshold reached: {label}",
+                    message=(
+                        f"Scenario {label} — '{sc.name}' — scores "
+                        f"{sc.priority_score} against a threshold of "
+                        f"{criteria['alert_threshold']}. Review its treatment plan."
+                    ),
+                    entity_id=sc.id,
+                    entity_type="risk_scenario",
+                    link=f"/risk-scenarios?highlight={sc.id}",
+                    severity="high",
+                )
+                created += 1
+
+    return created
+
+
 async def check_scenario_review_deadlines(db: AsyncSession) -> int:
     """RFP gap fix: "la revue annuelle des scenarios n'est pas outillee (pas de
     date de prochaine revue ni d'alerte associee — seuls les risques ont
@@ -1198,6 +1266,7 @@ async def run_all_checks(db: AsyncSession) -> dict:
     try:
         results["asset_eol"] = await check_asset_eol(db)
         results["threat_profile_review_due"] = await check_threat_profile_reviews(db)
+        results["scenario_priority_alert"] = await check_scenario_priority_alerts(db)
     except Exception as e:
         print(f"Asset EOL check failed: {e}")
 

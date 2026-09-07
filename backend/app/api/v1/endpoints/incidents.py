@@ -88,11 +88,18 @@ class IncidentOut(BaseModel):
     created_at: datetime; updated_at: datetime
     model_config = {"from_attributes": True}
 
-    @field_validator("affected_asset_ids", mode="before")
+    @field_validator(
+        "affected_asset_ids", "linked_risks", "linked_controls",
+        "linked_vendors", "linked_vulnerabilities", "tags",
+        mode="before",
+    )
     @classmethod
     def _default_asset_list(cls, v):
-        # Rows written before the migration have this column as NULL, not [].
-        return v or []
+        # Rows written before the migration have these columns as NULL, not [].
+        # One such row used to fail validation for the *whole* response, so a
+        # single legacy or imported incident took the entire list down with a
+        # 500. Same guard ThreatOut already carries for the same reason.
+        return v if isinstance(v, list) else ([] if v is None else v)
 
 class IncidentStats(BaseModel):
     total: int; open: int; investigating: int; contained: int; resolved: int; closed: int

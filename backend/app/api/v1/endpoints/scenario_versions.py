@@ -23,11 +23,22 @@ router = APIRouter()
 
 # Fields captured in each snapshot (pulled defensively — missing → None).
 _SNAPSHOT_FIELDS = [
+    "ref_id",
     "name", "description", "justification",
     "current_probability", "current_impact", "current_risk_level",
     "target_probability", "target_impact", "target_risk_level",
     "treatment", "threat_ids", "vulnerability_ids", "asset_ids",
     "applied_control_ids",
+    # Incidents that actually happened against the scenario. Attaching one is a
+    # change to the scenario's evidence and belongs in its history.
+    "linked_incident_ids",
+    # Prioritisation. "Toute modification des criteres ou des scores doit etre
+    # historisee" — without these, a score moving from 12 to 40 left no trace,
+    # which is exactly the change a reviewer most needs to see.
+    "regulatory_exposure_weight", "priority_score", "appetite_threshold",
+    # Quantified impact, alongside the qualitative justification.
+    "estimated_loss_min", "estimated_loss_likely", "estimated_loss_max",
+    "next_review_date",
 ]
 
 

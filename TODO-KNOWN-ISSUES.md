@@ -660,3 +660,49 @@ instead, so they mean the same thing on every run.
 code and will keep producing duplicates; with the index now in place it will hit
 an IntegrityError and skip that feed cycle instead (logged, self-limiting).
 
+---
+
+## 13. Risk scenarios: formalisation, history, prioritisation (added 2026-09-07)
+
+Audited against the three scenario requirement blocks. Most was built —
+auto-versioning on every edit, diff between versions, annual-review dates with
+reminders, appetite alerts, quantified loss ranges. Five gaps had nothing
+behind them; all five are now closed.
+
+### 13.1 Verified as MET
+| Requirement | Evidence |
+|---|---|
+| Unique identifier guaranteeing traceability | `ref_id` — "RS-0001", unique per tenant, allocated from the highest existing number so a deletion never causes a reuse. Backfilled for existing scenarios in creation order. The primary key was a uuid: unique, but not something anyone cites in a committee paper |
+| Justification of expected impact, qualitative and quantitative | `justification` free text alongside `estimated_loss_min/likely/max`; both are snapshotted into version history |
+| Mandatory annual review | `next_review_date` with reminders at 14/7/0 days and while overdue |
+| Enriched following real incidents | `linked_incident_ids`, validated against the tenant — a forged or typo'd id is refused with 422 rather than stored as a dangling reference |
+| Every modification historised with date, author, reason | Auto-snapshot of the pre-update state on every meaningful edit, plus the manual snapshot endpoint. Author and timestamp on each |
+| Complete version history, always accessible | `GET /scenario-versions/{id}`, newest first |
+| Chronological navigation between versions | Timeline plus `GET /{id}/diff?from&to`, returning per-field before/after |
+| Configurable prioritisation criteria | `GET`/`PATCH /risk-scenarios/priority-criteria` — regulatory-exposure weight, asset-criticality weight, alert threshold. Defaults reproduce the previous fixed formula exactly, so an organisation that never opens the settings sees no change in its rankings |
+| Scores recalculated on every update | On scenario edit, and on a criteria change across the whole register in one pass |
+| Alert threshold generating notifications | `check_scenario_priority_alerts` notifies the scenario owner as well as the CISO and admins — the owner is who the requirement means by "responsables", and they are not necessarily among the tenant-wide recipients |
+| Priority visible in dashboards and reports | `priority_score` on every scenario, `?sort=priority`, and an `over_priority_threshold` flag rendered as a badge |
+| Changes to criteria **or scores** historised | Criteria changes go to the activity log with the before/after and how many scenarios were re-scored; each scenario whose score actually moved also gets its own version snapshot naming the cause |
+
+### 13.2 Prioritisation is a layer, not a replacement
+Probability x impact still comes from the tenant's risk matrix, which is
+already configurable and is the organisation's stated policy for that axis. The
+configurable criteria sit on top of it. This is deliberate: making the matrix
+axes themselves re-weightable would give two places to express the same policy,
+and they would drift.
+
+Asset-criticality weighting defaults to **0** — off. Turning it on changes the
+ranking of every scenario that touches a critical asset, which is a policy
+decision for STB, not a default to inherit.
+
+### 13.3 Fixed along the way — a single NULL took down the incident list
+`IncidentOut` required `linked_risks`, `linked_controls`, `linked_vendors`,
+`linked_vulnerabilities` and `tags` to be lists, with no coercion. One row with
+a NULL in any of them — from an import, a hand-written migration, or a legacy
+insert — failed validation for the **entire response**, so `GET /incidents`
+returned 500 for the whole tenant rather than skipping the row.
+
+Found while seeding a test incident. `ThreatOut` already carried exactly this
+guard, for exactly this reason; `IncidentOut` now does too.
+
