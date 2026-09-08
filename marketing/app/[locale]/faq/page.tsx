@@ -3,6 +3,7 @@ import FAQView from "./FAQView";
 import { FAQ_ITEMS } from "./faqData";
 import en from "../../../i18n/locales/en";
 import { canonicalUrl, hreflangAlternates, OG_LOCALE, type Locale } from "@/lib/seo";
+import { OG_IMAGE } from "@/lib/brand";
 import { PAGE_META } from "@/lib/seo-meta";
 
 type FaqQ = Record<string, string>;
@@ -21,7 +22,7 @@ export function generateMetadata({ params }: { params: { locale: Locale } }): Me
       url: canonicalUrl(params.locale, "/faq"),
       type: "website",
       locale: OG_LOCALE[params.locale],
-      images: ["/logo-horizontal.png"],
+      images: [OG_IMAGE],
     },
   };
 }

@@ -3,6 +3,7 @@ import BlogView from "./BlogView";
 import { POSTS } from "./posts";
 import { localizePost } from "./translations";
 import { canonicalUrl, hreflangAlternates, OG_LOCALE, type Locale } from "@/lib/seo";
+import { OG_IMAGE } from "@/lib/brand";
 import { PAGE_META } from "@/lib/seo-meta";
 
 export function generateMetadata({ params }: { params: { locale: Locale } }): Metadata {
@@ -18,7 +19,7 @@ export function generateMetadata({ params }: { params: { locale: Locale } }): Me
       url: canonicalUrl(params.locale, "/blog"),
       type: "website",
       locale: OG_LOCALE[params.locale],
-      images: ["/logo-horizontal.png"],
+      images: [OG_IMAGE],
     },
   };
 }

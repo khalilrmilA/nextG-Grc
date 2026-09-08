@@ -13,6 +13,13 @@ const PAGES: { path: string; changeFrequency: "weekly" | "monthly"; priority: nu
   { path: "/news",             changeFrequency: "weekly",  priority: 0.8 },
   { path: "/faq",              changeFrequency: "monthly", priority: 0.7 },
   { path: "/contact",          changeFrequency: "monthly", priority: 0.7 },
+  // Company + legal. /about carries real weight here: it is the page that
+  // states the brand name in prose and names the related company, which is
+  // what Google needs to treat "GRCEye" as an entity rather than a typo.
+  { path: "/about",            changeFrequency: "monthly", priority: 0.8 },
+  { path: "/security",         changeFrequency: "monthly", priority: 0.7 },
+  { path: "/privacy",          changeFrequency: "monthly", priority: 0.3 },
+  { path: "/terms",            changeFrequency: "monthly", priority: 0.3 },
 ];
 
 export default function sitemap(): MetadataRoute.Sitemap {

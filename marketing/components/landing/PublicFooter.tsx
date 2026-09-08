@@ -45,9 +45,10 @@ export default function PublicFooter() {
           <div>
             <p className="text-xs font-bold text-slate-300 uppercase tracking-widest mb-4">Company</p>
             <ul className="space-y-2.5 text-sm">
-              <li><a href="#" className="hover:text-white transition-colors">Privacy Policy</a></li>
+              <li><Link href={to("/about")} className="hover:text-white transition-colors">About</Link></li>
+              <li><Link href={to("/privacy")} className="hover:text-white transition-colors">Privacy Policy</Link></li>
               <li><Link href={to("/terms")} className="hover:text-white transition-colors">Terms of Service</Link></li>
-              <li><a href="#" className="hover:text-white transition-colors">Security</a></li>
+              <li><Link href={to("/security")} className="hover:text-white transition-colors">Security</Link></li>
               <li><Link href={to("/contact")} className="hover:text-white transition-colors">Contact</Link></li>
             </ul>
           </div>

@@ -11,7 +11,14 @@ Allow: /blog
 Allow: /news
 Allow: /faq
 Allow: /contact
+Allow: /about
+Allow: /security
+Allow: /privacy
+Allow: /terms
 Allow: /GRCEye_Datasheet_2026.html
+
+# Open Graph card must be fetchable for social/rich previews
+Allow: /og-image.png
 
 # Favicon + manifest (must be publicly crawlable for Google rich results)
 Allow: /favicon.ico

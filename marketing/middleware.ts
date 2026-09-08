@@ -20,6 +20,10 @@ const LOCALE_COOKIE = "grceye_lang";
 // SPA grows.
 const MARKETING_PAGE_ROOTS = [
   "contact", "frameworks", "news", "blog", "faq", "how-it-works", "solutions", "features-landing",
+  // Company + legal pages. These were previously absent, so the footer's links
+  // to them fell through to the SPA proxy: /en/terms answered 200 with the Vite
+  // shell and bare /terms answered 500.
+  "about", "privacy", "terms", "security",
 ];
 
 function hasLocalePrefix(pathname: string): boolean {
@@ -30,6 +34,29 @@ function isMarketingPath(pathname: string): boolean {
   if (pathname === "/") return true;
   const firstSegment = pathname.split("/")[1] || "";
   return MARKETING_PAGE_ROOTS.includes(firstSegment);
+}
+
+/** Strip a leading /en, /fr or /ar so the remainder can be matched as a page path. */
+function stripLocale(pathname: string): string {
+  for (const l of LOCALES) {
+    if (pathname === `/${l}`) return "/";
+    if (pathname.startsWith(`/${l}/`)) return pathname.slice(l.length + 1);
+  }
+  return pathname;
+}
+
+/**
+ * Mark a response as noindex. Used for anything that is not a real marketing
+ * page: the catch-all fallback rewrite in next.config.js proxies every unknown
+ * URL to the Vite SPA, which answers 200 with its shell rather than a 404. That
+ * made every nonexistent URL a soft 404 — unlimited distinct URLs all returning
+ * 200 with the same <title>, burning crawl budget and splitting brand signals.
+ * A response header is the safe fix: it cannot break routing the way narrowing
+ * the fallback could, and it covers URLs no allow-list would have predicted.
+ */
+function noindex(res: NextResponse): NextResponse {
+  res.headers.set("X-Robots-Tag", "noindex, nofollow");
+  return res;
 }
 
 function detectLocale(req: NextRequest): string {
@@ -56,13 +83,19 @@ export function middleware(req: NextRequest) {
     return NextResponse.next();
   }
   if (hasLocalePrefix(pathname)) {
-    return NextResponse.next();
+    // Already localized. Still check the path *behind* the locale: /en/faq is a
+    // real page, but /en/anything-else falls through to the SPA proxy and comes
+    // back 200 with the Vite shell, so it must not be indexed.
+    return isMarketingPath(stripLocale(pathname))
+      ? NextResponse.next()
+      : noindex(NextResponse.next());
   }
   if (!isMarketingPath(pathname)) {
     // Dashboard SPA route (or /app, /login, /register, /api, ...) — leave it
     // untouched so next.config.js's rewrites (explicit ones, then the
-    // catch-all fallback) can proxy it to the Vite app.
-    return NextResponse.next();
+    // catch-all fallback) can proxy it to the Vite app, but keep it out of the
+    // index.
+    return noindex(NextResponse.next());
   }
 
   const locale = detectLocale(req);

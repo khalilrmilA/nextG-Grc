@@ -7,6 +7,7 @@ import PublicFooter from "@/components/landing/PublicFooter";
 import { POSTS, findPostBySlug } from "../posts";
 import Markdown from "../Markdown";
 import { canonicalUrl, hreflangAlternates, OG_LOCALE, type Locale } from "@/lib/seo";
+import { OG_IMAGE } from "@/lib/brand";
 import { localizePost } from "../translations";
 
 export function generateStaticParams() {
@@ -16,7 +17,7 @@ export function generateStaticParams() {
 const ARTICLE_UI = {
   en: { faq: "Frequently asked questions", ctaTitle: "Ready to operationalize this?", ctaBody: "GRCEye gives security teams a single platform for risk, compliance, audit, vendor risk, and policy, with AI that runs on your own infrastructure.", ctaTrial: "Start free trial", ctaTalk: "Talk to us", continueReading: "Continue reading", allArticles: "All articles" },
   fr: { faq: "Questions fréquentes", ctaTitle: "Prêt à passer à l'action ?", ctaBody: "GRCEye offre aux équipes sécurité une plateforme unique pour les risques, la conformité, l'audit, le risque fournisseur et les politiques, avec une IA qui s'exécute sur votre propre infrastructure.", ctaTrial: "Démarrer l'essai gratuit", ctaTalk: "Nous contacter", continueReading: "Poursuivre la lecture", allArticles: "Tous les articles" },
-  ar: { faq: "الأسئلة الشائعة", ctaTitle: "هل أنت مستعد لتطبيق ذلك؟", ctaBody: "توفر GRCeye لفرق الأمن منصة واحدة للمخاطر والامتثال والتدقيق ومخاطر الموردين والسياسات، بذكاء اصطناعي يعمل على بنيتك التحتية الخاصة.", ctaTrial: "ابدأ التجربة المجانية", ctaTalk: "تواصل معنا", continueReading: "تابع القراءة", allArticles: "جميع المقالات" },
+  ar: { faq: "الأسئلة الشائعة", ctaTitle: "هل أنت مستعد لتطبيق ذلك؟", ctaBody: "توفر GRCEye لفرق الأمن منصة واحدة للمخاطر والامتثال والتدقيق ومخاطر الموردين والسياسات، بذكاء اصطناعي يعمل على بنيتك التحتية الخاصة.", ctaTrial: "ابدأ التجربة المجانية", ctaTalk: "تواصل معنا", continueReading: "تابع القراءة", allArticles: "جميع المقالات" },
 } as const;
 
 export async function generateMetadata({ params }: { params: { slug: string; locale: Locale } }): Promise<Metadata> {
@@ -39,13 +40,13 @@ export async function generateMetadata({ params }: { params: { slug: string; loc
       publishedTime: new Date(post.date).toISOString(),
       authors: [post.author],
       tags: post.keywords.split(",").map(k => k.trim()),
-      images: ["/logo-horizontal.png"],
+      images: [OG_IMAGE],
     },
     twitter: {
       card: "summary_large_image",
       title: post.metaTitle,
       description: post.metaDescription,
-      images: ["/logo-horizontal.png"],
+      images: [OG_IMAGE],
     },
   };
 }

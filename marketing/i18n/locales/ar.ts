@@ -1089,7 +1089,7 @@ export default {
     },
     landing: {
       hero_badge: "أكثر من 70 معياراً للامتثال · ذكاء اصطناعي محلي · بدون تسرّب بيانات",
-      hero_title_pre: "GRCeye — GRC للمؤسسات لخدمة",
+      hero_title_pre: "GRCEye — GRC للمؤسسات لخدمة",
       typeword1: "فرق الأمن",
       typeword2: "مدراء أمن المعلومات",
       typeword3: "مدراء المخاطر",

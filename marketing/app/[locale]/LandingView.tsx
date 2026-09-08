@@ -56,10 +56,19 @@ function Reveal({
 
 function useTypewriter(words: string[], pause = 2200) {
   const [index, setIndex] = useState(0);
-  const [displayed, setDisplayed] = useState("");
+  // Seed with the first word in full rather than "" so the H1 is complete in the
+  // server-rendered HTML — Googlebot indexes the markup it is served, and an
+  // empty span made the <h1> read as a truncated sentence fragment.
+  // Client and server both render words[0], so hydration matches; the animation
+  // only takes over once `animating` flips on after mount.
+  const [displayed, setDisplayed] = useState(words[0]);
   const [typing, setTyping] = useState(true);
+  const [animating, setAnimating] = useState(false);
+
+  useEffect(() => { setAnimating(true); }, []);
 
   useEffect(() => {
+    if (!animating) return;
     const target = words[index];
     if (typing) {
       if (displayed.length < target.length) {
@@ -75,19 +84,25 @@ function useTypewriter(words: string[], pause = 2200) {
     }
     setIndex(i => (i + 1) % words.length);
     setTyping(true);
-  }, [displayed, typing, index, words, pause]);
+  }, [displayed, typing, index, words, pause, animating]);
 
   return displayed;
 }
 
 function CountUp({ to, suffix = "", prefix = "" }: { to: number; suffix?: string; prefix?: string }) {
-  const [count, setCount] = useState(0);
+  // Seed at the final value so the server-rendered HTML carries the real figure
+  // ("70+", "3,500+", "60%") instead of "0+". Googlebot does not run the
+  // IntersectionObserver, so a 0-seeded counter shipped three meaningless zeros
+  // as the page's only hard numbers. Client and server agree on first render;
+  // the effect rewinds to 0 and animates only once JS is actually running.
+  const [count, setCount] = useState(to);
   const ref = useRef<HTMLSpanElement>(null);
   const started = useRef(false);
 
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
+    setCount(0);
     const obs = new IntersectionObserver(([entry]) => {
       if (entry.isIntersecting && !started.current) {
         started.current = true;

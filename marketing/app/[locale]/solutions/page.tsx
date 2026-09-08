@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import SolutionsView from "./SolutionsView";
 import { canonicalUrl, hreflangAlternates, OG_LOCALE, type Locale } from "@/lib/seo";
+import { OG_IMAGE } from "@/lib/brand";
 import { PAGE_META } from "@/lib/seo-meta";
 
 export function generateMetadata({ params }: { params: { locale: Locale } }): Metadata {
@@ -16,7 +17,7 @@ export function generateMetadata({ params }: { params: { locale: Locale } }): Me
       url: canonicalUrl(params.locale, "/solutions"),
       type: "website",
       locale: OG_LOCALE[params.locale],
-      images: ["/logo-horizontal.png"],
+      images: [OG_IMAGE],
     },
   };
 }

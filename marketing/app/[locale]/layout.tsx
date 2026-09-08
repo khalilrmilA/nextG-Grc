@@ -4,11 +4,15 @@ import "../globals.css";
 import { SITE_URL, SITE_NAME } from "../constants";
 import { I18nProvider, type Language } from "../../i18n";
 import { LOCALES, isLocale } from "../../lib/seo";
+import {
+  BRAND, BRAND_ALTERNATE_NAMES, BRAND_COUNTRY, SAME_AS, KNOWS_ABOUT,
+  ORG_ID, SITE_ID, SOFTWARE_ID,
+  OG_IMAGE, OG_IMAGE_WIDTH, OG_IMAGE_HEIGHT,
+} from "../../lib/brand";
 
 const TITLE        = "GRCEye | Governance, Risk & Compliance Platform";
 const DESCRIPTION  =
   "All-in-one GRC SaaS: 70+ frameworks, AI gap analysis, risk quantification, audits, policies, vendor risk and a public trust center.";
-const OG_IMAGE     = "/android-chrome-512x512.png";
 
 export function generateStaticParams() {
   return LOCALES.map((locale) => ({ locale }));
@@ -74,8 +78,8 @@ export const metadata: Metadata = {
     images: [
       {
         url:    OG_IMAGE,
-        width:  512,
-        height: 512,
+        width:  OG_IMAGE_WIDTH,
+        height: OG_IMAGE_HEIGHT,
         alt:    "GRCEye | Governance, Risk & Compliance Platform",
       },
     ],
@@ -84,69 +88,120 @@ export const metadata: Metadata = {
 
   /* ── Twitter / X Card ─────────────────────────────────────── */
   twitter: {
-    card:        "summary",
+    // summary_large_image, not summary: the card is now a real 1200x630 asset,
+    // so it renders as a full-width preview instead of a cropped square thumb.
+    card:        "summary_large_image",
     title:       TITLE,
     description: DESCRIPTION,
     images:      [OG_IMAGE],
   },
 
-  /* ── Verification placeholders (fill in when you have codes) ─ */
-  // verification: {
-  //   google: "YOUR_GOOGLE_SEARCH_CONSOLE_TOKEN",
-  // },
-};
-
-/* ── Structured Data ──────────────────────────────────────────── */
-const ORG_JSON_LD = {
-  "@context": "https://schema.org",
-  "@type": "Organization",
-  name: "GRCEye",
-  url: SITE_URL,
-  logo: `${SITE_URL}/android-chrome-512x512.png`,
-  description: "All-in-one Governance, Risk and Compliance SaaS platform.",
-  sameAs: [],
-  contactPoint: [
-    {
-      "@type": "ContactPoint",
-      contactType: "sales",
-      email: "sales@grceye.com",
-      availableLanguage: ["en", "fr"],
-    },
-    {
-      "@type": "ContactPoint",
-      contactType: "customer support",
-      email: "support@grceye.com",
-      availableLanguage: ["en", "fr"],
-    },
-  ],
-};
-
-const SITE_JSON_LD = {
-  "@context": "https://schema.org",
-  "@type": "WebSite",
-  name: "GRCEye",
-  url: SITE_URL,
-};
-
-const SOFTWARE_JSON_LD = {
-  "@context": "https://schema.org",
-  "@type": "SoftwareApplication",
-  name: "GRCEye",
-  applicationCategory: "BusinessApplication",
-  operatingSystem: "Web",
-  url: SITE_URL,
-  description: DESCRIPTION,
-  offers: {
-    "@type": "Offer",
-    price: "0",
-    priceCurrency: "USD",
-    description: "14-day free trial, no credit card required",
+  /* ── Search-engine verification ───────────────────────────────
+     Set GOOGLE_SITE_VERIFICATION / BING_SITE_VERIFICATION in the environment
+     (marketing/.env.local, then rebuild). Without a verified property in
+     Search Console there is no way to submit the sitemap, request indexing, or
+     see manual actions — which is the first blocker to clear on this site. */
+  verification: {
+    ...(process.env.GOOGLE_SITE_VERIFICATION
+      ? { google: process.env.GOOGLE_SITE_VERIFICATION }
+      : {}),
+    ...(process.env.BING_SITE_VERIFICATION
+      ? { other: { "msvalidate.01": process.env.BING_SITE_VERIFICATION } }
+      : {}),
   },
-  featureList: [
-    "70+ compliance frameworks", "AI-powered gap analysis", "Risk quantification",
-    "Audit management", "Policy governance", "Vendor risk management", "Trust center",
-  ],
 };
+
+/* ── Structured Data ──────────────────────────────────────────────
+   Emitted as a single @graph rather than three standalone blocks. The three
+   nodes carry stable @ids and reference each other (site -> publisher -> org,
+   software -> publisher -> org), so Google reads one entity described from
+   three angles instead of three unrelated islands that each have to earn
+   recognition on their own.
+
+   alternateName is the load-bearing addition: "GRCEye" is an invented word, so
+   a query for "grceye" currently gets rewritten to "GRC eye". Declaring the
+   spelling variants is how we tell Google they are one entity, not a typo. */
+function buildJsonLd(locale: Language) {
+  const org = {
+    "@type": "Organization",
+    "@id": ORG_ID,
+    name: BRAND,
+    alternateName: BRAND_ALTERNATE_NAMES,
+    url: SITE_URL,
+    logo: {
+      "@type": "ImageObject",
+      url: `${SITE_URL}/android-chrome-512x512.png`,
+      width: 512,
+      height: 512,
+    },
+    image: `${SITE_URL}${OG_IMAGE}`,
+    description: "All-in-one Governance, Risk and Compliance SaaS platform.",
+    slogan: "Keep an eye on risk.",
+    email: "sales@grceye.com",
+    address: { "@type": "PostalAddress", addressCountry: BRAND_COUNTRY },
+    knowsAbout: KNOWS_ABOUT,
+    // Empty sameAs is omitted entirely rather than emitted as []: an empty
+    // array asserts "this entity has no other profiles", which is worse than
+    // making no claim. See lib/brand.ts for the list to grow.
+    ...(SAME_AS.length ? { sameAs: SAME_AS } : {}),
+    contactPoint: [
+      {
+        "@type": "ContactPoint",
+        contactType: "sales",
+        email: "sales@grceye.com",
+        availableLanguage: ["en", "fr", "ar"],
+      },
+      {
+        "@type": "ContactPoint",
+        contactType: "customer support",
+        email: "support@grceye.com",
+        availableLanguage: ["en", "fr", "ar"],
+      },
+    ],
+  };
+
+  const website = {
+    "@type": "WebSite",
+    "@id": SITE_ID,
+    name: BRAND,
+    alternateName: BRAND_ALTERNATE_NAMES,
+    url: SITE_URL,
+    description: DESCRIPTION,
+    inLanguage: locale,
+    publisher: { "@id": ORG_ID },
+  };
+
+  const software = {
+    "@type": "SoftwareApplication",
+    "@id": SOFTWARE_ID,
+    name: BRAND,
+    alternateName: BRAND_ALTERNATE_NAMES,
+    applicationCategory: "BusinessApplication",
+    applicationSubCategory: "Governance, Risk and Compliance",
+    operatingSystem: "Web",
+    url: SITE_URL,
+    description: DESCRIPTION,
+    inLanguage: locale,
+    publisher: { "@id": ORG_ID },
+    provider: { "@id": ORG_ID },
+    screenshot: `${SITE_URL}${OG_IMAGE}`,
+    // No aggregateRating / review: fabricating either is a manual-action risk
+    // and Google strips unverifiable review markup anyway.
+    offers: {
+      "@type": "Offer",
+      price: "0",
+      priceCurrency: "USD",
+      description: "14-day free trial, no credit card required",
+      availability: "https://schema.org/InStock",
+    },
+    featureList: [
+      "70+ compliance frameworks", "AI-powered gap analysis", "Risk quantification",
+      "Audit management", "Policy governance", "Vendor risk management", "Trust center",
+    ],
+  };
+
+  return { "@context": "https://schema.org", "@graph": [org, website, software] };
+}
 
 /* ── Root Layout ──────────────────────────────────────────────── */
 export default function RootLayout({
@@ -171,18 +226,10 @@ export default function RootLayout({
         <meta name="msapplication-TileImage"  content="/android-chrome-192x192.png" />
         <meta name="msapplication-TileColor"  content="#0f1729" />
 
-        {/* Structured data */}
+        {/* Structured data — one @graph, three cross-referenced nodes */}
         <script
           type="application/ld+json"
-          dangerouslySetInnerHTML={{ __html: JSON.stringify(ORG_JSON_LD) }}
-        />
-        <script
-          type="application/ld+json"
-          dangerouslySetInnerHTML={{ __html: JSON.stringify(SITE_JSON_LD) }}
-        />
-        <script
-          type="application/ld+json"
-          dangerouslySetInnerHTML={{ __html: JSON.stringify(SOFTWARE_JSON_LD) }}
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(buildJsonLd(lang)) }}
         />
       </head>
       <body>
