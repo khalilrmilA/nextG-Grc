@@ -32,6 +32,7 @@ export async function generateMetadata({ params }: { params: { slug: string; loc
     alternates: { canonical: canonicalUrl(params.locale, path), languages: hreflangAlternates(path) },
     authors: [{ name: post.author }],
     openGraph: {
+      siteName: "GRCEye",
       title: post.metaTitle,
       description: post.metaDescription,
       url: canonicalUrl(params.locale, path),

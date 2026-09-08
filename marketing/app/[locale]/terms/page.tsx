@@ -16,6 +16,7 @@ export function generateMetadata({ params }: { params: { locale: Locale } }): Me
       languages: hreflangAlternates("/terms"),
     },
     openGraph: {
+      siteName: "GRCEye",
       title,
       description,
       url: canonicalUrl(params.locale, "/terms"),
@@ -26,7 +27,8 @@ export function generateMetadata({ params }: { params: { locale: Locale } }): Me
   };
 }
 
-export default function TermsPage() {
+export default function TermsPage({ params }: { params: { locale: Locale } }) {
+  const to = (path: string) => `/${params.locale}${path}`;
   return (
     <LegalPage
       title="Terms of Service"
@@ -91,7 +93,7 @@ export default function TermsPage() {
         You retain all rights in the content you put into the platform. You grant us only
         the licence needed to host, process and display that content in order to provide the
         service. We process personal data as described in our{" "}
-        <Link href="/privacy">privacy policy</Link>. We do not use your content to train
+        <Link href={to("/privacy")}>privacy policy</Link>. We do not use your content to train
         general-purpose AI models.
       </p>
       <p>
@@ -150,7 +152,7 @@ export default function TermsPage() {
 
       <h2>13. Contact</h2>
       <p>
-        Questions about these terms: <Link href="/contact">contact us</Link> or email{" "}
+        Questions about these terms: <Link href={to("/contact")}>contact us</Link> or email{" "}
         <a href="mailto:sales@grceye.com">sales@grceye.com</a>.
       </p>
     </LegalPage>

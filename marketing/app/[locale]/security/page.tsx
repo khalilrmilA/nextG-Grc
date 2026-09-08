@@ -16,6 +16,7 @@ export function generateMetadata({ params }: { params: { locale: Locale } }): Me
       languages: hreflangAlternates("/security"),
     },
     openGraph: {
+      siteName: "GRCEye",
       title,
       description,
       url: canonicalUrl(params.locale, "/security"),
@@ -26,7 +27,8 @@ export function generateMetadata({ params }: { params: { locale: Locale } }): Me
   };
 }
 
-export default function SecurityPage() {
+export default function SecurityPage({ params }: { params: { locale: Locale } }) {
+  const to = (path: string) => `/${params.locale}${path}`;
   return (
     <LegalPage
       title="Security"
@@ -110,8 +112,8 @@ export default function SecurityPage() {
         </li>
         <li>
           <strong>Data ownership</strong> &mdash; your content is yours. See the{" "}
-          <Link href="/terms">terms of service</Link> and{" "}
-          <Link href="/privacy">privacy policy</Link>.
+          <Link href={to("/terms")}>terms of service</Link> and{" "}
+          <Link href={to("/privacy")}>privacy policy</Link>.
         </li>
       </ul>
 
@@ -141,7 +143,7 @@ export default function SecurityPage() {
       <p>
         If you need a completed security questionnaire, a data processing agreement, or
         architecture detail for your vendor review, ask via the{" "}
-        <Link href="/contact">contact form</Link> and we will turn it around. Customers can
+        <Link href={to("/contact")}>contact form</Link> and we will turn it around. Customers can
         also publish their own posture through the platform&apos;s built-in trust center.
       </p>
     </LegalPage>

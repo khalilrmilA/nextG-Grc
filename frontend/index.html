@@ -11,9 +11,13 @@
     <meta name="description" content="GRCEye is the all-in-one GRC SaaS platform: 70+ compliance frameworks, AI gap analysis, risk quantification, audits, policies, vendor risk and a public trust center — built for security teams." />
     <meta name="keywords" content="GRC platform, governance risk compliance, ISO 27001, SOC 2, NIST CSF, GDPR, NIS2, DORA, risk management software, compliance automation, AI compliance, vendor risk management, TPRM, audit software, policy management" />
     <meta name="author" content="GRCEye" />
-    <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1" />
+    <!-- Private authenticated app shell: never index it, and never let it assert
+         brand entity data. The marketing site (Next.js) is the sole source of the
+         GRCEye Organization/WebSite entity; a second, differing copy here split the
+         brand across two conflicting knowledge-graph nodes. -->
+    <meta name="robots" content="noindex, nofollow" />
     <meta name="theme-color" content="#2563eb" />
-    <link rel="canonical" href="https://grceye.com/" />
+    
 
     <!-- Open Graph -->
     <meta property="og:type" content="website" />
@@ -31,42 +35,7 @@
     <meta name="twitter:description" content="The all-in-one GRC SaaS platform with 70+ frameworks, AI gap analysis, risk quantification, audits, policies and vendor risk." />
     <meta name="twitter:image" content="https://grceye.com/logo.png" />
 
-    <!-- Organization JSON-LD (sitewide) -->
-    <script type="application/ld+json">
-    {
-      "@context": "https://schema.org",
-      "@type": "Organization",
-      "name": "GRCEye",
-      "url": "https://grceye.com",
-      "logo": "https://grceye.com/logo.png",
-      "description": "All-in-one Governance, Risk and Compliance SaaS platform.",
-      "sameAs": [],
-      "contactPoint": [
-        {
-          "@type": "ContactPoint",
-          "contactType": "sales",
-          "email": "sales@grceye.io",
-          "availableLanguage": ["en", "fr"]
-        },
-        {
-          "@type": "ContactPoint",
-          "contactType": "customer support",
-          "email": "support@grceye.io",
-          "availableLanguage": ["en", "fr"]
-        }
-      ]
-    }
-    </script>
 
-    <!-- WebSite JSON-LD with sitelinks search -->
-    <script type="application/ld+json">
-    {
-      "@context": "https://schema.org",
-      "@type": "WebSite",
-      "name": "GRCEye",
-      "url": "https://grceye.com"
-    }
-    </script>
   </head>
   <body>
     <div id="root"></div>

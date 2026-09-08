@@ -22,8 +22,18 @@ const PAGES: { path: string; changeFrequency: "weekly" | "monthly"; priority: nu
   { path: "/terms",            changeFrequency: "monthly", priority: 0.3 },
 ];
 
+/**
+ * Content-change dates for the static pages, edited by hand when a page's copy
+ * actually changes. Previously every static URL was stamped with `new Date()` at
+ * build time, so a deploy that touched one component told Google all 27 pages had
+ * changed. Crawlers learn to distrust a lastmod that always equals "the last
+ * deploy" and start ignoring the field entirely, which costs recrawl priority on
+ * the pages that genuinely did change.
+ */
+const STATIC_PAGES_LAST_MODIFIED = new Date("2026-09-08T00:00:00Z");
+
 export default function sitemap(): MetadataRoute.Sitemap {
-  const now = new Date();
+  const now = STATIC_PAGES_LAST_MODIFIED;
 
   // One entry per locale per page, each carrying hreflang alternates to the
   // other locales — lets Google discover and index /fr and /ar as distinct

@@ -67,8 +67,13 @@ Disallow: /src/
 Disallow: /@vite/
 Disallow: /node_modules/
 
-# Block search-result spam from crawlers
-Disallow: /*?*
+# Note: there is deliberately NO blanket `Disallow: /*?*` here.
+# That rule blocked every URL carrying a query string, which meant any inbound
+# link tagged with utm_source, gclid, fbclid or a referral parameter — i.e. every
+# link from an ad, a newsletter, a directory listing or a social post — became
+# uncrawlable, and the link equity died at the door. Canonical tags already
+# collapse parameter variants onto the clean URL, which is the correct tool for
+# this. Block specific parameters here only if a real crawl trap appears.
 
 # Explicit host + sitemap
 Host: https://grceye.com

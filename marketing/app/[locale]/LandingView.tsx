@@ -928,7 +928,10 @@ export default function LandingView() {
               { to: "/faq",              title: t("public.nav.faq"),       icon: MessageSquare, desc: t("public.landing.explore_faq_desc"),       cta: t("public.landing.explore_faq_cta"),       color: "from-orange-500 to-amber-500" },
             ].map((item, i) => (
               <Reveal key={item.title} delay={i * 80}>
-                <Link href={item.to} className="group gradient-border bg-white rounded-2xl p-7 card-hover block h-full">
+                {/* Locale-prefixed: an unprefixed href here made the French and
+                    Arabic home pages link to the English pages via a 307, which
+                    walks Googlebot straight out of the locale it was crawling. */}
+                <Link href={`/${lang}${item.to}`} className="group gradient-border bg-white rounded-2xl p-7 card-hover block h-full">
                   <div className={`w-10 h-10 bg-gradient-to-br ${item.color} rounded-xl flex items-center justify-center mb-4 shadow-md group-hover:scale-110 transition-transform`}>
                     <item.icon className="w-5 h-5 text-white" />
                   </div>
@@ -953,20 +956,20 @@ export default function LandingView() {
               <div className="relative">
                 <div className="inline-flex items-center gap-2 bg-white/10 border border-white/20 text-white text-xs font-semibold px-4 py-1.5 rounded-full mb-6 backdrop-blur-sm">
                   <Handshake className="w-3.5 h-3.5 text-yellow-300" />
-                  Partnerships &amp; Resellers
+                  {t("public.landing.partners_badge")}
                 </div>
                 <h2 className="text-2xl sm:text-3xl font-extrabold text-white mb-4">
-                  Open for partnerships and reseller programs
+                  {t("public.landing.partners_title")}
                 </h2>
                 <p className="text-slate-300 max-w-2xl mx-auto mb-8 leading-relaxed">
-                  We&apos;re actively partnering with consultancies, MSSPs, and resellers who want to bring GRCEye to their clients. Get in touch to talk white-labeling, referral, or reseller terms.
+                  {t("public.landing.partners_body")}
                 </p>
                 <div className="flex flex-col sm:flex-row gap-4 justify-center">
                   <Link
                     href={`/${lang}/contact`}
                     className="flex items-center justify-center gap-2 bg-white text-slate-900 font-bold px-7 py-3.5 rounded-2xl hover:bg-slate-100 transition-all text-sm shadow-lg"
                   >
-                    Contact Us <ArrowRight className="w-4 h-4 rtl:rotate-180" />
+                    {t("public.landing.partners_cta")} <ArrowRight className="w-4 h-4 rtl:rotate-180" />
                   </Link>
                   <a
                     href="mailto:partners@grceye.com"

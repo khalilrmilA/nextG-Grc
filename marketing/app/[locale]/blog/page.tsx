@@ -14,6 +14,7 @@ export function generateMetadata({ params }: { params: { locale: Locale } }): Me
     keywords: m.keywords,
     alternates: { canonical: canonicalUrl(params.locale, "/blog"), languages: hreflangAlternates("/blog") },
     openGraph: {
+      siteName: "GRCEye",
       title: m.ogTitle,
       description: m.ogDescription,
       url: canonicalUrl(params.locale, "/blog"),

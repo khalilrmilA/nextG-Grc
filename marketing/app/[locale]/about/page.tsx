@@ -33,6 +33,7 @@ export function generateMetadata({ params }: { params: { locale: Locale } }): Me
       languages: hreflangAlternates("/about"),
     },
     openGraph: {
+      siteName: "GRCEye",
       title: m.title,
       description: m.description,
       url: canonicalUrl(params.locale, "/about"),
@@ -56,7 +57,8 @@ const ABOUT_JSON_LD = {
   mainEntity: { "@id": ORG_ID },
 };
 
-export default function AboutPage() {
+export default function AboutPage({ params }: { params: { locale: Locale } }) {
+  const to = (path: string) => `/${params.locale}${path}`;
   return (
     <>
       <script
@@ -142,13 +144,13 @@ export default function AboutPage() {
           Sales enquiries go to{" "}
           <a href="mailto:sales@grceye.com">sales@grceye.com</a>, support to{" "}
           <a href="mailto:support@grceye.com">support@grceye.com</a>. You can also{" "}
-          <Link href="/contact">use the contact form</Link>, browse the{" "}
-          <Link href="/faq">frequently asked questions</Link>, or read about{" "}
-          <Link href="/security">how we secure the platform</Link>.
+          <Link href={to("/contact")}>use the contact form</Link>, browse the{" "}
+          <Link href={to("/faq")}>frequently asked questions</Link>, or read about{" "}
+          <Link href={to("/security")}>how we secure the platform</Link>.
         </p>
         <p>
           If you want to see it rather than read about it,{" "}
-          <Link href="/how-it-works">walk through how GRCEye works</Link> or{" "}
+          <Link href={to("/how-it-works")}>walk through how GRCEye works</Link> or{" "}
           <Link href="/register">start a free trial</Link> &mdash; no credit card required.
         </p>
       </LegalPage>

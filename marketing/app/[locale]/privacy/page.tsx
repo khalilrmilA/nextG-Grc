@@ -16,6 +16,7 @@ export function generateMetadata({ params }: { params: { locale: Locale } }): Me
       languages: hreflangAlternates("/privacy"),
     },
     openGraph: {
+      siteName: "GRCEye",
       title,
       description,
       url: canonicalUrl(params.locale, "/privacy"),
@@ -26,7 +27,8 @@ export function generateMetadata({ params }: { params: { locale: Locale } }): Me
   };
 }
 
-export default function PrivacyPage() {
+export default function PrivacyPage({ params }: { params: { locale: Locale } }) {
+  const to = (path: string) => `/${params.locale}${path}`;
   return (
     <LegalPage
       title="Privacy Policy"
@@ -172,7 +174,7 @@ export default function PrivacyPage() {
         Technical and organisational measures &mdash; encryption in transit, role-based
         access control, tenant isolation, multi-factor authentication and audit logging
         &mdash; are described on our{" "}
-        <Link href="/security">security page</Link>.
+        <Link href={to("/security")}>security page</Link>.
       </p>
 
       <h2>11. Changes</h2>
@@ -185,7 +187,7 @@ export default function PrivacyPage() {
       <h2>12. Contact</h2>
       <p>
         Privacy: <a href="mailto:privacy@grceye.com">privacy@grceye.com</a> &middot; General:{" "}
-        <Link href="/contact">contact form</Link>
+        <Link href={to("/contact")}>contact form</Link>
       </p>
     </LegalPage>
   );

@@ -14,28 +14,37 @@ type DropdownLink = {
 };
 type NavItem = SimpleLink | DropdownLink;
 
-const NAV_ITEMS: NavItem[] = [
-  { kind: "link", to: "/how-it-works",    label: "How it works" },
-  { kind: "link", to: "/features-landing", label: "Features"     },
-  { kind: "link", to: "/solutions",        label: "Solutions"    },
-  { kind: "link", to: "/frameworks",        label: "Frameworks"   },
-  {
-    kind: "dropdown",
-    label: "Resources",
-    items: [
-      { to: "/blog",  label: "Blog",             description: "GRC automation guides & insights",       icon: BookOpen   },
-      { to: "/news",  label: "Regulatory News",  description: "Latest framework & regulation updates", icon: Newspaper  },
-    ],
-  },
-  {
-    kind: "dropdown",
-    label: "Help",
-    items: [
-      { to: "/faq",     label: "FAQ",     description: "Pricing, security & integration answers", icon: HelpCircle    },
-      { to: "/contact", label: "Contact", description: "Sales, demos & support",                  icon: MessageSquare },
-    ],
-  },
-];
+/**
+ * Built per render from the active dictionary rather than declared as a module
+ * constant. The labels used to be hardcoded English, so the site-wide nav — and
+ * with it every dropdown description — stayed English on /fr and /ar. Combined
+ * with the footer, that left 37% of the Arabic home page's words in Latin script
+ * while its hreflang and <html lang> both claimed Arabic.
+ */
+function buildNavItems(t: (key: string) => string): NavItem[] {
+  return [
+    { kind: "link", to: "/how-it-works",     label: t("public.nav.how_it_works") },
+    { kind: "link", to: "/features-landing", label: t("public.nav.features")     },
+    { kind: "link", to: "/solutions",        label: t("public.nav.solutions")    },
+    { kind: "link", to: "/frameworks",       label: t("public.nav.frameworks")   },
+    {
+      kind: "dropdown",
+      label: t("public.nav.resources"),
+      items: [
+        { to: "/blog", label: t("public.nav.blog"),            description: t("public.nav.blog_desc"), icon: BookOpen  },
+        { to: "/news", label: t("public.nav.regulatory_news"), description: t("public.nav.news_desc"), icon: Newspaper },
+      ],
+    },
+    {
+      kind: "dropdown",
+      label: t("public.nav.help"),
+      items: [
+        { to: "/faq",     label: t("public.nav.faq"),     description: t("public.nav.faq_desc"),     icon: HelpCircle    },
+        { to: "/contact", label: t("public.nav.contact"), description: t("public.nav.contact_desc"), icon: MessageSquare },
+      ],
+    },
+  ];
+}
 
 export default function PublicNav() {
   const [open, setOpen]       = useState(false);
@@ -44,7 +53,8 @@ export default function PublicNav() {
   const [mobileExpanded, setMobileExpanded] = useState<string | null>(null);
   const pathname = usePathname();
   const dropdownRef = useRef<HTMLDivElement>(null);
-  const { lang } = useI18n();
+  const { t, lang } = useI18n();
+  const NAV_ITEMS = buildNavItems(t);
   const withLocale = (path: string) => (path === "/login" || path === "/register" ? path : `/${lang}${path}`);
 
   useEffect(() => { setOpen(false); setActiveDropdown(null); }, [pathname]);
@@ -151,13 +161,13 @@ export default function PublicNav() {
               href="/login"
               className="px-3.5 py-1.5 text-sm font-medium text-gray-600 hover:text-gray-900 transition-colors rounded-md hover:bg-gray-50"
             >
-              Sign in
+              {t("public.nav.sign_in")}
             </Link>
             <Link
               href="/register"
               className="group flex items-center gap-1.5 bg-gradient-to-br from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white text-sm font-semibold pl-4 pr-3.5 py-2 rounded-lg transition-all shadow-sm hover:shadow-md hover:shadow-blue-500/25"
             >
-              Start free trial
+              {t("public.nav.start_trial")}
               <ArrowRight className="w-3.5 h-3.5 transition-transform group-hover:translate-x-0.5" />
             </Link>
           </div>
@@ -169,14 +179,14 @@ export default function PublicNav() {
               href="/register"
               className="hidden sm:inline-flex items-center gap-1 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold px-3 py-1.5 rounded-lg shadow-sm"
             >
-              Start trial
+              {t("public.nav.start_trial")}
             </Link>
             {/* /login and /register are proxy-rewritten straight to the Vite dashboard
                 (see next.config.js rewrites) and intentionally never get a locale prefix. */}
             <button
               onClick={() => setOpen(true)}
               className="w-9 h-9 flex items-center justify-center rounded-lg hover:bg-gray-100 text-gray-700 transition-colors"
-              aria-label="Open menu"
+              aria-label={t("public.nav.open_menu")}
             >
               <Menu className="w-5 h-5" />
             </button>
@@ -202,7 +212,7 @@ export default function PublicNav() {
           <button
             onClick={() => setOpen(false)}
             className="w-9 h-9 flex items-center justify-center rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-700 transition-colors"
-            aria-label="Close menu"
+            aria-label={t("public.nav.close_menu")}
           >
             <X className="w-5 h-5" />
           </button>
@@ -268,7 +278,7 @@ export default function PublicNav() {
             onClick={() => setOpen(false)}
             className="flex items-center justify-center gap-2 w-full bg-gray-50 hover:bg-gray-100 border border-gray-200 text-gray-700 font-semibold px-4 py-3 rounded-xl transition-colors text-sm"
           >
-            Sign in
+            {t("public.nav.sign_in")}
           </Link>
         </div>
       </div>

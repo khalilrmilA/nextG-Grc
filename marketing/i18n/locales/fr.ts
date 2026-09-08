@@ -850,6 +850,13 @@ export default {
 
   public: {
     nav: {
+      regulatory_news: "Actualités réglementaires",
+      contact_desc: "Ventes, démos et support",
+      faq_desc: "Tarifs, sécurité et intégrations",
+      news_desc: "Dernières évolutions des référentiels et réglementations",
+      blog_desc: "Guides et analyses sur l'automatisation GRC",
+      help: "Aide",
+      resources: "Ressources",
       features: "Fonctionnalités",
       solutions: "Solutions",
       pricing: "Tarifs",
@@ -874,6 +881,7 @@ export default {
       badge_zero_egress: "Zéro fuite de données",
       platform: "Plateforme",
       company: "Entreprise",
+      about: "À propos",
       privacy: "Politique de confidentialité",
       terms: "Conditions d'utilisation",
       security: "Sécurité",
@@ -1088,6 +1096,10 @@ export default {
       register_error: "Échec de l'inscription. Veuillez réessayer.",
     },
     landing: {
+      partners_cta: "Nous contacter",
+      partners_body: "Nous nouons activement des partenariats avec des cabinets de conseil, des MSSP et des revendeurs souhaitant proposer GRCEye à leurs clients. Contactez-nous pour discuter marque blanche, apport d'affaires ou conditions de revente.",
+      partners_title: "Ouverts aux partenariats et aux programmes de revente",
+      partners_badge: "Partenariats et revendeurs",
       hero_badge: "70+ référentiels de conformité · IA on-premise · Zéro fuite de données",
       hero_title_pre: "GRCEye — GRC d'entreprise pour",
       typeword1: "les équipes sécurité",

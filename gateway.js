@@ -44,6 +44,11 @@ const MARKETING_PAGE_ROOTS = new Set([
 ]);
 const LOCALES = new Set(["en", "fr", "ar"]);
 
+// Root-level files that are always the marketing app's, never the dashboard's.
+const MARKETING_OWNED_FILES = new Set([
+  "/sitemap.xml", "/robots.txt", "/site.webmanifest", "/og-image.png",
+]);
+
 function isMarketingPath(pathname) {
   const segments = pathname.split("/").filter(Boolean);
   if (segments.length === 0) return true;
@@ -135,6 +140,15 @@ function handler(req, res) {
   }
 
   const pathname = u.split("?")[0];
+
+  // SEO artifacts are owned by the marketing app and must never be answered from
+  // the dashboard build, which still carries its own stale pre-marketing copies:
+  // frontend/dist/sitemap.xml listed 14 unprefixed URLs that all 307-redirect,
+  // while Next generates 75 correct locale-prefixed ones with hreflang. Because
+  // the static-file branch below checks the dashboard dist first, that stale pair
+  // was what Google actually received. Claim them for marketing explicitly rather
+  // than relying on the files being absent from dist.
+  if (MARKETING_OWNED_FILES.has(pathname)) return proxy(req, res, MARKETING);
 
   if (/\.[a-zA-Z0-9]+$/.test(pathname)) {
     // Static file. The dashboard has its own root-level public/ assets (logos, icons -

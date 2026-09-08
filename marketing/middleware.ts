@@ -108,7 +108,18 @@ export function middleware(req: NextRequest) {
   // (serve /en's content at the "/" URL) rather than redirect for this one
   // path; every other unprefixed marketing path still gets the visible locale redirect.
   if (pathname === "/") {
-    return NextResponse.rewrite(url);
+    const res = NextResponse.rewrite(url);
+    // This one URL serves three different languages off Accept-Language and the
+    // locale cookie, but Next stamps the rewritten page with
+    // `Cache-Control: s-maxage=31536000` and a Vary that lists neither. Any shared
+    // cache in front of this — the load balancer, a CDN, a corporate proxy — is
+    // therefore free to store whichever language it saw first and serve it to
+    // everyone for a year, Googlebot included. Declare what the response varies
+    // on, and keep shared caches from storing it at all: the page is SSG-backed
+    // and cheap to re-render, so there is nothing to gain by caching it publicly.
+    res.headers.set("Vary", "Accept-Language, Cookie");
+    res.headers.set("Cache-Control", "private, no-cache, must-revalidate");
+    return res;
   }
   return NextResponse.redirect(url, 307);
 }

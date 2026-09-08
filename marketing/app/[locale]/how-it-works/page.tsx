@@ -12,6 +12,7 @@ export function generateMetadata({ params }: { params: { locale: Locale } }): Me
     keywords: m.keywords,
     alternates: { canonical: canonicalUrl(params.locale, "/how-it-works"), languages: hreflangAlternates("/how-it-works") },
     openGraph: {
+      siteName: "GRCEye",
       title: m.ogTitle,
       description: m.ogDescription,
       url: canonicalUrl(params.locale, "/how-it-works"),

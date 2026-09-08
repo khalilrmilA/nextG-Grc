@@ -20,16 +20,31 @@ function FAQAccordion({ category, ids }: { category: string; ids: readonly strin
           <div key={id} className="border border-gray-200 rounded-xl overflow-hidden hover:border-blue-200 transition-colors">
             <button
               onClick={() => setExpanded(expanded === idx ? null : idx)}
+              aria-expanded={expanded === idx}
+              aria-controls={`faq-answer-${id}`}
               className="w-full px-6 py-4 flex items-center justify-between hover:bg-gray-50 transition-colors text-left rtl:text-right"
             >
               <span className="font-semibold text-gray-900 pr-4 rtl:pr-0 rtl:pl-4">{t(`public.faq_q.${id}_q`)}</span>
               <ChevronDown className={`w-5 h-5 text-gray-400 flex-shrink-0 transition-transform ${expanded === idx ? "rotate-180" : ""}`} />
             </button>
-            {expanded === idx && (
-              <div className="px-6 py-4 bg-blue-50/50 border-t border-gray-200">
-                <p className="text-gray-700 leading-relaxed text-sm">{t(`public.faq_q.${id}_a`)}</p>
+            {/* The answer is always rendered and merely collapsed with CSS, never
+                unmounted. Mounting only the open item put 31 of the 40 answers
+                outside the served HTML while the FAQPage JSON-LD declared all 40
+                — structured data that asserts content the page does not contain
+                is exactly what disqualifies an FAQ rich result. Collapsing with
+                a grid row keeps the same open/close animation. */}
+            <div
+              id={`faq-answer-${id}`}
+              className={`grid transition-all duration-200 ${
+                expanded === idx ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0"
+              }`}
+            >
+              <div className="overflow-hidden">
+                <div className="px-6 py-4 bg-blue-50/50 border-t border-gray-200">
+                  <p className="text-gray-700 leading-relaxed text-sm">{t(`public.faq_q.${id}_a`)}</p>
+                </div>
               </div>
-            )}
+            </div>
           </div>
         ))}
       </div>

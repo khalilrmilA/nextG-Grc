@@ -72,3 +72,6 @@ backend/backups/
 # this path from images for the same reason.
 backend/uploads/
 .deploy-backup-*/
+
+# Local pre-change copies of stale SEO assets (see the 2026-09-08 SEO pass)
+.seo-stale-backup-*/

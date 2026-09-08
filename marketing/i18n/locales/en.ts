@@ -851,6 +851,13 @@ export default {
   // Public marketing site (nav, footer, landing, blog, faq, news, contact, login, register)
   public: {
     nav: {
+      regulatory_news: "Regulatory News",
+      contact_desc: "Sales, demos & support",
+      faq_desc: "Pricing, security & integration answers",
+      news_desc: "Latest framework & regulation updates",
+      blog_desc: "GRC automation guides & insights",
+      help: "Help",
+      resources: "Resources",
       features: "Features",
       solutions: "Solutions",
       pricing: "Pricing",
@@ -875,6 +882,7 @@ export default {
       badge_zero_egress: "Zero egress",
       platform: "Platform",
       company: "Company",
+      about: "About",
       privacy: "Privacy Policy",
       terms: "Terms of Service",
       security: "Security",
@@ -1090,6 +1098,10 @@ export default {
       register_error: "Registration failed. Please try again.",
     },
     landing: {
+      partners_cta: "Contact Us",
+      partners_body: "We're actively partnering with consultancies, MSSPs, and resellers who want to bring GRCEye to their clients. Get in touch to talk white-labeling, referral, or reseller terms.",
+      partners_title: "Open for partnerships and reseller programs",
+      partners_badge: "Partnerships & Resellers",
       hero_badge: "70+ compliance frameworks · On-premise AI · Zero data egress",
       hero_title_pre: "GRCEye — Enterprise GRC for",
       typeword1: "security teams",
