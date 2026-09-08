@@ -236,7 +236,10 @@ def suite_control_register(client: Client, result: Result) -> None:
         return
     cid = control["id"]
     try:
-        status, updated, _ = client.call("PATCH", f"/applied-controls/{cid}", body={"status": "active"})
+        # "active" is NOT a ControlStatus member (planned / in_progress / implemented /
+        # not_applicable / deprecated). The endpoint used to accept it silently and now
+        # validates, so the suite was asserting a value the model never allowed.
+        status, updated, _ = client.call("PATCH", f"/applied-controls/{cid}", body={"status": "implemented"})
         result.check("a status change is accepted", status == 200, str(status))
         status, history, _ = client.call("GET", f"/applied-controls/{cid}/history")
         actions = [h["action"] for h in history] if status == 200 else []
