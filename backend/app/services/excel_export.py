@@ -86,8 +86,21 @@ def _cell(value: Any) -> Any:
     return value[:_MAX_CELL_CHARS] if len(value) > _MAX_CELL_CHARS else value
 
 
-def rows_to_xlsx(sheet_name: str, columns: Sequence[str], rows: Sequence[dict]) -> bytes:
-    """Render rows to an xlsx byte string with a styled header row."""
+def rows_to_xlsx(sheet_name: str, columns: Sequence[str], rows: Sequence[dict],
+                 *, lang: str = "en") -> bytes:
+    """Render rows to an xlsx byte string with a styled header row.
+
+    ``lang`` translates the HEADER ROW only — the same rule tabular_pdf follows.
+    Cell values stay exactly as the caller produced them, because this workbook
+    is also what /data/import/* reads back: a translated "operational" would not
+    import, and a translated risk title would be wrong in any language. Without
+    this, « Export Excel » was English whatever the UI language, which is the
+    half of the export clause the PDF path had already closed.
+    """
+    # Imported lazily: report_generator pulls in the model layer, and this
+    # renderer is imported by every export endpoint and by archiving.
+    from app.services.report_generator import column_label
+
     wb = Workbook()
     ws = wb.active
     ws.title = _sheet_title(sheet_name)
@@ -95,7 +108,7 @@ def rows_to_xlsx(sheet_name: str, columns: Sequence[str], rows: Sequence[dict]) 
     header_font = Font(bold=True, color="FFFFFF")
     header_fill = PatternFill(fill_type="solid", fgColor="1F5C8B")
     for col_idx, col in enumerate(columns, start=1):
-        cell = ws.cell(row=1, column=col_idx, value=_cell(str(col)))
+        cell = ws.cell(row=1, column=col_idx, value=_cell(column_label(lang, str(col))))
         cell.font = header_font
         cell.fill = header_fill
         cell.alignment = Alignment(vertical="center")
@@ -109,7 +122,10 @@ def rows_to_xlsx(sheet_name: str, columns: Sequence[str], rows: Sequence[dict]) 
 
     for col_idx, col in enumerate(columns, start=1):
         letter = ws.cell(row=1, column=col_idx).column_letter
-        ws.column_dimensions[letter].width = max(12, min(48, len(str(col)) + 4))
+        # Width from the HEADER AS PRINTED — "Responsable de la remédiation" is
+        # twice the width of "owner_id", and sizing on the raw name clipped it.
+        ws.column_dimensions[letter].width = max(
+            12, min(48, len(str(ws.cell(row=1, column=col_idx).value or col)) + 4))
     ws.freeze_panes = "A2"
 
     buf = io.BytesIO()

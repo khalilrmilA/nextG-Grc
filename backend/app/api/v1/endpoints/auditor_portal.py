@@ -26,6 +26,7 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, s
 from fastapi.responses import FileResponse, StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import func, or_, select
+from sqlalchemy.exc import OperationalError, ProgrammingError
 from pydantic import BaseModel
 
 from app.core.config import settings
@@ -516,12 +517,21 @@ async def _load_grid(db: AsyncSession, audit: Any | None) -> AuditGrid | None:
     grid_id = getattr(audit, "grid_id", None) if audit is not None else None
     if not grid_id:
         return None
-    return (await db.execute(
-        select(AuditGrid).where(
-            AuditGrid.id == grid_id,
-            AuditGrid.tenant_id == audit.tenant_id,
-        )
-    )).scalars().first()
+    try:
+        return (await db.execute(
+            select(AuditGrid).where(
+                AuditGrid.id == grid_id,
+                AuditGrid.tenant_id == audit.tenant_id,
+            )
+        )).scalars().first()
+    except (OperationalError, ProgrammingError):
+        # audit_grids is created by create_all() at startup. On a server whose
+        # restart has not happened, an engagement that already names a grid must
+        # fall back to the framework-controls checklist rather than 500 — the SPA
+        # hard-redirects to /service-down on any 5xx, ejecting the auditor out of
+        # the application. Same tolerance compliance.py gives its own new tables.
+        logger.debug("auditor_portal.grid.unavailable audit=%s", getattr(audit, "id", None))
+        return None
 
 
 async def _load_scale(db: AsyncSession, assessment: Any | None) -> ComplianceScale | None:
@@ -534,13 +544,20 @@ async def _load_scale(db: AsyncSession, assessment: Any | None) -> ComplianceSca
     scale_id = getattr(assessment, "scale_id", None) if assessment is not None else None
     if not scale_id:
         return None
-    return (await db.execute(
-        select(ComplianceScale).where(
-            ComplianceScale.id == scale_id,
-            or_(ComplianceScale.tenant_id == assessment.tenant_id,
-                ComplianceScale.is_builtin == True),  # noqa: E712
-        )
-    )).scalars().first()
+    try:
+        return (await db.execute(
+            select(ComplianceScale).where(
+                ComplianceScale.id == scale_id,
+                or_(ComplianceScale.tenant_id == assessment.tenant_id,
+                    ComplianceScale.is_builtin == True),  # noqa: E712
+            )
+        )).scalars().first()
+    except (OperationalError, ProgrammingError):
+        # Same reason as _load_grid above, and the same tolerance compliance.py's
+        # own _load_scale carries: no scale row reachable means the legacy verdict
+        # levels, not a broken checklist.
+        logger.debug("auditor_portal.scale.unavailable assessment=%s", getattr(assessment, "id", None))
+        return None
 
 
 def _grid_levels(grid: Any) -> list[dict]:

@@ -42,6 +42,7 @@ from app.models.threat import Threat
 from app.models.applied_control import AppliedControl
 from app.models.control_evaluation import ControlEvaluation
 from app.services.excel_export import rows_to_xlsx
+from app.services.report_generator import register_label
 from app.services.tabular_pdf import rows_to_pdf
 from app.services.xml_export import rows_to_xml, xml_to_rows
 
@@ -147,7 +148,9 @@ def _export_rows_bytes(fmt: str, label: str, cols: list[str], rows: list[dict],
     if fmt == "xml":
         return rows_to_xml(root_tag, record_tag, rows)
     if fmt == "xlsx":
-        return rows_to_xlsx(label, cols, _xlsx_safe_rows(rows))
+        # lang translates the header row only (see excel_export.rows_to_xlsx):
+        # the cells stay exactly as exported so /data/import/* still reads them.
+        return rows_to_xlsx(label, cols, _xlsx_safe_rows(rows), lang=lang)
     # NOTE: no markup escaping here on purpose. ``rows_to_pdf`` renders every
     # cell through ``pdf_arabic.paragraph_markup``, which already escapes
     # &, < and > before ReportLab parses the Paragraph. Escaping a second time
@@ -192,7 +195,10 @@ async def _export_response(rows: list[dict], filename_base: str, root_tag: str, 
     date_stamp = datetime.utcnow().strftime("%Y%m%d")
     stem = f"{filename_base}_{date_stamp}"
     cols = list(rows[0]) if rows else list(columns or [])
-    label = root_tag.replace("_", " ").title()
+    # The document heading / sheet name in the caller's language. It used to be
+    # the XML root tag title-cased ("Framework Controls"), i.e. English on a
+    # French or Arabic export — the one line a reader sees first.
+    label = register_label(lang, root_tag)
 
     if fmt == "csv":
         return _csv_response(rows, f"{stem}.csv", columns=cols)

@@ -662,7 +662,7 @@ _TERMS: dict[str, dict[str, str]] = {
         "cyber_attack": "Cyberattaque", "insider_threat": "Menace interne",
         "social_engineering": "Ingénierie sociale", "supply_chain": "Chaîne d'approvisionnement",
         "pending_validation": "En attente de validation", "validated": "Validé",
-        "operational": "En service", "degraded": "Dégradé",
+        "operational": "Opérationnel", "degraded": "Dégradé",
         "out_of_service": "Hors service", "quarantined": "En quarantaine", "lost": "Perdu ou volé",
         "unspecified": "Non renseigné", "other": "Autre",
         "decommissioned": "Démantelé", "acquisition": "Acquisition",

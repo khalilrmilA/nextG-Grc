@@ -24,6 +24,7 @@ import csv
 import datetime as dt
 import enum
 import io
+from functools import partial
 from typing import Annotated, Callable
 
 from fastapi import APIRouter, Depends, HTTPException, Response
@@ -49,6 +50,7 @@ from app.api.v1.dependencies.auth import get_current_user, get_tenant_id
 from app.api.v1.dependencies.features import require_feature
 from app.services.ai_locale import get_request_language, normalize_language
 from app.services.excel_export import rows_to_xlsx
+from app.services.report_generator import register_label
 from app.services.tabular_pdf import rows_to_pdf
 
 router = APIRouter()
@@ -308,7 +310,9 @@ async def _file_response(fmt: str, dataset: str, columns: list[str], rows: list[
     other request, and there are only two workers. asyncio.to_thread keeps the
     loop free.
     """
-    label = DATASETS[dataset][0]
+    # Localised heading / sheet name; falls back to the dataset's English label
+    # for a dataset the register vocabulary does not know.
+    label = register_label(lang, dataset) or DATASETS[dataset][0]
     if fmt == "csv":
         # Formula injection: a cell starting with =, +, -, @ is executed when
         # the file is opened in Excel/LibreOffice. data_io.py has run its CSV
@@ -338,7 +342,9 @@ async def _file_response(fmt: str, dataset: str, columns: list[str], rows: list[
     # the xlsx path needs the same neutralisation as the CSV one. Only strings
     # are rewritten — numbers and bools must stay typed to remain sortable.
     safe = [{k: (csv_safe_cell(v) if isinstance(v, str) else v) for k, v in row.items()} for row in rows]
-    data = await asyncio.to_thread(rows_to_xlsx, label, columns, safe)
+    # lang translates the header row only — the cell values are the same ones
+    # the csv path emits, so nothing that reads an export back is affected.
+    data = await asyncio.to_thread(partial(rows_to_xlsx, label, columns, safe, lang=lang))
     return Response(
         content=data,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
