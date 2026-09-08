@@ -45,7 +45,6 @@ export default function PublicFooter() {
               <li><Link href="/terms" className="hover:text-white transition-colors">Terms of Service</Link></li>
               <li><a href="#" className="hover:text-white transition-colors">Security</a></li>
               <li><Link href="/contact" className="hover:text-white transition-colors">Contact</Link></li>
-              <li><a href="mailto:support@grceye.com" className="hover:text-white transition-colors">Support</a></li>
             </ul>
           </div>
         </div>

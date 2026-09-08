@@ -6,10 +6,17 @@ import {
   CheckCircle, XCircle, AlertTriangle, MinusCircle,
   ChevronDown, ChevronUp, Sparkles, Globe, GitBranch,
   Download, Table2, Eye, EyeOff, Trash2, ExternalLink,
-  Link2, CheckSquare, History,
+  Link2, CheckSquare, History, Settings2, X, User as UserIcon, Archive,
 } from "lucide-react";
-import { complianceApi, type EvidenceItem } from "@/api/endpoints";
-import type { AssessmentDetail, GapDetail, ControlAssessmentDetail, LinkedChecklistDocument } from "@/types";
+import { complianceApi, usersApi, type EvidenceItem, type TenantUserRecord } from "@/api/endpoints";
+import type {
+  AssessmentDetail, GapDetail, ControlAssessmentDetail, LinkedChecklistDocument,
+  ComplianceScaleLevel,
+} from "@/types";
+import {
+  ScopeFields, ScopeBadge, usePerimeterOptions, validateScope,
+  type ScopeValue, type ScopeType,
+} from "@/pages/CompliancePage";
 import { FileHistoryModal } from "@/components/features/compliance/FileHistoryModal";
 import PolicyGeneratorModal from "@/components/features/compliance/PolicyGeneratorModal";
 import DocumentChecklistTab from "@/components/features/compliance/DocumentChecklistTab";
@@ -29,9 +36,59 @@ const STATUS_CONFIG = {
   in_progress:           { label: "In Progress",icon: Loader2,       color: "text-blue-600 bg-blue-50"    },
 } as const;
 
-function ControlStatusBadge({ status }: { readonly status: string }) {
-  const { t } = useTranslation();
+// ─── Conformity scale (« grille d'évaluation ») ────────────────────────────────
+// A scale level's wording is DATA, not a locale key: a tenant can rename or
+// replace it. So the label comes from the level itself in the user's language,
+// with label_en then the technical key as the fallbacks. Only when the
+// assessment is graded on the legacy enum (scale_levels empty) do the
+// compliance.status_options.* keys apply.
+
+function levelLabel(level: ComplianceScaleLevel, lang: string): string {
+  const l = (lang || "en").toLowerCase();
+  if (l.startsWith("fr")) return level.label_fr || level.label_en || level.key;
+  if (l.startsWith("ar")) return level.label_ar || level.label_en || level.key;
+  return level.label_en || level.label_fr || level.key;
+}
+
+function findLevel(
+  levels: ComplianceScaleLevel[] | undefined,
+  key: string | null | undefined,
+): ComplianceScaleLevel | undefined {
+  if (!levels || !key) return undefined;
+  return levels.find((lv) => lv.key === key);
+}
+
+/** The legacy enum value a scale level maps onto — what every count, filter,
+ *  export and report in the product still speaks. */
+function legacyOf(level: ComplianceScaleLevel | undefined): string | null {
+  const raw = level?.legacy_status;
+  return typeof raw === "string" && raw ? raw : null;
+}
+
+function ControlStatusBadge({
+  status,
+  statusKey,
+  levels,
+}: {
+  readonly status: string;
+  readonly statusKey?: string | null;
+  readonly levels?: ComplianceScaleLevel[];
+}) {
+  const { t, i18n } = useTranslation();
+  const level = findLevel(levels, statusKey);
   const cfg = STATUS_CONFIG[status as keyof typeof STATUS_CONFIG] ?? STATUS_CONFIG.not_started;
+  if (level) {
+    const color = typeof level.color === "string" ? level.color : undefined;
+    return (
+      <span
+        className="inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full"
+        style={color ? { color, backgroundColor: `${color}1a` } : undefined}
+      >
+        <cfg.icon className="w-3 h-3" />
+        {levelLabel(level, i18n.language)}
+      </span>
+    );
+  }
   return (
     <span className={`inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full ${cfg.color}`}>
       <cfg.icon className="w-3 h-3" />
@@ -81,7 +138,7 @@ function UploadTab({
         const doc = await complianceApi.uploadDocument(assessment.id, file);
         setDocs((prev) => [...prev, doc]);
       } catch {
-        setError(`Failed to upload ${file.name}. Only PDF, DOCX, XLSX, XLS, TXT are supported (max 10MB).`);
+        setError(t("compliance.upload_failed", "Could not upload {{name}}. Accepted: PDF, DOCX, XLSX, XLS, TXT (10 MB max).", { name: file.name }));
       }
     }
     setUploading(false);
@@ -109,7 +166,7 @@ function UploadTab({
           } else if (s.status === "failed") {
             stopPolling();
             setAnalyzing(false);
-            setError(s.error ?? "Analysis failed. Make sure Ollama is running and the model is available.");
+            setError(s.error ?? t("compliance.analysis_failed", "The analysis failed. Check that the AI service is running."));
           }
         } catch {
           // transient poll error — keep trying
@@ -117,7 +174,7 @@ function UploadTab({
       }, 4000);
     } catch {
       setAnalyzing(false);
-      setError("Could not start analysis. Make sure documents are uploaded.");
+      setError(t("compliance.analysis_start_failed", "The analysis could not be started. Upload at least one document first."));
     }
   }
 
@@ -218,11 +275,23 @@ function ResultsTab({
 }: {
   readonly assessment: AssessmentDetail;
 }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const [filter, setFilter] = useState<"all" | "implemented" | "partial" | "gap">("all");
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [policyGap, setPolicyGap] = useState<GapDetail | null>(null);
   const [overrides, setOverrides] = useState<Record<string, string>>({});
+  // The assessment's own conformity grid. Empty = graded on the legacy enum.
+  const scaleLevels: ComplianceScaleLevel[] = assessment.scale_levels ?? [];
+  const usesScale = scaleLevels.length > 0;
+  const [keyOverrides, setKeyOverrides] = useState<Record<string, string>>({});
+  const [statusError, setStatusError] = useState("");
+  const [users, setUsers] = useState<TenantUserRecord[]>([]);
+  const [ownerOverrides, setOwnerOverrides] = useState<Record<string, string>>({});
+  const [savingOwner, setSavingOwner] = useState<string | null>(null);
+  const [naDrafts, setNaDrafts] = useState<Record<string, string>>({});
+  const [naSaved, setNaSaved] = useState<Record<string, boolean>>({});
+  const [naErrors, setNaErrors] = useState<Record<string, string>>({});
+  const [savingNa, setSavingNa] = useState<string | null>(null);
   const [history, setHistory] = useState<Record<string, { status: string; by: string; at: string }[]>>({});
   const [saving, setSaving] = useState<string | null>(null);
   const [justifications, setJustifications] = useState<Record<string, string>>({});
@@ -238,21 +307,104 @@ function ResultsTab({
   const [evidenceSharedToast, setEvidenceSharedToast] = useState<{ fileName: string; count: number } | null>(null);
   const justificationTimeouts = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
 
+  // « Affectation d'un responsable par exigence » — a real user picker rather
+  // than the free-text UUID the field used to be.
+  useEffect(() => {
+    let alive = true;
+    usersApi.list()
+      .then((list) => { if (alive) setUsers(list.filter((u) => u.is_active)); })
+      .catch(() => { /* the picker degrades to "no owner"; never blocks the page */ });
+    return () => { alive = false; };
+  }, []);
+
+  function recordHistory(caId: string, currentStatus: string, newStatus: string) {
+    setHistory((prev) => ({
+      ...prev,
+      [caId]: [
+        ...(prev[caId] ?? [{ status: currentStatus, by: t("compliance.ai_assessment_label"), at: new Date(assessment.updated_at).toLocaleDateString() }]),
+        { status: newStatus, by: t("compliance.manually_overridden"), at: new Date().toLocaleDateString() },
+      ],
+    }));
+  }
+
+  /** Legacy enum path — used when the assessment is not graded on a scale. */
   async function handleStatusOverride(caId: string, currentStatus: string, newStatus: string) {
     if (newStatus === currentStatus) return;
     setSaving(caId);
+    setStatusError("");
     try {
-      await complianceApi.updateControlAssessment(caId, { status: newStatus as import("@/types").ControlStatus });
-      setOverrides((prev) => ({ ...prev, [caId]: newStatus }));
-      setHistory((prev) => ({
-        ...prev,
-        [caId]: [
-          ...(prev[caId] ?? [{ status: currentStatus, by: "AI Analysis", at: new Date(assessment.updated_at).toLocaleDateString() }]),
-          { status: newStatus, by: "Manual override", at: new Date().toLocaleDateString() },
-        ],
-      }));
-    } catch {/* silent */} finally {
+      const updated = await complianceApi.updateControlAssessment(caId, { status: newStatus as import("@/types").ControlStatus });
+      setOverrides((prev) => ({ ...prev, [caId]: updated.status }));
+      recordHistory(caId, currentStatus, updated.status);
+    } catch {
+      // Previously swallowed: the dropdown moved on screen whether or not the
+      // server accepted it (a mandatory control refused N/A with a 400).
+      setStatusError(t("compliance.status_save_failed", "The status could not be saved. Nothing was changed."));
+    } finally {
       setSaving(null);
+    }
+  }
+
+  /** Scale path — writes the LEVEL key of the assessment's own grid. The
+   *  backend keeps `status` in step so every count, export and report below
+   *  keeps working on the legacy enum. */
+  async function handleLevelChange(ca: ControlAssessmentDetail, levelKey: string) {
+    if (!levelKey || levelKey === effectiveStatusKey(ca)) return;
+    setSaving(ca.id);
+    setStatusError("");
+    const before = effectiveStatus(ca);
+    try {
+      const updated = await complianceApi.updateControlAssessment(ca.id, { status_key: levelKey });
+      setKeyOverrides((prev) => ({ ...prev, [ca.id]: updated.status_key ?? levelKey }));
+      setOverrides((prev) => ({ ...prev, [ca.id]: updated.status }));
+      recordHistory(ca.id, before, updated.status);
+      if (updated.requires_justification) {
+        setNaErrors((prev) => ({ ...prev, [ca.id]: t("applicability.justification_required") }));
+      }
+    } catch {
+      setStatusError(t("compliance.status_save_failed", "The status could not be saved. Nothing was changed."));
+    } finally {
+      setSaving(null);
+    }
+  }
+
+  async function handleOwnerChange(caId: string, ownerId: string) {
+    setSavingOwner(caId);
+    setStatusError("");
+    try {
+      // "" — never null. PATCH /control-assessments/{id} guards the field with
+      // `if body.owner_id is not None` and clears on `body.owner_id or None`, so
+      // a null means "leave alone": sending it to UNASSIGN did nothing, the
+      // response came back with the previous owner and the dropdown snapped
+      // back with no error shown.
+      const updated = await complianceApi.updateControlAssessment(caId, { owner_id: ownerId });
+      setOwnerOverrides((prev) => ({ ...prev, [caId]: updated.owner_id ?? "" }));
+    } catch {
+      setStatusError(t("compliance.status_save_failed", "The status could not be saved. Nothing was changed."));
+    } finally {
+      setSavingOwner(null);
+    }
+  }
+
+  /** « Non applicable » is an auditor's first question, so the reason goes into
+   *  its own column (not_applicable_justification) instead of the free notes,
+   *  and an empty one is refused before it ever reaches the server. */
+  async function handleSaveNaJustification(ca: ControlAssessmentDetail) {
+    const text = (naDrafts[ca.id] ?? ca.not_applicable_justification ?? "").trim();
+    if (!text) {
+      setNaErrors((prev) => ({ ...prev, [ca.id]: t("applicability.justification_required") }));
+      return;
+    }
+    setSavingNa(ca.id);
+    setNaErrors((prev) => ({ ...prev, [ca.id]: "" }));
+    try {
+      await complianceApi.updateControlAssessment(ca.id, { not_applicable_justification: text });
+      setNaSaved((prev) => ({ ...prev, [ca.id]: true }));
+      setTimeout(() => setNaSaved((prev) => ({ ...prev, [ca.id]: false })), 2000);
+    } catch {
+      setNaErrors((prev) => ({ ...prev, [ca.id]: t("applicability.error_save_failed") }));
+    } finally {
+      setSavingNa(null);
     }
   }
 
@@ -349,7 +501,7 @@ function ResultsTab({
       fileName: doc.file_name,
       contentType: doc.content_type,
       fileSizeBytes: doc.file_size_bytes,
-      subtitle: doc.clause_ref ? `Clause ${doc.clause_ref}` : undefined,
+      subtitle: doc.clause_ref ? `${t("compliance.clause")} ${doc.clause_ref}` : undefined,
       fetchUrl: complianceApi.downloadDocumentUrl(doc.id),
     });
   }
@@ -364,6 +516,19 @@ function ResultsTab({
   const cas = assessment.control_assessments;
   function effectiveStatus(ca: ControlAssessmentDetail) {
     return overrides[ca.id] ?? ca.status;
+  }
+  function effectiveStatusKey(ca: ControlAssessmentDetail): string {
+    return keyOverrides[ca.id] ?? ca.status_key ?? "";
+  }
+  function effectiveOwner(ca: ControlAssessmentDetail): string {
+    return ownerOverrides[ca.id] ?? ca.owner_id ?? "";
+  }
+  function isNotApplicable(ca: ControlAssessmentDetail): boolean {
+    if (usesScale) {
+      const lv = findLevel(scaleLevels, effectiveStatusKey(ca));
+      if (lv) return legacyOf(lv) === "not_applicable";
+    }
+    return effectiveStatus(ca) === "not_applicable";
   }
 
   const filtered = cas.filter((ca) => {
@@ -438,6 +603,15 @@ function ResultsTab({
         />
       )}
 
+      {statusError && (
+        <div className="bg-red-50 border border-red-200 rounded-xl p-3 text-sm text-red-700 flex items-center justify-between gap-3">
+          <span>{statusError}</span>
+          <button onClick={() => setStatusError("")} className="text-red-400 hover:text-red-600" title={t("common.close")}>
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+
       {/* Score summary */}
       <div className="bg-white rounded-2xl border border-gray-100 p-6 flex items-center gap-6">
         <div className="text-center">
@@ -445,6 +619,11 @@ function ResultsTab({
             {assessment.compliance_score ?? 0}%
           </p>
           <p className="text-sm text-gray-500 mt-1">{t("compliance.compliance_score_label")}</p>
+          {usesScale && (
+            <p className="text-xs text-gray-400 mt-0.5" title={t("compliance_scale.levels_hint")}>
+              {assessment.scale_name ?? t("compliance_scale.default_scale")}
+            </p>
+          )}
         </div>
         <div className="flex-1 grid grid-cols-3 gap-4">
           {[
@@ -607,7 +786,7 @@ function ResultsTab({
                   {ca.ai_confidence != null && (
                     <span className="text-xs text-gray-400">{Math.round(ca.ai_confidence * 100)}%</span>
                   )}
-                  <ControlStatusBadge status={effectiveStatus(ca)} />
+                  <ControlStatusBadge status={effectiveStatus(ca)} statusKey={effectiveStatusKey(ca)} levels={scaleLevels} />
                   {gap && (
                     <button
                       onClick={() => setPolicyGap(gap)}
@@ -620,7 +799,7 @@ function ResultsTab({
                   <button
                     onClick={(e) => { e.stopPropagation(); setShareModalCa(ca); }}
                     className="flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-500 hover:bg-orange-50 hover:text-orange-600 transition-colors"
-                    title="Share upload link with stakeholder"
+                    title={t("compliance.share_link_title", "Share an upload link with a stakeholder")}
                   >
                     <Link2 className="w-3 h-3" />
                     {t("compliance.share_btn")}
@@ -643,8 +822,8 @@ function ResultsTab({
                     <div className="bg-red-50 rounded-lg p-3">
                       <div className="flex items-center gap-2 mb-1">
                         <p className="text-xs font-semibold text-red-700">{t("compliance.gap_identified_label")}</p>
-                        <span className={`text-xs px-1.5 py-0.5 rounded-full font-medium ${SEVERITY_COLOR[gap.severity] ?? "text-gray-600 bg-gray-100"}`}>
-                          {gap.severity}
+                        <span className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${SEVERITY_COLOR[gap.severity] ?? "text-gray-600 bg-gray-100"}`}>
+                          {t(`compliance.severities.${gap.severity}`, { defaultValue: gap.severity })}
                         </span>
                       </div>
                       <p className="text-xs text-red-700">{gap.gap_description}</p>
@@ -666,28 +845,116 @@ function ResultsTab({
                     </div>
                   )}
 
-                  {/* Manual override */}
-                  <div className="flex items-center gap-2 pt-1">
+                  {/* Verdict — driven by the assessment's own conformity grid
+                      when it has one, by the legacy enum when it does not. */}
+                  <div className="flex flex-wrap items-center gap-2 pt-1">
                     <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide shrink-0">{t("compliance.override_status_label")}:</p>
-                    <select
-                      value={effectiveStatus(ca)}
-                      onChange={(e) => handleStatusOverride(ca.id, effectiveStatus(ca), e.target.value)}
-                      disabled={saving === ca.id}
-                      className="text-xs border border-gray-200 rounded-lg px-2 py-1 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
-                    >
-                      <option value="implemented">{t("compliance.status_options.implemented")}</option>
-                      <option value="partially_implemented">{t("compliance.status_options.partially_implemented")}</option>
-                      <option value="not_implemented">{t("compliance.status_options.not_implemented")}</option>
-                      {!ca.is_mandatory && <option value="not_applicable">{t("compliance.status_options.not_applicable")}</option>}
-                    </select>
+                    {usesScale ? (
+                      <select
+                        value={effectiveStatusKey(ca)}
+                        onChange={(e) => handleLevelChange(ca, e.target.value)}
+                        disabled={saving === ca.id}
+                        className="text-xs border border-gray-200 rounded-lg px-2 py-1 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                      >
+                        {/* Placeholder only: handleLevelChange refuses "" (there
+                            is no level for it), so leaving it selectable made
+                            picking it a silent no-op. */}
+                        <option value="" disabled>{t("compliance.status_options.not_started")}</option>
+                        {scaleLevels
+                          .filter((lv) => !(ca.is_mandatory && legacyOf(lv) === "not_applicable"))
+                          .map((lv) => (
+                            <option key={lv.key} value={lv.key}>{levelLabel(lv, i18n.language)}</option>
+                          ))}
+                      </select>
+                    ) : (
+                      <select
+                        value={effectiveStatus(ca)}
+                        onChange={(e) => handleStatusOverride(ca.id, effectiveStatus(ca), e.target.value)}
+                        disabled={saving === ca.id}
+                        className="text-xs border border-gray-200 rounded-lg px-2 py-1 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                      >
+                        <option value="implemented">{t("compliance.status_options.implemented")}</option>
+                        <option value="partially_implemented">{t("compliance.status_options.partially_implemented")}</option>
+                        <option value="not_implemented">{t("compliance.status_options.not_implemented")}</option>
+                        {!ca.is_mandatory && <option value="not_applicable">{t("compliance.status_options.not_applicable")}</option>}
+                      </select>
+                    )}
                     {ca.is_mandatory && (
                       <span className="text-xs text-red-600">{t("compliance.mandatory_no_na")}</span>
                     )}
                     {saving === ca.id && <Loader2 className="w-3.5 h-3.5 animate-spin text-gray-400" />}
-                    {overrides[ca.id] && (
+                    {(overrides[ca.id] || keyOverrides[ca.id]) && (
                       <span className="text-xs text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded">{t("compliance.manually_overridden")}</span>
                     )}
+
+                    {/* Owner of the requirement */}
+                    <span className="flex items-center gap-1.5 ms-auto">
+                      <UserIcon className="w-3.5 h-3.5 text-gray-400" />
+                      <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide shrink-0" htmlFor={`owner-${ca.id}`}>
+                        {t("compliance.assign_owner")}
+                      </label>
+                      <select
+                        id={`owner-${ca.id}`}
+                        value={effectiveOwner(ca)}
+                        onChange={(e) => handleOwnerChange(ca.id, e.target.value)}
+                        disabled={savingOwner === ca.id}
+                        className="text-xs border border-gray-200 rounded-lg px-2 py-1 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white max-w-[180px]"
+                      >
+                        <option value="">{t("compliance.select_owner")}</option>
+                        {users.map((u) => (
+                          <option key={u.id} value={u.id}>
+                            {`${u.first_name} ${u.last_name}`.trim() || u.email}
+                          </option>
+                        ))}
+                      </select>
+                      {savingOwner === ca.id && <Loader2 className="w-3.5 h-3.5 animate-spin text-gray-400" />}
+                    </span>
                   </div>
+
+                  {/* « Non applicable » — its own justification column, refused empty */}
+                  {isNotApplicable(ca) && (
+                    <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 space-y-2">
+                      <div className="flex items-center gap-1.5">
+                        <MinusCircle className="w-3.5 h-3.5 text-gray-400" />
+                        <label className="text-xs font-semibold text-gray-600 uppercase tracking-wide" htmlFor={`na-${ca.id}`}>
+                          {t("applicability.justification")} *
+                        </label>
+                      </div>
+                      <textarea
+                        id={`na-${ca.id}`}
+                        rows={2}
+                        value={naDrafts[ca.id] ?? ca.not_applicable_justification ?? ""}
+                        onChange={(e) => {
+                          const v = e.target.value;
+                          setNaDrafts((prev) => ({ ...prev, [ca.id]: v }));
+                          setNaErrors((prev) => ({ ...prev, [ca.id]: "" }));
+                        }}
+                        placeholder={t("applicability.justification_placeholder")}
+                        className="w-full px-3 py-2 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none bg-white"
+                      />
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => handleSaveNaJustification(ca)}
+                          disabled={savingNa === ca.id}
+                          className="flex items-center gap-1.5 text-xs font-medium bg-gray-800 hover:bg-gray-900 disabled:opacity-50 text-white px-3 py-1.5 rounded-lg transition-colors"
+                        >
+                          {savingNa === ca.id && <Loader2 className="w-3 h-3 animate-spin" />}
+                          {t("applicability.save")}
+                        </button>
+                        {naSaved[ca.id] && (
+                          <span className="text-xs text-green-600 flex items-center gap-1 font-medium">
+                            <CheckCircle className="w-3 h-3" /> {t("compliance.saved_label")}
+                          </span>
+                        )}
+                        {(naErrors[ca.id] || (ca.requires_justification && !(naDrafts[ca.id] ?? ca.not_applicable_justification ?? "").trim())) && (
+                          <span className="text-xs text-red-600">
+                            {naErrors[ca.id] || t("applicability.justification_required")}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  )}
 
                   {/* Status change history */}
                   {history[ca.id] && history[ca.id].length > 0 && (
@@ -697,7 +964,11 @@ function ResultsTab({
                         {history[ca.id].map((h, i) => (
                           <div key={i} className="flex items-center gap-2 text-xs text-gray-500">
                             <span className="w-1.5 h-1.5 rounded-full bg-gray-300 shrink-0" />
-                            <span className="font-medium text-gray-700">{STATUS_CONFIG[h.status as keyof typeof STATUS_CONFIG]?.label ?? h.status}</span>
+                            <span className="font-medium text-gray-700">
+                              {t(`compliance.status_options.${h.status}`, {
+                                defaultValue: STATUS_CONFIG[h.status as keyof typeof STATUS_CONFIG]?.label ?? h.status,
+                              })}
+                            </span>
                             <span>·</span>
                             <span>{h.by}</span>
                             <span>·</span>
@@ -775,8 +1046,8 @@ function ResultsTab({
                       <div className="bg-gradient-to-r from-teal-50 to-cyan-50 border-2 border-teal-200 rounded-lg p-2">
                         <div className="flex items-center gap-1.5 mb-1">
                           <div className="w-2 h-2 rounded-full bg-teal-600" />
-                          <span className="text-xs font-semibold text-teal-700 uppercase tracking-wide">Document Checklist</span>
-                          <span className="text-xs text-teal-500 font-normal ml-0.5">— auto-linked</span>
+                          <span className="text-xs font-semibold text-teal-700 uppercase tracking-wide">{t("compliance.document_checklist")}</span>
+                          <span className="text-xs text-teal-500 font-normal ml-0.5">— {t("compliance.auto_linked", "auto-linked")}</span>
                           <span className="ml-auto text-xs font-bold text-teal-600 bg-white px-1.5 py-0.5 rounded-full">{ca.linked_checklist_documents!.length}</span>
                         </div>
                         <div className="space-y-1">
@@ -785,12 +1056,12 @@ function ResultsTab({
                               <FileText className="w-3.5 h-3.5 flex-shrink-0 text-teal-600" />
                               <div className="flex-1 min-w-0">
                                 <span className="truncate font-medium text-teal-700 block">{doc.document_name ?? doc.file_name}</span>
-                                {doc.clause_ref && <span className="text-teal-400 text-xs">Clause {doc.clause_ref}</span>}
+                                {doc.clause_ref && <span className="text-teal-400 text-xs">{t("compliance.clause")} {doc.clause_ref}</span>}
                               </div>
                               <button
                                 onClick={() => openChecklistDoc(doc)}
                                 className="text-blue-600 hover:text-blue-800 flex-shrink-0"
-                                title="View document"
+                                title={t("compliance.checklist_view_file")}
                               >
                                 <ExternalLink className="w-3 h-3" />
                               </button>
@@ -831,7 +1102,7 @@ function ResultsTab({
                               <button
                                 onClick={() => handleToggleVisibility(ca.id, ev.id)}
                                 disabled={togglingVisibility === ev.id}
-                                title={ev.is_visible_to_auditor ? "Visible to auditor — click to hide" : "Hidden from auditor — click to show"}
+                                title={ev.is_visible_to_auditor ? t("compliance.checklist_hide_auditor") : t("compliance.checklist_show_auditor")}
                                 className={`flex-shrink-0 ${ev.is_visible_to_auditor ? "text-green-600" : "text-gray-400"}`}
                               >
                                 {togglingVisibility === ev.id
@@ -852,7 +1123,7 @@ function ResultsTab({
                               <button
                                 onClick={() => handleDeleteEvidence(ca.id, ev.id)}
                                 disabled={deletingEvidence === ev.id}
-                                title="Delete evidence"
+                                title={t("common.delete")}
                                 className="flex-shrink-0 text-red-400 hover:text-red-600"
                               >
                                 {deletingEvidence === ev.id
@@ -873,7 +1144,7 @@ function ResultsTab({
         })}
 
         {filtered.length === 0 && (
-          <div className="p-8 text-center text-sm text-gray-400">No controls in this category.</div>
+          <div className="p-8 text-center text-sm text-gray-400">{t("compliance.no_controls_in_category", "No requirement in this category.")}</div>
         )}
       </div>
 
@@ -980,11 +1251,11 @@ const PRIORITY_STYLE: Record<string, { color: string; bg: string; dot: string }>
   medium:   { color: "text-yellow-700", bg: "bg-yellow-100", dot: "bg-yellow-500" },
   low:      { color: "text-green-700",  bg: "bg-green-100",  dot: "bg-green-500"  },
 };
-const STATUS_STYLE_AP: Record<string, { label: string; color: string; bg: string; border: string }> = {
-  open:        { label: "To Do",       color: "text-gray-500",  bg: "bg-gray-100",  border: "border-gray-200"  },
-  in_progress: { label: "In Progress", color: "text-blue-600",  bg: "bg-blue-50",   border: "border-blue-200"  },
-  completed:   { label: "Done",        color: "text-green-600", bg: "bg-green-50",  border: "border-green-200" },
-  cancelled:   { label: "Cancelled",   color: "text-gray-400",  bg: "bg-gray-50",   border: "border-gray-200"  },
+const STATUS_STYLE_AP: Record<string, { labelKey: string; color: string; bg: string; border: string }> = {
+  open:        { labelKey: "action_plan.status_todo",        color: "text-gray-500",  bg: "bg-gray-100",  border: "border-gray-200"  },
+  in_progress: { labelKey: "action_plan.status_in_progress", color: "text-blue-600",  bg: "bg-blue-50",   border: "border-blue-200"  },
+  completed:   { labelKey: "action_plan.status_done",        color: "text-green-600", bg: "bg-green-50",  border: "border-green-200" },
+  cancelled:   { labelKey: "action_plan.status_cancelled",   color: "text-gray-400",  bg: "bg-gray-50",   border: "border-gray-200"  },
 };
 const AP_COLS = ["open", "in_progress", "completed", "cancelled"] as const;
 
@@ -1068,7 +1339,7 @@ function AssessmentActionPlan({ assessmentId, assessmentName }: { assessmentId: 
             return (
               <div key={colKey} className="flex flex-col gap-2">
                 <div className={`flex items-center gap-2 px-3 py-2 rounded-xl ${cfg.bg} border ${cfg.border}`}>
-                  <span className={`text-xs font-bold ${cfg.color}`}>{cfg.label}</span>
+                  <span className={`text-xs font-bold ${cfg.color}`}>{t(cfg.labelKey)}</span>
                   <span className="ml-auto text-xs font-semibold text-gray-500 bg-white/70 px-1.5 py-0.5 rounded-full">{colItems.length}</span>
                 </div>
                 <div className="flex flex-col gap-1.5 min-h-[60px]">
@@ -1082,10 +1353,10 @@ function AssessmentActionPlan({ assessmentId, assessmentName }: { assessmentId: 
                         <div className="flex items-center gap-1.5 flex-wrap">
                           <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] font-bold ${pStyle.bg} ${pStyle.color}`}>
                             <span className={`w-1.5 h-1.5 rounded-full ${pStyle.dot}`} />
-                            {item.priority}
+                            {t(`action_plan.priority_${item.priority}`, { defaultValue: item.priority })}
                           </span>
                           {item.is_certification_blocker && (
-                            <span className="text-[9px] font-bold px-1 py-0.5 rounded bg-red-100 text-red-700">BLOCKER</span>
+                            <span className="text-[9px] font-bold px-1 py-0.5 rounded bg-red-100 text-red-700">{t("action_plan.blocker")}</span>
                           )}
                           {item.control_identifier && (
                             <span className="text-[9px] font-mono font-semibold px-1 py-0.5 bg-gray-100 text-gray-600 rounded">{item.control_identifier}</span>
@@ -1100,19 +1371,19 @@ function AssessmentActionPlan({ assessmentId, assessmentName }: { assessmentId: 
                           {item.status !== "completed" && item.status !== "cancelled" && (
                             <button type="button" onClick={() => changeStatus(item.id, "completed")}
                               className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-semibold bg-green-50 text-green-600 border border-green-200 hover:bg-green-100 transition-colors">
-                              ✓ Done
+                              ✓ {t("action_plan.done")}
                             </button>
                           )}
                           {item.status === "open" && (
                             <button type="button" onClick={() => changeStatus(item.id, "in_progress")}
                               className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-semibold bg-blue-50 text-blue-600 border border-blue-200 hover:bg-blue-100 transition-colors">
-                              ▶ Start
+                              ▶ {t("action_plan.start", "Start")}
                             </button>
                           )}
                           {item.status === "completed" && (
                             <button type="button" onClick={() => changeStatus(item.id, "open")}
                               className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-semibold bg-gray-50 text-gray-500 border border-gray-200 hover:bg-gray-100 transition-colors">
-                              ↩ Reopen
+                              ↩ {t("action_plan.reopen", "Reopen")}
                             </button>
                           )}
                         </div>
@@ -1129,6 +1400,149 @@ function AssessmentActionPlan({ assessmentId, assessmentName }: { assessmentId: 
   );
 }
 
+// ─── Assessment settings: rename, re-scope, re-grade, archive ─────────────────
+// PATCH /compliance/assessments/{id} is the only way to move an assessment to
+// « archivé » and the only way to change the perimeter it measures.
+
+function AssessmentSettingsModal({
+  assessment,
+  onClose,
+  onSaved,
+  onArchived,
+}: {
+  readonly assessment: AssessmentDetail;
+  readonly onClose: () => void;
+  readonly onSaved: (updated: AssessmentDetail) => void;
+  readonly onArchived: () => void;
+}) {
+  const { t } = useTranslation();
+  const [name, setName] = useState(assessment.name);
+  const [scopeDescription, setScopeDescription] = useState(assessment.scope_description ?? "");
+  const [perimeter, setPerimeter] = useState<ScopeValue>({
+    scopeType: (assessment.scope_type ?? "tenant") as ScopeType,
+    orgEntityId: assessment.org_entity_id ?? "",
+    businessProcessId: assessment.business_process_id ?? "",
+    assetIds: assessment.in_scope_assets ?? [],
+    scaleId: assessment.scale_id ?? "",
+  });
+  const options = usePerimeterOptions(perimeter.scopeType);
+  const [saving, setSaving] = useState(false);
+  const [archiving, setArchiving] = useState(false);
+  const [error, setError] = useState("");
+
+  async function save(e: React.FormEvent) {
+    e.preventDefault();
+    if (!name.trim()) return;
+    const scopeError = validateScope(perimeter);
+    if (scopeError) { setError(t(scopeError)); return; }
+    setSaving(true);
+    setError("");
+    try {
+      const updated = await complianceApi.updateAssessment(assessment.id, {
+        name: name.trim(),
+        scope_description: scopeDescription.trim() || null,
+        scope_type: perimeter.scopeType,
+        org_entity_id: perimeter.scopeType === "org_entity" ? perimeter.orgEntityId : null,
+        business_process_id: perimeter.scopeType === "business_process" ? perimeter.businessProcessId : null,
+        in_scope_assets: perimeter.scopeType === "assets" ? perimeter.assetIds : [],
+        scale_id: perimeter.scaleId || null,
+      });
+      onSaved(updated);
+    } catch {
+      setError(t("compliance.assessment_settings_failed", "The assessment could not be updated. Nothing was changed."));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function archive() {
+    if (!window.confirm(t("compliance_scope.archive_confirm"))) return;
+    setArchiving(true);
+    setError("");
+    try {
+      await complianceApi.updateAssessment(assessment.id, { status: "archived" });
+      onArchived();
+    } catch {
+      setError(t("compliance.assessment_settings_failed", "The assessment could not be updated. Nothing was changed."));
+    } finally {
+      setArchiving(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto p-6">
+        <div className="flex items-center justify-between mb-5">
+          <h2 className="text-lg font-semibold text-gray-900">
+            {t("compliance.assessment_settings", "Assessment settings")}
+          </h2>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-700" title={t("common.close")}>
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        <form onSubmit={save} className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">{t("compliance.assessment_name")} *</label>
+            <input
+              type="text"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              placeholder={t("compliance.assessment_name_placeholder")}
+              required
+            />
+          </div>
+
+          <div className="border-t border-gray-100 pt-4">
+            <ScopeFields value={perimeter} onChange={setPerimeter} options={options} />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              {t("compliance.scope")} ({t("common.optional")})
+            </label>
+            <textarea
+              rows={2}
+              value={scopeDescription}
+              onChange={(e) => setScopeDescription(e.target.value)}
+              placeholder={t("compliance.scope_optional_placeholder")}
+              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+            />
+          </div>
+
+          {error && <p className="text-sm text-red-600">{error}</p>}
+
+          <div className="flex items-center justify-between gap-3 pt-1">
+            <button
+              type="button"
+              onClick={archive}
+              disabled={archiving || assessment.status === "archived"}
+              className="flex items-center gap-1.5 text-sm font-medium text-red-600 hover:text-red-700 disabled:opacity-40"
+            >
+              {archiving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Archive className="w-4 h-4" />}
+              {t("compliance_scope.archive_assessment")}
+            </button>
+            <div className="flex items-center gap-3">
+              <button type="button" onClick={onClose} className="px-4 py-2 text-sm text-gray-600 hover:text-gray-900">
+                {t("common.cancel")}
+              </button>
+              <button
+                type="submit"
+                disabled={saving || !name.trim()}
+                className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+              >
+                {saving && <Loader2 className="w-4 h-4 animate-spin" />}
+                {t("common.save")}
+              </button>
+            </div>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
 // ─── Main Page ─────────────────────────────────────────────────────────────────
 
 type Tab = "upload" | "checklist" | "results" | "gapreport" | "crossfw" | "actionplan";
@@ -1141,15 +1555,12 @@ export default function AssessmentDetailPage() {
   const [gaps, setGaps] = useState<GapDetail[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<Tab>("upload");
+  const [showSettings, setShowSettings] = useState(false);
 
   useEffect(() => {
     if (!assessmentId) return;
     complianceApi.getAssessment(assessmentId)
       .then((data) => {
-        // Debug: log first control to see what fields we're getting
-        if (data.control_assessments.length > 0) {
-          console.log("First control received:", JSON.stringify(data.control_assessments[0], null, 2));
-        }
         setAssessment(data);
         setGaps(data.gaps);
         if (data.control_assessments.length > 0) setActiveTab("results");
@@ -1194,6 +1605,22 @@ export default function AssessmentDetailPage() {
 
   return (
     <div className="p-8 max-w-6xl space-y-6">
+      {showSettings && (
+        <AssessmentSettingsModal
+          assessment={assessment}
+          onClose={() => setShowSettings(false)}
+          onSaved={(updated) => {
+            setAssessment(updated);
+            setGaps(updated.gaps);
+            setShowSettings(false);
+          }}
+          onArchived={() => {
+            setShowSettings(false);
+            navigate("/compliance");
+          }}
+        />
+      )}
+
       {/* Header */}
       <div>
         <button
@@ -1206,11 +1633,17 @@ export default function AssessmentDetailPage() {
         <div className="flex items-start justify-between">
           <div>
             <h1 className="text-2xl font-bold text-gray-900">{assessment.name}</h1>
-            <div className="flex items-center gap-3 mt-1 text-sm text-gray-500">
+            <div className="flex flex-wrap items-center gap-3 mt-1 text-sm text-gray-500">
               <span className="font-semibold px-2 py-0.5 rounded-md bg-blue-50 text-blue-700 text-xs">
                 {assessment.framework_short_name}
               </span>
               <span>{assessment.framework_name}</span>
+              <ScopeBadge assessment={assessment} />
+              {assessment.scale_name && (
+                <span className="text-xs text-gray-400" title={t("compliance_scale.select_scale")}>
+                  {assessment.scale_name}
+                </span>
+              )}
               {assessment.uploaded_documents.length > 0 && (
                 <span className="flex items-center gap-1">
                   <FileText className="w-3.5 h-3.5" />
@@ -1220,6 +1653,14 @@ export default function AssessmentDetailPage() {
             </div>
           </div>
           <div className="flex items-center gap-3">
+            <button
+              onClick={() => setShowSettings(true)}
+              title={t("compliance_scope.change_scope")}
+              className="flex items-center gap-1.5 text-sm font-medium text-gray-600 border border-gray-200 hover:bg-gray-50 px-3 py-2 rounded-lg transition-colors"
+            >
+              <Settings2 className="w-4 h-4" />
+              {t("compliance.assessment_settings", "Assessment settings")}
+            </button>
             {hasResults && (
               <button
                 onClick={() => navigate(`/compliance/${assessmentId}/traceability`)}

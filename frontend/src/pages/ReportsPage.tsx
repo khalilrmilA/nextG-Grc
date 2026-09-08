@@ -3,9 +3,12 @@
  * Shows available report types with descriptions and download buttons.
  */
 import { useState, useEffect } from "react";
-import { FileText, Download, LayoutDashboard, AlertTriangle, CheckSquare, Building2, ClipboardList, Loader2, Calendar, RefreshCw, Eye, Plus, Play, Trash2, X } from "lucide-react";
+import { FileText, Download, LayoutDashboard, AlertTriangle, CheckSquare, Building2, ClipboardList, Loader2, Calendar, RefreshCw, Eye, Plus, Play, Trash2, X, History, ShieldCheck, ShieldAlert, Lock } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { reportsApi, reportSchedulesApi } from "@/api/endpoints";
+import { reportsApi, reportSchedulesApi, complianceApi } from "@/api/endpoints";
+import type { StoredFileVersionItem } from "@/types";
+import { useAuthStore } from "@/store/auth";
+import FileHistoryModal from "@/components/features/compliance/FileHistoryModal";
 
 interface ReportType {
   id: string;
@@ -53,14 +56,38 @@ function fmtDateTime(iso: string | null | undefined): string {
   }
 }
 
+function fmtSize(bytes?: number | null): string {
+  if (!bytes) return "—";
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
+  return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+}
+
+/**
+ * « Archivage des rapports dans l\'historique » — every report the platform
+ * produces is now written as a StoredFileVersion, keyed on parent_type
+ * `report:<type>` and the tenant, with the sha256 of the bytes that were served.
+ * That is the same ledger the evidence files use, so the history is read with
+ * the same endpoint and shown with the same modal.
+ */
+const REPORT_PARENT_PREFIX = "report:";
+
+type ArchivedReportRow = StoredFileVersionItem & { reportType: string };
+
 
 export default function ReportsPage() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const [reportTypes, setReportTypes] = useState<ReportType[]>([]);
   const [loading, setLoading] = useState(true);
   const [downloading, setDownloading] = useState<string | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [apiError, setApiError] = useState(false);
+
+  const tenantId = useAuthStore((u) => u?.tenant_id);
+  const [history, setHistory] = useState<ArchivedReportRow[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(true);
+  const [historyDenied, setHistoryDenied] = useState(false);
+  const [historyFor, setHistoryFor] = useState<{ parentType: string; title: string } | null>(null);
 
   const [schedules, setSchedules] = useState<any[]>([]);
   const [schedulesLoading, setSchedulesLoading] = useState(true);
@@ -105,6 +132,40 @@ export default function ReportsPage() {
     loadReportTypes();
     loadSchedules();
   }, []);
+
+  // The archive is read per report type, because versions are numbered per
+  // (parent_type, tenant) — one series per type rather than one global one.
+  useEffect(() => {
+    let cancelled = false;
+    if (!tenantId || reportTypes.length === 0) {
+      setHistoryLoading(false);
+      return;
+    }
+    setHistoryLoading(true);
+    Promise.allSettled(
+      reportTypes.map((r) => complianceApi.listFileVersions(`${REPORT_PARENT_PREFIX}${r.id}`, tenantId)),
+    ).then((results) => {
+      if (cancelled) return;
+      const rows: ArchivedReportRow[] = [];
+      let denied = 0;
+      results.forEach((result, index) => {
+        if (result.status === "fulfilled") {
+          for (const version of result.value ?? []) {
+            rows.push({ ...version, reportType: reportTypes[index].id });
+          }
+        } else if ((result.reason as { response?: { status?: number } })?.response?.status === 403) {
+          denied += 1;
+        }
+      });
+      rows.sort((a, b) => (b.created_at || "").localeCompare(a.created_at || ""));
+      setHistory(rows.slice(0, 25));
+      // Only a real rights refusal turns the panel into a "not authorised"
+      // state; a single failed type just contributes no rows.
+      setHistoryDenied(denied > 0 && denied === results.length);
+      setHistoryLoading(false);
+    });
+    return () => { cancelled = true; };
+  }, [tenantId, reportTypes]);
 
   async function loadSchedules() {
     try {
@@ -307,10 +368,132 @@ export default function ReportsPage() {
                   )}
                 </button>
               </div>
+
+              {/* « Historique » — the archived versions of THIS report type */}
+              <button
+                type="button"
+                onClick={() =>
+                  setHistoryFor({
+                    parentType: `${REPORT_PARENT_PREFIX}${report.id}`,
+                    title: String(t(`reports.${report.id}_name` as never, report.name)),
+                  })
+                }
+                className="mt-3 inline-flex items-center gap-1.5 text-xs font-medium text-gray-500 hover:text-blue-600"
+              >
+                <History className="w-3.5 h-3.5" />
+                {t("treatment.history_short")}
+                {history.some((h) => h.reportType === report.id) && (
+                  <span className="text-gray-400">
+                    ({history.filter((h) => h.reportType === report.id).length})
+                  </span>
+                )}
+              </button>
             </div>
           );
         })}
       </div>
+
+      {/* Report archive — objectif 6, « archivage des rapports dans l'historique » */}
+      <div className="bg-white border border-gray-100 rounded-2xl p-5">
+        <div className="flex items-center gap-2 mb-1">
+          <History className="w-4 h-4 text-gray-500" />
+          <h3 className="text-sm font-semibold text-gray-900">
+            {t("reports.history_title", { defaultValue: t("treatment.history") })}
+          </h3>
+        </div>
+        {i18n.exists("reports.history_subtitle") && (
+          <p className="text-xs text-gray-500 mb-4">{t("reports.history_subtitle")}</p>
+        )}
+
+        {historyLoading ? (
+          <div className="flex items-center justify-center py-8">
+            <Loader2 className="w-5 h-5 animate-spin text-blue-500" />
+          </div>
+        ) : historyDenied ? (
+          <div className="flex flex-col items-center py-8 text-sm text-gray-400">
+            <Lock className="w-6 h-6 mb-2 text-gray-300" />
+            {t("activity_log.forbidden")}
+          </div>
+        ) : history.length === 0 ? (
+          <div className="text-center py-8 text-sm text-gray-400">
+            {t("reports.no_history", { defaultValue: t("treatment.no_history") })}
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-gray-100">
+                  <th className="text-left py-2 pr-3 font-medium text-gray-500">{t("reports.col_type")}</th>
+                  <th className="text-left py-2 pr-3 font-medium text-gray-500">{t("treatment.version_n", { n: "" }).trim()}</th>
+                  <th className="text-left py-2 pr-3 font-medium text-gray-500">{t("common.name")}</th>
+                  <th className="text-left py-2 pr-3 font-medium text-gray-500">{t("common.created_at")}</th>
+                  <th className="text-left py-2 pr-3 font-medium text-gray-500">{t("archiving.evidence_hash")}</th>
+                  <th className="text-right py-2 font-medium text-gray-500">{t("common.actions")}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {history.map((row) => {
+                  const intact = row.integrity === "ok" || row.integrity === "unrecorded";
+                  return (
+                    <tr key={row.id} className="border-b border-gray-50">
+                      <td className="py-2.5 pr-3 text-gray-700">
+                        {String(t(`reports.${row.reportType}_name` as never, row.reportType))}
+                      </td>
+                      <td className="py-2.5 pr-3">
+                        <span className="text-xs font-mono font-semibold text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded">
+                          v{row.version_number}
+                        </span>
+                      </td>
+                      <td className="py-2.5 pr-3 text-gray-900 max-w-xs truncate" title={row.file_name ?? ""}>
+                        {row.file_name || "—"}
+                        <span className="block text-xs text-gray-400">{fmtSize(row.file_size_bytes)}</span>
+                      </td>
+                      <td className="py-2.5 pr-3 text-gray-500 whitespace-nowrap">{fmtDateTime(row.created_at)}</td>
+                      <td className="py-2.5 pr-3">
+                        <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold border ${
+                          intact
+                            ? "bg-green-50 text-green-700 border-green-200"
+                            : "bg-red-50 text-red-700 border-red-200"
+                        }`}>
+                          {intact ? <ShieldCheck className="w-3 h-3" /> : <ShieldAlert className="w-3 h-3" />}
+                          {intact
+                            ? t("audit_detail.evidence_integrity_ok")
+                            : t("audit_detail.evidence_integrity_failed")}
+                        </span>
+                      </td>
+                      <td className="py-2.5 text-right">
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setHistoryFor({
+                              parentType: `${REPORT_PARENT_PREFIX}${row.reportType}`,
+                              title: String(t(`reports.${row.reportType}_name` as never, row.reportType)),
+                            })
+                          }
+                          title={t("treatment.history")}
+                          aria-label={t("treatment.history")}
+                          className="p-1.5 rounded-lg text-gray-500 hover:bg-gray-100 hover:text-blue-600"
+                        >
+                          <History className="w-3.5 h-3.5" />
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {historyFor && (
+        <FileHistoryModal
+          parentType={historyFor.parentType}
+          parentId={tenantId ?? ""}
+          title={historyFor.title}
+          onClose={() => setHistoryFor(null)}
+        />
+      )}
 
       {/* Scheduled reports */}
       <div className="bg-white border border-gray-100 rounded-2xl p-5">
@@ -490,7 +673,7 @@ export default function ReportsPage() {
               <iframe
                 src={previewUrl}
                 className="w-full h-full"
-                title="PDF Preview"
+                title={t("reports.report_preview")}
               />
             </div>
           </div>

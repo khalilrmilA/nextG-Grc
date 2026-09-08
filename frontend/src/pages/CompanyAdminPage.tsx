@@ -3,12 +3,13 @@ import { Navigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { useAuthStore } from "../store/auth";
 import { usersApi, groupsApi, activityLogApi, type TeamGroupRecord } from "../api/endpoints";
+import type { ActivityActionCatalogue } from "../types";
 import {
   UserPlus, Trash2, KeyRound, Users, Search, X,
   CheckCircle, Loader2, AlertCircle, Eye, EyeOff,
   Shield, ShieldCheck, ToggleLeft, ToggleRight, Pencil,
   Activity, Clock, Filter, Plus, Download, Upload, LogIn, ScrollText,
-  UsersRound, Ban, FolderPlus,
+  UsersRound, Ban, FolderPlus, Send,
 } from "lucide-react";
 
 // ── Role definitions ──────────────────────────────────────────────────────────
@@ -608,6 +609,15 @@ const ACTION_CONFIG: Record<string, { bg: string; text: string; dot: string; ico
   login:  { bg: "bg-purple-50",  text: "text-purple-700",  dot: "bg-purple-500",  icon: LogIn   },
   export: { bg: "bg-gray-50",    text: "text-gray-600",    dot: "bg-gray-400",    icon: Download },
   import: { bg: "bg-teal-50",    text: "text-teal-700",    dot: "bg-teal-500",    icon: Upload  },
+  // Access + validation verbs, recorded since the trail started logging reads
+  // and normalising approvals (objectif 8).
+  view:       { bg: "bg-sky-50",     text: "text-sky-700",     dot: "bg-sky-500",     icon: Eye         },
+  download:   { bg: "bg-cyan-50",    text: "text-cyan-700",    dot: "bg-cyan-500",    icon: Download    },
+  approve:    { bg: "bg-emerald-50", text: "text-emerald-700", dot: "bg-emerald-500", icon: ShieldCheck },
+  validate:   { bg: "bg-emerald-50", text: "text-emerald-700", dot: "bg-emerald-500", icon: ShieldCheck },
+  close:      { bg: "bg-emerald-50", text: "text-emerald-700", dot: "bg-emerald-500", icon: CheckCircle },
+  distribute: { bg: "bg-indigo-50",  text: "text-indigo-700",  dot: "bg-indigo-500",  icon: Send        },
+  reject:     { bg: "bg-rose-50",    text: "text-rose-700",    dot: "bg-rose-500",    icon: Ban         },
 };
 
 const MODULE_CONFIG: Record<string, { label_key: string; icon: string }> = {
@@ -628,8 +638,11 @@ const MODULE_CONFIG: Record<string, { label_key: string; icon: string }> = {
   webhook:       { label_key: "webhooks.title",         icon: "🔗" },
 };
 
-const ENTITY_FILTER_LIST = ["risk","vendor","audit","policy","compliance","asset","incident","vulnerability","threat"];
-const ACTION_FILTER_LIST  = ["create","update","delete","login","export","import"];
+// Fallbacks only: the real lists come from GET /activity-log/actions, which
+// reports the verbs and entity types this tenant's trail actually holds.
+const ENTITY_FILTER_LIST = ["risk","vendor","audit","policy","compliance","asset","incident","vulnerability","threat","report"];
+const ACTION_FILTER_LIST  = ["create","update","delete","login","export","import","view","download","approve","close","distribute"];
+const CATEGORY_FILTER_LIST = ["access","validation","change","other"];
 
 function fmtTimeAgo(dateStr: string, justNow: string): string {
   const diff = Math.max(0, Date.now() - new Date(dateStr).getTime());
@@ -664,18 +677,44 @@ function ActivityLogPanel({ users, initialUserId }: { users: TenantUser[]; initi
   const [userFilter, setUserFilter]   = useState(initialUserId ?? "");
   const [entityFilter, setEntityFilter] = useState("");
   const [actionFilter, setActionFilter] = useState("");
+  const [categoryFilter, setCategoryFilter] = useState("");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
+  const [catalogue, setCatalogue] = useState<ActivityActionCatalogue | null>(null);
   const LIMIT = 25;
+
+  // The verb vocabulary is published by the backend, so a verb it starts
+  // recording (view, download, approve, close, distribute…) is filterable here
+  // without a frontend change.
+  useEffect(() => {
+    let cancelled = false;
+    activityLogApi.actions()
+      .then(data => { if (!cancelled) setCatalogue(data); })
+      .catch(() => { if (!cancelled) setCatalogue(null); });
+    return () => { cancelled = true; };
+  }, []);
+
+  const actionOptions = catalogue?.actions_present?.length ? catalogue.actions_present : ACTION_FILTER_LIST;
+  const entityOptions = catalogue?.entity_types_present?.length ? catalogue.entity_types_present : ENTITY_FILTER_LIST;
+  const categoryOptions = catalogue?.category_choices?.length ? catalogue.category_choices : CATEGORY_FILTER_LIST;
 
   async function load(reset = true) {
     const newOffset = reset ? 0 : offset;
     reset ? setLoading(true) : setLoadingMore(true);
     try {
-      const params: any = { limit: LIMIT, offset: newOffset };
+      const params: {
+        user_id?: string; entity_type?: string; action?: string; category?: string;
+        date_from?: string; date_to?: string; limit: number; offset: number;
+      } = { limit: LIMIT, offset: newOffset };
       if (userFilter)   params.user_id     = userFilter;
       if (entityFilter) params.entity_type = entityFilter;
       if (actionFilter) params.action      = actionFilter;
+      if (categoryFilter) params.category  = categoryFilter;
+      // A date picker yields a day; the range is widened so "to" includes it.
+      if (dateFrom) params.date_from = `${dateFrom}T00:00:00`;
+      if (dateTo)   params.date_to   = `${dateTo}T23:59:59`;
       const data = await activityLogApi.list(params);
-      const entries = Array.isArray(data) ? data : (data as any).items || [];
+      const entries = data?.items ?? [];
       setItems(prev => reset ? entries : [...prev, ...entries]);
       setHasMore(entries.length === LIMIT);
       setOffset(newOffset + entries.length);
@@ -687,9 +726,9 @@ function ActivityLogPanel({ users, initialUserId }: { users: TenantUser[]; initi
     }
   }
 
-  useEffect(() => { load(true); }, [userFilter, entityFilter, actionFilter]);
+  useEffect(() => { load(true); }, [userFilter, entityFilter, actionFilter, categoryFilter, dateFrom, dateTo]);
 
-  const hasFilters = userFilter || entityFilter || actionFilter;
+  const hasFilters = userFilter || entityFilter || actionFilter || categoryFilter || dateFrom || dateTo;
 
   return (
     <div className="space-y-4">
@@ -718,7 +757,7 @@ function ActivityLogPanel({ users, initialUserId }: { users: TenantUser[]; initi
             className="border border-gray-200 rounded-xl text-sm px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
             <option value="">{t("activity_log.all_modules")}</option>
-            {ENTITY_FILTER_LIST.map(et => (
+            {entityOptions.map(et => (
               <option key={et} value={et}>
                 {MODULE_CONFIG[et]?.icon} {t(`activity_log.entities.${et}`, { defaultValue: et })}
               </option>
@@ -732,16 +771,60 @@ function ActivityLogPanel({ users, initialUserId }: { users: TenantUser[]; initi
             className="border border-gray-200 rounded-xl text-sm px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
             <option value="">{t("activity_log.all_actions")}</option>
-            {ACTION_FILTER_LIST.map(a => (
+            {actionOptions.map(a => (
               <option key={a} value={a}>
                 {t(`activity_log.actions.${a}`, { defaultValue: a })}
               </option>
             ))}
           </select>
 
+          {/* Verb family — access / validation / change, the three questions
+              objectif 8 asks the trail to answer. */}
+          <select
+            value={categoryFilter}
+            onChange={e => setCategoryFilter(e.target.value)}
+            className="border border-gray-200 rounded-xl text-sm px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+            aria-label={t("activity_log.category")}
+          >
+            <option value="">{t("activity_log.all_categories")}</option>
+            {categoryOptions.map(c => (
+              <option key={c} value={c}>
+                {t(`activity_log.categories.${c}`, { defaultValue: c })}
+              </option>
+            ))}
+          </select>
+
+          <div className="flex items-center gap-2">
+            <label className="text-xs text-gray-500" htmlFor="company-log-from">
+              {t("activity_log.date_from", { defaultValue: t("audit_campaign.period_start") })}
+            </label>
+            <input
+              id="company-log-from"
+              type="date"
+              value={dateFrom}
+              onChange={e => setDateFrom(e.target.value)}
+              className="border border-gray-200 rounded-xl text-sm px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+          <div className="flex items-center gap-2">
+            <label className="text-xs text-gray-500" htmlFor="company-log-to">
+              {t("activity_log.date_to", { defaultValue: t("audit_campaign.period_end") })}
+            </label>
+            <input
+              id="company-log-to"
+              type="date"
+              value={dateTo}
+              onChange={e => setDateTo(e.target.value)}
+              className="border border-gray-200 rounded-xl text-sm px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+
           {hasFilters && (
             <button
-              onClick={() => { setUserFilter(""); setEntityFilter(""); setActionFilter(""); }}
+              onClick={() => {
+                setUserFilter(""); setEntityFilter(""); setActionFilter("");
+                setCategoryFilter(""); setDateFrom(""); setDateTo("");
+              }}
               className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-red-500 transition-colors border border-gray-200 hover:border-red-200 rounded-lg px-3 py-2"
             >
               <X className="w-3 h-3" /> {t("activity_log.clear_filters")}
@@ -770,8 +853,13 @@ function ActivityLogPanel({ users, initialUserId }: { users: TenantUser[]; initi
               {items.map((entry: any, idx: number) => {
                 const cfg   = ACTION_CONFIG[entry.action] ?? ACTION_CONFIG.update;
                 const Icon  = cfg.icon;
-                const email = entry.user_email || "system@platform";
-                const initials = email.slice(0, 2).toUpperCase();
+                const email = entry.actor_email || entry.user_email || "";
+                // The trail resolves the actor for display; a blank one is the
+                // scheduler, not an anonymous user.
+                const actor = entry.is_system
+                  ? t("activity_log.actor_system")
+                  : (entry.actor_name || email || t("activity_log.actor_unknown"));
+                const initials = (email || actor).slice(0, 2).toUpperCase();
                 const mod   = MODULE_CONFIG[entry.entity_type];
 
                 const actionLabel  = t(`activity_log.actions.${entry.action}`,  { defaultValue: entry.action });
@@ -790,7 +878,7 @@ function ActivityLogPanel({ users, initialUserId }: { users: TenantUser[]; initi
                     <div className="flex-1 min-w-0">
                       {/* Top row: email + time */}
                       <div className="flex items-center justify-between gap-2 mb-1">
-                        <p className="text-sm font-semibold text-gray-800 truncate">{email}</p>
+                        <p className="text-sm font-semibold text-gray-800 truncate" title={email}>{actor}</p>
                         <span className="flex-shrink-0 flex items-center gap-1 text-xs text-gray-400">
                           <Clock className="w-3 h-3" />{timeLabel}
                         </span>

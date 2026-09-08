@@ -1,8 +1,374 @@
 import { useState, useEffect } from "react";
-import { Plus, X, Loader2, Crown, Trash2, Users, FileText, Eye, UserPlus, Shield, Calendar, Pencil, Landmark } from "lucide-react";
+import { BarChart3, ChevronDown, ChevronRight, Plus, X, Loader2, Crown, Trash2, Users, FileText, Eye, UserPlus, Shield, Calendar, Pencil, Landmark } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import { useQuery } from "@tanstack/react-query";
+import {
+  CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis,
+} from "recharts";
 import { governanceApi, usersApi, policiesApi } from "@/api/endpoints";
+// The governance history endpoint has no wrapper on the api lane's object yet
+// (reported under needs_integration); apiClient is the same instance every
+// wrapper in endpoints.ts is built on, so this call keeps the auth refresh, the
+// 402 upsell dispatch and the outage handling the house rule is really about —
+// it is not a raw fetch().
+import { apiClient } from "@/api/client";
 import { MultiSelect } from "@/components/common/MultiSelect";
+import ModuleDashboard from "@/components/dashboards/ModuleDashboard";
+import i18n from "@/i18n";
+
+/* ── French and Arabic for the governance strings that have no locale entry ──
+ * locales/{en,fr,ar}.ts contain NO `governance` section at all (verified: the
+ * top-level keys are common, nav, auth, dashboard, compliance, … and there is
+ * no governance one), so every string on this page came from the English
+ * `defaultValue` of its own t() call — and a defaultValue is used for EVERY
+ * language. The whole of objectif 6's page therefore rendered in English to a
+ * French and to an Arabic reader: the RACI matrix, the document repository, the
+ * committee editor, the access grants, the group picker and the role preview.
+ * The full set of this page's own labels is supplied below, not just the ones
+ * added with the dashboard. Registered the way
+ * i18n/index.ts already registers eliteLocales and gapfills, and
+ * NON-DESTRUCTIVELY (last argument false) because locales/*.ts belong to
+ * another lane in this wave: the moment that lane defines one of these keys for
+ * real, its value is already in the store and wins. See needs_integration. */
+const GOVERNANCE_I18N: Record<string, Record<string, string>> = {
+  en: {
+    add_group: "Add group",
+    access: "Access",
+    access_denied: "You don't have permission to manage access on this document.",
+    access_save_error: "Could not grant access.",
+    activity: "Activity / decision",
+    add: "Add",
+    by_role: "By role",
+    by_user: "User",
+    cadence: "Cadence",
+    committee_name: "Committee name",
+    committees: "Steering committees",
+    doc_title: "Title",
+    documents: "Document repository",
+    edit_committee: "Edit committee",
+    elite: "Elite Pack",
+    grant: "Grant",
+    linked_documents: "Linked documents",
+    linked_policies: "Linked policies",
+    manage_access: "Manage access",
+    module: "Module",
+    new_committee: "New committee",
+    new_doc: "New document",
+    next_meeting: "Next meeting",
+    no_committees: "No steering committees yet.",
+    no_docs: "No documents yet.",
+    no_grants: "No explicit grants yet — falls back to the document's default access level.",
+    no_policies: "No policies found",
+    no_raci: "No RACI assignments yet.",
+    raci: "RACI matrix",
+    responsible: "Responsible",
+    select_documents: "Select documents…",
+    select_policies: "Select policies…",
+    select_user: "Select a user…",
+    subtitle: "RACI responsibility matrix and the governance document repository",
+    title: "Governance",
+    typology: "Typology",
+    version: "Version",
+    by_group: "By group",
+    custom_role: "Custom role",
+    group_name: "Group name",
+    groups: "Groups",
+    users_directory: "User directory",
+    members: "Members",
+    no_assignments: "No assignments for this role yet.",
+    no_users: "No users found",
+    preview_of: "Responsibilities of",
+    preview_role: "Preview role",
+    select_group: "Select group…",
+    select_members: "Select members…",
+    unknown_group: "Unknown group",
+    load_failed: "These sections could not be read and are shown empty for that reason, not because they hold nothing: {{sections}}.",
+    // R / A / C / I were a hard-coded English map (RACI_LABEL) printed straight
+    // into the picker, so they never translated at all.
+    raci_r: "Responsible",
+    raci_a: "Accountable",
+    raci_c: "Consulted",
+    raci_i: "Informed",
+  },
+  fr: {
+    add_group: "Ajouter un groupe",
+    access: "Accès",
+    access_denied: "Votre profil n'est pas autorisé à gérer les accès de ce document.",
+    access_save_error: "L'accès n'a pas pu être accordé.",
+    activity: "Activité / décision",
+    add: "Ajouter",
+    by_role: "Par rôle",
+    by_user: "Utilisateur",
+    cadence: "Périodicité",
+    committee_name: "Nom du comité",
+    committees: "Comités de pilotage",
+    doc_title: "Titre",
+    documents: "Référentiel documentaire",
+    edit_committee: "Modifier le comité",
+    elite: "Pack Elite",
+    grant: "Accorder",
+    linked_documents: "Documents liés",
+    linked_policies: "Politiques liées",
+    manage_access: "Gérer les accès",
+    module: "Module",
+    new_committee: "Nouveau comité",
+    new_doc: "Nouveau document",
+    next_meeting: "Prochaine réunion",
+    no_committees: "Aucun comité de pilotage pour l'instant.",
+    no_docs: "Aucun document pour l'instant.",
+    no_grants: "Aucun accès explicite pour l'instant — le niveau d'accès par défaut du document s'applique.",
+    no_policies: "Aucune politique trouvée",
+    no_raci: "Aucune attribution RACI pour l'instant.",
+    raci: "Matrice RACI",
+    responsible: "Responsable",
+    select_documents: "Sélectionner des documents…",
+    select_policies: "Sélectionner des politiques…",
+    select_user: "Sélectionner un utilisateur…",
+    subtitle: "Matrice de responsabilités RACI et référentiel documentaire de gouvernance",
+    title: "Gouvernance",
+    typology: "Typologie",
+    version: "Version",
+    by_group: "Par groupe",
+    custom_role: "Rôle personnalisé",
+    group_name: "Nom du groupe",
+    groups: "Groupes",
+    users_directory: "Annuaire des utilisateurs",
+    members: "Membres",
+    no_assignments: "Aucune attribution pour ce rôle pour l'instant.",
+    no_users: "Aucun utilisateur trouvé",
+    preview_of: "Responsabilités de",
+    preview_role: "Aperçu du rôle",
+    select_group: "Sélectionner un groupe…",
+    select_members: "Sélectionner des membres…",
+    unknown_group: "Groupe inconnu",
+    load_failed: "Ces sections n'ont pas pu être lues et apparaissent vides pour cette raison, non parce qu'elles ne contiennent rien : {{sections}}.",
+    raci_r: "Réalise",
+    raci_a: "Approuve",
+    raci_c: "Consulté",
+    raci_i: "Informé",
+  },
+  ar: {
+    add_group: "إضافة مجموعة",
+    access: "الوصول",
+    access_denied: "ملفك الشخصي غير مخوَّل لإدارة صلاحيات الوصول لهذا المستند.",
+    access_save_error: "تعذّر منح الوصول.",
+    activity: "النشاط / القرار",
+    add: "إضافة",
+    by_role: "حسب الدور",
+    by_user: "المستخدم",
+    cadence: "الدورية",
+    committee_name: "اسم اللجنة",
+    committees: "لجان التسيير",
+    doc_title: "العنوان",
+    documents: "مرجعية المستندات",
+    edit_committee: "تعديل اللجنة",
+    elite: "حزمة Elite",
+    grant: "منح",
+    linked_documents: "المستندات المرتبطة",
+    linked_policies: "السياسات المرتبطة",
+    manage_access: "إدارة الوصول",
+    module: "الوحدة",
+    new_committee: "لجنة جديدة",
+    new_doc: "مستند جديد",
+    next_meeting: "الاجتماع القادم",
+    no_committees: "لا توجد لجان تسيير بعد.",
+    no_docs: "لا توجد مستندات بعد.",
+    no_grants: "لا توجد صلاحيات صريحة بعد — يُطبَّق مستوى الوصول الافتراضي للمستند.",
+    no_policies: "لم يُعثر على أي سياسة",
+    no_raci: "لا توجد إسنادات RACI بعد.",
+    raci: "مصفوفة RACI",
+    responsible: "المسؤول",
+    select_documents: "اختر مستندات…",
+    select_policies: "اختر سياسات…",
+    select_user: "اختر مستخدماً…",
+    subtitle: "مصفوفة مسؤوليات RACI ومرجعية مستندات الحوكمة",
+    title: "الحوكمة",
+    typology: "التصنيف",
+    version: "الإصدار",
+    by_group: "حسب المجموعة",
+    custom_role: "دور مخصص",
+    group_name: "اسم المجموعة",
+    groups: "المجموعات",
+    users_directory: "دليل المستخدمين",
+    members: "الأعضاء",
+    no_assignments: "لا توجد إسنادات لهذا الدور بعد.",
+    no_users: "لا يوجد مستخدمون",
+    preview_of: "مسؤوليات",
+    preview_role: "معاينة الدور",
+    select_group: "اختر مجموعة…",
+    select_members: "اختر الأعضاء…",
+    unknown_group: "مجموعة غير معروفة",
+    load_failed: "تعذّرت قراءة هذه الأقسام، ولذلك تظهر فارغة — لا لأنها لا تحتوي على شيء: {{sections}}.",
+    raci_r: "المنفّذ",
+    raci_a: "المعتمِد",
+    raci_c: "المُستشار",
+    raci_i: "المُبلَّغ",
+  },
+};
+for (const lng of ["en", "fr", "ar"]) {
+  i18n.addResourceBundle(lng, "translation", { governance: GOVERNANCE_I18N[lng] }, true, false);
+}
+
+/** Objectif 6 — « Accessible depuis la section gouvernance ».
+ *  Remembered per browser; localStorage THROWS in some privacy modes, so the
+ *  preference must never be able to take the governance page down with it. */
+const DASH_LS_KEY = "grceye.moduledash.governance.open";
+
+function readDashOpen(): boolean {
+  try {
+    return window.localStorage.getItem(DASH_LS_KEY) !== "0";
+  } catch {
+    return true;
+  }
+}
+
+/* ── Objectif 6: « mise à jour mensuelle » ──────────────────────────────────
+ *
+ * GET /governance/trend returns one point per month, built from the daily
+ * snapshots (source "trend_snapshot_daily") or, while the history is still too
+ * thin, from the intake volume (source "intake_volume") — a DELIBERATELY
+ * narrower figure, "what was opened that month" rather than "what was carried".
+ * The two are never mixed silently: the caption below always states which one
+ * is on screen.
+ *
+ * `total: null` means no snapshot existed for that month. It is rendered as a
+ * GAP (connectNulls={false}), never as a zero — a zero would assert that the
+ * organisation held no policy that month, which is a fabricated figure of
+ * exactly the kind a bank stops trusting the rest of the screen over.
+ */
+interface TrendPoint {
+  month: string;
+  period: string;
+  as_of: string | null;
+  total: number | null;
+  counts: Record<string, unknown>;
+}
+
+interface TrendResponse {
+  metric: string;
+  months: number;
+  /** "unavailable" is a THIRD answer, not a synonym for "no history yet": the
+   *  underlying tables could not be read at all and every total came back null.
+   *  Telling the user "the series builds up one snapshot per day" in that case
+   *  would describe a young history where there is in fact a broken read, so it
+   *  gets the server's own operator-actionable sentence instead. */
+  source: "trend_snapshot_daily" | "intake_volume" | "unavailable";
+  note: string;
+  series: TrendPoint[];
+}
+
+const TREND_WINDOWS = [6, 12, 24];
+
+function GovernanceTrend() {
+  const { t } = useTranslation();
+  const [months, setMonths] = useState(6);
+
+  const query = useQuery<TrendResponse>({
+    queryKey: ["governance-trend", months],
+    // Same gate as the dashboard this is nested in (custom_dashboards +
+    // require_roles_strict(executive, ciso)), and ModuleDashboard only renders
+    // its children once that dashboard has actually loaded — so by the time
+    // this mounts the caller is known to be entitled and allowed.
+    queryFn: () =>
+      apiClient
+        .get<TrendResponse>("/governance/trend", { params: { months } })
+        .then((r) => r.data),
+    // A refusal is settled: asking again cannot change a plan or a role, and a
+    // repeated 402 re-fires the application-wide upgrade toast.
+    retry: (failureCount, error) => {
+      const status = (error as { response?: { status?: number } })?.response?.status ?? 0;
+      if (status >= 400 && status < 500) return false;
+      return failureCount < 1;
+    },
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const series = query.data?.series ?? [];
+  const hasHistory = series.some((p) => p.total != null);
+
+  return (
+    <div className="border-t border-gray-100 pt-4 space-y-2">
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <div>
+          <p className="text-sm font-medium text-gray-900">{t("moduledash.trend_title")}</p>
+          <p className="text-xs text-gray-400">{t("moduledash.trend_updated_monthly")}</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <label className="sr-only" htmlFor="governance-trend-window">
+            {t("moduledash.trend_period")}
+          </label>
+          <select
+            id="governance-trend-window"
+            value={String(months)}
+            onChange={(e) => setMonths(Number(e.target.value))}
+            className="border border-gray-200 rounded-xl text-xs px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-500"
+          >
+            {TREND_WINDOWS.map((n) => (
+              // `n`, never `count`: passing `count` switches i18next to plural
+              // resolution and looks for _one/_other keys that do not exist.
+              <option key={n} value={n}>{t("moduledash.trend_months", { n })}</option>
+            ))}
+          </select>
+        </div>
+      </div>
+
+      {query.isLoading ? (
+        <div className="h-40 bg-gray-50 rounded-xl animate-pulse" role="status" aria-busy="true">
+          <span className="sr-only">{t("moduledash.loading")}</span>
+        </div>
+      ) : query.isError ? (
+        // Never an eviction and never a blank space: the series is an extra on
+        // top of a dashboard that already loaded. A 404 is its own case: the
+        // route exists in the source but not in the process answering — the
+        // backend has not been restarted since it was added — and saying
+        // "not enough history yet" there would describe a young series where
+        // there is in fact nothing serving it.
+        <p className="text-xs text-gray-400 py-3">
+          {(query.error as { response?: { status?: number } })?.response?.status === 404
+            ? t("moduledash.error_not_published")
+            : t("moduledash.trend_no_history")}
+        </p>
+      ) : query.data?.source === "unavailable" ? (
+        <p className="flex items-start gap-2 px-3 py-2 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-800" role="status">
+          <span>{query.data.note || t("moduledash.error_not_ready")}</span>
+        </p>
+      ) : !hasHistory ? (
+        <p className="text-xs text-gray-400 py-3">{t("moduledash.trend_no_history")}</p>
+      ) : (
+        <>
+          <div className="h-44">
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={series} margin={{ top: 8, right: 8, bottom: 0, left: -20 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                <XAxis dataKey="month" tick={{ fontSize: 11, fill: "#94a3b8" }} tickLine={false} axisLine={false} />
+                <YAxis allowDecimals={false} tick={{ fontSize: 11, fill: "#94a3b8" }} tickLine={false} axisLine={false} />
+                <Tooltip
+                  formatter={(value: number | string) => [value, t("moduledash.trend_count")]}
+                  labelFormatter={(label: string) => `${t("moduledash.trend_month")} ${label}`}
+                />
+                <Line
+                  type="monotone"
+                  dataKey="total"
+                  stroke="#7c3aed"
+                  strokeWidth={2}
+                  dot={{ r: 3 }}
+                  /* A month with no snapshot is a hole in the record, not a zero. */
+                  connectNulls={false}
+                  isAnimationActive={false}
+                />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+          <p className="text-xs text-gray-400">
+            {query.data?.source === "intake_volume"
+              ? `${t("moduledash.trend_intake")} ${t("moduledash.trend_source_intake")}`
+              : t("moduledash.trend_source_snapshot")}
+          </p>
+        </>
+      )}
+    </div>
+  );
+}
 
 const RACI_BADGE: Record<string, string> = {
   R: "bg-blue-100 text-blue-700 border-blue-200",
@@ -10,7 +376,10 @@ const RACI_BADGE: Record<string, string> = {
   C: "bg-amber-100 text-amber-700 border-amber-200",
   I: "bg-gray-100 text-gray-600 border-gray-200",
 };
-const RACI_LABEL: Record<string, string> = { R: "Responsible", A: "Accountable", C: "Consulted", I: "Informed" };
+// R/A/C/I now resolve through governance.raci_* (registered above) so the
+// picker reads « R — Réalise » in French and the Arabic equivalent in Arabic,
+// instead of the English word in every language.
+const RACI_KEYS = ["R", "A", "C", "I"] as const;
 const BUILTIN_ROLES = ["tenant_admin", "ciso", "risk_manager", "compliance_manager", "control_owner", "business_owner", "security_analyst", "executive", "auditor", "policy_manager"];
 const TYPOLOGIES = ["policy", "charter", "regulation", "minutes", "procedure", "plan"];
 const ACCESS = ["read", "edit", "validate"];
@@ -33,6 +402,7 @@ export default function GovernancePage() {
   const [docForm, setDocForm] = useState({ title: "", typology: "policy", module: "", access_level: "read", content: "" });
   const [savingDoc, setSavingDoc] = useState(false);
   const [busy, setBusy] = useState("");
+  const [dashOpen, setDashOpen] = useState<boolean>(readDashOpen);
 
   // Custom-role preview: what a role (built-in or custom) is currently responsible for
   const [previewRole, setPreviewRole] = useState<string | null>(null);
@@ -54,6 +424,11 @@ export default function GovernancePage() {
   const [savingAccess, setSavingAccess] = useState(false);
   const [accessBusy, setAccessBusy] = useState("");
 
+  // Which of the six registers below could not be read at all. Kept separate
+  // from "the register is empty", because the two look identical on screen and
+  // mean opposite things.
+  const [loadError, setLoadError] = useState("");
+
   // Steering committees (M14.6)
   const [showCommittee, setShowCommittee] = useState(false);
   const emptyCommittee = { id: "", name: "", description: "", cadence: "quarterly", member_ids: [] as string[], linked_policy_ids: [] as string[], linked_document_ids: [] as string[], next_meeting_date: "" };
@@ -63,18 +438,39 @@ export default function GovernancePage() {
   const knownRoles = Array.from(new Set([...BUILTIN_ROLES, ...raci.filter((r) => r.responsible_type === "role" && r.role).map((r) => r.role)]));
 
   async function load() {
-    try {
-      const [r, d, g, u, c, p] = await Promise.all([
-        governanceApi.raciList(), governanceApi.docsList(), governanceApi.groupsList(), usersApi.list(),
-        governanceApi.committeesList(), policiesApi.list().catch(() => []),
-      ]);
-      setRaci(Array.isArray(r) ? r : []);
-      setDocs(Array.isArray(d) ? d : []);
-      setGroups(Array.isArray(g) ? g : []);
-      setUsers(Array.isArray(u) ? u : []);
-      setCommittees(Array.isArray(c) ? c : []);
-      setPolicies(Array.isArray(p) ? p : []);
-    } catch { setRaci([]); setDocs([]); setGroups([]); setUsers([]); setCommittees([]); setPolicies([]); } finally { setLoading(false); }
+    // allSettled, not all. With Promise.all a single failing call — a 403 on
+    // the user directory, say — rejected the whole batch and the catch then
+    // emptied ALL SIX registers, so a page whose RACI matrix and document
+    // repository had loaded perfectly well rendered « Aucune attribution » and
+    // « Aucun document ». That is the assert-emptiness-on-failure defect: the
+    // screen states, in the tender's own words, that nothing is recorded, when
+    // in fact nothing could be read.
+    const [r, d, g, u, c, p] = await Promise.allSettled([
+      governanceApi.raciList(), governanceApi.docsList(), governanceApi.groupsList(), usersApi.list(),
+      governanceApi.committeesList(), policiesApi.list(),
+    ]);
+    const take = (s: PromiseSettledResult<unknown>): any[] =>
+      s.status === "fulfilled" && Array.isArray(s.value) ? s.value : [];
+    setRaci(take(r));
+    setDocs(take(d));
+    setGroups(take(g));
+    setUsers(take(u));
+    setCommittees(take(c));
+    setPolicies(take(p));
+    // Named, so an operator knows which section is unreadable rather than
+    // guessing from an empty table.
+    const failed = ([
+      [r, t("governance.raci", "RACI matrix")],
+      [d, t("governance.documents", "Document repository")],
+      [g, t("governance.groups")],
+      [u, t("governance.users_directory")],
+      [c, t("governance.committees", "Steering committees")],
+      [p, t("nav.policies", "Policies")],
+    ] as [PromiseSettledResult<unknown>, string][])
+      .filter(([s]) => s.status === "rejected")
+      .map(([, label]) => label);
+    setLoadError(failed.length ? t("governance.load_failed", { sections: failed.join(", ") }) : "");
+    setLoading(false);
   }
   useEffect(() => { load(); }, []);
 
@@ -214,6 +610,18 @@ export default function GovernancePage() {
   }
   async function delCommittee(id: string) { setBusy(id); try { await governanceApi.committeeDelete(id); load(); } catch {} finally { setBusy(""); } }
 
+  function toggleDash() {
+    setDashOpen((open) => {
+      const next = !open;
+      try {
+        window.localStorage.setItem(DASH_LS_KEY, next ? "1" : "0");
+      } catch {
+        // Private browsing — the panel simply reopens on the next visit.
+      }
+      return next;
+    });
+  }
+
   return (
     <div className="p-8 max-w-7xl space-y-6">
       <div className="flex items-center justify-between">
@@ -226,6 +634,61 @@ export default function GovernancePage() {
           </div>
           <p className="text-sm text-gray-500 mt-1">{t("governance.subtitle", "RACI responsibility matrix and the governance document repository")}</p>
         </div>
+      </div>
+
+      {loadError && (
+        <div className="flex items-start gap-3 px-4 py-3 bg-amber-50 border border-amber-200 rounded-xl text-sm text-amber-800" role="status">
+          <span className="flex-1">{loadError}</span>
+          <button
+            type="button"
+            onClick={() => { setLoading(true); load(); }}
+            className="shrink-0 text-xs font-medium underline"
+          >
+            {t("moduledash.retry")}
+          </button>
+        </div>
+      )}
+
+      {/*
+        Objectif 6 — « Accessible depuis la section gouvernance », « réservé aux
+        fonctions de direction », « mise à jour mensuelle ».
+        GET /dashboards/governance (politiques, attestations, comités) already
+        existed and only AnalyticsPage ever called it — a card in another
+        navigation group does not make it accessible from the governance
+        section. The LOCATION is the rule, so it is mounted here.
+
+        ModuleDashboard owns every answer the call can end in: the Elite plan
+        gate as a translated upsell instead of a blank card, the strict role
+        gate (executive / ciso — the tenant owner is deliberately NOT admitted)
+        as an explicit « vue restreinte », a 424 as the operator's own message,
+        and an empty repository as "nothing recorded yet" — never sample rows.
+        The monthly series required by « mise à jour mensuelle » goes in its
+        children slot, so it is only fetched once the dashboard itself loaded.
+      */}
+      <div className="space-y-3">
+        <button
+          type="button"
+          onClick={toggleDash}
+          aria-expanded={dashOpen}
+          aria-controls="module-dashboard-governance"
+          className="inline-flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+        >
+          {dashOpen
+            ? <ChevronDown className="w-4 h-4 text-gray-400" aria-hidden="true" />
+            : <ChevronRight className="w-4 h-4 text-gray-400" aria-hidden="true" />}
+          <BarChart3 className="w-4 h-4 text-blue-600" aria-hidden="true" />
+          {t("moduledash.dashboard")}
+          <span className="text-xs font-normal text-gray-400">
+            {dashOpen ? t("moduledash.hide") : t("moduledash.show")}
+          </span>
+        </button>
+        {dashOpen && (
+          <div id="module-dashboard-governance">
+            <ModuleDashboard module="governance">
+              <GovernanceTrend />
+            </ModuleDashboard>
+          </div>
+        )}
       </div>
 
       {/* RACI matrix */}
@@ -242,7 +705,9 @@ export default function GovernancePage() {
         <form onSubmit={addRaci} className="flex flex-wrap items-end gap-2">
           <input value={raciForm.activity} onChange={(e) => setRaciForm({ ...raciForm, activity: e.target.value })} placeholder={t("governance.activity", "Activity / decision")} className="flex-1 min-w-[200px] border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
           <select value={raciForm.raci} onChange={(e) => setRaciForm({ ...raciForm, raci: e.target.value })} className="border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-            {["R", "A", "C", "I"].map((x) => <option key={x} value={x}>{x} — {RACI_LABEL[x]}</option>)}
+            {RACI_KEYS.map((x) => (
+              <option key={x} value={x}>{x} — {t(`governance.raci_${x.toLowerCase()}`)}</option>
+            ))}
           </select>
           <select value={raciForm.responsible_type} onChange={(e) => setRaciForm({ ...raciForm, responsible_type: e.target.value })} className="border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
             <option value="role">{t("governance.by_role", "By role")}</option>

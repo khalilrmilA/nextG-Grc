@@ -167,18 +167,6 @@ function severityColor(s: string) {
   if (s === "medium") return "#854d0e";
   return "#374151";
 }
-function statusColor(s: string) {
-  if (s === "implemented") return "#166534";
-  if (s === "partially_implemented") return "#854d0e";
-  if (s === "not_implemented") return "#991b1b";
-  return "#6b7280";
-}
-function statusBg(s: string) {
-  if (s === "implemented") return "#dcfce7";
-  if (s === "partially_implemented") return "#fef9c3";
-  if (s === "not_implemented") return "#fee2e2";
-  return "#f3f4f6";
-}
 
 export function exportComplianceReport(data: ReportData) {
   const scoreColor = data.complianceScore == null ? "#6b7280"
@@ -675,4 +663,296 @@ export function exportDdA(data: DdAData) {
 
   const safe = data.assessmentName.replace(/[^a-z0-9]/gi, "_");
   downloadFile(html, `DdA_${data.frameworkShortName}_${safe}.html`, "text/html;charset=utf-8;");
+}
+
+// ─── Chart image export (PNG) — dependency-free ───────────────────────────────
+//
+// « Export graphique » for the tender: every chart on screen must leave the
+// platform as a picture that can be pasted into a steering-committee deck.
+//
+// No library is used and none may be added (nothing can be installed on the
+// production host). The mechanism is the browser's own: a recharts chart is
+// plain inline <svg> in the DOM, so it is cloned, its *computed* styles are
+// written back onto the clone as inline attributes (a detached SVG has no
+// stylesheet, so anything coming from a CSS class would otherwise be lost),
+// serialised, loaded into an <img> through a data: URL and painted onto a
+// <canvas>. The canvas stays untainted because the serialised SVG references
+// nothing external, so toBlob() is allowed to hand the bytes back.
+//
+// Screens whose "chart" is CSS bars rather than an <svg> (Analytics) call
+// exportBarChartAsPng, which builds the SVG from the same numbers the bars are
+// drawn from — the picture is generated from the data, never scraped.
+
+/** Style properties that actually change how an SVG paints. Copying the whole
+ *  computed style would produce a multi-megabyte file for no visual gain. */
+const SVG_STYLE_PROPS = [
+  "fill", "fill-opacity", "fill-rule",
+  "stroke", "stroke-width", "stroke-opacity", "stroke-dasharray",
+  "stroke-linecap", "stroke-linejoin",
+  "opacity", "display", "visibility",
+  "font-family", "font-size", "font-weight", "font-style",
+  "text-anchor", "dominant-baseline", "letter-spacing",
+  "paint-order", "shape-rendering",
+] as const;
+
+function inlineComputedStyles(source: Element, clone: Element): void {
+  const computed = window.getComputedStyle(source);
+  let css = "";
+  for (const prop of SVG_STYLE_PROPS) {
+    const value = computed.getPropertyValue(prop);
+    // "none" is kept on purpose (a grid line's fill:none must survive the trip);
+    // only the no-op defaults are dropped, to keep the serialised file small.
+    if (value && value !== "normal" && value !== "auto") {
+      css += `${prop}:${value};`;
+    }
+  }
+  if (css) clone.setAttribute("style", css);
+
+  const sourceChildren = source.children;
+  const cloneChildren = clone.children;
+  for (let i = 0; i < sourceChildren.length && i < cloneChildren.length; i++) {
+    inlineComputedStyles(sourceChildren[i], cloneChildren[i]);
+  }
+}
+
+function downloadBlob(blob: Blob, filename: string): void {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+export function safeFileName(name: string): string {
+  return (name || "chart").replace(/[^a-z0-9_-]+/gi, "_").replace(/^_+|_+$/g, "").slice(0, 80) || "chart";
+}
+
+/** Rasterise a standalone SVG document string and download it as a PNG. */
+function rasterizeSvg(
+  svgMarkup: string,
+  width: number,
+  height: number,
+  filename: string,
+  background: string,
+  scale: number,
+): Promise<boolean> {
+  return new Promise((resolve) => {
+    const image = new Image();
+    // A data: URL rather than a blob: URL — Safari refuses to load a blob-backed
+    // SVG into an <img> that will be drawn to a canvas. encodeURIComponent (not
+    // btoa) so Arabic and French labels survive the trip.
+    image.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svgMarkup)}`;
+    image.onload = () => {
+      try {
+        const canvas = document.createElement("canvas");
+        canvas.width = Math.max(1, Math.round(width * scale));
+        canvas.height = Math.max(1, Math.round(height * scale));
+        const ctx = canvas.getContext("2d");
+        if (!ctx) {
+          resolve(false);
+          return;
+        }
+        // Charts are drawn for a white page; without this the PNG is
+        // transparent and unreadable in most document editors.
+        ctx.fillStyle = background;
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.setTransform(scale, 0, 0, scale, 0, 0);
+        ctx.drawImage(image, 0, 0, width, height);
+        canvas.toBlob((blob) => {
+          if (!blob) {
+            resolve(false);
+            return;
+          }
+          downloadBlob(blob, filename.endsWith(".png") ? filename : `${filename}.png`);
+          resolve(true);
+        }, "image/png");
+      } catch {
+        resolve(false);
+      }
+    };
+    image.onerror = () => resolve(false);
+  });
+}
+
+export interface ChartExportOptions {
+  /** Caption drawn above the chart — usually the card's own heading. */
+  title?: string;
+  /** Small line under the title (period, filter, tenant…). */
+  subtitle?: string;
+  background?: string;
+  /** Pixel density. 2 keeps text crisp when the PNG is enlarged in a deck. */
+  scale?: number;
+  /** Written right-to-left when the UI is in Arabic. */
+  rtl?: boolean;
+}
+
+/**
+ * Export the first inline <svg> inside `container` (a recharts chart) as a PNG.
+ *
+ * Returns false rather than throwing when there is nothing to export or the
+ * browser refuses the conversion, so a caller can show its own message.
+ */
+export async function exportChartAsPng(
+  container: HTMLElement | null,
+  filename: string,
+  options: ChartExportOptions = {},
+): Promise<boolean> {
+  if (!container) return false;
+  const source = container.querySelector("svg");
+  if (!source) return false;
+
+  const rect = source.getBoundingClientRect();
+  const width = Math.round(rect.width || source.clientWidth || 640);
+  const height = Math.round(rect.height || source.clientHeight || 320);
+  if (width < 2 || height < 2) return false;
+
+  const title = options.title?.trim();
+  const subtitle = options.subtitle?.trim();
+  const padding = 16;
+  const headerHeight = (title ? 26 : 0) + (subtitle ? 18 : 0);
+  const totalWidth = width + padding * 2;
+  const totalHeight = height + headerHeight + padding * 2;
+  const background = options.background ?? "#ffffff";
+  const rtl = options.rtl === true;
+  const textX = rtl ? totalWidth - padding : padding;
+  const anchor = rtl ? "end" : "start";
+
+  const clone = source.cloneNode(true) as SVGSVGElement;
+  inlineComputedStyles(source, clone);
+  // Serialising an SVG lifted out of an HTML document does not always carry the
+  // namespace, and an <img> refuses a namespace-less SVG outright.
+  clone.setAttribute("xmlns", "http://www.w3.org/2000/svg");
+  clone.setAttribute("width", String(width));
+  clone.setAttribute("height", String(height));
+  if (!clone.getAttribute("viewBox")) {
+    clone.setAttribute("viewBox", `0 0 ${width} ${height}`);
+  }
+  clone.setAttribute("x", String(padding));
+  clone.setAttribute("y", String(headerHeight + padding));
+
+  const serialised = new XMLSerializer().serializeToString(clone);
+  const markup =
+    `<svg xmlns="http://www.w3.org/2000/svg" width="${totalWidth}" height="${totalHeight}" ` +
+    `viewBox="0 0 ${totalWidth} ${totalHeight}"${rtl ? ' direction="rtl"' : ""}>` +
+    `<rect width="100%" height="100%" fill="${background}"/>` +
+    (title
+      ? `<text x="${textX}" y="${padding + 14}" text-anchor="${anchor}" font-family="Helvetica, Arial, sans-serif" ` +
+        `font-size="14" font-weight="600" fill="#111827">${escapeXml(title)}</text>`
+      : "") +
+    (subtitle
+      ? `<text x="${textX}" y="${padding + (title ? 32 : 14)}" text-anchor="${anchor}" font-family="Helvetica, Arial, sans-serif" ` +
+        `font-size="11" fill="#6b7280">${escapeXml(subtitle)}</text>`
+      : "") +
+    serialised +
+    `</svg>`;
+
+  return rasterizeSvg(markup, totalWidth, totalHeight, filename, background, options.scale ?? 2);
+}
+
+function escapeXml(value: string): string {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&apos;");
+}
+
+const CHART_PALETTE = [
+  "#3b82f6", "#6366f1", "#10b981", "#f59e0b",
+  "#f43f5e", "#8b5cf6", "#06b6d4", "#f97316",
+];
+
+export interface BarChartEntry {
+  label: string;
+  value: number;
+  color?: string;
+}
+
+/**
+ * Build a horizontal bar chart as a standalone SVG document from raw numbers.
+ *
+ * Used by the screens whose bars are CSS divs rather than an <svg>: the picture
+ * is generated from the same values the page displays, so it cannot drift from
+ * what the user is looking at.
+ */
+export function buildBarChartSvg(
+  title: string,
+  entries: BarChartEntry[],
+  options: ChartExportOptions = {},
+): { markup: string; width: number; height: number } {
+  const rtl = options.rtl === true;
+  const background = options.background ?? "#ffffff";
+  const width = 640;
+  const padding = 20;
+  const rowHeight = 26;
+  const labelWidth = 190;
+  const valueWidth = 54;
+  const subtitle = options.subtitle?.trim();
+  const headerHeight = 24 + (subtitle ? 18 : 0);
+  const height = headerHeight + padding * 2 + Math.max(1, entries.length) * rowHeight;
+  const max = Math.max(1, ...entries.map((e) => (Number.isFinite(e.value) ? e.value : 0)));
+  const trackWidth = width - padding * 2 - labelWidth - valueWidth;
+
+  const rows = entries
+    .map((entry, index) => {
+      const value = Number.isFinite(entry.value) ? entry.value : 0;
+      const y = headerHeight + padding + index * rowHeight;
+      const barWidth = Math.max(2, Math.round((value / max) * trackWidth));
+      const colour = entry.color ?? CHART_PALETTE[index % CHART_PALETTE.length];
+      // Mirrored horizontally in Arabic so bars grow away from the label, as
+      // they do on screen.
+      const labelX = rtl ? width - padding : padding;
+      const trackX = rtl ? padding + valueWidth : padding + labelWidth;
+      const barX = rtl ? trackX + trackWidth - barWidth : trackX;
+      const valueX = rtl ? padding : width - padding;
+      return (
+        `<text x="${labelX}" y="${y + 15}" text-anchor="${rtl ? "end" : "start"}" font-family="Helvetica, Arial, sans-serif" ` +
+        `font-size="11" fill="#4b5563">${escapeXml(entry.label)}</text>` +
+        `<rect x="${trackX}" y="${y + 6}" width="${trackWidth}" height="10" rx="5" fill="#f3f4f6"/>` +
+        `<rect x="${barX}" y="${y + 6}" width="${barWidth}" height="10" rx="5" fill="${colour}"/>` +
+        `<text x="${valueX}" y="${y + 15}" text-anchor="${rtl ? "start" : "end"}" font-family="Helvetica, Arial, sans-serif" ` +
+        `font-size="11" font-weight="600" fill="#111827">${escapeXml(String(value))}</text>`
+      );
+    })
+    .join("");
+
+  const titleX = rtl ? width - padding : padding;
+  const anchor = rtl ? "end" : "start";
+  const markup =
+    `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" ` +
+    `viewBox="0 0 ${width} ${height}"${rtl ? ' direction="rtl"' : ""}>` +
+    `<rect width="100%" height="100%" fill="${background}"/>` +
+    `<text x="${titleX}" y="${padding + 8}" text-anchor="${anchor}" font-family="Helvetica, Arial, sans-serif" ` +
+    `font-size="14" font-weight="600" fill="#111827">${escapeXml(title)}</text>` +
+    (subtitle
+      ? `<text x="${titleX}" y="${padding + 26}" text-anchor="${anchor}" font-family="Helvetica, Arial, sans-serif" ` +
+        `font-size="11" fill="#6b7280">${escapeXml(subtitle)}</text>`
+      : "") +
+    rows +
+    `</svg>`;
+
+  return { markup, width, height };
+}
+
+/** Build a bar chart from raw values and download it as a PNG. */
+export async function exportBarChartAsPng(
+  title: string,
+  entries: BarChartEntry[],
+  filename: string,
+  options: ChartExportOptions = {},
+): Promise<boolean> {
+  if (!entries.length) return false;
+  const { markup, width, height } = buildBarChartSvg(title, entries, options);
+  return rasterizeSvg(
+    markup,
+    width,
+    height,
+    filename,
+    options.background ?? "#ffffff",
+    options.scale ?? 2,
+  );
 }

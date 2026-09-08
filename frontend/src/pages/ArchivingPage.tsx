@@ -1,7 +1,17 @@
 import { useState, useEffect } from "react";
-import { Plus, X, Loader2, Crown, Archive, Download, Trash2, Repeat, CheckCircle2, XCircle } from "lucide-react";
+import {
+  Plus, X, Loader2, Crown, Archive, Download, Trash2, Repeat, CheckCircle2, XCircle,
+  Eye, Search, ShieldCheck, ShieldAlert, FileText, Paperclip, RefreshCw,
+} from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { archivingApi } from "@/api/endpoints";
+// POST /archiving/purge-expired now REQUIRES ?reason= (min 5 chars) and accepts
+// ?dry_run=. archivingApi.purgeExpired() is still a zero-argument call that
+// sends neither, so going through it can only ever 422. Until that signature is
+// widened (api lane), the call is made on the same authenticated client the api
+// objects wrap — never a bare fetch/axios.
+import { apiClient } from "@/api/client";
+import type { ArchiveRecord, ArchiveContent, ArchivedEvidence } from "@/types";
 
 const ENTITY_TYPES = ["risk", "policy", "audit", "control", "assessment", "document", "vulnerability"];
 
@@ -17,6 +27,44 @@ function formatEntityType(type: string): string {
   return type.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
+/** The snapshot's own name for the record, whatever shape it was archived in. */
+function archivedName(record: { payload?: Record<string, unknown> | null; entity_id?: string | null }): string {
+  const payload = record.payload ?? {};
+  for (const key of ["title", "name", "reference", "ref_id", "label"]) {
+    const value = payload[key];
+    if (typeof value === "string" && value.trim()) return value;
+  }
+  return record.entity_id ?? "—";
+}
+
+function fmtBytes(bytes?: number | null): string {
+  if (!bytes) return "—";
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
+  return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+}
+
+function saveBlob(blob: Blob, filename: string) {
+  const url = window.URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  window.URL.revokeObjectURL(url);
+}
+
+/** Scalar payload fields, in a stable order — the archived record as a person
+ *  reads it, with the raw JSON kept underneath for anything not scalar. */
+function scalarFields(payload: Record<string, unknown> | null | undefined): [string, string][] {
+  if (!payload) return [];
+  return Object.entries(payload)
+    .filter(([, v]) => v === null || ["string", "number", "boolean"].includes(typeof v))
+    .slice(0, 24)
+    .map(([k, v]) => [k, v === null || v === "" ? "—" : String(v)]);
+}
+
 function buildCriteriaFromClauses(clauses: RuleClause[]): string {
   return clauses
     .filter((c) => c.field.trim() && c.value.trim())
@@ -28,10 +76,262 @@ function emptyClause(): RuleClause {
   return { field: "", op: "=", value: "" };
 }
 
+/**
+ * « Consultation sans restauration » — the archived record read back whole:
+ * the snapshot itself, the children captured with it (constats, recommandations)
+ * and the evidence manifest, each file downloadable and checkable against the
+ * fingerprint taken when it was stored.
+ */
+function ArchiveDetailDrawer({ archiveId, onClose }: { archiveId: string; onClose: () => void }) {
+  const { t } = useTranslation();
+  const [content, setContent] = useState<ArchiveContent | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [verify, setVerify] = useState(false);
+  const [downloading, setDownloading] = useState("");
+  const [showRaw, setShowRaw] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    setError("");
+    archivingApi
+      .content(archiveId, verify)
+      .then((data) => { if (!cancelled) setContent(data); })
+      .catch(() => { if (!cancelled) setError(t("archiving.detail_load_error")); })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, [archiveId, verify, t]);
+
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) { if (e.key === "Escape") onClose(); }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  async function downloadEvidence(item: ArchivedEvidence) {
+    if (!item.id) return;
+    setDownloading(item.id);
+    try {
+      // The bytes need the Authorization header, so this comes back as a blob
+      // rather than as a link the browser would fetch unauthenticated.
+      const blob = await archivingApi.downloadEvidence(archiveId, item.id);
+      saveBlob(blob, item.file_name || item.name || "evidence");
+    } catch {
+      setError(t("archiving.detail_load_error"));
+    } finally {
+      setDownloading("");
+    }
+  }
+
+  const record = content?.record;
+  const children = content?.children ?? {};
+  const childKeys = Object.keys(children).filter((k) => k !== "evidence" && (children[k] ?? []).length > 0);
+  const evidence = content?.evidence ?? [];
+
+  const childLabels: Record<string, string> = {
+    findings: t("archiving.children_findings"),
+    evidence: t("archiving.children_evidence"),
+    recommendations: t("archiving.children_recommendations"),
+  };
+
+  return (
+    <div className="fixed inset-0 z-50">
+      <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
+      <div className="absolute inset-y-0 right-0 rtl:right-auto rtl:left-0 w-full max-w-2xl bg-white shadow-2xl overflow-y-auto">
+        <div className="sticky top-0 bg-white border-b border-gray-100 px-6 py-4 flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <h2 className="text-lg font-semibold text-gray-900 truncate">{t("archiving.archive_detail")}</h2>
+            {record && (
+              <p className="text-xs text-gray-500 mt-0.5 truncate">{archivedName(record)}</p>
+            )}
+          </div>
+          <div className="flex items-center gap-2 flex-shrink-0">
+            <button
+              type="button"
+              onClick={() => setVerify((v) => !v)}
+              title={t("archiving.evidence_hash")}
+              className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium ${
+                verify ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-gray-200 text-gray-600 hover:bg-gray-50"
+              }`}
+            >
+              <ShieldCheck className="w-3.5 h-3.5" /> {t("archiving.evidence_hash")}
+            </button>
+            <button onClick={onClose} className="text-gray-400 hover:text-gray-600" aria-label={t("common.close")}>
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+        </div>
+
+        <div className="px-6 py-5 space-y-6">
+          {error && <div className="p-3 bg-red-50 text-red-700 rounded-xl text-sm">{error}</div>}
+
+          {loading ? (
+            <div className="flex items-center justify-center py-20"><Loader2 className="w-6 h-6 animate-spin text-blue-500" /></div>
+          ) : !record ? (
+            <p className="text-sm text-gray-400 text-center py-16">{t("archiving.detail_load_error")}</p>
+          ) : (
+            <>
+              {/* Header facts */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <p className="text-xs text-gray-400">{t("archiving.entity_type")}</p>
+                  <p className="text-sm text-gray-900">{formatEntityType(record.entity_type)}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-400">{t("archiving.archived_on")}</p>
+                  <p className="text-sm text-gray-900">{record.archived_at ? new Date(record.archived_at).toLocaleString() : "—"}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-400">{t("archiving.archived_by")}</p>
+                  <p className="text-sm text-gray-900">{content?.archived_by_email || t("activity_log.actor_system")}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-400">{t("archiving.retention_until")}</p>
+                  <p className="text-sm text-gray-900">
+                    {record.retention_until ? new Date(record.retention_until).toLocaleDateString() : t("archiving.indefinite")}
+                  </p>
+                </div>
+                <div className="col-span-2">
+                  <p className="text-xs text-gray-400">{t("archiving.reason")}</p>
+                  <p className="text-sm text-gray-900">{record.reason || "—"}</p>
+                </div>
+              </div>
+
+              {/* Snapshot */}
+              <div>
+                <h3 className="text-sm font-semibold text-gray-900 flex items-center gap-2">
+                  <FileText className="w-4 h-4 text-gray-400" /> {t("archiving.content_title")}
+                </h3>
+                <p className="text-xs text-gray-400 mt-0.5">{t("archiving.content_hint")}</p>
+                <div className="mt-3 rounded-xl border border-gray-100 overflow-hidden">
+                  <table className="w-full text-sm">
+                    <tbody>
+                      {scalarFields(record.payload).map(([key, value]) => (
+                        <tr key={key} className="border-b border-gray-50 last:border-0">
+                          <td className="px-4 py-2 text-xs font-mono text-gray-500 w-1/3 align-top">{key}</td>
+                          <td className="px-4 py-2 text-gray-800 break-words">{value}</td>
+                        </tr>
+                      ))}
+                      {scalarFields(record.payload).length === 0 && (
+                        <tr><td className="px-4 py-3 text-sm text-gray-400">{t("common.no_data")}</td></tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowRaw((v) => !v)}
+                  className="mt-2 text-xs text-blue-600 hover:text-blue-700 font-medium"
+                >
+                  {showRaw ? t("common.close") : t("common.view")}
+                </button>
+                {showRaw && (
+                  <pre className="mt-2 p-3 bg-gray-50 border border-gray-100 rounded-xl text-xs text-gray-600 overflow-x-auto whitespace-pre-wrap">
+                    {JSON.stringify(record.payload ?? {}, null, 2)}
+                  </pre>
+                )}
+              </div>
+
+              {/* Children captured with the record */}
+              {childKeys.length > 0 && (
+                <div>
+                  <h3 className="text-sm font-semibold text-gray-900">{t("archiving.children_title")}</h3>
+                  <p className="text-xs text-gray-400 mt-0.5">{t("archiving.source")}: {content?.children_source}</p>
+                  <div className="mt-3 space-y-4">
+                    {childKeys.map((key) => (
+                      <div key={key} className="rounded-xl border border-gray-100 overflow-hidden">
+                        <div className="px-4 py-2 bg-gray-50/70 flex items-center justify-between">
+                          <span className="text-xs font-semibold text-gray-600">{childLabels[key] ?? formatEntityType(key)}</span>
+                          <span className="text-xs text-gray-400">{(children[key] ?? []).length}</span>
+                        </div>
+                        <ul className="divide-y divide-gray-50">
+                          {(children[key] ?? []).slice(0, 25).map((child, idx) => (
+                            <li key={String(child.id ?? idx)} className="px-4 py-2.5 text-sm text-gray-800 flex items-center justify-between gap-3">
+                              <span className="truncate">{archivedName({ payload: child, entity_id: String(child.id ?? "") })}</span>
+                              {typeof child.status === "string" && (
+                                <span className="inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold bg-gray-100 text-gray-600 flex-shrink-0">
+                                  {child.status}
+                                </span>
+                              )}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Evidence manifest */}
+              <div>
+                <h3 className="text-sm font-semibold text-gray-900 flex items-center gap-2">
+                  <Paperclip className="w-4 h-4 text-gray-400" /> {t("archiving.evidence_title")}
+                </h3>
+                {evidence.length === 0 ? (
+                  <p className="text-sm text-gray-400 mt-2">{t("archiving.evidence_none")}</p>
+                ) : (
+                  <div className="mt-3 space-y-2">
+                    {evidence.map((item, idx) => {
+                      const failed = item.integrity === "modified" || item.integrity === "missing" || item.integrity === "unreadable";
+                      return (
+                        <div key={item.id ?? idx} className="border border-gray-100 rounded-xl px-4 py-3 flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <p className="text-sm font-medium text-gray-900 truncate">
+                              {item.file_name || item.name || "—"}
+                            </p>
+                            <p className="text-xs text-gray-400 mt-0.5">{fmtBytes(item.file_size_bytes)}</p>
+                            {item.file_sha256 && (
+                              <p className="text-xs font-mono text-gray-400 mt-0.5 truncate" title={item.file_sha256}>
+                                {t("archiving.evidence_hash")}: {item.file_sha256.slice(0, 16)}…
+                              </p>
+                            )}
+                            <span className={`inline-flex items-center gap-1 mt-1.5 rounded-full px-2.5 py-0.5 text-xs font-semibold border ${
+                              failed
+                                ? "bg-red-50 text-red-700 border-red-200"
+                                : "bg-green-50 text-green-700 border-green-200"
+                            }`}>
+                              {failed ? <ShieldAlert className="w-3 h-3" /> : <ShieldCheck className="w-3 h-3" />}
+                              {failed
+                                ? t("audit_detail.evidence_integrity_failed")
+                                : t("audit_detail.evidence_integrity_ok")}
+                            </span>
+                          </div>
+                          <button
+                            type="button"
+                            disabled={!item.downloadable || downloading === item.id}
+                            onClick={() => downloadEvidence(item)}
+                            className="flex-shrink-0 inline-flex items-center gap-1.5 border border-gray-200 text-gray-700 text-xs font-medium rounded-lg px-3 py-1.5 hover:bg-gray-50 disabled:opacity-40"
+                          >
+                            {downloading === item.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <Download className="w-3 h-3" />}
+                            {t("archiving.evidence_download")}
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function ArchivingPage() {
   const { t } = useTranslation();
-  const [items, setItems] = useState<any[]>([]);
+  const [items, setItems] = useState<ArchiveRecord[]>([]);
   const [loading, setLoading] = useState(true);
+  const [typeFilter, setTypeFilter] = useState("");
+  const [search, setSearch] = useState("");
+  const [detailId, setDetailId] = useState<string | null>(null);
+  const [purgeOpen, setPurgeOpen] = useState(false);
+  const [purgeReason, setPurgeReason] = useState("");
+  const [purgeWord, setPurgeWord] = useState("");
+  const [purgeError, setPurgeError] = useState("");
+  const [loadError, setLoadError] = useState("");
   const [showAdd, setShowAdd] = useState(false);
   const [form, setForm] = useState({ entity_type: "risk", reason: "", retention_days: 365 });
   const [saving, setSaving] = useState(false);
@@ -62,14 +362,23 @@ export default function ArchivingPage() {
   });
 
   async function load() {
-    try { const d = await archivingApi.list(); setItems(Array.isArray(d) ? d : []); }
-    catch { setItems([]); } finally { setLoading(false); }
+    setLoadError("");
+    try {
+      const d = await archivingApi.listFiltered(typeFilter ? { entity_type: typeFilter, limit: 200 } : { limit: 200 });
+      setItems(Array.isArray(d) ? d : []);
+    } catch {
+      setItems([]);
+      setLoadError(t("archiving.load_error"));
+    } finally { setLoading(false); }
   }
   async function loadRules() {
     try { const d = await archivingApi.listRules(); setRules(Array.isArray(d) ? d : []); }
     catch { setRules([]); } finally { setRulesLoading(false); }
   }
-  useEffect(() => { load(); loadRules(); }, []);
+  useEffect(() => { loadRules(); }, []);
+  // Re-queried server-side rather than filtered in the browser: the list is
+  // capped, so a client-side filter would only ever search the first page.
+  useEffect(() => { setLoading(true); load(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [typeFilter]);
 
   async function addArchive(e: React.FormEvent) {
     e.preventDefault();
@@ -80,10 +389,29 @@ export default function ArchivingPage() {
       setShowAdd(false); setForm({ entity_type: "risk", reason: "", retention_days: 365 }); setLoading(true); load();
     } catch {} finally { setSaving(false); }
   }
+  const purgeWordExpected = t("archiving.purge_confirm_word");
+  const purgeReady = purgeReason.trim().length >= 5 && purgeWord.trim().toUpperCase() === purgeWordExpected.toUpperCase();
+
   async function purge() {
-    setBusy("purge"); setMsg("");
-    try { const r = await archivingApi.purgeExpired(); setMsg(`Purged ${r.purged} expired record(s).`); setLoading(true); load(); }
-    catch { setMsg("Purge failed"); } finally { setBusy(""); }
+    if (!purgeReady) return;
+    setBusy("purge"); setMsg(""); setPurgeError("");
+    try {
+      const r = await apiClient
+        .post<{ purged?: number }>("/archiving/purge-expired", null, { params: { reason: purgeReason.trim() } })
+        .then((res) => res.data);
+      setMsg(t("archiving.purge_done", { count: r?.purged ?? 0 }));
+      setPurgeOpen(false); setPurgeReason(""); setPurgeWord("");
+      setLoading(true); load();
+    } catch (err: any) {
+      // 403 is the tenant_admin gate, not a failure of the operation — say which.
+      const status = err?.response?.status;
+      const detail = err?.response?.data?.detail;
+      setPurgeError(
+        status === 403
+          ? t("archiving.purge_forbidden")
+          : (typeof detail === "string" ? detail : t("archiving.load_error")),
+      );
+    } finally { setBusy(""); }
   }
   async function exportArchives(format: "xlsx" | "csv" | "pdf") {
     setBusy(`export-${format}`);
@@ -162,6 +490,14 @@ export default function ArchivingPage() {
 
   const expired = items.filter((i) => i.retention_until && i.retention_until < new Date().toISOString()).length;
 
+  const needle = search.trim().toLowerCase();
+  const visible = needle
+    ? items.filter((i) =>
+        `${archivedName(i)} ${i.reason ?? ""} ${i.entity_type}`.toLowerCase().includes(needle),
+      )
+    : items;
+  const entityTypeOptions = Array.from(new Set([...ENTITY_TYPES, ...items.map((i) => i.entity_type)]));
+
   return (
     <div className="p-8 max-w-7xl space-y-6">
       <div className="flex items-center justify-between">
@@ -204,33 +540,80 @@ export default function ArchivingPage() {
         ))}
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 flex items-center justify-between">
           <div><p className="text-sm font-semibold text-gray-900">{t("archiving.enforce", "Retention")}</p><p className="text-xs text-gray-500 mt-0.5">{msg || t("archiving.enforce_sub", "Delete records past their retention")}</p></div>
-          <button onClick={purge} disabled={!!busy} className="inline-flex items-center gap-2 bg-white border border-gray-200 text-gray-700 px-3 py-2 rounded-xl text-sm font-medium hover:bg-gray-50 disabled:opacity-50">
+          <button onClick={() => { setPurgeError(""); setPurgeOpen(true); }} disabled={!!busy} className="inline-flex items-center gap-2 bg-white border border-gray-200 text-gray-700 px-3 py-2 rounded-xl text-sm font-medium hover:bg-gray-50 disabled:opacity-50">
             {busy === "purge" ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />} {t("archiving.purge", "Purge expired")}
           </button>
         </div>
       </div>
 
+      {/* Filters */}
+      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
+        <div className="flex items-center gap-3 flex-wrap">
+          <label className="sr-only" htmlFor="archive-type-filter">{t("archiving.filter_entity_type")}</label>
+          <select
+            id="archive-type-filter"
+            value={typeFilter}
+            onChange={(e) => setTypeFilter(e.target.value)}
+            className="border border-gray-200 rounded-xl text-sm px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+          >
+            <option value="">{t("archiving.filter_all_types")}</option>
+            {entityTypeOptions.map((x) => <option key={x} value={x}>{formatEntityType(x)}</option>)}
+          </select>
+          <div className="relative flex-1 min-w-[220px] max-w-sm">
+            <Search className="w-4 h-4 text-gray-400 absolute left-3 rtl:left-auto rtl:right-3 top-1/2 -translate-y-1/2" />
+            <input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder={t("archiving.search_placeholder")}
+              aria-label={t("archiving.search_placeholder")}
+              className="w-full border border-gray-200 rounded-xl text-sm pl-9 rtl:pl-3 rtl:pr-9 pr-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+          <button
+            onClick={() => { setLoading(true); load(); }}
+            disabled={loading}
+            className="inline-flex items-center gap-2 border border-gray-200 text-gray-700 px-3 py-2 rounded-xl text-sm font-medium hover:bg-gray-50 disabled:opacity-50"
+          >
+            <RefreshCw className="w-4 h-4" /> {t("common.refresh")}
+          </button>
+        </div>
+      </div>
+
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+        {loadError && <div className="m-4 p-3 bg-red-50 text-red-700 rounded-xl text-sm">{loadError}</div>}
         {loading ? (
           <div className="flex items-center justify-center py-16"><Loader2 className="w-6 h-6 animate-spin text-blue-500" /></div>
-        ) : items.length === 0 ? (
+        ) : visible.length === 0 ? (
           <div className="text-center py-16 text-gray-400">{t("archiving.empty", "No archived records yet.")}</div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead><tr className="border-b border-gray-100 bg-gray-50/50">
                 <th className="text-left px-6 py-3 font-medium text-gray-500">{t("archiving.entity", "Entity")}</th>
+                <th className="text-left px-6 py-3 font-medium text-gray-500">{t("archiving.entity_name")}</th>
                 <th className="text-left px-6 py-3 font-medium text-gray-500">{t("archiving.reason", "Reason")}</th>
                 <th className="text-left px-6 py-3 font-medium text-gray-500">{t("archiving.archived", "Archived")}</th>
                 <th className="text-left px-6 py-3 font-medium text-gray-500">{t("archiving.retention_until", "Retention until")}</th>
+                <th className="px-6 py-3" />
               </tr></thead>
               <tbody>
-                {items.map((it) => (
+                {visible.map((it) => (
                   <tr key={it.id} className="border-b border-gray-50 hover:bg-gray-50/50">
                     <td className="px-6 py-4"><span className="inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold border bg-gray-100 text-gray-600 capitalize">{it.entity_type}</span></td>
-                    <td className="px-6 py-4 text-gray-900">{it.reason || "—"}</td>
+                    <td className="px-6 py-4 text-gray-900 font-medium max-w-xs truncate" title={archivedName(it)}>{archivedName(it)}</td>
+                    <td className="px-6 py-4 text-gray-600 max-w-xs truncate" title={it.reason ?? ""}>{it.reason || "—"}</td>
                     <td className="px-6 py-4 text-gray-500">{it.archived_at ? new Date(it.archived_at).toLocaleDateString() : "—"}</td>
                     <td className="px-6 py-4 text-gray-500">{it.retention_until ? new Date(it.retention_until).toLocaleDateString() : t("archiving.indefinite", "indefinite")}</td>
+                    <td className="px-6 py-4 text-right">
+                      <button
+                        onClick={() => setDetailId(it.id)}
+                        title={t("archiving.view_archive")}
+                        aria-label={t("archiving.view_archive")}
+                        className="inline-flex items-center gap-1.5 border border-gray-200 text-gray-700 text-xs font-medium rounded-lg px-3 py-1.5 hover:bg-gray-50"
+                      >
+                        <Eye className="w-3.5 h-3.5" /> {t("archiving.view")}
+                      </button>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -238,6 +621,70 @@ export default function ArchivingPage() {
           </div>
         )}
       </div>
+
+      {detailId && <ArchiveDetailDrawer archiveId={detailId} onClose={() => setDetailId(null)} />}
+
+      {/* « Assure la conservation… » — purging destroys evidence permanently, so
+          the route demands a written reason and this asks for it, plus the
+          typed confirmation word, before anything is sent. */}
+      {purgeOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setPurgeOpen(false)} />
+          <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-lg p-6">
+            <div className="flex items-start justify-between gap-3 mb-3">
+              <h3 className="text-lg font-semibold text-gray-900">{t("archiving.purge_confirm_title")}</h3>
+              <button onClick={() => setPurgeOpen(false)} className="text-gray-400 hover:text-gray-600" aria-label={t("common.close")}>
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <p className="text-sm text-gray-600">{t("archiving.purge_confirm_body")}</p>
+
+            {purgeError && <div className="mt-3 p-3 bg-red-50 text-red-700 rounded-xl text-sm">{purgeError}</div>}
+
+            <label className="block text-xs font-medium text-gray-600 mt-4 mb-1" htmlFor="purge-reason">
+              {t("archiving.reason")}
+            </label>
+            <textarea
+              id="purge-reason"
+              rows={3}
+              value={purgeReason}
+              onChange={(e) => setPurgeReason(e.target.value)}
+              placeholder={t("archiving.reason")}
+              className="w-full border border-gray-200 rounded-xl text-sm px-3 py-2 focus:outline-none focus:ring-2 focus:ring-red-500"
+            />
+
+            <label className="block text-xs font-medium text-gray-600 mt-3 mb-1" htmlFor="purge-word">
+              {t("archiving.purge_confirm_input")}
+            </label>
+            <input
+              id="purge-word"
+              value={purgeWord}
+              onChange={(e) => setPurgeWord(e.target.value)}
+              placeholder={purgeWordExpected}
+              className="w-full border border-gray-200 rounded-xl text-sm px-3 py-2 focus:outline-none focus:ring-2 focus:ring-red-500"
+            />
+
+            <div className="flex justify-end gap-2 mt-5">
+              <button
+                type="button"
+                onClick={() => setPurgeOpen(false)}
+                className="px-4 py-2 rounded-xl text-sm font-medium border border-gray-200 text-gray-700 hover:bg-gray-50"
+              >
+                {t("common.cancel")}
+              </button>
+              <button
+                type="button"
+                onClick={purge}
+                disabled={!purgeReady || busy === "purge"}
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium bg-red-600 text-white hover:bg-red-700 disabled:opacity-50"
+              >
+                {busy === "purge" ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+                {t("archiving.purge")}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── Archiving Rules (scheduled auto-archiving) ──────────────────── */}
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">

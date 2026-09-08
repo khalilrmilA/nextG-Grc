@@ -37,6 +37,71 @@ import type {
   RiskCartographyDetail,
   CartographyDefinition,
   DocumentLogEntry,
+  // ── Compliance & audit programme (STB Bloc 9) ─────────────────────────────
+  // `Requirement`, `AuditRegisterRow` and the rest of the domain shapes live in
+  // "@/types" — import them from there in pages; only what this file references
+  // is imported here (noUnusedLocals is on).
+  RequirementListResponse,
+  RequirementFacets,
+  RequirementLinkedPolicy,
+  ComplianceScale,
+  ComplianceScaleLevel,
+  ComplianceScaleCreate,
+  ComplianceScaleUpdate,
+  ControlApplicability,
+  ControlApplicabilityState,
+  ControlApplicabilityUpsert,
+  ControlTranslation,
+  ControlTranslationUpsert,
+  ControlSearchResponse,
+  FrameworkImportResult,
+  FrameworkUpstreamDiff,
+  ScopeCoverage,
+  ActionItemAttachment,
+  AuditCampaign,
+  AuditCampaignListResponse,
+  AuditCampaignAudit,
+  AuditCampaignSummary,
+  AuditGrid,
+  AuditGridItem,
+  AuditGridDetail,
+  AuditGridResponseItem,
+  AuditGridChecklist,
+  AuditGridSeedResult,
+  AuditComment,
+  AuditCommentThread,
+  PendingAuditComment,
+  AuditRegisterRow,
+  AuditEvidence,
+  AuditFindingStatusEvent,
+  OverdueAuditFinding,
+  AuditReportDistribution,
+  AuditRecommendation,
+  AuditRecommendationSummary,
+  AuditorEngagement,
+  AuditorEngagementChecklist,
+  RegulatoryFeed,
+  RegulatoryFeedCreate,
+  RegulatoryFeedTestResult,
+  RegulatoryUpdateVersion,
+  PolicyLinkedControl,
+  ControlPolicies,
+  ArchiveRecord,
+  ArchiveContent,
+  ActivityLogListResponse,
+  ActivityActionCatalogue,
+  EntityAccessReport,
+  ActivityRetentionPolicy,
+  ActivityLogSeal,
+  LoginEvent,
+  ReportBuilderDataset,
+  ReportBuilderTemplate,
+  // ── Dashboards: consolidated executive view, cadence and export ───────────
+  ExecutiveSummary,
+  DashboardExportKey,
+  DashboardExportFormat,
+  DashboardExportCatalogue,
+  DashboardExportFailure,
 } from "@/types";
 
 export interface ActionPlanItem {
@@ -60,7 +125,20 @@ export interface ActionPlanItem {
   is_certification_blocker: boolean;
   owner_id?: string | null;
   owner_name?: string | null;
+  /** True once the non-conformity behind this action is closed — the
+   *  « exigence clôturée » state the closure loop writes back. */
+  gap_resolved?: boolean;
+  /** corrective | preventive. A preventive action has no gap behind it. */
+  action_type?: string;
+  /** e.g. "revue trimestrielle des habilitations" — preventive actions only. */
+  recurrence?: string | null;
+  /** Set when the action came from an audit finding rather than a compliance gap. */
+  finding_id?: string | null;
 }
+
+/** The action-plan row under its domain name. Same shape as ActionPlanItem,
+ *  which stays exported because existing screens import it. */
+export type ActionItem = ActionPlanItem;
 
 const API_BASE = import.meta.env.VITE_API_URL ?? "http://localhost:8000/api/v1";
 
@@ -152,7 +230,12 @@ export const authApi = {
 // ─── Frameworks ──────────────────────────────
 
 export const frameworksApi = {
-  list: () => apiClient.get<Framework[]>("/frameworks").then((r) => r.data),
+  /** The referential's frameworks. `source_type` classifies them by origin
+   *  (norme | reglementation | loi | politique_interne) and `q` matches on
+   *  name / short_name / issuing_body. Both are optional, so `list()` keeps
+   *  behaving exactly as it always did. */
+  list: (params?: { source_type?: string; q?: string }) =>
+    apiClient.get<Framework[]>("/frameworks", { params }).then((r) => r.data),
 
   get: (id: string) => apiClient.get<Framework>(`/frameworks/${id}`).then((r) => r.data),
 
@@ -195,12 +278,101 @@ export const frameworksApi = {
       source_framework?: string;
     }>;
   }) => apiClient.post<Framework>("/frameworks/builder/create", data).then((r) => r.data),
+
+  // ── Referential search across every framework ─────────────────────────────
+  // The filter bar's data source: classification filters plus the facet counts
+  // to render them with. Text is returned in the caller's UI language when a
+  // translation exists (the client sends Accept-Language on every request).
+  searchControls: (params?: {
+    source_type?: string;
+    domain?: string;
+    requirement_type?: string;
+    is_mandatory?: boolean;
+    framework_id?: string;
+    q?: string;
+    limit?: number;
+    offset?: number;
+  }) =>
+    apiClient.get<ControlSearchResponse>("/frameworks/controls/search", { params }).then((r) => r.data),
+
+  // ── Import a framework from a file ────────────────────────────────────────
+  // Multipart: never set Content-Type by hand, the boundary is generated.
+  // `dry_run` validates the file and reports what WOULD happen without writing —
+  // always offer it before a real import.
+  importControls: (
+    file: File,
+    options?: {
+      framework_id?: string;
+      format?: string;
+      name?: string;
+      short_name?: string;
+      version?: string;
+      source_type?: string;
+      issuing_body?: string;
+      description?: string;
+      dry_run?: boolean;
+    },
+  ) => {
+    const fd = new FormData();
+    fd.append("file", file);
+    Object.entries(options ?? {}).forEach(([key, value]) => {
+      if (value === undefined || value === null) return;
+      fd.append(key, String(value));
+    });
+    return apiClient.post<FrameworkImportResult>("/frameworks/import", fd).then((r) => r.data);
+  },
+
+  // ── Applicability (« déclaration d'applicabilité ») ───────────────────────
+  getControlApplicability: (frameworkId: string, controlDbId: string) =>
+    apiClient
+      .get<ControlApplicabilityState>(`/frameworks/${frameworkId}/controls/${controlDbId}/applicability`)
+      .then((r) => r.data),
+
+  setControlApplicability: (
+    frameworkId: string,
+    controlDbId: string,
+    data: ControlApplicabilityUpsert,
+  ) =>
+    apiClient
+      .put<ControlApplicability>(`/frameworks/${frameworkId}/controls/${controlDbId}/applicability`, data)
+      .then((r) => r.data),
+
+  // ── Control translations (fr / ar are contractual, not optional) ──────────
+  listControlTranslations: (frameworkId: string, controlDbId: string) =>
+    apiClient
+      .get<ControlTranslation[]>(`/frameworks/${frameworkId}/controls/${controlDbId}/translations`)
+      .then((r) => r.data),
+
+  upsertControlTranslation: (
+    frameworkId: string,
+    controlDbId: string,
+    lang: string,
+    data: ControlTranslationUpsert,
+  ) =>
+    apiClient
+      .put<ControlTranslation>(
+        `/frameworks/${frameworkId}/controls/${controlDbId}/translations/${lang}`,
+        data,
+      )
+      .then((r) => r.data),
+
+  // ── Upstream lineage of a tenant fork ─────────────────────────────────────
+  // What the built-in has gained/lost/changed since this copy was cloned.
+  getUpstreamDiff: (frameworkId: string) =>
+    apiClient.get<FrameworkUpstreamDiff>(`/frameworks/${frameworkId}/upstream-diff`).then((r) => r.data),
+
+  /** Pull upstream changes in. `update_unmodified` deliberately leaves locally
+   *  edited controls alone — check `modified[].locally_edited` on the diff first. */
+  syncFromUpstream: (frameworkId: string, data?: { adopt_new?: boolean; update_unmodified?: boolean }) =>
+    apiClient.post(`/frameworks/${frameworkId}/upstream-sync`, data ?? {}).then((r) => r.data),
 };
 
 // ─── Risks ───────────────────────────────────
 
 export const risksApi = {
-  list: (params?: { page?: number; page_size?: number; status?: string; severity?: string }) =>
+  // org_entity_id / business_process_id filter the register by département and by
+  // processus — the backend applies both in SQL alongside status and severity.
+  list: (params?: { page?: number; page_size?: number; status?: string; severity?: string; org_entity_id?: string; business_process_id?: string }) =>
     apiClient.get<PaginatedResponse<Risk>>("/risks", { params }).then((r) => r.data),
 
   get: (id: string) => apiClient.get<Risk>(`/risks/${id}`).then((r) => r.data),
@@ -412,8 +584,189 @@ export const complianceApi = {
       params: assessmentId ? { assessment_id: assessmentId } : undefined,
     }).then(r => r.data),
 
-  updateActionPlanItem: (id: string, data: Partial<{ status: string; start_date: string | null; due_date: string | null; owner_id: string | null; notes: string; priority: string }>) =>
+  updateActionPlanItem: (id: string, data: Partial<{ status: string; start_date: string | null; due_date: string | null; owner_id: string | null; notes: string; priority: string; title: string; description: string; action_type: string; recurrence: string | null }>) =>
     apiClient.patch<ActionPlanItem>(`/compliance/action-plan/${id}`, data).then(r => r.data),
+
+  // ── Assessment perimeter & conformity scale ───────────────────────────────
+  /** Rename, re-scope, re-grade or archive an assessment. Every field is
+   *  optional; an omitted field is left untouched. This is also the only way to
+   *  move an assessment to "archived". */
+  updateAssessment: (
+    assessmentId: string,
+    data: Partial<{
+      name: string;
+      description: string | null;
+      scope_description: string | null;
+      scope_type: string;
+      org_entity_id: string | null;
+      business_process_id: string | null;
+      in_scope_assets: string[];
+      scale_id: string | null;
+      status: string;
+      lead_assessor_id: string | null;
+      assessment_start: string | null;
+      assessment_end: string | null;
+      next_review_date: string | null;
+    }>,
+  ) =>
+    apiClient.patch<AssessmentDetail>(`/compliance/assessments/${assessmentId}`, data).then((r) => r.data),
+
+  /** Create with a perimeter and/or a conformity scale. Omitting all of them
+   *  keeps the historical organisation-wide behaviour. */
+  createScopedAssessment: (data: {
+    framework_id: string;
+    name: string;
+    description?: string;
+    scope_description?: string;
+    scope_type?: string;
+    org_entity_id?: string | null;
+    business_process_id?: string | null;
+    in_scope_assets?: string[] | null;
+    scale_id?: string | null;
+  }) => apiClient.post<AssessmentDetail>("/compliance/assessments", data).then((r) => r.data),
+
+  // ── Coverage by perimeter (« la conformité de la DSI / du processus X ») ──
+  // Org entities also carry a rolled-up score covering every descendant.
+  coverageByEntity: (frameworkId?: string) =>
+    apiClient
+      .get<ScopeCoverage>("/compliance/coverage/by-entity", {
+        params: frameworkId ? { framework_id: frameworkId } : undefined,
+      })
+      .then((r) => r.data),
+
+  coverageByProcess: (frameworkId?: string) =>
+    apiClient
+      .get<ScopeCoverage>("/compliance/coverage/by-process", {
+        params: frameworkId ? { framework_id: frameworkId } : undefined,
+      })
+      .then((r) => r.data),
+
+  coverageByAsset: (frameworkId?: string) =>
+    apiClient
+      .get<ScopeCoverage>("/compliance/coverage/by-asset", {
+        params: frameworkId ? { framework_id: frameworkId } : undefined,
+      })
+      .then((r) => r.data),
+
+  // ── Action plan: plan an action, not just inherit one from a gap ──────────
+  /** `action_type: "preventive"` is the half of the requirement that has no gap
+   *  behind it — it could not be planned anywhere before this route existed. */
+  createActionPlanItem: (data: {
+    title: string;
+    description?: string | null;
+    assessment_id?: string | null;
+    gap_id?: string | null;
+    owner_id?: string | null;
+    start_date?: string | null;
+    due_date?: string | null;
+    priority?: string;
+    status?: string;
+    action_type?: string;
+    recurrence?: string | null;
+    notes?: string | null;
+  }) => apiClient.post<ActionPlanItem>("/compliance/action-plan", data).then((r) => r.data),
+
+  deleteActionPlanItem: (id: string) =>
+    apiClient.delete(`/compliance/action-plan/${id}`),
+
+  /** Filterable listing. `action_type` separates corrective from preventive;
+   *  `status` filters on open | in_progress | completed | cancelled. */
+  listActionPlanFiltered: (params?: { assessment_id?: string; action_type?: string; status?: string }) =>
+    apiClient.get<ActionPlanItem[]>("/compliance/action-plan", { params }).then((r) => r.data),
+
+  // ── Action-plan attachments (proof the action was actually carried out) ───
+  uploadActionAttachment: (itemId: string, file: File, description?: string) => {
+    const fd = new FormData();
+    fd.append("file", file);
+    if (description) fd.append("description", description);
+    return apiClient
+      .post<ActionItemAttachment>(`/compliance/action-plan/${itemId}/attachments`, fd)
+      .then((r) => r.data);
+  },
+
+  listActionAttachments: (itemId: string) =>
+    apiClient
+      .get<ActionItemAttachment[]>(`/compliance/action-plan/${itemId}/attachments`)
+      .then((r) => r.data),
+
+  /** Blob rather than a bare URL: the download needs the Authorization header.
+   *  `acknowledgeIntegrityFailure` is the CISO override that serves a file whose
+   *  checksum no longer matches, so a damaged file can still be investigated. */
+  downloadActionAttachment: (attachmentId: string, acknowledgeIntegrityFailure = false) =>
+    apiClient
+      .get(`/compliance/action-plan/attachments/${attachmentId}/download`, {
+        params: acknowledgeIntegrityFailure ? { acknowledge_integrity_failure: true } : undefined,
+        responseType: "blob",
+      })
+      .then((r) => r.data as Blob),
+
+  deleteActionAttachment: (attachmentId: string) =>
+    apiClient.delete(`/compliance/action-plan/attachments/${attachmentId}`),
+
+  // ── Evidence file governance ─────────────────────────────────────────────
+  /** Every stored evidence file with its checksum verdict — the report an
+   *  auditor asks for when they want to know nothing was swapped out. */
+  evidenceIntegrityReport: (limit?: number) =>
+    apiClient
+      .get("/compliance/evidence/integrity-report", { params: limit ? { limit } : undefined })
+      .then((r) => r.data),
+
+  fileStorageSummary: () =>
+    apiClient.get("/compliance/files/storage-summary").then((r) => r.data),
+
+  /** What a purge WOULD destroy. Always show this before calling the purge. */
+  fileRetentionPreview: (limit?: number) =>
+    apiClient
+      .get("/compliance/files/retention/preview", { params: limit ? { limit } : undefined })
+      .then((r) => r.data),
+
+  fileRetentionPurge: () =>
+    apiClient.post("/compliance/files/retention/purge").then((r) => r.data),
+};
+
+// ─── Compliance scales (grilles d'évaluation) ─────────────────────────────
+// The customisable conformity scale an assessment is graded on. Built-in scales
+// are shared and read-only; a tenant's own are editable. Every write takes a
+// governance `reason` — changing the yardstick re-scores live assessments, so
+// the backend requires the justification rather than accepting a silent edit.
+
+export const complianceScalesApi = {
+  list: (isActive?: boolean) =>
+    apiClient
+      .get<ComplianceScale[]>("/compliance-scales", {
+        params: isActive === undefined ? undefined : { is_active: isActive },
+      })
+      .then((r) => r.data),
+
+  get: (scaleId: string) =>
+    apiClient.get<ComplianceScale>(`/compliance-scales/${scaleId}`).then((r) => r.data),
+
+  /** The four-level default the tender describes — a starting point for a new scale. */
+  defaultLevels: () =>
+    apiClient.get<ComplianceScaleLevel[]>("/compliance-scales/default-levels").then((r) => r.data),
+
+  create: (data: ComplianceScaleCreate, reason: string) =>
+    apiClient
+      .post<ComplianceScale>("/compliance-scales", data, { params: { reason } })
+      .then((r) => r.data),
+
+  /** `reason` becomes mandatory once the scale grades a live assessment, and
+   *  whenever the edit makes the scale the default. Check `assessment_count`
+   *  first and warn ("changing this re-scores 12 assessments"). */
+  update: (scaleId: string, data: ComplianceScaleUpdate, reason?: string) =>
+    apiClient
+      .patch<ComplianceScale>(`/compliance-scales/${scaleId}`, data, {
+        params: reason ? { reason } : undefined,
+      })
+      .then((r) => r.data),
+
+  setDefault: (scaleId: string, reason: string) =>
+    apiClient
+      .put<ComplianceScale>(`/compliance-scales/${scaleId}/default`, null, { params: { reason } })
+      .then((r) => r.data),
+
+  delete: (scaleId: string, reason: string) =>
+    apiClient.delete(`/compliance-scales/${scaleId}`, { params: { reason } }),
 };
 
 // ─── Custom Framework Builder ─────────────────
@@ -538,16 +891,468 @@ export const aiApi = {
 // ─── Audits ──────────────────────────────────
 
 export const auditsApi = {
+  /** @deprecated GET /audits answers with a bare array, not a page. Kept because
+   *  AuditsPage already handles both shapes — new callers want `listAll`. */
   list: (params?: { page?: number; page_size?: number }) =>
     apiClient.get<PaginatedResponse<Audit>>("/audits", { params }).then((r) => r.data),
+
+  /** The engagements, optionally narrowed to a campaign or a perimeter member
+   *  (« audits couvrant ce processus »). */
+  listAll: (params?: {
+    status_filter?: string;
+    campaign_id?: string;
+    process_id?: string;
+    org_entity_id?: string;
+    asset_id?: string;
+  }) => apiClient.get<Audit[]>("/audits", { params }).then((r) => r.data),
 
   get: (id: string) => apiClient.get<Audit>(`/audits/${id}`).then((r) => r.data),
 
   create: (data: Partial<Audit>) =>
     apiClient.post<Audit>("/audits", data).then((r) => r.data),
 
+  update: (id: string, data: Partial<Audit>) =>
+    apiClient.patch<Audit>(`/audits/${id}`, data).then((r) => r.data),
+
+  /** Soft delete — the engagement leaves the register but survives for the
+   *  trail, so `reason` (5 chars minimum) is required and `restore` undoes it. */
+  delete: (id: string, reason: string) =>
+    apiClient.delete(`/audits/${id}`, { params: { reason } }),
+
+  restore: (id: string) =>
+    apiClient.post<Audit>(`/audits/${id}/restore`).then((r) => r.data),
+
+  /** The filterable register — one row per engagement with its findings roll-up.
+   *  `include_deleted` is admin-only and shows soft-deleted engagements. */
+  register: (params?: {
+    status_filter?: string;
+    audit_type?: string;
+    campaign_id?: string;
+    framework_id?: string;
+    lead_auditor_id?: string;
+    process_id?: string;
+    org_entity_id?: string;
+    date_from?: string;
+    date_to?: string;
+    q?: string;
+    include_deleted?: boolean;
+    limit?: number;
+    offset?: number;
+  }) => apiClient.get<AuditRegisterRow[]>("/audits/register", { params }).then((r) => r.data),
+
+  savePlan: (auditId: string, auditPlan: string) =>
+    apiClient.post<Audit>(`/audits/${auditId}/plan`, { audit_plan: auditPlan }).then((r) => r.data),
+
+  // ── Findings ──────────────────────────────────────────────────────────────
   getFindings: (auditId: string) =>
     apiClient.get<AuditFinding[]>(`/audits/${auditId}/findings`).then((r) => r.data),
+
+  listFindings: (auditId: string, params?: { status_filter?: string; severity?: string; finding_type?: string }) =>
+    apiClient.get<AuditFinding[]>(`/audits/${auditId}/findings`, { params }).then((r) => r.data),
+
+  createFinding: (auditId: string, data: {
+    title: string;
+    description: string;
+    severity?: string;
+    control_id?: string | null;
+    remediation_owner_id?: string | null;
+    due_date?: string | null;
+    recommendation?: string | null;
+    finding_type?: string | null;
+  }) => apiClient.post<AuditFinding>(`/audits/${auditId}/findings`, data).then((r) => r.data),
+
+  updateFinding: (auditId: string, findingId: string, data: Partial<AuditFinding>) =>
+    apiClient.patch<AuditFinding>(`/audits/${auditId}/findings/${findingId}`, data).then((r) => r.data),
+
+  /** Withdraw a constat. `reason` (5 chars minimum) is required — a finding that
+   *  simply vanished is exactly what an auditor will not accept. */
+  deleteFinding: (auditId: string, findingId: string, reason: string) =>
+    apiClient.delete(`/audits/${auditId}/findings/${findingId}`, { params: { reason } }),
+
+  /** Close a finding against its proof. `closure_evidence_id` points at a file
+   *  already uploaded to this audit. */
+  closeFinding: (auditId: string, findingId: string, data: {
+    closure_note: string;
+    closure_evidence_id?: string | null;
+    status?: string;
+  }) => apiClient.post<AuditFinding>(`/audits/${auditId}/findings/${findingId}/close`, data).then((r) => r.data),
+
+  /** The audited party's answer to a constat — « réponse du management ». */
+  respondToFinding: (auditId: string, findingId: string, managementResponse: string) =>
+    apiClient
+      .post<AuditFinding>(`/audits/${auditId}/findings/${findingId}/response`, {
+        management_response: managementResponse,
+      })
+      .then((r) => r.data),
+
+  findingHistory: (auditId: string, findingId: string) =>
+    apiClient
+      .get<AuditFindingStatusEvent[]>(`/audits/${auditId}/findings/${findingId}/history`)
+      .then((r) => r.data),
+
+  /** Every finding past its due date, across all engagements. */
+  overdueFindings: () =>
+    apiClient.get<OverdueAuditFinding[]>("/audits/findings/overdue").then((r) => r.data),
+
+  // ── Evidence ──────────────────────────────────────────────────────────────
+  listEvidence: (auditId: string, findingId?: string) =>
+    apiClient
+      .get<AuditEvidence[]>(`/audits/${auditId}/evidence`, {
+        params: findingId ? { finding_id: findingId } : undefined,
+      })
+      .then((r) => r.data),
+
+  /** Register a piece of evidence that lives elsewhere (no file upload). */
+  createEvidence: (auditId: string, data: {
+    name: string;
+    description?: string | null;
+    file_name?: string | null;
+    s3_key?: string | null;
+    finding_id?: string | null;
+  }) => apiClient.post<AuditEvidence>(`/audits/${auditId}/evidence`, data).then((r) => r.data),
+
+  /** Multipart upload — Content-Type is left to the browser so the multipart
+   *  boundary is generated. Uploads are capped at 2 MB by the backend. */
+  uploadEvidence: (auditId: string, file: File, options?: {
+    name?: string;
+    description?: string;
+    finding_id?: string;
+  }) => {
+    const fd = new FormData();
+    fd.append("file", file);
+    if (options?.name) fd.append("name", options.name);
+    if (options?.description) fd.append("description", options.description);
+    if (options?.finding_id) fd.append("finding_id", options.finding_id);
+    return apiClient.post<AuditEvidence>(`/audits/${auditId}/evidence/upload`, fd).then((r) => r.data);
+  },
+
+  /** Attach proof directly to one constat. */
+  uploadFindingEvidence: (auditId: string, findingId: string, file: File, options?: {
+    name?: string;
+    description?: string;
+  }) => {
+    const fd = new FormData();
+    fd.append("file", file);
+    if (options?.name) fd.append("name", options.name);
+    if (options?.description) fd.append("description", options.description);
+    return apiClient
+      .post<AuditEvidence>(`/audits/${auditId}/findings/${findingId}/evidence`, fd)
+      .then((r) => r.data);
+  },
+
+  /** Blob rather than a bare URL — the download needs the Authorization header. */
+  downloadEvidence: (auditId: string, evidenceId: string) =>
+    apiClient
+      .get(`/audits/${auditId}/evidence/${evidenceId}/download`, { responseType: "blob" })
+      .then((r) => r.data as Blob),
+
+  deleteEvidence: (auditId: string, evidenceId: string) =>
+    apiClient.delete(`/audits/${auditId}/evidence/${evidenceId}`),
+
+  // ── Report state machine ──────────────────────────────────────────────────
+  // draft → submitted → approved | rejected → issued → distributed.
+  // `generateReport` renders the file; `submit` sends it for approval;
+  // `approve`/`reject` are the reviewer's decision; `distribute` records who
+  // it was actually sent to.
+  generateReport: (auditId: string) =>
+    apiClient.post<Audit>(`/audits/${auditId}/report/generate`).then((r) => r.data),
+
+  downloadReport: (auditId: string) =>
+    apiClient.get(`/audits/${auditId}/report/download`, { responseType: "blob" }).then((r) => r.data as Blob),
+
+  submitReport: (auditId: string) =>
+    apiClient.post<Audit>(`/audits/${auditId}/report/submit`).then((r) => r.data),
+
+  approveReport: (auditId: string, reason?: string) =>
+    apiClient.post<Audit>(`/audits/${auditId}/report/approve`, { reason: reason ?? null }).then((r) => r.data),
+
+  rejectReport: (auditId: string, reason: string) =>
+    apiClient.post<Audit>(`/audits/${auditId}/report/reject`, { reason }).then((r) => r.data),
+
+  /** @deprecated the pre-workflow one-shot approval. Use `approveReport`. */
+  approveReportLegacy: (auditId: string) =>
+    apiClient.post<Audit>(`/audits/${auditId}/approve-report`).then((r) => r.data),
+
+  distributeReport: (auditId: string, data: { recipients: string[]; channel?: string; note?: string | null }) =>
+    apiClient.post<AuditReportDistribution>(`/audits/${auditId}/report/distribute`, data).then((r) => r.data),
+
+  listReportDistributions: (auditId: string) =>
+    apiClient.get<AuditReportDistribution[]>(`/audits/${auditId}/report/distributions`).then((r) => r.data),
+
+  // ── Recommendations (the follow-up register) ──────────────────────────────
+  listRecommendations: (params?: {
+    status_filter?: string;
+    owner_id?: string;
+    audit_id?: string;
+    campaign_id?: string;
+    priority?: string;
+    overdue?: boolean;
+    limit?: number;
+    offset?: number;
+  }) => apiClient.get<AuditRecommendation[]>("/audits/recommendations", { params }).then((r) => r.data),
+
+  recommendationsSummary: (campaignId?: string) =>
+    apiClient
+      .get<AuditRecommendationSummary>("/audits/recommendations/summary", {
+        params: campaignId ? { campaign_id: campaignId } : undefined,
+      })
+      .then((r) => r.data),
+
+  /** Recompute each recommendation's progress from its action items. */
+  rollupRecommendations: (auditId?: string) =>
+    apiClient
+      .post("/audits/recommendations/rollup", null, { params: auditId ? { audit_id: auditId } : undefined })
+      .then((r) => r.data),
+
+  listAuditRecommendations: (auditId: string) =>
+    apiClient.get<AuditRecommendation[]>(`/audits/${auditId}/recommendations`).then((r) => r.data),
+
+  createRecommendation: (auditId: string, data: {
+    title: string;
+    description?: string | null;
+    finding_id?: string | null;
+    ref_code?: string | null;
+    priority?: string | null;
+    owner_id?: string | null;
+    due_date?: string | null;
+  }) => apiClient.post<AuditRecommendation>(`/audits/${auditId}/recommendations`, data).then((r) => r.data),
+
+  updateRecommendation: (recId: string, data: Partial<{
+    title: string;
+    description: string | null;
+    ref_code: string | null;
+    priority: string | null;
+    status: string;
+    owner_id: string | null;
+    due_date: string | null;
+    progress: number;
+  }>) => apiClient.patch<AuditRecommendation>(`/audits/recommendations/${recId}`, data).then((r) => r.data),
+
+  closeRecommendation: (recId: string, data: { closure_note: string; status?: string }) =>
+    apiClient.post<AuditRecommendation>(`/audits/recommendations/${recId}/close`, data).then((r) => r.data),
+
+  deleteRecommendation: (recId: string) =>
+    apiClient.delete(`/audits/recommendations/${recId}`),
+
+  // ── Comments scoped to one engagement ─────────────────────────────────────
+  // The cross-engagement feed lives on auditCommentsApi.
+  listComments: (auditId: string, findingId?: string) =>
+    apiClient
+      .get<AuditComment[]>(`/audits/${auditId}/comments`, {
+        params: findingId ? { finding_id: findingId } : undefined,
+      })
+      .then((r) => r.data),
+
+  postComment: (auditId: string, data: {
+    body: string;
+    finding_id?: string | null;
+    parent_id?: string | null;
+    is_internal?: boolean;
+  }) => apiClient.post<AuditComment>(`/audits/${auditId}/comments`, data).then((r) => r.data),
+};
+
+// ─── Audit campaigns (« plan d'audit annuel ») ────────────────────────────
+// A campaign groups engagements into one programme so a steering committee can
+// read where the plan stands in a single call.
+
+export const auditCampaignsApi = {
+  list: (params?: {
+    status?: string;
+    cadence?: string;
+    is_active?: boolean;
+    search?: string;
+    limit?: number;
+    offset?: number;
+  }) => apiClient.get<AuditCampaignListResponse>("/audit-campaigns", { params }).then((r) => r.data),
+
+  get: (campaignId: string) =>
+    apiClient.get<AuditCampaign>(`/audit-campaigns/${campaignId}`).then((r) => r.data),
+
+  create: (data: {
+    name: string;
+    description?: string | null;
+    cadence?: string;
+    status?: string;
+    period_start?: string | null;
+    period_end?: string | null;
+    owner_id?: string | null;
+  }) => apiClient.post<AuditCampaign>("/audit-campaigns", data).then((r) => r.data),
+
+  update: (campaignId: string, data: Partial<{
+    name: string;
+    description: string | null;
+    cadence: string;
+    status: string;
+    period_start: string | null;
+    period_end: string | null;
+    owner_id: string | null;
+    is_active: boolean;
+  }>) => apiClient.patch<AuditCampaign>(`/audit-campaigns/${campaignId}`, data).then((r) => r.data),
+
+  delete: (campaignId: string) => apiClient.delete(`/audit-campaigns/${campaignId}`),
+
+  audits: (campaignId: string) =>
+    apiClient.get<AuditCampaignAudit[]>(`/audit-campaigns/${campaignId}/audits`).then((r) => r.data),
+
+  /** Everything a steering committee asks for, in one call. */
+  summary: (campaignId: string) =>
+    apiClient.get<AuditCampaignSummary>(`/audit-campaigns/${campaignId}/summary`).then((r) => r.data),
+
+  /** Announce the plan to its stakeholders. `force` re-announces a campaign that
+   *  was already announced — otherwise the second call is refused. */
+  notify: (campaignId: string, force = false) =>
+    apiClient
+      .post<AuditCampaign>(`/audit-campaigns/${campaignId}/notify`, null, { params: { force } })
+      .then((r) => r.data),
+};
+
+// ─── Audit grids (« grille d'évaluation personnalisable ») ────────────────
+// A reusable checklist with its own verdict levels. An engagement that points at
+// a grid is answered on the grid; one that does not falls back to the framework
+// controls checklist, unchanged.
+
+export const auditGridsApi = {
+  list: (params?: { is_active?: boolean; search?: string; limit?: number; offset?: number }) =>
+    apiClient.get<AuditGrid[]>("/audit-grids", { params }).then((r) => r.data),
+
+  /** Returns the grid AND its rows. */
+  get: (gridId: string) =>
+    apiClient.get<AuditGridDetail>(`/audit-grids/${gridId}`).then((r) => r.data),
+
+  create: (data: {
+    name: string;
+    description?: string | null;
+    levels?: ComplianceScaleLevel[] | null;
+    source_framework_id?: string | null;
+    is_default?: boolean;
+  }) => apiClient.post<AuditGrid>("/audit-grids", data).then((r) => r.data),
+
+  update: (gridId: string, data: Partial<{
+    name: string;
+    description: string | null;
+    levels: ComplianceScaleLevel[] | null;
+    is_default: boolean;
+    is_active: boolean;
+  }>) => apiClient.patch<AuditGrid>(`/audit-grids/${gridId}`, data).then((r) => r.data),
+
+  delete: (gridId: string) => apiClient.delete(`/audit-grids/${gridId}`),
+
+  addItem: (gridId: string, data: {
+    title: string;
+    ref_code?: string | null;
+    description?: string | null;
+    guidance?: string | null;
+    section?: string | null;
+    sort_order?: number | null;
+    control_id?: string | null;
+    is_mandatory?: boolean;
+  }) => apiClient.post<AuditGridItem>(`/audit-grids/${gridId}/items`, data).then((r) => r.data),
+
+  updateItem: (gridId: string, itemId: string, data: Partial<{
+    title: string;
+    ref_code: string | null;
+    description: string | null;
+    guidance: string | null;
+    section: string | null;
+    sort_order: number;
+    is_mandatory: boolean;
+  }>) => apiClient.patch<AuditGridItem>(`/audit-grids/${gridId}/items/${itemId}`, data).then((r) => r.data),
+
+  deleteItem: (gridId: string, itemId: string) =>
+    apiClient.delete(`/audit-grids/${gridId}/items/${itemId}`),
+
+  /** Fill a grid from a framework's controls. `domain` narrows a large standard;
+   *  `replace` wipes the grid's current rows first. */
+  seedFromFramework: (gridId: string, data: { framework_id: string; domain?: string | null; replace?: boolean }) =>
+    apiClient.post<AuditGridSeedResult>(`/audit-grids/${gridId}/seed-from-framework`, data).then((r) => r.data),
+
+  // ── Working through a grid on one engagement ──────────────────────────────
+  /** `source` says whether this engagement has a grid at all — when it reads
+   *  "framework_controls" the caller keeps using the existing checklist. */
+  checklist: (auditId: string) =>
+    apiClient.get<AuditGridChecklist>(`/audit-grids/audits/${auditId}/checklist`).then((r) => r.data),
+
+  /** Upsert one answer. `verdict` is a key of the grid's levels, or null to clear. */
+  setResponse: (auditId: string, itemId: string, data: { verdict?: string | null; note?: string | null }) =>
+    apiClient.put<AuditGridResponseItem>(`/audit-grids/audits/${auditId}/responses/${itemId}`, data).then((r) => r.data),
+
+  /** Save a whole page of answers at once, keyed by grid item id. */
+  setResponsesBulk: (auditId: string, responses: Record<string, { verdict?: string | null; note?: string | null }>) =>
+    apiClient.put<AuditGridResponseItem[]>(`/audit-grids/audits/${auditId}/responses`, { responses }).then((r) => r.data),
+};
+
+// ─── Audit comments (« échange contradictoire ») ──────────────────────────
+// Threads hang off an audit, a finding, or a control assessment. An internal
+// note is invisible to the audited party — `viewer_is_audit_team` on the thread
+// says whether to offer that toggle at all, instead of having the POST refused.
+
+export const auditCommentsApi = {
+  list: (params: {
+    audit_id?: string;
+    finding_id?: string;
+    control_assessment_id?: string;
+    limit?: number;
+    offset?: number;
+  }) => apiClient.get<AuditCommentThread>("/audit-comments", { params }).then((r) => r.data),
+
+  create: (data: {
+    body: string;
+    audit_id?: string | null;
+    finding_id?: string | null;
+    control_assessment_id?: string | null;
+    parent_id?: string | null;
+    is_internal?: boolean;
+  }) => apiClient.post<AuditComment>("/audit-comments", data).then((r) => r.data),
+
+  update: (commentId: string, body: string) =>
+    apiClient.patch<AuditComment>(`/audit-comments/${commentId}`, { body }).then((r) => r.data),
+
+  /** Soft delete: the row survives for the trail, the words do not. */
+  delete: (commentId: string) => apiClient.delete(`/audit-comments/${commentId}`),
+
+  /** The « constats à traiter » feed — exchanges waiting on the current user. */
+  pending: (limit?: number) =>
+    apiClient
+      .get<PendingAuditComment[]>("/audit-comments/pending", { params: limit ? { limit } : undefined })
+      .then((r) => r.data),
+};
+
+// ─── Requirements referential (« référentiel centralisé ») ────────────────
+// One flat, filterable view over every silo that holds a requirement: framework
+// controls, internal policies, regulatory obligations. `scope` defaults to
+// "selected" (the tenant's chosen frameworks); pass "all" to search everything.
+
+export const requirementsApi = {
+  list: (params?: {
+    source_kind?: string;
+    source_type?: string;
+    domain?: string;
+    requirement_type?: string;
+    applicability?: string;
+    framework_id?: string;
+    search?: string;
+    scope?: "selected" | "all";
+    limit?: number;
+    offset?: number;
+  }) => apiClient.get<RequirementListResponse>("/requirements", { params }).then((r) => r.data),
+
+  /** Counts per classification axis — what the filter sidebar renders. */
+  facets: (params?: {
+    source_kind?: string;
+    source_type?: string;
+    domain?: string;
+    requirement_type?: string;
+    applicability?: string;
+    framework_id?: string;
+    search?: string;
+    scope?: "selected" | "all";
+  }) => apiClient.get<RequirementFacets>("/requirements/facets", { params }).then((r) => r.data),
+
+  /** Every internal policy that claims to cover this requirement. */
+  policiesForControl: (controlId: string) =>
+    apiClient
+      .get<RequirementLinkedPolicy[]>(`/requirements/controls/${controlId}/policies`)
+      .then((r) => r.data),
 };
 
 // ─── Policies ────────────────────────────────
@@ -611,6 +1416,29 @@ export const policiesApi = {
 
   exportPdf: (id: string) =>
     apiClient.get(`/policies/${id}/export-pdf`, { responseType: "blob" }).then((r) => r.data as Blob),
+
+  acknowledgeAttestation: (policyId: string, attestationId: string) =>
+    apiClient
+      .patch<PolicyAttestation>(`/policies/${policyId}/attestations/${attestationId}/acknowledge`)
+      .then((r) => r.data),
+
+  approveVersion: (policyId: string, versionId: string) =>
+    apiClient.patch<PolicyVersion>(`/policies/${policyId}/versions/${versionId}/approve`).then((r) => r.data),
+
+  // ── Policy ↔ requirement linkage ──────────────────────────────────────────
+  /** The requirements this policy claims to cover, resolved for display —
+   *  `linked_controls` holds bare ids, this returns the refs an auditor reads. */
+  listLinkedControls: (policyId: string) =>
+    apiClient.get<PolicyLinkedControl[]>(`/policies/${policyId}/controls`).then((r) => r.data),
+
+  /** Rewrite the requirement links. Pass the complete list — this replaces, it
+   *  does not merge. */
+  setLinkedControls: (policyId: string, linkedControls: string[]) =>
+    apiClient.patch<Policy>(`/policies/${policyId}`, { linked_controls: linkedControls }).then((r) => r.data),
+
+  /** The other direction: given a requirement, which policies cover it. */
+  byControl: (controlId: string) =>
+    apiClient.get<ControlPolicies>(`/policies/by-control/${controlId}`).then((r) => r.data),
 };
 
 // ─── Vendors ─────────────────────────────────
@@ -741,7 +1569,38 @@ export interface DashboardLayout {
   dashboard_key: string;
   widget_config: DashboardWidgetItem[];
   is_default: boolean;
+  /**
+   * Auto-refresh cadence for this dashboard — the « mise à jour ... selon un
+   * intervalle configuré » half of the tender clause.
+   *   null = never configured (apply the client default),
+   *      0 = auto-refresh explicitly OFF,
+   *      n = refresh every n seconds.
+   */
+  refresh_interval_seconds?: number | null;
+  /**
+   * false when dashboard_layouts.refresh_interval_seconds is not physically on
+   * this database yet (create_all() does not add columns to an EXISTING table —
+   * scripts/migrate_add_dashboard_refresh.py has to be run). The selector must
+   * be hidden while this is false: a PUT carrying the field answers 424.
+   */
+  refresh_config_available?: boolean;
+  /** Bounds echoed by the backend so the UI never hardcodes them. */
+  refresh_min_seconds?: number;
+  refresh_max_seconds?: number;
 }
+
+/** Partial PUT body for /dashboard/layout — omitted fields are left unchanged
+ *  server-side, so cadence and widget order save independently. */
+export interface DashboardLayoutPatch {
+  widget_config?: DashboardWidgetItem[];
+  refresh_interval_seconds?: number;
+}
+
+/** The nine dashboard keys the backend knows (widget defaults + export). */
+export const DASHBOARD_KEYS = [
+  "assets", "vulnerabilities", "threats", "risks", "controls",
+  "governance", "audit", "compliance", "executive",
+] as const;
 
 export const dashboardApi = {
   getSummary: () => apiClient.get<DashboardSummary>("/dashboard/summary").then((r) => r.data),
@@ -759,6 +1618,131 @@ export const dashboardApi = {
     apiClient.get<DashboardLayout>("/dashboard/layout", { params: { dashboard_key: dashboardKey } }).then((r) => r.data),
   saveLayout: (widgetConfig: DashboardWidgetItem[], dashboardKey: string = "main") =>
     apiClient.put<DashboardLayout>("/dashboard/layout", { widget_config: widgetConfig }, { params: { dashboard_key: dashboardKey } }).then((r) => r.data),
+
+  /**
+   * Save only the auto-refresh cadence, leaving the widget layout untouched.
+   *
+   * Kept separate from saveLayout on purpose: the backend gates a widget_config
+   * write on custom_dashboards (402 for a non-Elite tenant) but NOT the cadence,
+   * which is a tender requirement rather than an up-sell. Sending both together
+   * would drag the cadence behind the plan gate for the 16 of 18 tenants that
+   * are not Elite.
+   *
+   * @param seconds 0 turns auto-refresh off; otherwise 30..3600 (422 outside).
+   *                Check `refresh_config_available` from getLayout() first — a
+   *                PUT of this field on an unmigrated database answers 424.
+   */
+  saveRefreshInterval: (seconds: number, dashboardKey: string = "main") =>
+    apiClient
+      .put<DashboardLayout>("/dashboard/layout", { refresh_interval_seconds: seconds }, {
+        params: { dashboard_key: dashboardKey },
+      })
+      .then((r) => r.data),
+
+  /** Escape hatch for saving both halves at once (same 402/424 caveats). */
+  updateLayout: (patch: DashboardLayoutPatch, dashboardKey: string = "main") =>
+    apiClient
+      .put<DashboardLayout>("/dashboard/layout", patch, { params: { dashboard_key: dashboardKey } })
+      .then((r) => r.data),
+
+  /**
+   * Objectif 9 — the consolidated cross-module view « réservée aux profils
+   * exécutifs ». STRICTLY gated server-side (require_roles_strict): a
+   * tenant_admin who is not also `executive`/`ciso` gets a 403 here, which is
+   * the point of the clause and NOT a bug to work around. Callers should hide
+   * the entry point rather than let the user walk into the 403.
+   *
+   * Not billing-gated, so it never produces the Elite up-sell dialog.
+   */
+  getExecutiveSummary: () =>
+    apiClient.get<ExecutiveSummary>("/dashboard/executive-summary").then((r) => r.data),
+};
+
+// ─── Dashboard export (PDF / Excel) ──────────────────────────────────────────
+//
+// « Export PDF/Excel » appears in seven of the nine tender objectives. This is
+// the dashboard itself as an artefact — not the Report Builder (a flat dataset
+// from another screen) and not the five canned narrative PDFs.
+//
+// The artefact is written in the caller's language: `lang` is sent as a query
+// parameter as well as via Accept-Language because the backend lets ?lang= win,
+// and a download triggered outside axios (an <a href>) cannot set a header.
+
+/** Filename the server chose, from Content-Disposition, with a sane fallback. */
+function exportFilenameFrom(disposition: unknown, fallback: string): string {
+  if (typeof disposition !== "string") return fallback;
+  // filename="assets_dashboard_20260908.xlsx"
+  const match = /filename\*?=(?:UTF-8'')?"?([^";]+)"?/i.exec(disposition);
+  return match?.[1] ? decodeURIComponent(match[1]) : fallback;
+}
+
+/**
+ * Normalise an export failure into something a screen can act on.
+ *
+ * Necessary because responseType:"blob" makes axios hand back the ERROR body as
+ * a Blob too, so `error.response.data.detail` is `undefined` and printing it
+ * yields "[object Blob]". A 424 here is operator-actionable (the schema is
+ * behind the code) and MUST be shown, never treated as a crash.
+ */
+export async function parseDashboardExportError(err: unknown): Promise<DashboardExportFailure> {
+  const response = (err as { response?: { status?: number; data?: unknown } })?.response;
+  const status = response?.status ?? 0;
+  let raw: unknown = response?.data;
+  if (raw instanceof Blob) {
+    try {
+      raw = JSON.parse(await raw.text());
+    } catch {
+      raw = undefined;
+    }
+  }
+  const detail = (raw as { detail?: unknown } | undefined)?.detail;
+  if (detail && typeof detail === "object") {
+    const d = detail as { error?: string; message?: string };
+    return { status, error: d.error ?? "", message: d.message ?? "" };
+  }
+  return { status, error: "", message: typeof detail === "string" ? detail : "" };
+}
+
+export const dashboardExportApi = {
+  /**
+   * The nine dashboards with localised labels and an ADVISORY role list.
+   * `roles` is a hint for hiding buttons — the binding check runs on the export
+   * itself and can still refuse (403), so never treat this as the policy.
+   */
+  keys: (lang?: string) =>
+    apiClient
+      .get<DashboardExportCatalogue>("/dashboard-export/keys", { params: lang ? { lang } : undefined })
+      .then((r) => r.data),
+
+  /**
+   * One dashboard as a binary artefact.
+   * 200 blob | 400 bad format | 402 feature_not_in_plan (global upsell listener)
+   * | 403 role | 404 unknown key | 424 schema/gate not ready (show the message).
+   */
+  exportDashboard: (
+    key: DashboardExportKey,
+    format: DashboardExportFormat = "xlsx",
+    lang?: string,
+  ): Promise<Blob> =>
+    apiClient
+      .get(`/dashboard-export/${key}`, { params: { format, ...(lang ? { lang } : {}) }, responseType: "blob" })
+      .then((r) => r.data as Blob),
+
+  /** Same call, keeping the server-chosen filename (date-stamped per dashboard). */
+  exportDashboardFile: (
+    key: DashboardExportKey,
+    format: DashboardExportFormat = "xlsx",
+    lang?: string,
+  ): Promise<{ blob: Blob; filename: string }> =>
+    apiClient
+      .get(`/dashboard-export/${key}`, { params: { format, ...(lang ? { lang } : {}) }, responseType: "blob" })
+      .then((r) => ({
+        blob: r.data as Blob,
+        filename: exportFilenameFrom(
+          (r.headers as unknown as Record<string, unknown> | undefined)?.["content-disposition"],
+          `${key}_dashboard.${format === "pdf" ? "pdf" : "xlsx"}`,
+        ),
+      })),
 };
 
 // ─── Subscriptions ───────────────────────────
@@ -944,6 +1928,63 @@ export const auditorPortalApi = {
       onDone,
       signal,
     ),
+
+  // ── Engagement-scoped portal (« affectation des auditeurs ») ──────────────
+  /** The engagements this auditor was given — assignments seen from their side. */
+  getMyAudits: () =>
+    apiClient.get<AuditorEngagement[]>("/auditor-portal/audits").then((r) => r.data),
+
+  getMyAudit: (auditId: string) =>
+    apiClient.get<AuditorEngagement>(`/auditor-portal/audits/${auditId}`).then((r) => r.data),
+
+  /** The engagement's checklist plus the verdict scale it is answered on. When
+   *  `grid` is null the engagement has no grid and `controls` is the checklist. */
+  getEngagementChecklist: (auditId: string) =>
+    apiClient
+      .get<AuditorEngagementChecklist>(`/auditor-portal/audits/${auditId}/checklist`)
+      .then((r) => r.data),
+
+  /** Record a verdict on one grid row. `verdict` must be a key of the scale the
+   *  checklist shipped — free text is rejected server-side. */
+  recordGridVerdict: (auditId: string, itemId: string, data: { verdict?: string | null; note?: string | null }) =>
+    apiClient.put(`/auditor-portal/audits/${auditId}/grid-items/${itemId}`, data).then((r) => r.data),
+
+  listEngagementFindings: (auditId: string) =>
+    apiClient.get<AuditFinding[]>(`/auditor-portal/audits/${auditId}/findings`).then((r) => r.data),
+
+  /** « Ajout de constats » — the auditor files their own finding from the portal. */
+  createEngagementFinding: (auditId: string, data: {
+    title: string;
+    description: string;
+    severity?: string;
+    finding_type?: string | null;
+    control_id?: string | null;
+    recommendation?: string | null;
+    due_date?: string | null;
+    remediation_owner_id?: string | null;
+  }) => apiClient.post<AuditFinding>(`/auditor-portal/audits/${auditId}/findings`, data).then((r) => r.data),
+
+  listEngagementEvidence: (auditId: string) =>
+    apiClient.get<AuditEvidence[]>(`/auditor-portal/audits/${auditId}/evidence`).then((r) => r.data),
+
+  /** Multipart — Content-Type is left to the browser so the boundary is generated. */
+  uploadEngagementEvidence: (auditId: string, file: File, options?: {
+    name?: string;
+    description?: string;
+    finding_id?: string;
+  }) => {
+    const fd = new FormData();
+    fd.append("file", file);
+    if (options?.name) fd.append("name", options.name);
+    if (options?.description) fd.append("description", options.description);
+    if (options?.finding_id) fd.append("finding_id", options.finding_id);
+    return apiClient.post<AuditEvidence>(`/auditor-portal/audits/${auditId}/evidence`, fd).then((r) => r.data);
+  },
+
+  downloadEngagementEvidence: (evidenceId: string) =>
+    apiClient
+      .get(`/auditor-portal/evidence/${evidenceId}/download`, { responseType: "blob" })
+      .then((r) => r.data as Blob),
 };
 
 // ─── Users ────────────────────────────────────
@@ -1284,12 +2325,81 @@ export const regulatoryApi = {
   approve: (id: string) => apiClient.post(`/regulatory/${id}/approve`).then((r) => r.data),
   reject: (id: string) => apiClient.delete(`/regulatory/${id}/reject`),
   controlDraft: (id: string) => apiClient.get(`/regulatory/${id}/control-draft`).then((r) => r.data),
+
+  /** Who changed a regulatory obligation, when and why. */
+  versions: (id: string) =>
+    apiClient.get<RegulatoryUpdateVersion[]>(`/regulatory/${id}/versions`).then((r) => r.data),
+
+  // ── Veille réglementaire: the sources the watch actually reads ────────────
+  // Built-in feeds are shared and read-only (`is_builtin`); a tenant's own are
+  // editable. `last_error` is what to surface when a feed silently stops.
+  listFeeds: () => apiClient.get<RegulatoryFeed[]>("/regulatory/feeds").then((r) => r.data),
+
+  createFeed: (data: RegulatoryFeedCreate) =>
+    apiClient.post<RegulatoryFeed>("/regulatory/feeds", data).then((r) => r.data),
+
+  updateFeed: (feedId: string, data: Partial<RegulatoryFeedCreate>) =>
+    apiClient.patch<RegulatoryFeed>(`/regulatory/feeds/${feedId}`, data).then((r) => r.data),
+
+  deleteFeed: (feedId: string) => apiClient.delete(`/regulatory/feeds/${feedId}`),
+
+  /** Fetch the feed once and report what came back, without importing anything. */
+  testFeed: (feedId: string) =>
+    apiClient.post<RegulatoryFeedTestResult>(`/regulatory/feeds/${feedId}/test`).then((r) => r.data),
 };
 
 // ─── Activity Log ───────────────────────────
+// The trail is hash-chained: `seq` and `entry_hash` come straight off the stored
+// row, while `actor_email` / `actor_name` are resolved at read time and are NOT
+// part of the hash. `category` (access | validation | change | other) is derived,
+// so an examiner can separate "qui a consulté" from "qui a validé".
 export const activityLogApi = {
-  list: (params?: { entity_type?: string; action?: string; user_id?: string; limit?: number; offset?: number }) =>
-    apiClient.get("/activity-log", { params }).then((r) => r.data),
+  list: (params?: {
+    entity_type?: string;
+    action?: string;
+    user_id?: string;
+    /** "Qui a consulté CE rapport ?" needs the object, not just its type. */
+    entity_id?: string;
+    category?: string;
+    /** manual | batch | api — how the action reached the platform. */
+    origin?: string;
+    date_from?: string;
+    date_to?: string;
+    limit?: number;
+    offset?: number;
+  }) => apiClient.get<ActivityLogListResponse>("/activity-log", { params }).then((r) => r.data),
+
+  /** The verbs, entity types and origins this tenant's trail actually contains,
+   *  so the filter dropdowns match the data instead of a hard-coded guess.
+   *  `i18n_prefix` names the namespace to render each verb through. */
+  actions: () =>
+    apiClient.get<ActivityActionCatalogue>("/activity-log/actions").then((r) => r.data),
+
+  /** Everyone who touched one object, with per-verb counts and the recent tail. */
+  entityAccessReport: (entityType: string, entityId: string, params?: { category?: string; recent_limit?: number }) =>
+    apiClient
+      .get<EntityAccessReport>(`/activity-log/access/${entityType}/${entityId}`, { params })
+      .then((r) => r.data),
+
+  /** Sign-in history — who, when, from where, and whether it worked. */
+  loginEvents: (params?: { success?: boolean; limit?: number; offset?: number }) =>
+    apiClient.get<LoginEvent[]>("/activity-log/login-events", { params }).then((r) => r.data),
+
+  /** Recompute the hash chain and report where (if anywhere) it breaks. */
+  verifyChain: () => apiClient.get("/activity-log/verify").then((r) => r.data),
+
+  getRetention: () =>
+    apiClient.get<ActivityRetentionPolicy>("/activity-log/retention").then((r) => r.data),
+
+  setRetention: (data: { enabled?: boolean; retention_days?: number }) =>
+    apiClient.patch<ActivityRetentionPolicy>("/activity-log/retention", data).then((r) => r.data),
+
+  /** Seal-then-purge: the sealed digest is the only record of what was destroyed.
+   *  `reason` must be at least 20 characters and `confirm` must be true. */
+  seal: (data: { reason: string; retention_days?: number | null; confirm: boolean }) =>
+    apiClient.post("/activity-log/retention/seal", data).then((r) => r.data),
+
+  listSeals: () => apiClient.get<ActivityLogSeal[]>("/activity-log/seals").then((r) => r.data),
 };
 
 // ─── Webhooks ───────────────────────────────
@@ -1307,8 +2417,13 @@ export type DataIoFormat = "csv" | "xml";
 export const dataApi = {
   exportCsv: async (module: string) => dataApi.exportData(module, "csv"),
   exportXml: async (module: string) => dataApi.exportData(module, "xml"),
-  exportData: async (module: string, format: DataIoFormat = "csv") => {
-    const resp = await apiClient.get(`/data/export/${module}`, { params: { format }, responseType: "blob" });
+  /** `extraParams` carries the per-dataset filters a few exports accept:
+   *  `audit_id` on audit-findings, `framework_id` on framework-controls. */
+  exportData: async (module: string, format: DataIoFormat = "csv", extraParams?: Record<string, string | undefined>) => {
+    const resp = await apiClient.get(`/data/export/${module}`, {
+      params: { format, ...(extraParams ?? {}) },
+      responseType: "blob",
+    });
     const mime = format === "xml" ? "application/xml" : "text/csv";
     const blob = new Blob([resp.data], { type: mime });
     const url = window.URL.createObjectURL(blob);
@@ -1327,6 +2442,19 @@ export const dataApi = {
       .post(`/data/import/${module}`, fd, { params: { format }, headers: { "Content-Type": "multipart/form-data" } })
       .then((r) => r.data);
   },
+
+  // ── Named exports for the datasets that take a filter ─────────────────────
+  /** Every constat, or only one engagement's. */
+  exportAuditFindings: (format: DataIoFormat = "csv", auditId?: string) =>
+    dataApi.exportData("audit-findings", format, auditId ? { audit_id: auditId } : undefined),
+
+  /** The framework catalogue itself (one row per framework). */
+  exportFrameworks: (format: DataIoFormat = "csv") => dataApi.exportData("frameworks", format),
+
+  /** The controls of one framework — or of all of them when `frameworkId` is
+   *  omitted, which on a 94-framework tenant is a very large file. */
+  exportFrameworkControls: (format: DataIoFormat = "csv", frameworkId?: string) =>
+    dataApi.exportData("framework-controls", format, frameworkId ? { framework_id: frameworkId } : undefined),
 };
 
 // ─── Contract Collaboration ─────────────────
@@ -1560,9 +2688,37 @@ export const eliteDashboardsApi = {
 
 // ── Report builder (Elite Pack) ──────────────────────────────────────────────
 export const reportBuilderApi = {
-  datasets: () => apiClient.get("/report-builder/datasets").then((r) => r.data),
-  exportFile: (dataset: string, format: "xlsx" | "csv") =>
-    apiClient.post("/report-builder/export", { dataset, format }, { responseType: "blob" }).then((r) => r.data),
+  /** Every dataset the builder can report on — `audit_findings` among them —
+   *  each with the columns it exposes. */
+  datasets: () => apiClient.get<ReportBuilderDataset[]>("/report-builder/datasets").then((r) => r.data),
+
+  exportFile: (
+    dataset: string,
+    format: "xlsx" | "csv" | "pdf",
+    options?: { columns?: string[]; filters?: Record<string, unknown> },
+  ) =>
+    apiClient
+      .post(
+        "/report-builder/export",
+        { dataset, format, columns: options?.columns, filters: options?.filters ?? {} },
+        { responseType: "blob" },
+      )
+      .then((r) => r.data as Blob),
+
+  // ── Saved templates ───────────────────────────────────────────────────────
+  listTemplates: () =>
+    apiClient.get<ReportBuilderTemplate[]>("/report-builder/templates").then((r) => r.data),
+
+  createTemplate: (data: { name: string; dataset: string; columns?: string[]; filters?: Record<string, unknown> }) =>
+    apiClient.post<ReportBuilderTemplate>("/report-builder/templates", data).then((r) => r.data),
+
+  deleteTemplate: (templateId: string) =>
+    apiClient.delete(`/report-builder/templates/${templateId}`),
+
+  runTemplate: (templateId: string, format: "xlsx" | "csv" | "pdf" = "xlsx") =>
+    apiClient
+      .post(`/report-builder/templates/${templateId}/run`, null, { params: { format }, responseType: "blob" })
+      .then((r) => r.data as Blob),
 };
 
 // ── Risk treatment plans (Elite Pack) ────────────────────────────────────────
@@ -1646,6 +2802,31 @@ export const archivingApi = {
   createRule: (data: { entity_type: string; criteria: string; enabled?: boolean; retention_days?: number | null }) =>
     apiClient.post("/archiving/rules", data).then((r) => r.data),
   deleteRule: (id: string) => apiClient.delete(`/archiving/rules/${id}`),
+
+  listFiltered: (params?: { entity_type?: string; limit?: number }) =>
+    apiClient.get<ArchiveRecord[]>("/archiving", { params }).then((r) => r.data),
+
+  get: (archiveId: string) =>
+    apiClient.get<ArchiveRecord>(`/archiving/${archiveId}`).then((r) => r.data),
+
+  /** The archived snapshot with its children and evidence manifest.
+   *  `verify` re-reads every archived file and checks it against the sha256
+   *  taken at upload — it streams the bytes, so keep it off for a listing. */
+  content: (archiveId: string, verify = false) =>
+    apiClient
+      .get<ArchiveContent>(`/archiving/${archiveId}/content`, { params: verify ? { verify: true } : undefined })
+      .then((r) => r.data),
+
+  /** Blob rather than a bare URL — the download needs the Authorization header.
+   *  `acknowledgeIntegrityFailure` is the CISO override that serves a file whose
+   *  checksum no longer matches, so a damaged file can still be investigated. */
+  downloadEvidence: (archiveId: string, evidenceId: string, acknowledgeIntegrityFailure = false) =>
+    apiClient
+      .get(`/archiving/${archiveId}/evidence/${evidenceId}/download`, {
+        params: acknowledgeIntegrityFailure ? { acknowledge_integrity_failure: true } : undefined,
+        responseType: "blob",
+      })
+      .then((r) => r.data as Blob),
 };
 
 // ── CVE knowledge base (Elite Pack) ──────────────────────────────────────────

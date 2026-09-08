@@ -1,14 +1,17 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { AlertTriangle, Plus, Search, X, ChevronRight, Download, Target, Pencil, Loader2, ShieldCheck } from "lucide-react";
-import { risksApi } from "../api/endpoints";
+import { AlertTriangle, Plus, Search, X, ChevronRight, ChevronDown, Download, Target, Pencil, Loader2, ShieldCheck, BarChart3 } from "lucide-react";
+import { risksApi, assetGraphApi } from "../api/endpoints";
 import type { Risk, RiskSeverity } from "../types";
 import RiskAIPanel from "../components/ai/RiskAIPanel";
 import { exportRisksCSV } from "../utils/exportUtils";
 import { useAuthStore, hasAnyRole } from "../store/auth";
 import { useColumnVisibility, type ColumnDef } from "../components/common/useColumnVisibility";
 import ColumnsMenu from "../components/common/ColumnsMenu";
+import ModuleDashboard from "../components/dashboards/ModuleDashboard";
+import { useBucketLabel } from "../components/common/Breakdown";
+import { useEntitlements } from "../context/EntitlementsContext";
 
 const SEV_BADGE: Record<RiskSeverity, string> = {
   critical: "bg-red-100 text-red-700 border-red-200",
@@ -56,12 +59,28 @@ function heatmapColor(l: number, i: number): string {
   if (s >= 3)  return "bg-yellow-200 text-gray-700";
   return "bg-green-100 text-gray-600";
 }
-function heatmapLabel(l: number, i: number): string {
+/** Severity BUCKET KEY for a cell, not a label: the tooltip used to read
+ *  "Critical/High" in French and in Arabic. The caller translates it through
+ *  compliance.severities.*, which every other severity on this page uses. */
+function heatmapSeverityKey(l: number, i: number): "critical" | "high" | "medium" | "low" {
   const s = l * i;
-  if (s >= 15) return "Critical/High";
-  if (s >= 10) return "High";
-  if (s >= 6)  return "Medium";
-  return "Low";
+  if (s >= 15) return "critical";
+  if (s >= 10) return "high";
+  if (s >= 6)  return "medium";
+  return "low";
+}
+
+/** Remember whether the operator keeps the dashboard panel open. localStorage
+ *  THROWS outright in some privacy modes — a preference must never take the
+ *  risk register down with it. */
+const DASH_LS_KEY = "grceye.moduledash.risks.open";
+
+function readDashOpen(): boolean {
+  try {
+    return window.localStorage.getItem(DASH_LS_KEY) !== "0";
+  } catch {
+    return true;
+  }
 }
 
 // ── Demo data (fallback when API has no data) ─────────────────────────────────
@@ -109,7 +128,7 @@ function RiskHeatmap({ risks, onCellClick }: { readonly risks: Risk[]; readonly 
                       key={`${l}-${impact}`}
                       onClick={() => onCellClick(l, impact)}
                       className={`rounded-lg h-12 flex items-center justify-center font-bold text-sm transition-all hover:ring-2 hover:ring-blue-400 hover:ring-offset-1 ${heatmapColor(l, impact)} ${cellCls}`}
-                      title={`L${l}×I${impact} = ${heatmapLabel(l,impact)} (${count})`}
+                      title={`L${l}×I${impact} = ${t(`compliance.severities.${heatmapSeverityKey(l, impact)}`)} (${count})`}
                     >
                       {cellLabel}
                     </button>
@@ -270,6 +289,7 @@ function AddRiskModal({ onClose, onSaved }: { readonly onClose: () => void; read
 // ── Risk Detail Modal ─────────────────────────────────────────────────────────
 function RiskDetailModal({ risk, onClose, onUpdated }: { readonly risk: Risk; readonly onClose: () => void; readonly onUpdated: (updated: Risk) => void }) {
   const { t } = useTranslation();
+  const label = useBucketLabel();
   const [editingAppetite, setEditingAppetite] = useState(false);
   const [appetiteForm, setAppetiteForm] = useState({
     appetite_threshold: risk.appetite_threshold ?? "",
@@ -337,8 +357,8 @@ function RiskDetailModal({ risk, onClose, onUpdated }: { readonly risk: Risk; re
               <div>
                 <h2 className="font-semibold text-gray-900 leading-snug">{risk.title}</h2>
                 <div className="flex items-center gap-2 mt-1.5 flex-wrap">
-                  <span className={`text-xs font-semibold px-2.5 py-0.5 rounded-full border capitalize ${SEV_BADGE[sev as RiskSeverity]}`}>{sev}</span>
-                  <span className="text-xs text-gray-500 capitalize">{risk.status.replaceAll("_", " ")}</span>
+                  <span className={`text-xs font-semibold px-2.5 py-0.5 rounded-full border ${SEV_BADGE[sev as RiskSeverity]}`}>{label(sev)}</span>
+                  <span className="text-xs text-gray-500">{label(risk.status)}</span>
                   {risk.risk_category && <span className="text-xs bg-slate-100 text-slate-600 px-2 py-0.5 rounded-md">{risk.risk_category}</span>}
                 </div>
               </div>
@@ -559,9 +579,16 @@ function RiskDetailModal({ risk, onClose, onUpdated }: { readonly risk: Risk; re
 // ── Main Page ─────────────────────────────────────────────────────────────────
 export default function RisksPage() {
   const { t } = useTranslation();
+  // Raw backend enum values (`treatment_in_progress`) through the product
+  // vocabulary — `status.replaceAll("_"," ")` read as English in every language.
+  const label = useBucketLabel();
+  const [dashOpen, setDashOpen] = useState<boolean>(readDashOpen);
   const [search, setSearch] = useState("");
   const [severityFilter, setSeverityFilter] = useState<string>("all");
   const [heatmapFilter, setHeatmapFilter] = useState<{ l: number; i: number } | null>(null);
+  // STB gap 19.d — « les risques de la DSI », « les risques du processus Crédit ».
+  const [orgEntityFilter, setOrgEntityFilter] = useState<string>("all");
+  const [processFilter, setProcessFilter] = useState<string>("all");
   const [showAddModal, setShowAddModal] = useState(false);
   const [selectedRisk, setSelectedRisk] = useState<Risk | null>(null);
 
@@ -576,16 +603,65 @@ export default function RisksPage() {
   ];
   const { isVisible, toggle, reset } = useColumnVisibility("risks", RISK_COLUMNS);
 
+  function toggleDash() {
+    setDashOpen((open) => {
+      const next = !open;
+      try {
+        window.localStorage.setItem(DASH_LS_KEY, next ? "1" : "0");
+      } catch {
+        // Private browsing — the panel simply reopens next visit.
+      }
+      return next;
+    });
+  }
+
   const queryClient = useQueryClient();
-  const { data, isError } = useQuery({ queryKey: ["risks"], queryFn: () => risksApi.list(), retry: false });
-  const risks = (isError || !data?.items?.length) ? DEMO_RISKS : data.items;
+  // page_size defaults to 20 server-side (dependencies/pagination.py), and this page
+  // computes the KPI tiles, the 5x5 heatmap, the "X of Y" summary AND the CSV export
+  // from whatever this call returns. Unbounded, every one of those silently described
+  // only the 20 most recent risks the moment a tenant had more than 20 — the register
+  // would say "12 critical" when it held 60. 500 is the endpoint's ceiling (le=500).
+  const { data, isError } = useQuery({
+    queryKey: ["risks", "all"],
+    queryFn: () => risksApi.list({ page: 1, page_size: 500 }),
+    retry: false,
+  });
+  // Both of these live behind require_feature("asset_cartography") — every route
+  // in asset_graph.py carries it. Fired unconditionally they answer 402 for a
+  // tenant without that pack, and client.ts turns a 402 into a GLOBAL
+  // "elite-upsell" toast: merely opening the risk register popped an Elite
+  // upgrade banner about Asset Cartography, twice, for a user who asked for
+  // neither. The gate itself stays exactly where it is; what is fixed is asking
+  // for a refusal we can already predict. `hasFeature` fails open (unknown
+  // feature, or a failed entitlements call ⇒ true), so nothing is hidden from a
+  // tenant that does hold the pack.
+  const { hasFeature } = useEntitlements();
+  const hasCartography = hasFeature("asset_cartography");
+  const { data: orgEntities } = useQuery<{ id: string; name: string }[]>({
+    queryKey: ["org-entities"], queryFn: () => assetGraphApi.listEntities(),
+    enabled: hasCartography, retry: false,
+  });
+  const { data: processes } = useQuery<{ id: string; name: string }[]>({
+    queryKey: ["business-processes"], queryFn: () => assetGraphApi.listProcesses(),
+    enabled: hasCartography, retry: false,
+  });
+  // Only fall back to sample data when the request actually FAILED. Previously an
+  // empty register also triggered it, so a new tenant with zero risks saw a populated
+  // heatmap of fictional risks — and exportRisksCSV(risks) wrote those to a file the
+  // client could circulate as their own register.
+  const usingDemoData = isError;
+  const risks = usingDemoData ? DEMO_RISKS : (data?.items ?? []);
+  // The register can hold more than one page; say so rather than implying this is all.
+  const truncated = !usingDemoData && (data?.total ?? 0) > risks.length;
 
   const filtered = risks.filter(r => {
     const matchSearch = r.title.toLowerCase().includes(search.toLowerCase()) ||
       (r.risk_category ?? "").toLowerCase().includes(search.toLowerCase());
     const matchSev  = severityFilter === "all" || r.severity === severityFilter;
     const matchHeat = !heatmapFilter || (r.likelihood === heatmapFilter.l && r.impact === heatmapFilter.i);
-    return matchSearch && matchSev && matchHeat;
+    const matchEntity  = orgEntityFilter === "all" || r.org_entity_id === orgEntityFilter;
+    const matchProcess = processFilter === "all" || r.business_process_id === processFilter;
+    return matchSearch && matchSev && matchHeat && matchEntity && matchProcess;
   });
 
   const counts = {
@@ -604,9 +680,16 @@ export default function RisksPage() {
         </div>
         <div className="flex items-center gap-2">
           <ColumnsMenu columns={RISK_COLUMNS} isVisible={isVisible} toggle={toggle} reset={reset} />
+          {/* While the register could not be loaded the screen is showing the
+              sample row, and exportRisksCSV(risks) would write THAT to a file
+              the client can circulate as their own register. The export is
+              therefore disabled in exactly that state — the register on screen
+              is not theirs to export. */}
           <button
             onClick={() => exportRisksCSV(risks)}
-            className="flex items-center gap-2 border border-gray-200 hover:bg-gray-50 text-gray-600 px-4 py-2.5 rounded-lg text-sm font-medium transition-colors"
+            disabled={usingDemoData}
+            title={usingDemoData ? t("nav.demo_data") : undefined}
+            className="flex items-center gap-2 border border-gray-200 hover:bg-gray-50 disabled:opacity-50 disabled:hover:bg-transparent text-gray-600 px-4 py-2.5 rounded-lg text-sm font-medium transition-colors"
           >
             <Download className="w-4 h-4" /> {t("risks.export_csv")}
           </button>
@@ -616,6 +699,47 @@ export default function RisksPage() {
           </button>
         </div>
       </div>
+
+      {/*
+        Objectif 4 — « Accessible depuis la page dédiée aux risques ».
+        The risk dashboard existed behind GET /dashboards/risks, but the only
+        screen that ever called it was AnalyticsPage: a card in another
+        navigation group does not make a dashboard accessible from the risk
+        register. The LOCATION is the requirement.
+      */}
+      <div className="space-y-3">
+        <button
+          type="button"
+          onClick={toggleDash}
+          aria-expanded={dashOpen}
+          aria-controls="module-dashboard-risks"
+          className="inline-flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+        >
+          {dashOpen
+            ? <ChevronDown className="w-4 h-4 text-gray-400" aria-hidden="true" />
+            : <ChevronRight className="w-4 h-4 text-gray-400" aria-hidden="true" />}
+          <BarChart3 className="w-4 h-4 text-amber-600" aria-hidden="true" />
+          {t("moduledash.dashboard")}
+          <span className="text-xs font-normal text-gray-400">
+            {dashOpen ? t("moduledash.hide") : t("moduledash.show")}
+          </span>
+        </button>
+        {dashOpen && <ModuleDashboard module="risks" />}
+      </div>
+
+      {/* The register could not be read, so the figures below — the tiles, the
+          5x5 map, the table — describe the SAMPLE row, not this tenant. Say so
+          unmistakably: a bank that spots an invented figure stops trusting
+          every number on the screen. */}
+      {usingDemoData && (
+        <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 flex items-start gap-3" role="status">
+          <AlertTriangle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" aria-hidden="true" />
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-semibold text-amber-900">{t("nav.demo_data")}</p>
+            <p className="text-xs text-amber-700 mt-0.5">{t("errors.load_failed")}</p>
+          </div>
+        </div>
+      )}
 
       <div className="grid grid-cols-4 gap-4">
         {(["critical", "high", "medium", "low"] as const).map(sev => {
@@ -658,6 +782,26 @@ export default function RisksPage() {
                 ))}
               </div>
             </div>
+            {!!orgEntities?.length && (
+              <div>
+                <label htmlFor="risk-entity-filter" className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1.5 block">{t("risks.filter_org_entity")}</label>
+                <select id="risk-entity-filter" value={orgEntityFilter} onChange={e => setOrgEntityFilter(e.target.value)}
+                  className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                  <option value="all">{t("common.all")}</option>
+                  {orgEntities.map(e => <option key={e.id} value={e.id}>{e.name}</option>)}
+                </select>
+              </div>
+            )}
+            {!!processes?.length && (
+              <div>
+                <label htmlFor="risk-process-filter" className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1.5 block">{t("risks.filter_process")}</label>
+                <select id="risk-process-filter" value={processFilter} onChange={e => setProcessFilter(e.target.value)}
+                  className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                  <option value="all">{t("common.all")}</option>
+                  {processes.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                </select>
+              </div>
+            )}
             {heatmapFilter && (
               <div className="flex items-center justify-between bg-blue-50 border border-blue-200 rounded-lg px-3 py-2">
                 <span className="text-xs text-blue-700 font-medium">{t("risks.heatmap_filter")}: L{heatmapFilter.l} × I{heatmapFilter.i}</span>
@@ -668,6 +812,9 @@ export default function RisksPage() {
               <p className="text-sm text-gray-500">
                 {t("risks.showing")} <span className="font-semibold text-gray-900">{filtered.length}</span> {t("common.of")}{" "}
                 <span className="font-semibold text-gray-900">{risks.length}</span> {t("risks.risks_word")}
+                {truncated && (
+                  <span className="ml-1 text-amber-700">({t("risks.truncated", { total: data?.total ?? 0 })})</span>
+                )}
               </p>
             </div>
           </div>
@@ -705,8 +852,8 @@ export default function RisksPage() {
                 {isVisible("severity") && (
                   <td className="px-4 py-4">
                     {risk.severity && (
-                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border capitalize ${SEV_BADGE[risk.severity]}`}>
-                        {risk.severity}
+                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${SEV_BADGE[risk.severity]}`}>
+                        {label(risk.severity)}
                       </span>
                     )}
                   </td>
@@ -729,7 +876,7 @@ export default function RisksPage() {
                 )}
                 {isVisible("status") && (
                   <td className="px-4 py-4">
-                    <span className="text-xs text-gray-500 capitalize">{risk.status.replaceAll("_", " ")}</span>
+                    <span className="text-xs text-gray-500">{label(risk.status)}</span>
                   </td>
                 )}
                 {isVisible("tags") && (

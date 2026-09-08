@@ -1,107 +1,182 @@
 /**
- * AuditPlanModal — AI-generated audit program streamed from Ollama.
- * Triggered from the New Audit modal or audit detail page.
+ * AuditPlanModal — the audit programme for ONE engagement.
+ *
+ * What changed for objectif 4 (« planifier selon le périmètre défini ») :
+ *   * the programme is built against the engagement's REAL framework and its
+ *     real controls (fetched from /frameworks/{id}/controls) instead of a canned
+ *     ISO 27001 list — and when no framework is set the modal says so rather
+ *     than silently substituting one;
+ *   * the perimeter (processes, entities, systems) is passed into the request,
+ *     folded into audit_scope, which is the field the prompt actually reads;
+ *   * the result is PERSISTED — POST /audits/{id}/plan — instead of being
+ *     thrown away when the modal closes.
  */
 import { useState, useRef, useEffect } from "react";
-import { X, RefreshCw, Copy, Download, Sparkles, FileText } from "lucide-react";
-import { aiApi } from "@/api/endpoints";
+import { useTranslation } from "react-i18next";
+import { X, RefreshCw, Copy, Download, Sparkles, FileText, Save, Loader2, AlertTriangle } from "lucide-react";
+import { aiApi, auditsApi, frameworksApi } from "@/api/endpoints";
 import { useAiTokenRefresh } from "@/hooks/useAiTokenRefresh";
 import AiGate from "@/components/features/ai/AiGate";
 import { safeMarkdown } from "@/lib/safeMarkdown";
 
-interface Props {
-  auditTitle: string;
-  frameworkName: string;
-  frameworkShortName: string;
-  auditScope?: string;
-  auditObjective?: string;
-  controls?: Array<{ control_id: string; title: string; category: string }>;
-  onClose: () => void;
+export interface AuditPlanPerimeter {
+  readonly processes?: string[];
+  readonly entities?: string[];
+  readonly systems?: string[];
 }
 
-// Default controls for well-known frameworks when none are loaded from DB
-const DEFAULT_CONTROLS: Record<string, Array<{ control_id: string; title: string; category: string }>> = {
-  "ISO 27001": [
-    { control_id: "A.5.1",  title: "Policies for information security",       category: "organizational" },
-    { control_id: "A.5.15", title: "Access control",                          category: "organizational" },
-    { control_id: "A.6.3",  title: "Information security awareness",          category: "people"         },
-    { control_id: "A.7.1",  title: "Physical security perimeters",            category: "physical"       },
-    { control_id: "A.8.1",  title: "User endpoint devices",                   category: "technical"      },
-    { control_id: "A.8.7",  title: "Protection against malware",              category: "technical"      },
-    { control_id: "A.8.8",  title: "Management of technical vulnerabilities", category: "technical"      },
-    { control_id: "A.8.24", title: "Use of cryptography",                     category: "technical"      },
-    { control_id: "A.5.28", title: "Collection of evidence",                  category: "organizational" },
-    { control_id: "A.5.29", title: "Information security during disruption",  category: "organizational" },
-  ],
-  "SOC 2": [
-    { control_id: "CC1.1", title: "COSO Principle 1 — Integrity and ethics",     category: "governance"     },
-    { control_id: "CC6.1", title: "Logical access security",                     category: "technical"      },
-    { control_id: "CC6.2", title: "Registration and authorization of new users", category: "technical"      },
-    { control_id: "CC6.3", title: "Role-based access",                           category: "technical"      },
-    { control_id: "CC7.1", title: "Detection and monitoring of anomalies",       category: "technical"      },
-    { control_id: "CC7.2", title: "Monitoring system components",                category: "technical"      },
-    { control_id: "CC8.1", title: "Change management controls",                  category: "organizational" },
-    { control_id: "A1.1",  title: "Availability — capacity management",          category: "technical"      },
-    { control_id: "C1.1",  title: "Confidentiality — data classification",       category: "organizational" },
-    { control_id: "P1.1",  title: "Privacy — notice and communication",          category: "organizational" },
-  ],
-  "NIST CSF": [
-    { control_id: "GV.OC", title: "Organizational context",                    category: "govern"   },
-    { control_id: "ID.AM", title: "Asset management",                          category: "identify" },
-    { control_id: "ID.RA", title: "Risk assessment",                           category: "identify" },
-    { control_id: "PR.AA", title: "Identity management & access control",      category: "protect"  },
-    { control_id: "PR.DS", title: "Data security",                             category: "protect"  },
-    { control_id: "PR.IR", title: "Technology infrastructure resilience",      category: "protect"  },
-    { control_id: "DE.AE", title: "Adverse event analysis",                    category: "detect"   },
-    { control_id: "RS.MA", title: "Incident management",                       category: "respond"  },
-    { control_id: "RC.RP", title: "Incident recovery plan",                    category: "recover"  },
-  ],
+interface Props {
+  readonly auditTitle: string;
+  readonly frameworkName: string;
+  readonly frameworkShortName: string;
+  readonly auditScope?: string;
+  readonly auditObjective?: string;
+  readonly auditType?: string;
+  /** Resolved framework id — the modal loads its controls from it. */
+  readonly frameworkId?: string | null;
+  /** Named perimeter members, already resolved to labels by the caller. */
+  readonly perimeter?: AuditPlanPerimeter;
+  readonly controls?: Array<{ control_id: string; title: string; category: string }>;
+  /** When given, the generated programme can be saved onto the engagement. */
+  readonly auditId?: string;
+  readonly onSaved?: (plan: string) => void;
+  readonly onClose: () => void;
+}
+
+/** aiApi.streamAuditPlan is typed to the original fields; the endpoint also
+ *  accepts audit_type. Declared as an intersection so nothing is dropped. */
+type AuditPlanRequest = Parameters<typeof aiApi.streamAuditPlan>[0] & {
+  audit_type?: string;
 };
 
-// Markdown rendering: shared XSS-safe helper.
 const renderMarkdown = safeMarkdown;
 
 export default function AuditPlanModal({
   auditTitle, frameworkName, frameworkShortName,
-  auditScope, auditObjective, controls, onClose,
+  auditScope, auditObjective, auditType, frameworkId, perimeter,
+  controls, auditId, onSaved, onClose,
 }: Props) {
+  const { t } = useTranslation();
   const { refreshAiTokens } = useAiTokenRefresh();
   const [output, setOutput]   = useState("");
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [done, setDone]       = useState(false);
+  const [saving, setSaving]   = useState(false);
+  const [saved, setSaved]     = useState(false);
+  const [error, setError]     = useState("");
+  const [resolved, setResolved] = useState<Array<{ control_id: string; title: string; category: string }>>(controls ?? []);
+  const [preparing, setPreparing] = useState(true);
   const abortRef = useRef<AbortController | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
 
-  const resolvedControls = controls?.length
-    ? controls
-    : DEFAULT_CONTROLS[frameworkName] ?? DEFAULT_CONTROLS["ISO 27001"];
+  // ── Perimeter, spelled out for the prompt ────────────────────────────────
+  const perimeterLines: string[] = [];
+  if (perimeter?.processes?.length) {
+    perimeterLines.push(`${t("audit_detail.perimeter_processes")}: ${perimeter.processes.join(", ")}`);
+  }
+  if (perimeter?.entities?.length) {
+    perimeterLines.push(`${t("audit_detail.perimeter_entities")}: ${perimeter.entities.join(", ")}`);
+  }
+  if (perimeter?.systems?.length) {
+    perimeterLines.push(`${t("audit_detail.perimeter_systems")}: ${perimeter.systems.join(", ")}`);
+  }
+  const scopeForPrompt = [auditScope?.trim(), ...perimeterLines].filter(Boolean).join(" — ");
 
+  // ── Resolve the engagement's own controls ────────────────────────────────
   useEffect(() => {
-    generate();
+    let cancelled = false;
+    async function prepare() {
+      if (controls?.length) {
+        setResolved(controls);
+        setPreparing(false);
+        return;
+      }
+      if (!frameworkId) {
+        setResolved([]);
+        setPreparing(false);
+        return;
+      }
+      try {
+        const list = await frameworksApi.getControls(frameworkId);
+        if (cancelled) return;
+        setResolved(
+          list.slice(0, 60).map((c) => ({
+            control_id: c.control_id,
+            title: c.title,
+            category: c.category ?? "",
+          })),
+        );
+      } catch {
+        if (!cancelled) setResolved([]);
+      } finally {
+        if (!cancelled) setPreparing(false);
+      }
+    }
+    prepare();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [frameworkId]);
+
+  // Generate as soon as we have something real to generate against. No silent
+  // fallback framework: an empty control set is reported, not papered over.
+  useEffect(() => {
+    if (preparing) return;
+    if (resolved.length > 0 && !output && !loading && !done) generate();
     return () => { abortRef.current?.abort(); };
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [preparing, resolved.length]);
 
   useEffect(() => {
     if (loading) bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [output]);
+  }, [output, loading]);
 
   function generate() {
+    if (resolved.length === 0) return;
     setOutput("");
     setDone(false);
+    setSaved(false);
+    setError("");
     setLoading(true);
     abortRef.current = new AbortController();
+    const request: AuditPlanRequest = {
+      framework_name: frameworkName,
+      framework_short_name: frameworkShortName,
+      audit_title: auditTitle,
+      audit_scope: scopeForPrompt || undefined,
+      audit_objective: auditObjective,
+      audit_type: auditType,
+      controls: resolved,
+    };
     aiApi.streamAuditPlan(
-      { framework_name: frameworkName, framework_short_name: frameworkShortName,
-        audit_title: auditTitle, audit_scope: auditScope, audit_objective: auditObjective,
-        controls: resolvedControls },
-      (token) => setOutput(prev => prev + token),
+      request,
+      (token) => setOutput((prev) => prev + token),
       async () => {
         setLoading(false);
         setDone(true);
         await refreshAiTokens();
       },
       abortRef.current.signal,
-    ).catch(() => setLoading(false));
+    ).catch(() => {
+      setLoading(false);
+      // A deliberate Stop aborts the stream; that is not a failure to report.
+      if (abortRef.current?.signal.aborted) return;
+      setError(t("audit_report.error_generate_failed"));
+    });
+  }
+
+  async function savePlan() {
+    if (!auditId || !output.trim()) return;
+    setSaving(true);
+    setError("");
+    try {
+      await auditsApi.savePlan(auditId, output);
+      setSaved(true);
+      onSaved?.(output);
+    } catch {
+      setError(t("audit_detail.error_save_failed"));
+    } finally {
+      setSaving(false);
+    }
   }
 
   function copyToClipboard() {
@@ -118,9 +193,11 @@ export default function AuditPlanModal({
     URL.revokeObjectURL(url);
   }
 
+  const noFramework = !preparing && resolved.length === 0;
+
   return (
-    <AiGate featureLabel="Audit Plan Generator">
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+    <AiGate featureLabel={t("audit_detail.plan_title")}>
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
         <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col overflow-hidden">
           {/* Header */}
           <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 flex-shrink-0">
@@ -129,34 +206,44 @@ export default function AuditPlanModal({
                 <Sparkles className="w-5 h-5 text-white" />
               </div>
               <div>
-                <h2 className="font-semibold text-gray-900 text-sm">AI Audit Program</h2>
-                <p className="text-xs text-gray-400">{frameworkName} · {resolvedControls.length} controls in scope</p>
+                <h2 className="font-semibold text-gray-900 text-sm">{t("audit_detail.plan_title")}</h2>
+                <p className="text-xs text-gray-400">
+                  {frameworkName || t("audit_detail.select_framework")}
+                  {resolved.length > 0 && ` · ${t("framework_editor.controls_count", { count: resolved.length })}`}
+                </p>
               </div>
             </div>
             <div className="flex items-center gap-2">
               {loading && (
                 <button type="button" onClick={() => { abortRef.current?.abort(); setLoading(false); }}
                   className="text-xs px-3 py-1.5 bg-gray-100 text-gray-600 rounded-lg hover:bg-gray-200 transition-colors">
-                  Stop
+                  {t("policies.ai_stop")}
                 </button>
               )}
               {done && (
                 <>
                   <button type="button" onClick={generate}
                     className="flex items-center gap-1.5 text-xs px-3 py-1.5 bg-gray-100 text-gray-600 rounded-lg hover:bg-gray-200 transition-colors">
-                    <RefreshCw className="w-3 h-3" /> Regenerate
+                    <RefreshCw className="w-3 h-3" /> {t("audit_detail.plan_regenerate")}
                   </button>
                   <button type="button" onClick={copyToClipboard}
                     className="flex items-center gap-1.5 text-xs px-3 py-1.5 bg-gray-100 text-gray-600 rounded-lg hover:bg-gray-200 transition-colors">
-                    <Copy className="w-3 h-3" /> Copy
+                    <Copy className="w-3 h-3" /> {t("audits.copy_report")}
                   </button>
                   <button type="button" onClick={downloadMd}
-                    className="flex items-center gap-1.5 text-xs px-3 py-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
-                    <Download className="w-3 h-3" /> Download .md
+                    className="flex items-center gap-1.5 text-xs px-3 py-1.5 bg-gray-100 text-gray-600 rounded-lg hover:bg-gray-200 transition-colors">
+                    <Download className="w-3 h-3" /> {t("audits.download_report")}
                   </button>
+                  {auditId && (
+                    <button type="button" onClick={savePlan} disabled={saving || saved}
+                      className="flex items-center gap-1.5 text-xs px-3 py-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors">
+                      {saving ? <Loader2 className="w-3 h-3 animate-spin" /> : <Save className="w-3 h-3" />}
+                      {saved ? t("audit_detail.plan_saved") : t("audit_detail.plan_save")}
+                    </button>
+                  )}
                 </>
               )}
-              <button type="button" onClick={onClose}
+              <button type="button" onClick={onClose} title={t("common.close")}
                 className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors">
                 <X className="w-4 h-4" />
               </button>
@@ -164,24 +251,38 @@ export default function AuditPlanModal({
           </div>
 
           {/* Context bar */}
-          <div className="px-6 py-2 bg-gray-50 border-b border-gray-100 flex items-center gap-4 text-xs text-gray-500 flex-shrink-0">
-            <span><strong className="text-gray-700">Title:</strong> {auditTitle}</span>
-            {auditScope && <span><strong className="text-gray-700">Scope:</strong> {auditScope}</span>}
-            {loading && <span className="ml-auto animate-pulse text-indigo-500">AI generating audit program…</span>}
-            {done && <span className="ml-auto text-green-600 font-medium flex items-center gap-1"><FileText className="w-3 h-3" /> Complete</span>}
+          <div className="px-6 py-2 bg-gray-50 border-b border-gray-100 flex items-center gap-4 text-xs text-gray-500 flex-shrink-0 flex-wrap">
+            <span><strong className="text-gray-700">{t("audits.title_label")}:</strong> {auditTitle}</span>
+            {scopeForPrompt && <span><strong className="text-gray-700">{t("audits.scope")}:</strong> {scopeForPrompt}</span>}
+            {loading && <span className="ms-auto animate-pulse text-indigo-500">{t("audit_detail.plan_generating")}</span>}
+            {done && (
+              <span className="ms-auto text-green-600 font-medium flex items-center gap-1">
+                <FileText className="w-3 h-3" /> {t("common.success")}
+              </span>
+            )}
           </div>
 
           {/* Output */}
           <div className="flex-1 overflow-y-auto px-6 py-4">
-            {!output && loading && (
+            {error && (
+              <p className="mb-3 text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{error}</p>
+            )}
+            {noFramework && (
+              <div className="flex flex-col items-center justify-center py-16 gap-3 text-center">
+                <AlertTriangle className="w-8 h-8 text-amber-400" />
+                <p className="text-sm font-semibold text-gray-600">{t("audit_detail.plan_needs_framework")}</p>
+                <p className="text-xs text-gray-400 max-w-sm">{t("audit_detail.plan_hint")}</p>
+              </div>
+            )}
+            {!output && (loading || preparing) && !noFramework && (
               <div className="flex flex-col items-center justify-center py-16 gap-3 text-gray-400">
                 <div className="flex gap-1">
-                  {[0,1,2].map(i => (
+                  {[0, 1, 2].map((i) => (
                     <span key={i} className="w-2 h-2 bg-indigo-400 rounded-full animate-bounce"
                       style={{ animationDelay: `${i * 0.15}s` }} />
                   ))}
                 </div>
-                <p className="text-sm">Generating audit program…</p>
+                <p className="text-sm">{t("audit_detail.plan_generating")}</p>
               </div>
             )}
             {output && (

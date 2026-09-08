@@ -1,13 +1,19 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import {
-  Plus, Search, X, Loader2, Filter, Shield, Trash2, Tag,
+  Plus, Search, X, Loader2, Filter, Shield, Trash2, Tag, BarChart3,
   Sparkles, Download, ThumbsUp, ThumbsDown, Clock, CheckCircle2, RefreshCw,
   AlertTriangle, ExternalLink, CheckCheck, ChevronRight, ChevronDown, Pencil, Lock, Rss,
-  BadgeCheck, CalendarClock, CopyPlus, History,
+  BadgeCheck, CalendarClock, CopyPlus, History, TrendingUp,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { threatsApi, assetsApi, vulnerabilitiesApi } from "@/api/endpoints";
+// Same axios instance as every `api` object (auth header, 401 refresh, outage
+// guard) — used directly only because api/endpoints.ts is owned by another lane
+// in this wave and cannot gain a `trend()` wrapper here. See needs_integration.
+import { apiClient } from "@/api/client";
 import { MultiSelect, type MultiSelectOption } from "@/components/common/MultiSelect";
+import ModuleDashboard from "@/components/dashboards/ModuleDashboard";
+import { useBucketLabel } from "@/components/common/Breakdown";
 
 const PROBABILITY_LEVELS = ["rare", "peu_probable", "possible", "probable", "quasiment_certain"];
 const SEVERITY_LEVELS = ["mineur", "notable", "fort", "tres_fort", "critique"];
@@ -38,8 +44,31 @@ const SEVERITY_BADGE: Record<string, string> = {
   low:      "bg-green-100 text-green-700 border-green-200",
 };
 
-function fmt(s: string) {
-  return s.replaceAll("_", " ").replace(/\b\w/g, (c) => c.toUpperCase());
+// NOTE: the former `fmt()` humaniser is gone. It was not a label function —
+// `fmt("cyber_attack")` reads "Cyber Attack" in every language, so a French or
+// Arabic reader was shown English enum values on every card, every group
+// heading and every filter of this page. Everything user-visible goes through
+// `useBucketLabel()` instead (vocab → moduledash.vocab → humanised fallback).
+
+/** Remember whether the operator keeps the dashboard panel open. localStorage
+ *  THROWS outright in some privacy modes — a preference must never take the
+ *  threat page down with it. */
+const DASH_LS_KEY = "grceye.moduledash.threats.open";
+
+function readDashOpen(): boolean {
+  try {
+    return window.localStorage.getItem(DASH_LS_KEY) !== "0";
+  } catch {
+    return true;
+  }
+}
+
+/** The server's own message for a failed call — it is the one an operator can
+ *  act on. Never a redirect: a 5xx hard-redirects this SPA to /service-down,
+ *  i.e. ejects the user out of the application instead of showing the failure. */
+function errorDetail(err: unknown): string {
+  const detail = (err as { response?: { data?: { detail?: unknown } } })?.response?.data?.detail;
+  return typeof detail === "string" && detail.trim() ? detail : "";
 }
 
 // ── Detail modal ──────────────────────────────────────────────────────────────
@@ -60,6 +89,7 @@ const EMPTY_PROFILE_FORM = {
 
 function ThreatDetailModal({ threat, onClose, onUpdated }: { threat: any; onClose: () => void; onUpdated: (updated: any) => void }) {
   const { t } = useTranslation();
+  const label = useBucketLabel();
   const [editingProfile, setEditingProfile] = useState(false);
   const [profileForm, setProfileForm] = useState(EMPTY_PROFILE_FORM);
   const [profileError, setProfileError] = useState("");
@@ -158,11 +188,11 @@ function ThreatDetailModal({ threat, onClose, onUpdated }: { threat: any; onClos
                 </span>
               )}
               <span className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold border ${CATEGORY_BADGE[threat.category] || "bg-gray-100 text-gray-600 border-gray-200"}`}>
-                {fmt(threat.category || "other")}
+                {label(threat.category || "other")}
               </span>
               {threat.severity && (
                 <span className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold border ${SEVERITY_BADGE[threat.severity] || "bg-gray-100 text-gray-600 border-gray-200"}`}>
-                  {fmt(threat.severity)}
+                  {label(threat.severity)}
                 </span>
               )}
               {threat.is_builtin && (
@@ -563,8 +593,222 @@ function ThreatDetailModal({ threat, onClose, onUpdated }: { threat: any; onClos
 
 // ── Main page ─────────────────────────────────────────────────────────────────
 
+/* ── Historical trend (objectif 3 — « tendances ») ────────────────────────────
+ *
+ * GET /threats/trend returns one point per calendar month, read from the daily
+ * `trend_snapshots` history and degrading to an intake-volume proxy while that
+ * history is still thin — the pattern RiskSnapshot has been proving in
+ * production, cloned rather than reinvented.
+ *
+ * Four things this panel must never do:
+ *   • Draw a missing month as a zero. `total: null` means "no snapshot existed
+ *     for that month", not "the register was empty". A zero there is an
+ *     invented figure, so a null month is drawn as an explicit gap.
+ *   • Pass an intake-volume series off as a balance — the two answer different
+ *     questions, so the source is named on screen in the user's language.
+ *   • Render the backend's `month` field: it is `strftime("%b")`, i.e. always
+ *     English ("Sep"). The axis is formatted from `period` through Intl.
+ *   • Take the page down when the route is not deployed. These endpoints ship
+ *     in this wave but the running uvicorn workers predate them, so until the
+ *     backend is restarted the call answers 405 here (the router has /threats
+ *     but not /threats/trend). That is shown as a translated "not published
+ *     yet" note, never as an error and never as a redirect.
+ *
+ * IMPORTANT on the denominator: this series counts the TENANT'S OWN register
+ * and excludes the built-in catalogue, which is ~729 identical rows on every
+ * tenant of this installation — including them would add the same constant to
+ * every point and flatten the movement the chart exists to show. The grid below
+ * lists catalogue entries too, so the two numbers legitimately differ; the
+ * snapshot payload carries `builtin_catalogue` and it is printed under the
+ * chart so a reader can reconcile them instead of assuming one of them is wrong.
+ * For that reason the bar is labelled « Nombre » and NOT "Menaces répertoriées",
+ * which would assert a total this series does not measure.
+ *
+ * It goes through `apiClient` rather than a `threatsApi.trend()` wrapper because
+ * api/endpoints.ts belongs to another lane in this wave — same axios instance,
+ * same auth, same interceptors, so this is not a raw fetch. Reported for
+ * integration.
+ */
+const TREND_MONTHS = 6;
+
+interface TrendPoint {
+  month: string;
+  period: string;
+  as_of: string | null;
+  /** null = no reading for that month. NEVER coerce to 0. */
+  total: number | null;
+  counts: Record<string, any>;
+}
+
+interface TrendEnvelope {
+  metric: string;
+  months: number;
+  source: string;
+  note?: string;
+  series: TrendPoint[];
+}
+
+/** Operator-actionable message per HTTP status, reusing ModuleDashboard's own
+ *  vocabulary so the two panels never describe the same failure differently.
+ *  405 sits next to 404 because a router that has the module but not this path
+ *  answers "Method Not Allowed" — same cause, same fix. */
+function trendErrorKey(status?: number): string {
+  if (status === 404 || status === 405) return "moduledash.error_not_published";
+  if (status === 424) return "moduledash.error_not_ready";
+  if (status === undefined) return "moduledash.error_unreachable";
+  return "moduledash.error_generic";
+}
+
+function TrendPanel({
+  load,
+  legendLabel,
+  footnote,
+}: {
+  load: () => Promise<TrendEnvelope>;
+  legendLabel: string;
+  footnote?: (d: TrendEnvelope) => string;
+}) {
+  const { t, i18n } = useTranslation();
+  const [data, setData] = useState<TrendEnvelope | null>(null);
+  const [status, setStatus] = useState<number | undefined>(undefined);
+  const [state, setState] = useState<"loading" | "ready" | "error">("loading");
+
+  // Month names in the UI language — see the note above about `%b`.
+  const monthFmt = useMemo(() => {
+    try {
+      return new Intl.DateTimeFormat(i18n.language || "en", { month: "short" });
+    } catch {
+      return null;
+    }
+  }, [i18n.language]);
+
+  function monthLabel(p: TrendPoint): string {
+    const m = /^(\d{4})-(\d{2})$/.exec(p.period || "");
+    if (!m || !monthFmt) return p.month || p.period || "";
+    return monthFmt.format(new Date(Number(m[1]), Number(m[2]) - 1, 1));
+  }
+
+  useEffect(() => {
+    let alive = true;
+    setState("loading");
+    load()
+      .then((d) => { if (alive) { setData(d); setState("ready"); } })
+      .catch((err: any) => {
+        if (!alive) return;
+        setStatus(err?.response?.status);
+        setState("error");
+      });
+    return () => { alive = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const series = data?.series ?? [];
+  const readings = series.filter((p) => typeof p.total === "number");
+  const max = Math.max(1, ...readings.map((p) => p.total as number));
+  const intake = data?.source === "intake_volume";
+  // "unavailable" is the envelope returned when even the fallback could not be
+  // READ — every total null because the query failed, not because nothing was
+  // measured. The two must not share a message: « historique encore
+  // insuffisant » states a fact about the register, and stating it when the
+  // truth is a fact about this request is the same fabrication as plotting a 0.
+  // The backend distinguishes them with `source`, so the panel does too.
+  const unavailable = data?.source === "unavailable";
+  const noHistory = state === "ready" && readings.length === 0;
+
+  return (
+    <div className="rounded-xl border border-gray-100 bg-gray-50/50 p-4 space-y-3">
+      <div className="flex items-baseline gap-2 flex-wrap">
+        <TrendingUp className="w-4 h-4 text-gray-400 self-center" aria-hidden="true" />
+        <p className="text-sm font-semibold text-gray-900">{t("moduledash.trend_title")}</p>
+        <span className="text-xs text-gray-400">{t("moduledash.trend_months", { n: TREND_MONTHS })}</span>
+        <span className="ms-auto text-xs text-gray-400">{t("moduledash.trend_updated_monthly")}</span>
+      </div>
+
+      {state === "loading" && (
+        <div className="h-24 rounded-lg bg-gray-100 animate-pulse" role="status" aria-busy="true">
+          <span className="sr-only">{t("moduledash.loading")}</span>
+        </div>
+      )}
+
+      {state === "error" && (
+        <p className="text-xs text-gray-500" role="status">{t(trendErrorKey(status))}</p>
+      )}
+
+      {state === "ready" && noHistory && (
+        <p className="text-xs text-gray-500" role="status">
+          {t(unavailable ? "moduledash.error_not_ready" : "moduledash.trend_no_history")}
+        </p>
+      )}
+
+      {state === "ready" && !noHistory && (
+        <>
+          {intake && (
+            <p className="text-xs text-amber-800 bg-amber-50 rounded-lg px-3 py-2" role="status">
+              {t("moduledash.trend_intake")}
+            </p>
+          )}
+
+          <div className="flex items-end gap-1.5 h-28">
+            {series.map((p) => {
+              const value = p.total;
+              const height = value == null ? 0 : Math.max(4, Math.round((value / max) * 92));
+              const title = value == null
+                ? `${monthLabel(p)} — ${t("moduledash.no_data")}`
+                : `${monthLabel(p)} — ${t("moduledash.trend_count")}: ${value}`;
+              return (
+                <div key={p.period} className="flex-1 min-w-0 flex flex-col items-center justify-end gap-1">
+                  {value == null ? (
+                    // An explicit gap. Never a zero-height bar sitting on the
+                    // axis, which reads as "zero" to anyone glancing at it.
+                    <div
+                      className="w-full h-6 rounded-md border border-dashed border-gray-300 bg-white/60"
+                      title={title}
+                      aria-hidden="true"
+                    />
+                  ) : (
+                    <div className="w-full rounded-t-md bg-orange-500/80" style={{ height: `${height}px` }} title={title} />
+                  )}
+                  <span className="text-[10px] font-medium text-gray-600 tabular-nums">
+                    {value == null ? "—" : value}
+                  </span>
+                  <span className="text-[10px] text-gray-400 truncate max-w-full">{monthLabel(p)}</span>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* The same series in text, for a screen reader and for a printed
+              board pack where the bar heights carry nothing. */}
+          <ul className="sr-only">
+            {series.map((p) => (
+              <li key={p.period}>
+                {t("moduledash.trend_period")}: {monthLabel(p)} — {t("moduledash.trend_count")}:{" "}
+                {p.total == null ? t("moduledash.no_data") : p.total}
+              </li>
+            ))}
+          </ul>
+
+          <div className="flex items-center gap-4 flex-wrap text-[11px] text-gray-500">
+            <span className="inline-flex items-center gap-1.5">
+              <span className="w-2.5 h-2.5 rounded-sm bg-orange-500/80" aria-hidden="true" /> {legendLabel}
+            </span>
+          </div>
+
+          <p className="text-[11px] text-gray-400">
+            {intake ? t("moduledash.trend_source_intake") : t("moduledash.trend_source_snapshot")}
+            {data && footnote ? ` ${footnote(data)}` : ""}
+          </p>
+        </>
+      )}
+    </div>
+  );
+}
+
 export default function ThreatLibraryPage() {
   const { t } = useTranslation();
+  // Raw backend enum values (`cyber_attack`, `technical_failure`) through the
+  // product vocabulary — the raw values read as English on every screen.
+  const label = useBucketLabel();
   const [items, setItems]           = useState<any[]>([]);
   const [pending, setPending]       = useState<any[]>([]);
   const [loading, setLoading]       = useState(true);
@@ -581,6 +825,8 @@ export default function ThreatLibraryPage() {
   const [watchBusy, setWatchBusy] = useState("");
   const [showWatch, setShowWatch] = useState(false);
   const [error, setError]           = useState("");
+  const [loadError, setLoadError]   = useState("");
+  const [dashOpen, setDashOpen]     = useState<boolean>(readDashOpen);
   const [submitting, setSubmitting] = useState(false);
 
   // button states
@@ -609,12 +855,29 @@ export default function ThreatLibraryPage() {
       ]);
       setItems(Array.isArray(data) ? data : []);
       setPending(Array.isArray(pend) ? pend : []);
-    } catch {
+      setLoadError("");
+    } catch (err) {
+      // Never swallow this. An empty register on a failed call made the screen
+      // say « aucune menace » — telling a bank its library is empty when the
+      // server refused to answer is the same class of lie as inventing rows.
       setItems([]);
       setPending([]);
+      setLoadError(errorDetail(err) || t("errors.load_failed"));
     } finally {
       setLoading(false);
     }
+  }
+
+  function toggleDash() {
+    setDashOpen((open) => {
+      const next = !open;
+      try {
+        window.localStorage.setItem(DASH_LS_KEY, next ? "1" : "0");
+      } catch {
+        // Private browsing — the panel simply reopens next visit.
+      }
+      return next;
+    });
   }
 
   useEffect(() => { load(); }, [catFilter, typeFilter, probFilter, sevFilter, overdueOnly]);
@@ -742,6 +1005,12 @@ export default function ThreatLibraryPage() {
            i.ref_id?.toLowerCase().includes(search.toLowerCase()),
   );
 
+  // The grid lists the tenant's own register AND the shared built-in catalogue.
+  // GET /threats returns the whole library unpaged (`limit` defaults to None in
+  // threats.py), so both of these are complete counts, not page counts.
+  const builtinThreatCount = items.filter((i: any) => i.is_builtin).length;
+  const ownThreatCount = items.length - builtinThreatCount;
+
   const grouped: Record<string, any[]> = {};
   for (const item of filtered) {
     const cat = item.category || "other";
@@ -757,8 +1026,27 @@ export default function ThreatLibraryPage() {
         <div>
           <h1 className="text-2xl font-bold text-gray-900">{t("threats.title")}</h1>
           <p className="text-sm text-gray-500 mt-1">
-            {t("threats.subtitle")} · {items.length} in library
-            {pending.length > 0 && <span className="ml-2 text-amber-600 font-medium">· {pending.length} pending review</span>}
+            {/*
+              Two numbers, each named for what it counts. `items` is the whole
+              grid below — the tenant's own register PLUS the shared built-in
+              catalogue (729 MITRE entries on this installation) — while the
+              dashboard mounted immediately under this header reports
+              GET /dashboards/threats, which is tenant-scoped only. Labelling
+              the 733 « menaces répertoriées » put that exact phrase on the page
+              twice with two figures 180× apart and no way to reconcile them,
+              which is how a bank stops trusting both. The register count is now
+              the one that carries the dashboard's own label, and the catalogue
+              is stated beside it as the remainder.
+            */}
+            {t("threats.subtitle")} · {ownThreatCount} {t("moduledash.metric_total_threats").toLowerCase()}
+            {builtinThreatCount > 0 && (
+              <span> · {builtinThreatCount} {t("threats.builtin").toLowerCase()}</span>
+            )}
+            {pending.length > 0 && (
+              <span className="ms-2 text-amber-600 font-medium">
+                · {pending.length} {t("moduledash.vocab.pending_validation").toLowerCase()}
+              </span>
+            )}
           </p>
           <p className="text-xs text-gray-400 mt-0.5 flex items-center gap-1">
             <Sparkles className="w-3 h-3 text-purple-400" />
@@ -799,6 +1087,75 @@ export default function ThreatLibraryPage() {
           <CheckCircle2 className="w-4 h-4 shrink-0" />
           <span className="flex-1">{notice.msg}</span>
           <button onClick={() => setNotice(null)}><X className="w-4 h-4 opacity-50 hover:opacity-100" /></button>
+        </div>
+      )}
+
+      {/*
+        Objectif 3 — « Accessible depuis la page dédiée aux menaces ».
+        The threat dashboard existed behind GET /dashboards/threats, but the
+        only screen that ever called it was AnalyticsPage: a card in another
+        navigation group does not make a dashboard accessible from the threat
+        page. The LOCATION is the requirement.
+
+        Access stays limited to the security-analysis profiles — the endpoint's
+        require_roles_strict answers 403 for anyone else, which ModuleDashboard
+        renders as an explicit « vue restreinte » panel rather than a blank card.
+      */}
+      <div className="space-y-3">
+        <button
+          type="button"
+          onClick={toggleDash}
+          aria-expanded={dashOpen}
+          aria-controls="module-dashboard-threats"
+          className="inline-flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+        >
+          {dashOpen
+            ? <ChevronDown className="w-4 h-4 text-gray-400" aria-hidden="true" />
+            : <ChevronRight className="w-4 h-4 text-gray-400" aria-hidden="true" />}
+          <BarChart3 className="w-4 h-4 text-orange-600" aria-hidden="true" />
+          {t("moduledash.dashboard")}
+          <span className="text-xs font-normal text-gray-400">
+            {dashOpen ? t("moduledash.hide") : t("moduledash.show")}
+          </span>
+        </button>
+        {dashOpen && (
+          <ModuleDashboard module="threats">
+            {/* Rendered as a CHILD of the dashboard on purpose: ModuleDashboard
+                only renders children once the dashboard itself loaded, so the
+                trend never fires a second request behind the Elite gate or the
+                security-analyst gate, and never appears next to an upsell or a
+                « vue restreinte » panel. */}
+            <TrendPanel
+              load={() =>
+                apiClient
+                  .get<TrendEnvelope>("/threats/trend", { params: { months: TREND_MONTHS } })
+                  .then((r) => r.data)
+              }
+              // « Nombre », not « Menaces répertoriées »: the series excludes the
+              // shared built-in catalogue that the grid below does list.
+              legendLabel={t("moduledash.trend_count")}
+              footnote={(d) => {
+                const n = d.series.map((p) => p.counts?.builtin_catalogue).filter((x) => typeof x === "number").pop();
+                // Only when the payload actually carries it (snapshot source).
+                return typeof n === "number" ? `${t("threats.builtin")}: ${n}.` : "";
+              }}
+            />
+          </ModuleDashboard>
+        )}
+      </div>
+
+      {/* The register could not be read. Say what the server said — its detail
+          carries the operator's next action. */}
+      {loadError && (
+        <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 flex items-start gap-3" role="status">
+          <AlertTriangle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" aria-hidden="true" />
+          <p className="text-sm text-amber-900 flex-1 min-w-0">{loadError}</p>
+          <button
+            onClick={() => { setLoading(true); load(); }}
+            className="inline-flex items-center gap-1.5 shrink-0 rounded-xl border border-amber-300 px-2.5 py-1.5 text-xs font-medium text-amber-800 hover:bg-amber-100"
+          >
+            <RefreshCw className="w-3.5 h-3.5" aria-hidden="true" /> {t("common.retry")}
+          </button>
         </div>
       )}
 
@@ -920,11 +1277,11 @@ export default function ThreatLibraryPage() {
                     {th.ref_id && <span className="font-mono text-xs text-gray-400">{th.ref_id}</span>}
                     <span className="font-medium text-sm text-gray-900">{th.name}</span>
                     <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-semibold border ${CATEGORY_BADGE[th.category] || "bg-gray-100 text-gray-600 border-gray-200"}`}>
-                      {fmt(th.category || "cyber_attack")}
+                      {label(th.category || "cyber_attack")}
                     </span>
                     {th.severity && (
                       <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-semibold border ${SEVERITY_BADGE[th.severity] || "bg-gray-100 text-gray-600 border-gray-200"}`}>
-                        {fmt(th.severity)}
+                        {label(th.severity)}
                       </span>
                     )}
                   </div>
@@ -987,7 +1344,7 @@ export default function ThreatLibraryPage() {
             className="border border-gray-200 rounded-xl text-sm px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
             <option value="">{t("threats.all_categories")}</option>
-            {CATEGORY_OPTIONS.map((c) => <option key={c} value={c}>{fmt(c)}</option>)}
+            {CATEGORY_OPTIONS.map((c) => <option key={c} value={c}>{label(c)}</option>)}
           </select>
           <select
             value={typeFilter}
@@ -1031,6 +1388,12 @@ export default function ThreatLibraryPage() {
         <div className="flex items-center justify-center py-16">
           <Loader2 className="w-6 h-6 animate-spin text-blue-500" />
         </div>
+      ) : loadError ? (
+        // Distinct from "no threats": the library is unknown, not empty.
+        <div className="text-center py-16 text-gray-400">
+          <Shield className="w-10 h-10 mx-auto mb-3 opacity-30" />
+          <p className="text-sm font-medium">{t("common.no_data")}</p>
+        </div>
       ) : Object.keys(grouped).length === 0 ? (
         <div className="text-center py-16 text-gray-400">
           <Shield className="w-10 h-10 mx-auto mb-3 opacity-30" />
@@ -1042,7 +1405,7 @@ export default function ThreatLibraryPage() {
           <div key={category} className="space-y-3">
             <h2 className="text-sm font-semibold text-gray-600 uppercase tracking-wide flex items-center gap-2">
               <Shield className="w-4 h-4" />
-              {fmt(category)} ({threats.length})
+              {label(category)} ({threats.length})
             </h2>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {threats.map((threat: any) => (
@@ -1055,7 +1418,7 @@ export default function ThreatLibraryPage() {
                     <div className="flex items-center gap-2 flex-wrap">
                       {threat.ref_id && <span className="font-mono text-xs text-gray-400">{threat.ref_id}</span>}
                       {threat.is_builtin ? (
-                        <span className="inline-flex rounded-full px-2 py-0.5 text-xs font-semibold bg-blue-100 text-blue-700 border border-blue-200">Built-in</span>
+                        <span className="inline-flex rounded-full px-2 py-0.5 text-xs font-semibold bg-blue-100 text-blue-700 border border-blue-200">{t("threats.builtin")}</span>
                       ) : (
                         <button
                           onClick={(e) => { e.stopPropagation(); handleDelete(threat.id); }}
@@ -1067,7 +1430,7 @@ export default function ThreatLibraryPage() {
                     </div>
                     <div className="flex items-center gap-1.5 shrink-0">
                       <span className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold border ${CATEGORY_BADGE[threat.category] || "bg-gray-100 text-gray-600 border-gray-200"}`}>
-                        {fmt(threat.category || "other")}
+                        {label(threat.category || "other")}
                       </span>
                       <ChevronRight className="w-3.5 h-3.5 text-gray-300 group-hover:text-blue-400 transition-colors" />
                     </div>
@@ -1091,7 +1454,7 @@ export default function ThreatLibraryPage() {
                       ))}
                       {((threat.typical_threat_actors?.length || 0) + (threat.typical_attack_vectors?.length || 0)) > 5 && (
                         <span className="inline-flex items-center rounded-full px-2 py-0.5 text-xs bg-gray-100 text-gray-500">
-                          +{(threat.typical_threat_actors?.length || 0) + (threat.typical_attack_vectors?.length || 0) - 5} more
+                          +{(threat.typical_threat_actors?.length || 0) + (threat.typical_attack_vectors?.length || 0) - 5}
                         </span>
                       )}
                     </div>
@@ -1153,7 +1516,7 @@ export default function ThreatLibraryPage() {
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">{t("common.category")}</label>
                 <select value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-                  {CATEGORY_OPTIONS.map((c) => <option key={c} value={c}>{fmt(c)}</option>)}
+                  {CATEGORY_OPTIONS.map((c) => <option key={c} value={c}>{label(c)}</option>)}
                 </select>
               </div>
               <div>

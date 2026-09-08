@@ -18,6 +18,175 @@ export const eliteEn = {
   analytics: {
     title: "Analytics & Dashboards", elite: "Elite Pack", subtitle: "Per-module KPIs across the whole risk programme, with Excel/CSV export",
     export_title: "Report export", export_sub: "Download any dataset as a formatted Excel workbook or CSV", dataset: "Dataset", unavailable: "No data",
+    // ── Page chrome. These three were referenced by AnalyticsPage through a
+    //    defaultValue, i.e. they rendered English in every language. ──────────
+    export_image: "Export as image", export_image_failed: "The chart image could not be generated.",
+    pertinent_cves: "Relevant CVEs",
+    // ── Module names. One per tender objective; this page is 7 of the 9. ─────
+    module_assets: "Assets", module_vulnerabilities: "Vulnerabilities", module_threats: "Threats",
+    module_risks: "Risks", module_controls: "Controls", module_governance: "Governance",
+    module_compliance: "Compliance", module_audit: "Audit", module_executive: "Executive summary",
+    module_recommendations: "Recommendations", module_incidents: "Incidents", module_vendors: "Third parties",
+    module_exceptions: "Exceptions & waivers", module_action_plan: "Action plan",
+    // ── Breakdown labels (the "by_*" keys the dashboards return) ─────────────
+    by_type: "By type", by_class: "By class", by_criticality: "By criticality", by_lifecycle: "By lifecycle",
+    by_severity: "By severity", by_status: "By status", by_category: "By category", by_priority: "By priority",
+    by_risk_tier: "By risk tier", by_owner: "By owner", by_framework: "By framework", by_entity: "By entity",
+    by_month: "By month", by_treatment: "By treatment option", by_audit_type: "By audit type",
+    // Composed breakdowns, written out in full rather than concatenated at the
+    // call site: "A — B" built with a template literal reverses badly in RTL.
+    break_policies_status: "Policies by status", break_attestations_status: "Attestations by status",
+    break_audits_status: "Audits by status", break_findings_severity: "Findings by severity",
+    break_findings_status: "Findings by status", break_controls_status: "Controls by status",
+    break_gaps_severity: "Gaps by severity", break_recommendations_status: "Recommendations by status",
+    break_assets_criticality: "Assets by criticality", break_vulns_severity: "Vulnerabilities by severity",
+    break_risks_severity: "Risks by severity", break_incidents_severity: "Incidents by severity",
+    // ── Metric names ─────────────────────────────────────────────────────────
+    metric_total: "Total", metric_open: "Open", metric_pending: "Pending", metric_overdue: "Overdue",
+    metric_avg_cvss: "Average CVSS", metric_avg_progress: "Average progress", metric_total_cost: "Total cost",
+    metric_coverage: "Control coverage", metric_score: "Score", metric_committees: "Committees",
+    metric_next_meeting: "Next meeting", metric_attestation_rate: "Attestation rate",
+    metric_critical_high: "Critical + high", metric_blockers: "Certification blockers",
+    // ── Datasets offered for export ──────────────────────────────────────────
+    dataset_risks: "Risk register", dataset_vulnerabilities: "Vulnerabilities", dataset_assets: "Asset inventory",
+    dataset_applied_controls: "Applied controls", dataset_audits: "Audits", dataset_threats: "Threat library",
+    dataset_incidents: "Incidents", dataset_policies: "Policies", dataset_compliance: "Compliance assessments",
+    dataset_audit_findings: "Audit findings", dataset_vendors: "Third parties", dataset_action_items: "Action plan",
+    // ── Charts: axes, legends, tooltips ──────────────────────────────────────
+    axis_count: "Number", axis_share: "Share (%)", axis_category: "Category", axis_period: "Period",
+    axis_severity: "Severity", axis_status: "Status", axis_score: "Score", axis_month: "Month",
+    axis_likelihood: "Likelihood", axis_impact: "Impact", axis_amount: "Amount",
+    legend_title: "Legend", legend_current: "Current", legend_target: "Target", legend_previous: "Previous period",
+    legend_threshold: "Threshold", legend_appetite: "Risk appetite",
+    tooltip_count: "{{count}} record(s)", tooltip_share: "{{percent}}% of the total",
+    tooltip_period: "Period: {{period}}",
+    tooltip_cell: "{{count}} risk(s) — likelihood {{likelihood}}, impact {{impact}}",
+    chart_no_data: "No data to plot", chart_total: "Total", chart_other: "Other",
+    chart_top_n: "Top {{count}}", chart_loading: "Loading the chart…",
+  },
+  // ── Dashboard controls, shared by every dashboard screen ───────────────────
+  // Export menu, refresh cadence, "last updated" stamp and the filter bar. Kept
+  // in one namespace so the nine dashboards cannot drift into nine wordings.
+  dashctl: {
+    export: "Export", export_menu: "Export this dashboard", export_pdf: "PDF", export_excel: "Excel",
+    export_format: "Format", exporting: "Preparing the export…", export_done: "Export ready",
+    export_failed: "The export failed. Please try again.",
+    // 424: the schema is behind the code. Operator-actionable and NOT a crash.
+    export_not_ready: "This dashboard cannot be exported yet: the server is waiting on a database update. Contact your administrator.",
+    // 403 from a strict role gate — expected behaviour, not an error to retry.
+    export_forbidden: "Your role does not allow this dashboard to be exported.",
+    export_upgrade: "Dashboard export is part of the Elite Pack.",
+    refresh: "Refresh", refresh_now: "Refresh now", refreshing: "Refreshing…",
+    auto_refresh: "Auto-refresh", refresh_interval: "Refresh interval",
+    refresh_off: "Off", refresh_30s: "Every 30 seconds", refresh_1m: "Every minute",
+    refresh_5m: "Every 5 minutes", refresh_15m: "Every 15 minutes", refresh_30m: "Every 30 minutes",
+    refresh_1h: "Every hour",
+    refresh_saved: "Refresh interval saved", refresh_save_failed: "The refresh interval could not be saved.",
+    refresh_unavailable: "The refresh interval cannot be saved on this server yet. Contact your administrator.",
+    refresh_bounds: "Between {{min}} and {{max}} seconds, or off.",
+    live: "Live", paused: "Paused",
+    last_updated: "Last updated", last_updated_at: "Last updated at {{time}}",
+    updated_just_now: "Updated just now", updated_minutes_ago: "Updated {{count}} min ago",
+    never_updated: "Not yet loaded",
+    filters: "Filters", filters_active: "{{count}} active filter(s)",
+    filter_period: "Period", filter_from: "From", filter_to: "To",
+    period_7d: "Last 7 days", period_30d: "Last 30 days", period_90d: "Last 90 days",
+    period_12m: "Last 12 months", period_ytd: "Year to date", period_all: "All time", period_custom: "Custom range",
+    filter_framework: "Framework", filter_entity: "Entity", filter_owner: "Owner",
+    filter_severity: "Severity", filter_status: "Status", filter_criticality: "Criticality",
+    filter_category: "Category", filter_risk_tier: "Risk tier", filter_all: "All",
+    filter_apply: "Apply", filter_reset: "Reset filters", filter_none: "No filter applied",
+    // Rendered wherever the backend returned null (it never fabricates a 0).
+    not_available: "Not available", no_data: "No data", data_unavailable: "Data unavailable",
+    degraded_notice: "Some indicators could not be computed and are shown as unavailable.",
+    restricted: "Restricted view", restricted_hint: "This dashboard is reserved for specific roles.",
+  },
+  // ── Objectif 9: the consolidated executive view ("réservée aux profils
+  //    exécutifs"). Its 403 is the clause working, not a fault — say so. ──────
+  execdash: {
+    title: "Executive summary", subtitle: "Consolidated cross-module view for the executive committee and the CISO",
+    posture: "Security posture", posture_hint: "Weighted score — open the formula to see what moved it",
+    posture_formula: "How this score is computed", posture_components: "Components",
+    component_compliance: "Compliance", component_control_coverage: "Control coverage",
+    component_risk_exposure: "Risk exposure", weight: "Weight",
+    posture_unmeasured: "Not enough measured data to score",
+    top_risks: "Top risks", risk_score: "Exposure (likelihood x impact)",
+    backlog_change: "Change in the open-risk backlog", backlog_since: "since {{date}}",
+    backlog_improved: "{{count}} fewer open risks", backlog_worsened: "{{count}} more open risks",
+    backlog_unchanged: "No change", backlog_no_history: "Not enough history to compare",
+    next_committee: "Next governance committee", no_committee: "No meeting scheduled",
+    blocks_unavailable: "Unavailable indicators", blocks_unavailable_hint: "{{count}} block(s) could not be computed on this server.",
+    forbidden_title: "Reserved for executive profiles",
+    forbidden_hint: "This consolidated view is restricted to the executive and CISO profiles. Owning the organisation account is not sufficient.",
+  },
+  // ── Backend vocabulary ────────────────────────────────────────────────────
+  // The dashboards group by raw enum values ("in_remediation", "cyber_attack"),
+  // so the CHART LABELS were English whatever the UI language — this is the bulk
+  // of the "80% English" finding. Look a value up as
+  //   t(`vocab.${raw}`, { defaultValue: humanised(raw) })
+  // so an enum added later degrades to a readable label instead of a raw key.
+  vocab: {
+    // levels — severity, criticality, priority, impact, risk tier
+    critical: "Critical", high: "High", medium: "Medium", low: "Low",
+    very_high: "Very high", very_low: "Very low", info: "Informational", informational: "Informational",
+    observation: "Observation", urgent: "Urgent", unspecified: "Unspecified",
+    // generic lifecycle / workflow
+    open: "Open", closed: "Closed", new: "New", draft: "Draft", pending: "Pending",
+    in_progress: "In progress", completed: "Completed", cancelled: "Cancelled", other: "Other",
+    active: "Active", inactive: "Inactive", archived: "Archived", expired: "Expired", revoked: "Revoked",
+    approved: "Approved", rejected: "Rejected", declined: "Declined", accepted: "Accepted",
+    published: "Published", retired: "Retired", deprecated: "Deprecated", validated: "Validated",
+    under_review: "Under review", in_review: "In review", pending_approval: "Pending approval",
+    pending_validation: "Pending validation", action_required: "Action required",
+    acknowledged: "Acknowledged", resolved: "Resolved", read: "Read", unread: "Unread", dismissed: "Dismissed",
+    waiting_user: "Waiting on user", ended: "Ended", paused: "Paused",
+    // assets
+    server: "Server", workstation: "Workstation", cloud_service: "Cloud service",
+    application: "Application", database: "Database", network_device: "Network device",
+    mobile_device: "Mobile device", iot_device: "IoT device", data: "Data", process: "Process",
+    person: "Person", site: "Site", physical_document: "Physical document", supplier: "Supplier",
+    primary: "Primary asset", support: "Supporting asset",
+    acquisition: "Acquisition", in_use: "In use", maintenance: "Maintenance",
+    decommissioned: "Decommissioned",
+    // vulnerabilities
+    in_remediation: "Being remediated", mitigated: "Mitigated", false_positive: "False positive",
+    // threats
+    cyber_attack: "Cyber attack", social_engineering: "Social engineering",
+    insider_threat: "Insider threat", physical: "Physical", natural_disaster: "Natural disaster",
+    supply_chain: "Supply chain", technical_failure: "Technical failure", human_error: "Human error",
+    legal_regulatory: "Legal & regulatory",
+    operationnelle: "Operational", organisationnelle: "Organisational",
+    environnementale: "Environmental", technologique: "Technological",
+    // risks
+    identified: "Identified", assessed: "Assessed", treatment_planned: "Treatment planned",
+    treatment_in_progress: "Treatment in progress", treated: "Treated",
+    mitigate: "Mitigate", transfer: "Transfer", avoid: "Avoid", untreated: "Untreated",
+    // controls
+    planned: "Planned", implemented: "Implemented", not_implemented: "Not implemented",
+    partially_implemented: "Partially implemented", not_started: "Not started",
+    not_applicable: "Not applicable",
+    // audit
+    planning: "Planning", fieldwork: "Fieldwork", review: "Review", reporting: "Reporting",
+    remediated: "Remediated", internal: "Internal", external: "External",
+    regulatory: "Regulatory", certification: "Certification",
+    // incidents
+    investigating: "Investigating", contained: "Contained", post_mortem: "Post-mortem",
+    data_breach: "Data breach", unauthorized_access: "Unauthorised access", malware: "Malware",
+    phishing: "Phishing", dos_attack: "Denial of service", physical_security: "Physical security",
+    system_outage: "System outage", policy_violation: "Policy violation",
+    // vendors
+    onboarding: "Onboarding", offboarding: "Offboarding",
+    pending_ai: "Pending AI review", ai_reviewed: "AI reviewed", pending_ciso: "Pending CISO approval",
+    sent_to_vendor: "Sent to the vendor",
+    // evidence
+    document: "Document", screenshot: "Screenshot", log: "Log", configuration: "Configuration",
+    report: "Report", attestation: "Attestation", automated: "Automated",
+    // roles (the strict dashboard gates name these in their 403)
+    super_admin: "Super administrator", tenant_admin: "Organisation administrator", ciso: "CISO",
+    risk_manager: "Risk manager", compliance_manager: "Compliance manager", auditor: "Auditor",
+    policy_manager: "Policy manager", vendor_manager: "Third-party manager",
+    control_owner: "Control owner", business_owner: "Business owner",
+    security_analyst: "Security analyst", executive: "Executive", viewer: "Viewer",
   },
   treatment: {
     title: "Risk Treatment", elite: "Elite Pack", subtitle: "Treatment decisions per risk — mitigate / accept / transfer / avoid — with schedule, cost and tracking",
@@ -176,6 +345,179 @@ export const eliteFr = {
   analytics: {
     title: "Analytique et tableaux de bord", elite: "Elite Pack", subtitle: "Indicateurs par module sur tout le dispositif de gestion des risques, avec export Excel/CSV",
     export_title: "Export de rapport", export_sub: "Téléchargez n'importe quel jeu de données en classeur Excel ou CSV", dataset: "Jeu de données", unavailable: "Aucune donnée",
+    // ── Habillage de la page. Ces trois clés étaient appelées avec une
+    //    defaultValue, donc affichées en anglais dans toutes les langues. ─────
+    export_image: "Exporter en image", export_image_failed: "L'image du graphique n'a pas pu être générée.",
+    pertinent_cves: "CVE pertinentes",
+    // ── Noms des modules. Un par objectif de l'appel d'offres. ───────────────
+    module_assets: "Actifs", module_vulnerabilities: "Vulnérabilités", module_threats: "Menaces",
+    module_risks: "Risques", module_controls: "Contrôles", module_governance: "Gouvernance",
+    module_compliance: "Conformité", module_audit: "Audit", module_executive: "Synthèse de direction",
+    module_recommendations: "Recommandations", module_incidents: "Incidents", module_vendors: "Tiers",
+    module_exceptions: "Dérogations et exceptions", module_action_plan: "Plan d'action",
+    // ── Libellés de répartition (les clés « by_* » renvoyées par les tableaux) ─
+    by_type: "Par type", by_class: "Par classe", by_criticality: "Par criticité", by_lifecycle: "Par cycle de vie",
+    by_severity: "Par sévérité", by_status: "Par statut", by_category: "Par catégorie", by_priority: "Par priorité",
+    by_risk_tier: "Par niveau de risque", by_owner: "Par propriétaire", by_framework: "Par référentiel",
+    by_entity: "Par entité", by_month: "Par mois", by_treatment: "Par option de traitement",
+    by_audit_type: "Par type d'audit",
+    // Répartitions composées, écrites en toutes lettres plutôt que concaténées
+    // dans la page : un « A — B » construit par template literal s'inverse mal en RTL.
+    break_policies_status: "Politiques par statut", break_attestations_status: "Attestations par statut",
+    break_audits_status: "Audits par statut", break_findings_severity: "Constats par sévérité",
+    break_findings_status: "Constats par statut", break_controls_status: "Contrôles par statut",
+    break_gaps_severity: "Écarts par sévérité", break_recommendations_status: "Recommandations par statut",
+    break_assets_criticality: "Actifs par criticité", break_vulns_severity: "Vulnérabilités par sévérité",
+    break_risks_severity: "Risques par sévérité", break_incidents_severity: "Incidents par sévérité",
+    // ── Noms des indicateurs ─────────────────────────────────────────────────
+    metric_total: "Total", metric_open: "Ouverts", metric_pending: "En attente", metric_overdue: "En retard",
+    metric_avg_cvss: "CVSS moyen", metric_avg_progress: "Avancement moyen", metric_total_cost: "Coût total",
+    metric_coverage: "Couverture des contrôles", metric_score: "Score", metric_committees: "Comités",
+    metric_next_meeting: "Prochaine séance", metric_attestation_rate: "Taux d'attestation",
+    metric_critical_high: "Critiques et élevés", metric_blockers: "Bloquants pour la certification",
+    // ── Jeux de données proposés à l'export ──────────────────────────────────
+    dataset_risks: "Registre des risques", dataset_vulnerabilities: "Vulnérabilités", dataset_assets: "Inventaire des actifs",
+    dataset_applied_controls: "Contrôles appliqués", dataset_audits: "Audits", dataset_threats: "Bibliothèque de menaces",
+    dataset_incidents: "Incidents", dataset_policies: "Politiques", dataset_compliance: "Évaluations de conformité",
+    dataset_audit_findings: "Constats d'audit", dataset_vendors: "Tiers", dataset_action_items: "Plan d'action",
+    // ── Graphiques : axes, légendes, infobulles ──────────────────────────────
+    axis_count: "Nombre", axis_share: "Part (%)", axis_category: "Catégorie", axis_period: "Période",
+    axis_severity: "Sévérité", axis_status: "Statut", axis_score: "Score", axis_month: "Mois",
+    axis_likelihood: "Vraisemblance", axis_impact: "Impact", axis_amount: "Montant",
+    legend_title: "Légende", legend_current: "Actuel", legend_target: "Cible", legend_previous: "Période précédente",
+    legend_threshold: "Seuil", legend_appetite: "Appétence au risque",
+    tooltip_count: "{{count}} enregistrement(s)", tooltip_share: "{{percent}} % du total",
+    tooltip_period: "Période : {{period}}",
+    tooltip_cell: "{{count}} risque(s) — vraisemblance {{likelihood}}, impact {{impact}}",
+    chart_no_data: "Aucune donnée à représenter", chart_total: "Total", chart_other: "Autre",
+    chart_top_n: "Les {{count}} principaux", chart_loading: "Chargement du graphique…",
+  },
+  // ── Commandes communes à tous les tableaux de bord ─────────────────────────
+  // Menu d'export, cadence d'actualisation, horodatage « Dernière actualisation »
+  // et barre de filtres. Regroupées pour que les neuf tableaux de bord ne
+  // dérivent pas vers neuf formulations différentes.
+  dashctl: {
+    export: "Exporter", export_menu: "Exporter ce tableau de bord", export_pdf: "PDF", export_excel: "Excel",
+    export_format: "Format", exporting: "Préparation de l'export…", export_done: "Export prêt",
+    export_failed: "L'export a échoué. Veuillez réessayer.",
+    // 424 : la base est en retard sur le code. Message actionnable par
+    // l'exploitant, ce n'est PAS un plantage.
+    export_not_ready: "Ce tableau de bord ne peut pas encore être exporté : le serveur attend une mise à jour de la base de données. Contactez votre administrateur.",
+    // 403 renvoyé par une restriction de rôle stricte : comportement attendu.
+    export_forbidden: "Votre rôle ne permet pas d'exporter ce tableau de bord.",
+    export_upgrade: "L'export des tableaux de bord fait partie de l'Elite Pack.",
+    refresh: "Actualiser", refresh_now: "Actualiser maintenant", refreshing: "Actualisation…",
+    auto_refresh: "Actualisation automatique", refresh_interval: "Intervalle d'actualisation",
+    refresh_off: "Désactivée", refresh_30s: "Toutes les 30 secondes", refresh_1m: "Toutes les minutes",
+    refresh_5m: "Toutes les 5 minutes", refresh_15m: "Toutes les 15 minutes", refresh_30m: "Toutes les 30 minutes",
+    refresh_1h: "Toutes les heures",
+    refresh_saved: "Intervalle d'actualisation enregistré", refresh_save_failed: "L'intervalle d'actualisation n'a pas pu être enregistré.",
+    refresh_unavailable: "L'intervalle d'actualisation ne peut pas encore être enregistré sur ce serveur. Contactez votre administrateur.",
+    refresh_bounds: "Entre {{min}} et {{max}} secondes, ou désactivée.",
+    live: "En direct", paused: "En pause",
+    last_updated: "Dernière actualisation", last_updated_at: "Dernière actualisation à {{time}}",
+    updated_just_now: "Actualisé à l'instant", updated_minutes_ago: "Actualisé il y a {{count}} min",
+    never_updated: "Pas encore chargé",
+    filters: "Filtres", filters_active: "{{count}} filtre(s) actif(s)",
+    filter_period: "Période", filter_from: "Du", filter_to: "Au",
+    period_7d: "7 derniers jours", period_30d: "30 derniers jours", period_90d: "90 derniers jours",
+    period_12m: "12 derniers mois", period_ytd: "Depuis le 1er janvier", period_all: "Tout l'historique",
+    period_custom: "Période personnalisée",
+    filter_framework: "Référentiel", filter_entity: "Entité", filter_owner: "Propriétaire",
+    filter_severity: "Sévérité", filter_status: "Statut", filter_criticality: "Criticité",
+    filter_category: "Catégorie", filter_risk_tier: "Niveau de risque", filter_all: "Tous",
+    filter_apply: "Appliquer", filter_reset: "Réinitialiser les filtres", filter_none: "Aucun filtre appliqué",
+    // Affiché partout où le backend a renvoyé null (il ne fabrique jamais de 0).
+    not_available: "Non disponible", no_data: "Aucune donnée", data_unavailable: "Donnée indisponible",
+    degraded_notice: "Certains indicateurs n'ont pas pu être calculés et sont affichés comme indisponibles.",
+    restricted: "Vue restreinte", restricted_hint: "Ce tableau de bord est réservé à certains profils.",
+  },
+  // ── Objectif 9 : la vue consolidée « réservée aux profils exécutifs ».
+  //    Son 403 est la clause qui fonctionne, pas une anomalie : le dire. ──────
+  execdash: {
+    title: "Synthèse de direction", subtitle: "Vue consolidée inter-modules pour le comité de direction et le RSSI",
+    posture: "Posture de sécurité", posture_hint: "Score pondéré — ouvrez la formule pour voir ce qui l'a fait bouger",
+    posture_formula: "Mode de calcul du score", posture_components: "Composantes",
+    component_compliance: "Conformité", component_control_coverage: "Couverture des contrôles",
+    component_risk_exposure: "Exposition au risque", weight: "Pondération",
+    posture_unmeasured: "Données mesurées insuffisantes pour calculer un score",
+    top_risks: "Risques majeurs", risk_score: "Exposition (vraisemblance x impact)",
+    backlog_change: "Évolution du stock de risques ouverts", backlog_since: "depuis le {{date}}",
+    backlog_improved: "{{count}} risque(s) ouvert(s) de moins", backlog_worsened: "{{count}} risque(s) ouvert(s) de plus",
+    backlog_unchanged: "Aucune évolution", backlog_no_history: "Historique insuffisant pour comparer",
+    next_committee: "Prochain comité de gouvernance", no_committee: "Aucune séance planifiée",
+    blocks_unavailable: "Indicateurs indisponibles", blocks_unavailable_hint: "{{count}} bloc(s) n'ont pas pu être calculés sur ce serveur.",
+    forbidden_title: "Réservé aux profils exécutifs",
+    forbidden_hint: "Cette vue consolidée est réservée aux profils Direction générale et RSSI. Être administrateur de l'organisation ne suffit pas.",
+  },
+  // ── Vocabulaire du backend ────────────────────────────────────────────────
+  // Les tableaux de bord regroupent par valeurs d'énumération brutes
+  // (« in_remediation », « cyber_attack ») : les LIBELLÉS DES GRAPHIQUES
+  // restaient donc en anglais quelle que soit la langue — c'est l'essentiel du
+  // constat « 80 % en anglais ». À utiliser ainsi :
+  //   t(`vocab.${raw}`, { defaultValue: humanised(raw) })
+  vocab: {
+    // niveaux — sévérité, criticité, priorité, impact, niveau de tiers
+    critical: "Critique", high: "Élevé", medium: "Moyen", low: "Faible",
+    very_high: "Très élevé", very_low: "Très faible", info: "Information", informational: "Information",
+    observation: "Observation", urgent: "Urgent", unspecified: "Non renseigné",
+    // cycle de vie / workflow générique
+    open: "Ouvert", closed: "Clôturé", new: "Nouveau", draft: "Brouillon", pending: "En attente",
+    in_progress: "En cours", completed: "Terminé", cancelled: "Annulé", other: "Autre",
+    active: "Actif", inactive: "Inactif", archived: "Archivé", expired: "Expiré", revoked: "Révoqué",
+    approved: "Approuvé", rejected: "Rejeté", declined: "Refusé", accepted: "Accepté",
+    published: "Publié", retired: "Retiré", deprecated: "Obsolète", validated: "Validé",
+    under_review: "En cours de revue", in_review: "En revue", pending_approval: "En attente d'approbation",
+    pending_validation: "En attente de validation", action_required: "Action requise",
+    acknowledged: "Attesté", resolved: "Résolu", read: "Lu", unread: "Non lu", dismissed: "Ignoré",
+    waiting_user: "En attente de l'utilisateur", ended: "Terminé", paused: "En pause",
+    // actifs
+    server: "Serveur", workstation: "Poste de travail", cloud_service: "Service cloud",
+    application: "Application", database: "Base de données", network_device: "Équipement réseau",
+    mobile_device: "Terminal mobile", iot_device: "Objet connecté", data: "Données", process: "Processus",
+    person: "Personne", site: "Site", physical_document: "Document papier", supplier: "Fournisseur",
+    primary: "Actif primaire", support: "Actif support",
+    acquisition: "Acquisition", in_use: "En service", maintenance: "En maintenance",
+    decommissioned: "Démantelé",
+    // vulnérabilités
+    in_remediation: "En cours de remédiation", mitigated: "Atténuée", false_positive: "Faux positif",
+    // menaces
+    cyber_attack: "Cyberattaque", social_engineering: "Ingénierie sociale",
+    insider_threat: "Menace interne", physical: "Physique", natural_disaster: "Catastrophe naturelle",
+    supply_chain: "Chaîne d'approvisionnement", technical_failure: "Panne technique",
+    human_error: "Erreur humaine", legal_regulatory: "Juridique et réglementaire",
+    operationnelle: "Opérationnelle", organisationnelle: "Organisationnelle",
+    environnementale: "Environnementale", technologique: "Technologique",
+    // risques
+    identified: "Identifié", assessed: "Évalué", treatment_planned: "Traitement planifié",
+    treatment_in_progress: "Traitement en cours", treated: "Traité",
+    mitigate: "Réduire", transfer: "Transférer", avoid: "Éviter", untreated: "Non traité",
+    // contrôles
+    planned: "Planifié", implemented: "Mis en œuvre", not_implemented: "Non mis en œuvre",
+    partially_implemented: "Partiellement mis en œuvre", not_started: "Non démarré",
+    not_applicable: "Non applicable",
+    // audit
+    planning: "Planification", fieldwork: "Travaux sur site", review: "Revue", reporting: "Rapport",
+    remediated: "Corrigé", internal: "Interne", external: "Externe",
+    regulatory: "Réglementaire", certification: "Certification",
+    // incidents
+    investigating: "Investigation en cours", contained: "Confiné", post_mortem: "Retour d'expérience",
+    data_breach: "Violation de données", unauthorized_access: "Accès non autorisé", malware: "Logiciel malveillant",
+    phishing: "Hameçonnage", dos_attack: "Déni de service", physical_security: "Sécurité physique",
+    system_outage: "Interruption de service", policy_violation: "Violation de politique",
+    // tiers
+    onboarding: "Intégration", offboarding: "Désengagement",
+    pending_ai: "En attente d'analyse IA", ai_reviewed: "Analysé par l'IA", pending_ciso: "En attente de validation RSSI",
+    sent_to_vendor: "Transmis au tiers",
+    // preuves
+    document: "Document", screenshot: "Capture d'écran", log: "Journal", configuration: "Configuration",
+    report: "Rapport", attestation: "Attestation", automated: "Automatisé",
+    // rôles (nommés par les restrictions strictes dans leur 403)
+    super_admin: "Super administrateur", tenant_admin: "Administrateur de l'organisation", ciso: "RSSI",
+    risk_manager: "Responsable des risques", compliance_manager: "Responsable conformité", auditor: "Auditeur",
+    policy_manager: "Responsable des politiques", vendor_manager: "Responsable des tiers",
+    control_owner: "Propriétaire du contrôle", business_owner: "Propriétaire métier",
+    security_analyst: "Analyste sécurité", executive: "Direction générale", viewer: "Consultation",
   },
   treatment: {
     title: "Traitement des risques", elite: "Elite Pack", subtitle: "Décisions de traitement par risque — réduire / accepter / transférer / éviter — avec échéancier, coût et suivi",
@@ -334,6 +676,173 @@ export const eliteAr = {
   analytics: {
     title: "التحليلات ولوحات المعلومات", elite: "Elite Pack", subtitle: "مؤشرات الأداء لكل وحدة عبر برنامج المخاطر بالكامل، مع تصدير Excel/CSV",
     export_title: "تصدير التقرير", export_sub: "نزّل أي مجموعة بيانات كملف Excel أو CSV", dataset: "مجموعة البيانات", unavailable: "لا توجد بيانات",
+    // ── Page chrome. These three were called with a defaultValue, so they
+    //    rendered in English in every language. ───────────────────────────────
+    export_image: "تصدير كصورة", export_image_failed: "تعذّر إنشاء صورة الرسم البياني.",
+    pertinent_cves: "الثغرات المعلنة (CVE) ذات الصلة",
+    // ── Module names — one per tender objective. ─────────────────────────────
+    module_assets: "الأصول", module_vulnerabilities: "الثغرات الأمنية", module_threats: "التهديدات",
+    module_risks: "المخاطر", module_controls: "الضوابط", module_governance: "الحوكمة",
+    module_compliance: "الامتثال", module_audit: "التدقيق", module_executive: "الملخص التنفيذي",
+    module_recommendations: "التوصيات", module_incidents: "الحوادث", module_vendors: "الأطراف الثالثة",
+    module_exceptions: "الاستثناءات والإعفاءات", module_action_plan: "خطة العمل",
+    // ── Breakdown labels (the "by_*" keys the dashboards return) ─────────────
+    by_type: "حسب النوع", by_class: "حسب الفئة", by_criticality: "حسب الأهمية", by_lifecycle: "حسب دورة الحياة",
+    by_severity: "حسب الخطورة", by_status: "حسب الحالة", by_category: "حسب التصنيف", by_priority: "حسب الأولوية",
+    by_risk_tier: "حسب مستوى المخاطر", by_owner: "حسب المالك", by_framework: "حسب الإطار المرجعي",
+    by_entity: "حسب الكيان", by_month: "حسب الشهر", by_treatment: "حسب خيار المعالجة",
+    by_audit_type: "حسب نوع التدقيق",
+    // Composed breakdowns written out in full — an "A — B" template literal
+    // reverses badly under RTL.
+    break_policies_status: "السياسات حسب الحالة", break_attestations_status: "الإقرارات حسب الحالة",
+    break_audits_status: "عمليات التدقيق حسب الحالة", break_findings_severity: "ملاحظات التدقيق حسب الخطورة",
+    break_findings_status: "ملاحظات التدقيق حسب الحالة", break_controls_status: "الضوابط حسب الحالة",
+    break_gaps_severity: "الفجوات حسب الخطورة", break_recommendations_status: "التوصيات حسب الحالة",
+    break_assets_criticality: "الأصول حسب الأهمية", break_vulns_severity: "الثغرات حسب الخطورة",
+    break_risks_severity: "المخاطر حسب الخطورة", break_incidents_severity: "الحوادث حسب الخطورة",
+    // ── Metric names ─────────────────────────────────────────────────────────
+    metric_total: "الإجمالي", metric_open: "المفتوحة", metric_pending: "قيد الانتظار", metric_overdue: "المتأخرة",
+    metric_avg_cvss: "متوسط درجة CVSS", metric_avg_progress: "متوسط نسبة الإنجاز", metric_total_cost: "التكلفة الإجمالية",
+    metric_coverage: "تغطية الضوابط", metric_score: "الدرجة", metric_committees: "اللجان",
+    metric_next_meeting: "الاجتماع القادم", metric_attestation_rate: "نسبة الإقرار",
+    metric_critical_high: "الحرجة والمرتفعة", metric_blockers: "معوقات الحصول على الشهادة",
+    // ── Datasets offered for export ──────────────────────────────────────────
+    dataset_risks: "سجل المخاطر", dataset_vulnerabilities: "الثغرات الأمنية", dataset_assets: "جرد الأصول",
+    dataset_applied_controls: "الضوابط المطبقة", dataset_audits: "عمليات التدقيق", dataset_threats: "مكتبة التهديدات",
+    dataset_incidents: "الحوادث", dataset_policies: "السياسات", dataset_compliance: "تقييمات الامتثال",
+    dataset_audit_findings: "ملاحظات التدقيق", dataset_vendors: "الأطراف الثالثة", dataset_action_items: "خطة العمل",
+    // ── Charts: axes, legends, tooltips ──────────────────────────────────────
+    axis_count: "العدد", axis_share: "النسبة (%)", axis_category: "التصنيف", axis_period: "الفترة",
+    axis_severity: "الخطورة", axis_status: "الحالة", axis_score: "الدرجة", axis_month: "الشهر",
+    axis_likelihood: "الاحتمالية", axis_impact: "الأثر", axis_amount: "المبلغ",
+    legend_title: "مفتاح الرسم", legend_current: "الحالي", legend_target: "المستهدف", legend_previous: "الفترة السابقة",
+    legend_threshold: "الحد", legend_appetite: "مستوى تقبّل المخاطر",
+    tooltip_count: "{{count}} سجل", tooltip_share: "{{percent}}٪ من الإجمالي",
+    tooltip_period: "الفترة: {{period}}",
+    tooltip_cell: "{{count}} من المخاطر — الاحتمالية {{likelihood}}، الأثر {{impact}}",
+    chart_no_data: "لا توجد بيانات للعرض", chart_total: "الإجمالي", chart_other: "أخرى",
+    chart_top_n: "أعلى {{count}}", chart_loading: "جارٍ تحميل الرسم البياني…",
+  },
+  // ── Dashboard controls shared by every dashboard screen ────────────────────
+  dashctl: {
+    export: "تصدير", export_menu: "تصدير لوحة المعلومات", export_pdf: "PDF", export_excel: "Excel",
+    export_format: "الصيغة", exporting: "جارٍ تجهيز الملف…", export_done: "الملف جاهز",
+    export_failed: "فشل التصدير. يُرجى المحاولة مرة أخرى.",
+    // 424: the database is behind the code — operator-actionable, not a crash.
+    export_not_ready: "لا يمكن تصدير لوحة المعلومات بعد: الخادم بانتظار تحديث قاعدة البيانات. يُرجى التواصل مع المسؤول.",
+    // 403 from a strict role gate — expected behaviour, not a retryable error.
+    export_forbidden: "صلاحيتك لا تسمح بتصدير لوحة المعلومات هذه.",
+    export_upgrade: "تصدير لوحات المعلومات جزء من باقة Elite Pack.",
+    refresh: "تحديث", refresh_now: "تحديث الآن", refreshing: "جارٍ التحديث…",
+    auto_refresh: "التحديث التلقائي", refresh_interval: "فترة التحديث",
+    refresh_off: "معطّل", refresh_30s: "كل 30 ثانية", refresh_1m: "كل دقيقة",
+    refresh_5m: "كل 5 دقائق", refresh_15m: "كل 15 دقيقة", refresh_30m: "كل 30 دقيقة",
+    refresh_1h: "كل ساعة",
+    refresh_saved: "تم حفظ فترة التحديث", refresh_save_failed: "تعذّر حفظ فترة التحديث.",
+    refresh_unavailable: "لا يمكن حفظ فترة التحديث على هذا الخادم بعد. يُرجى التواصل مع المسؤول.",
+    refresh_bounds: "بين {{min}} و {{max}} ثانية، أو معطّل.",
+    live: "مباشر", paused: "متوقّف مؤقتًا",
+    last_updated: "آخر تحديث", last_updated_at: "آخر تحديث في {{time}}",
+    updated_just_now: "تم التحديث للتو", updated_minutes_ago: "تم التحديث قبل {{count}} دقيقة",
+    never_updated: "لم يتم التحميل بعد",
+    filters: "عوامل التصفية", filters_active: "{{count}} عامل تصفية نشط",
+    filter_period: "الفترة", filter_from: "من", filter_to: "إلى",
+    period_7d: "آخر 7 أيام", period_30d: "آخر 30 يومًا", period_90d: "آخر 90 يومًا",
+    period_12m: "آخر 12 شهرًا", period_ytd: "منذ بداية السنة", period_all: "كامل السجل",
+    period_custom: "فترة مخصّصة",
+    filter_framework: "الإطار المرجعي", filter_entity: "الكيان", filter_owner: "المالك",
+    filter_severity: "الخطورة", filter_status: "الحالة", filter_criticality: "الأهمية",
+    filter_category: "التصنيف", filter_risk_tier: "مستوى المخاطر", filter_all: "الكل",
+    filter_apply: "تطبيق", filter_reset: "إعادة تعيين عوامل التصفية", filter_none: "لم يتم تطبيق أي عامل تصفية",
+    // Shown wherever the backend returned null (it never fabricates a 0).
+    not_available: "غير متاح", no_data: "لا توجد بيانات", data_unavailable: "البيانات غير متاحة",
+    degraded_notice: "تعذّر احتساب بعض المؤشرات وتظهر على أنها غير متاحة.",
+    restricted: "عرض مقيّد", restricted_hint: "لوحة المعلومات هذه مخصّصة لملفات وظيفية محدّدة.",
+  },
+  // ── Objectif 9: the consolidated executive view, restricted to executive
+  //    profiles. Its 403 is the clause working, not a fault. ─────────────────
+  execdash: {
+    title: "الملخص التنفيذي", subtitle: "عرض موحّد عبر جميع الوحدات للجنة التنفيذية ومسؤول أمن المعلومات",
+    posture: "وضع الأمن السيبراني", posture_hint: "درجة مرجّحة — افتح المعادلة لمعرفة أسباب تغيّرها",
+    posture_formula: "طريقة احتساب الدرجة", posture_components: "المكوّنات",
+    component_compliance: "الامتثال", component_control_coverage: "تغطية الضوابط",
+    component_risk_exposure: "التعرّض للمخاطر", weight: "الوزن",
+    posture_unmeasured: "البيانات المقاسة غير كافية لاحتساب درجة",
+    top_risks: "أبرز المخاطر", risk_score: "التعرّض (الاحتمالية × الأثر)",
+    backlog_change: "تطوّر رصيد المخاطر المفتوحة", backlog_since: "منذ {{date}}",
+    backlog_improved: "انخفاض بمقدار {{count}} من المخاطر المفتوحة", backlog_worsened: "ارتفاع بمقدار {{count}} من المخاطر المفتوحة",
+    backlog_unchanged: "لا تغيير", backlog_no_history: "السجل غير كافٍ للمقارنة",
+    next_committee: "اجتماع لجنة الحوكمة القادم", no_committee: "لا يوجد اجتماع مجدول",
+    blocks_unavailable: "مؤشرات غير متاحة", blocks_unavailable_hint: "تعذّر احتساب {{count}} من الكتل على هذا الخادم.",
+    forbidden_title: "مخصّص للملفات التنفيذية",
+    forbidden_hint: "هذا العرض الموحّد مخصّص لملفي الإدارة التنفيذية ومسؤول أمن المعلومات. كون المستخدم مدير المؤسسة لا يكفي.",
+  },
+  // ── Backend vocabulary ────────────────────────────────────────────────────
+  // The dashboards group by raw enum values, so chart labels stayed English in
+  // every language. Look one up as
+  //   t(`vocab.${raw}`, { defaultValue: humanised(raw) })
+  vocab: {
+    // levels — severity, criticality, priority, impact, risk tier
+    critical: "حرج", high: "مرتفع", medium: "متوسط", low: "منخفض",
+    very_high: "مرتفع جدًا", very_low: "منخفض جدًا", info: "معلوماتي", informational: "معلوماتي",
+    observation: "ملاحظة", urgent: "عاجل", unspecified: "غير محدّد",
+    // generic lifecycle / workflow
+    open: "مفتوح", closed: "مغلق", new: "جديد", draft: "مسودة", pending: "قيد الانتظار",
+    in_progress: "قيد التنفيذ", completed: "مكتمل", cancelled: "ملغى", other: "أخرى",
+    active: "نشط", inactive: "غير نشط", archived: "مؤرشف", expired: "منتهي الصلاحية", revoked: "ملغى الصلاحية",
+    approved: "معتمد", rejected: "مرفوض", declined: "مرفوض", accepted: "مقبول",
+    published: "منشور", retired: "مسحوب", deprecated: "مهمل", validated: "مُصادق عليه",
+    under_review: "قيد المراجعة", in_review: "قيد المراجعة", pending_approval: "بانتظار الاعتماد",
+    pending_validation: "بانتظار التحقق", action_required: "يتطلب إجراءً",
+    acknowledged: "تم الإقرار", resolved: "تمت المعالجة", read: "مقروء", unread: "غير مقروء", dismissed: "مُستبعد",
+    waiting_user: "بانتظار المستخدم", ended: "منتهٍ", paused: "متوقّف مؤقتًا",
+    // assets
+    server: "خادم", workstation: "محطة عمل", cloud_service: "خدمة سحابية",
+    application: "تطبيق", database: "قاعدة بيانات", network_device: "جهاز شبكة",
+    mobile_device: "جهاز محمول", iot_device: "جهاز إنترنت الأشياء", data: "بيانات", process: "عملية",
+    person: "شخص", site: "موقع", physical_document: "مستند ورقي", supplier: "مورّد",
+    primary: "أصل أساسي", support: "أصل داعم",
+    acquisition: "اقتناء", in_use: "قيد الاستخدام", maintenance: "قيد الصيانة",
+    decommissioned: "تم إخراجه من الخدمة",
+    // vulnerabilities
+    in_remediation: "قيد المعالجة", mitigated: "تم التخفيف منها", false_positive: "إنذار كاذب",
+    // threats
+    cyber_attack: "هجوم سيبراني", social_engineering: "هندسة اجتماعية",
+    insider_threat: "تهديد داخلي", physical: "مادي", natural_disaster: "كارثة طبيعية",
+    supply_chain: "سلسلة التوريد", technical_failure: "عطل تقني", human_error: "خطأ بشري",
+    legal_regulatory: "قانوني وتنظيمي",
+    operationnelle: "تشغيلية", organisationnelle: "تنظيمية",
+    environnementale: "بيئية", technologique: "تقنية",
+    // risks
+    identified: "محدّد", assessed: "مُقيَّم", treatment_planned: "المعالجة مخطّطة",
+    treatment_in_progress: "المعالجة قيد التنفيذ", treated: "تمت معالجته",
+    mitigate: "التخفيف", transfer: "النقل", avoid: "التجنّب", untreated: "دون معالجة",
+    // controls
+    planned: "مخطّط", implemented: "مطبّق", not_implemented: "غير مطبّق",
+    partially_implemented: "مطبّق جزئيًا", not_started: "لم يبدأ",
+    not_applicable: "غير منطبق",
+    // audit
+    planning: "التخطيط", fieldwork: "العمل الميداني", review: "المراجعة", reporting: "إعداد التقرير",
+    remediated: "تمت المعالجة", internal: "داخلي", external: "خارجي",
+    regulatory: "تنظيمي", certification: "شهادة",
+    // incidents
+    investigating: "قيد التحقيق", contained: "تم احتواؤه", post_mortem: "تحليل ما بعد الحادث",
+    data_breach: "تسريب بيانات", unauthorized_access: "وصول غير مصرّح به", malware: "برمجيات خبيثة",
+    phishing: "تصيّد احتيالي", dos_attack: "هجوم حجب الخدمة", physical_security: "الأمن المادي",
+    system_outage: "انقطاع الخدمة", policy_violation: "مخالفة السياسة",
+    // third parties
+    onboarding: "بدء التعاقد", offboarding: "إنهاء التعاقد",
+    pending_ai: "بانتظار تحليل الذكاء الاصطناعي", ai_reviewed: "تمت مراجعته بالذكاء الاصطناعي",
+    pending_ciso: "بانتظار اعتماد مسؤول أمن المعلومات", sent_to_vendor: "أُرسل إلى المورّد",
+    // evidence
+    document: "مستند", screenshot: "لقطة شاشة", log: "سجل", configuration: "إعدادات",
+    report: "تقرير", attestation: "إقرار", automated: "آلي",
+    // roles (named by the strict dashboard gates in their 403)
+    super_admin: "مدير النظام العام", tenant_admin: "مدير المؤسسة", ciso: "مسؤول أمن المعلومات",
+    risk_manager: "مدير المخاطر", compliance_manager: "مدير الامتثال", auditor: "مدقّق",
+    policy_manager: "مدير السياسات", vendor_manager: "مدير الأطراف الثالثة",
+    control_owner: "مالك الضابط", business_owner: "مالك الأعمال",
+    security_analyst: "محلل أمن المعلومات", executive: "الإدارة التنفيذية", viewer: "مطالع",
   },
   treatment: {
     title: "معالجة المخاطر", elite: "Elite Pack", subtitle: "قرارات المعالجة لكل خطر — تخفيف / قبول / نقل / تجنّب — مع جدول زمني وتكلفة ومتابعة",

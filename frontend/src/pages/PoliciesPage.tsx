@@ -4,10 +4,10 @@ import { Link } from "react-router-dom";
 import {
   FileText, Plus, CheckCircle, Clock, AlertCircle, Calendar, Link2, X,
   ChevronRight, Wand2, Trash2, Search, Download, Send, History,
-  Edit3, AlertTriangle, Users, Sparkles, StopCircle, Loader2,
+  Edit3, AlertTriangle, Users, Sparkles, StopCircle, Loader2, Save, BookOpen,
 } from "lucide-react";
-import { policiesApi, usersApi, aiApi, assetGraphApi, type PolicyVersion, type PolicyAttestation } from "../api/endpoints";
-import type { Policy } from "../types";
+import { policiesApi, usersApi, aiApi, assetGraphApi, frameworksApi, type PolicyVersion, type PolicyAttestation } from "../api/endpoints";
+import type { Policy, PolicyLinkedControl, Framework, FrameworkControl } from "../types";
 import i18n from "../i18n";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -174,13 +174,231 @@ function NewPolicyModal({ onClose, onSaved }: { readonly onClose: () => void; re
 
 // ── Policy Detail Modal ───────────────────────────────────────────────────────
 
-type DetailTab = "overview" | "content" | "history" | "attestations";
+type DetailTab = "overview" | "content" | "controls" | "history" | "attestations";
 
-function PolicyDetailModal({ policy, onClose, onStatusChange, onDelete, users }: {
+// ── Policy ↔ requirement picker ───────────────────────────────────────────────
+// « Politiques internes applicables à l'organisation » only means something if a
+// policy can be attached to the requirement it covers. `linked_controls` existed
+// on the model and only the AI generator ever wrote it; the UI read its count and
+// offered no way to set it. This tab writes it (PATCH /policies/{id}) and reads
+// the resolved refs back (GET /policies/{id}/controls).
+
+function PolicyControlsTab({ policy, onSaved }: {
+  readonly policy: Policy;
+  readonly onSaved: (p: Policy) => void;
+}) {
+  const { t } = useTranslation();
+  const [entries, setEntries] = useState<PolicyLinkedControl[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [error, setError] = useState("");
+
+  const [frameworks, setFrameworks] = useState<Framework[]>([]);
+  const [frameworkId, setFrameworkId] = useState("");
+  const [query, setQuery] = useState("");
+  const [results, setResults] = useState<FrameworkControl[]>([]);
+  const [searching, setSearching] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    policiesApi.listLinkedControls(policy.id)
+      .then(rows => { if (!cancelled) setEntries(rows); })
+      .catch(() => { if (!cancelled) setEntries([]); })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, [policy.id]);
+
+  useEffect(() => {
+    frameworksApi.list().then(setFrameworks).catch(() => setFrameworks([]));
+  }, []);
+
+  // Debounced search — the corpus is ~4 500 requirements, one keystroke must not
+  // be one round-trip.
+  useEffect(() => {
+    const term = query.trim();
+    if (!term && !frameworkId) { setResults([]); return; }
+    const timer = setTimeout(() => {
+      setSearching(true);
+      frameworksApi.searchControls({
+        ...(term ? { q: term } : {}),
+        ...(frameworkId ? { framework_id: frameworkId } : {}),
+        limit: 25,
+      })
+        .then(res => setResults(res.items ?? []))
+        .catch(() => setResults([]))
+        .finally(() => setSearching(false));
+    }, 350);
+    return () => clearTimeout(timer);
+  }, [query, frameworkId]);
+
+  function add(control: FrameworkControl) {
+    setSaved(false);
+    setEntries(prev => prev.some(e => e.id === control.id) ? prev : [...prev, {
+      id: control.id,
+      control_ref: control.control_id,
+      title: control.title,
+      framework_id: control.framework_id,
+      framework_short_name: control.source_short_name ?? null,
+      domain: control.domain ?? null,
+      requirement_type: control.requirement_type ?? null,
+    }]);
+  }
+
+  function remove(id: string) {
+    setSaved(false);
+    setEntries(prev => prev.filter(e => e.id !== id));
+  }
+
+  async function save() {
+    setSaving(true);
+    setError("");
+    setSaved(false);
+    try {
+      const updated = await policiesApi.setLinkedControls(policy.id, entries.map(e => e.id));
+      onSaved(updated);
+      setSaved(true);
+    } catch (err: unknown) {
+      const detail = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
+      setError(typeof detail === "string" ? detail : t("errors.save_failed"));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="p-6 space-y-5">
+      {/* Currently linked */}
+      <div>
+        <div className="flex items-center justify-between gap-3 mb-2">
+          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
+            {t("policies.linked_controls")}
+          </p>
+          <span className="text-xs text-gray-400">
+            {t("policies.controls_mapped", { count: entries.length })}
+          </span>
+        </div>
+        {loading ? (
+          <div className="flex items-center gap-2 text-sm text-gray-400 py-4">
+            <Loader2 className="w-4 h-4 animate-spin" /> {t("common.loading")}
+          </div>
+        ) : entries.length === 0 ? (
+          <p className="text-sm text-gray-400">{t("framework_editor.no_controls")}</p>
+        ) : (
+          <div className="space-y-2">
+            {entries.map(e => (
+              <div key={e.id} className="flex items-center justify-between gap-3 border border-gray-100 rounded-xl px-3 py-2.5">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-xs font-mono font-bold text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded">
+                      {e.control_ref}
+                    </span>
+                    <span className="text-sm font-medium text-gray-800 truncate">{e.title}</span>
+                  </div>
+                  <p className="text-xs text-gray-400 mt-0.5">
+                    {e.framework_short_name ?? e.framework_name ?? ""}
+                    {e.domain ? ` · ${e.domain}` : ""}
+                  </p>
+                </div>
+                <button type="button" onClick={() => remove(e.id)}
+                  className="p-1.5 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-lg flex-shrink-0"
+                  title={t("common.delete")}>
+                  <Trash2 className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Picker */}
+      <div className="bg-gray-50 rounded-xl p-4 space-y-3">
+        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
+          {t("framework_editor.controls_title")}
+        </p>
+        <div className="flex items-center gap-2 flex-wrap">
+          <div className="relative flex-1 min-w-[180px]">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
+            <input
+              className="w-full border border-gray-200 rounded-lg pl-9 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+              placeholder={t("framework_editor.search_controls")}
+              value={query}
+              onChange={e => setQuery(e.target.value)}
+            />
+          </div>
+          <select
+            className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+            value={frameworkId}
+            onChange={e => setFrameworkId(e.target.value)}
+          >
+            <option value="">{t("frameworks.all_frameworks")}</option>
+            {frameworks.map(f => (
+              <option key={f.id} value={f.id}>{f.short_name}</option>
+            ))}
+          </select>
+        </div>
+
+        {searching ? (
+          <div className="flex items-center gap-2 text-sm text-gray-400 py-3">
+            <Loader2 className="w-4 h-4 animate-spin" /> {t("common.loading")}
+          </div>
+        ) : results.length === 0 ? (
+          <p className="text-xs text-gray-400">{t("framework_editor.no_controls_found")}</p>
+        ) : (
+          <div className="border border-gray-200 rounded-lg bg-white overflow-y-auto max-h-56 divide-y divide-gray-50">
+            {results.map(c => {
+              const already = entries.some(e => e.id === c.id);
+              return (
+                <button key={c.id} type="button" onClick={() => add(c)} disabled={already}
+                  className="w-full text-left px-3 py-2.5 hover:bg-blue-50 disabled:opacity-40 disabled:hover:bg-white transition-colors">
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] font-mono font-bold text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded flex-shrink-0">
+                      {c.control_id}
+                    </span>
+                    <span className="text-xs text-gray-800 line-clamp-1">{c.title}</span>
+                    {already
+                      ? <CheckCircle className="w-3.5 h-3.5 text-green-500 ml-auto flex-shrink-0" />
+                      : <Plus className="w-3.5 h-3.5 text-blue-500 ml-auto flex-shrink-0" />}
+                  </div>
+                  <p className="text-[10px] text-gray-400 mt-0.5">
+                    {c.source_short_name ?? ""}{c.domain ? ` · ${c.domain}` : ""}
+                  </p>
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {error && (
+        <p className="flex items-center gap-2 text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+          <AlertCircle className="w-4 h-4 flex-shrink-0" /> {error}
+        </p>
+      )}
+      {saved && (
+        <p className="flex items-center gap-2 text-sm text-green-700 bg-green-50 border border-green-200 rounded-lg px-3 py-2">
+          <CheckCircle className="w-4 h-4 flex-shrink-0" /> {t("common.success")}
+        </p>
+      )}
+
+      <button
+        onClick={save}
+        disabled={saving || loading}
+        className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-sm font-medium px-4 py-2.5 rounded-lg transition-colors">
+        {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+        {saving ? t("common.saving") : t("common.save")}
+      </button>
+    </div>
+  );
+}
+
+function PolicyDetailModal({ policy, onClose, onStatusChange, onDelete, onUpdated, users }: {
   readonly policy: Policy;
   readonly onClose: () => void;
   readonly onStatusChange: (id: string, next: string) => void;
   readonly onDelete: (id: string) => void;
+  readonly onUpdated: (p: Policy) => void;
   readonly users: TenantUser[];
 }) {
   const { t } = useTranslation();
@@ -348,6 +566,7 @@ function PolicyDetailModal({ policy, onClose, onStatusChange, onDelete, users }:
   const TABS: { key: DetailTab; label: string; icon: typeof FileText }[] = [
     { key: "overview",     label: t("policies.tab_overview"),     icon: FileText  },
     { key: "content",      label: t("policies.tab_content"),      icon: Edit3     },
+    { key: "controls",     label: t("policies.linked_controls"),  icon: BookOpen  },
     { key: "history",      label: t("policies.tab_history"),      icon: History   },
     { key: "attestations", label: t("policies.tab_attestations"), icon: Users     },
   ];
@@ -588,6 +807,11 @@ function PolicyDetailModal({ policy, onClose, onStatusChange, onDelete, users }:
             </div>
           )}
 
+          {/* ── Linked requirements ── */}
+          {tab === "controls" && (
+            <PolicyControlsTab policy={policy} onSaved={onUpdated} />
+          )}
+
           {/* ── Version History ── */}
           {tab === "history" && (
             <div className="p-6 space-y-3">
@@ -805,6 +1029,13 @@ export default function PoliciesPage() {
     } catch { /* ignore */ }
   }
 
+  /** A policy edited inside the detail modal (today: its linked requirements)
+   *  must not leave a stale row behind it in the register. */
+  function handleUpdated(updated: Policy) {
+    setPolicies(prev => prev.map(p => (p.id === updated.id ? updated : p)));
+    setSelected(prev => (prev && prev.id === updated.id ? updated : prev));
+  }
+
   const today = new Date();
   const overdueCount = policies.filter(p => p.next_review_date && new Date(p.next_review_date) < today).length;
 
@@ -999,6 +1230,7 @@ export default function PoliciesPage() {
           onClose={() => setSelected(null)}
           onStatusChange={handleStatusChange}
           onDelete={handleDelete}
+          onUpdated={handleUpdated}
           users={users}
         />
       )}

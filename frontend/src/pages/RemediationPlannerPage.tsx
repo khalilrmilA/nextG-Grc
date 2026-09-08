@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
+import { useTranslation } from "react-i18next";
 import { useParams, useNavigate } from "react-router-dom";
 import { ArrowLeft, Sparkles, Loader2, RotateCcw, Copy, CheckCheck } from "lucide-react";
 import { aiApi, complianceApi } from "@/api/endpoints";
@@ -6,6 +7,7 @@ import { useAiTokenRefresh } from "@/hooks/useAiTokenRefresh";
 import AiGate from "@/components/features/ai/AiGate";
 
 export default function RemediationPlannerPage() {
+  const { t } = useTranslation();
   const { assessmentId } = useParams<{ assessmentId: string }>();
   const navigate = useNavigate();
   const { refreshAiTokens } = useAiTokenRefresh();
@@ -15,6 +17,7 @@ export default function RemediationPlannerPage() {
   const [done, setDone] = useState(false);
   const [error, setError] = useState("");
   const [copied, setCopied] = useState(false);
+  const [copyError, setCopyError] = useState("");
   const [assessmentName, setAssessmentName] = useState("");
   const [frameworkName, setFrameworkName] = useState("");
 
@@ -56,11 +59,11 @@ export default function RemediationPlannerPage() {
       abortRef.current.signal,
     ).catch((err) => {
       if (err?.name !== "AbortError") {
-        setError("Failed to generate remediation plan. Make sure Ollama is running.");
+        setError(t("compliance.plan_failed", "The remediation plan could not be generated. Check that the AI service is running."));
         setStreaming(false);
       }
     });
-  }, [assessmentId]);
+  }, [assessmentId, refreshAiTokens, t]);
 
   useEffect(() => {
     startStream();
@@ -68,9 +71,17 @@ export default function RemediationPlannerPage() {
   }, [startStream]);
 
   async function handleCopy() {
-    await navigator.clipboard.writeText(planText);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+    // navigator.clipboard rejects outright in an insecure context or when the
+    // permission is denied; unguarded it was an unhandled rejection and the
+    // button silently did nothing.
+    try {
+      await navigator.clipboard.writeText(planText);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      setCopyError(t("common.error_generic"));
+      setTimeout(() => setCopyError(""), 4000);
+    }
   }
 
   // Render markdown-like sections — split on "##" headings for visual structure
@@ -137,17 +148,17 @@ export default function RemediationPlannerPage() {
         {/* Header */}
         <div>
           <button
-            onClick={() => navigate(`/compliance/assessments/${assessmentId}`)}
+            onClick={() => navigate(`/compliance/${assessmentId}`)}
             className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-800 mb-3"
           >
             <ArrowLeft className="w-4 h-4" />
-            Back to assessment
+            {t("compliance.back_to_assessment", "Back to the assessment")}
           </button>
           <div className="flex items-start justify-between">
             <div>
               <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
                 <Sparkles className="w-6 h-6 text-purple-500" />
-                90-Day Remediation Plan
+                {t("compliance.remediation_planner")}
               </h1>
               {assessmentName && (
                 <p className="text-sm text-gray-500 mt-1">
@@ -168,33 +179,34 @@ export default function RemediationPlannerPage() {
                     className="flex items-center gap-1.5 text-sm border border-gray-200 hover:bg-gray-50 text-gray-600 px-3 py-1.5 rounded-lg transition-colors"
                   >
                     {copied ? <CheckCheck className="w-4 h-4 text-green-500" /> : <Copy className="w-4 h-4" />}
-                    {copied ? "Copied!" : "Copy"}
+                    {copied ? t("common.copied", "Copied!") : t("common.copy", "Copy")}
                   </button>
                   <button
                     onClick={startStream}
                     className="flex items-center gap-1.5 text-sm border border-gray-200 hover:bg-gray-50 text-gray-600 px-3 py-1.5 rounded-lg transition-colors"
                   >
                     <RotateCcw className="w-4 h-4" />
-                    Regenerate
+                    {t("compliance.regenerate", "Regenerate")}
                   </button>
                 </>
               )}
             </div>
           </div>
+          {copyError && <p className="text-xs text-red-600 mt-2 text-end">{copyError}</p>}
         </div>
 
         {/* Status bar */}
         {streaming && (
           <div className="flex items-center gap-2 text-sm text-purple-700 bg-purple-50 border border-purple-100 rounded-xl px-4 py-3">
             <Loader2 className="w-4 h-4 animate-spin" />
-            AI is generating your personalized 90-day remediation plan…
+            {t("compliance.plan_streaming", "The AI is drafting your 90-day remediation plan…")}
           </div>
         )}
 
         {error && (
           <div className="bg-red-50 border border-red-200 rounded-xl p-4 text-sm text-red-700">
             {error}
-            <button onClick={startStream} className="ml-3 text-red-600 underline">Retry</button>
+            <button onClick={startStream} className="ms-3 text-red-600 underline">{t("common.retry")}</button>
           </div>
         )}
 
@@ -214,7 +226,7 @@ export default function RemediationPlannerPage() {
         {!planText && !streaming && !error && (
           <div className="bg-white rounded-2xl border border-gray-100 p-12 text-center">
             <Sparkles className="w-10 h-10 text-purple-300 mx-auto mb-3" />
-            <p className="text-sm text-gray-400">Starting generation…</p>
+            <p className="text-sm text-gray-400">{t("compliance.plan_starting", "Starting generation…")}</p>
           </div>
         )}
       </div>

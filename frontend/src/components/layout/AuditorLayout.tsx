@@ -5,16 +5,20 @@ import {
   LogOut, Bell, ChevronRight,
 } from "lucide-react";
 import LanguageSwitcher from "../LanguageSwitcher";
+import { useTranslation } from "react-i18next";
 
 export default function AuditorLayout() {
+  // The three auditor pages are fully translated; this chrome around them was not,
+  // so a Tunisian bank's auditor saw an English sidebar on a French screen.
+  const { t } = useTranslation();
   const user = useAuthStore(u => u);
   const navigate = useNavigate();
   const initials = (user?.name ?? "A").charAt(0).toUpperCase();
 
   const NAV = [
-    { to: "/auditor/portal",   icon: ClipboardCheck, label: "My Assignments" },
-    { to: "/auditor/settings", icon: Settings,       label: "Settings"       },
-    { to: "/auditor/help",     icon: HelpCircle,     label: "Help"           },
+    { to: "/auditor/portal",   icon: ClipboardCheck, label: t("auditor_portal.my_assignments") },
+    { to: "/auditor/settings", icon: Settings,       label: t("settings.title")               },
+    { to: "/auditor/help",     icon: HelpCircle,     label: t("help.title")                   },
   ];
 
   return (
@@ -29,7 +33,7 @@ export default function AuditorLayout() {
 
         {/* Company badge */}
         <div className="mx-4 mt-3 px-3 py-2.5 bg-gradient-to-r from-purple-500/10 to-violet-500/10 border border-purple-500/20 rounded-xl">
-          <p className="text-xs font-semibold text-purple-300">{user?.org ?? "Your Company"}</p>
+          <p className="text-xs font-semibold text-purple-300">{user?.org ?? t("auditor_portal.your_company")}</p>
           <p className="text-xs text-purple-400/70 mt-0.5">Auditor</p>
         </div>
 
@@ -66,7 +70,7 @@ export default function AuditorLayout() {
             className="flex items-center gap-3 px-3 py-2.5 w-full rounded-xl text-sm font-medium text-slate-400 hover:bg-red-500/10 hover:text-red-400 transition-all"
           >
             <LogOut className="w-4 h-4" />
-            Sign Out
+            {t("nav.sign_out")}
           </button>
         </div>
       </aside>
@@ -76,9 +80,9 @@ export default function AuditorLayout() {
         {/* Top bar */}
         <header className="bg-white border-b border-gray-100 px-8 py-3.5 flex items-center justify-between flex-shrink-0">
           <div className="flex items-center gap-2 text-sm text-gray-500">
-            <span>GRC Platform</span>
+            <span>{t("auditor_portal.platform")}</span>
             <ChevronRight className="w-3.5 h-3.5 text-gray-300" />
-            <span className="text-gray-900 font-semibold">Auditor Portal</span>
+            <span className="text-gray-900 font-semibold">{t("auditor_portal.title")}</span>
           </div>
           <div className="flex items-center gap-3">
             <LanguageSwitcher />
@@ -91,7 +95,7 @@ export default function AuditorLayout() {
                 <span className="text-sm font-bold">{initials}</span>
               </div>
               <div className="hidden sm:block">
-                <p className="text-xs font-semibold text-gray-800 leading-none">{user?.name ?? "Auditor"}</p>
+                <p className="text-xs font-semibold text-gray-800 leading-none">{user?.name ?? t("roles.auditor")}</p>
                 <p className="text-xs text-gray-400 mt-0.5">{user?.org} · Auditor</p>
               </div>
             </div>

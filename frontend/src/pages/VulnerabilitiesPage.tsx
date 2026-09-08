@@ -1,8 +1,14 @@
-import { useState, useEffect } from "react";
-import { Plus, Search, X, Loader2, Filter, Bug, ShieldCheck, Wrench, BarChart3, Upload, Download, Plug, RefreshCw, Trash2, ChevronRight, ChevronDown, Check, Gauge, GitBranch } from "lucide-react";
+import { useState, useEffect, useMemo } from "react";
+import { Plus, Search, X, Loader2, Filter, Bug, ShieldCheck, Wrench, BarChart3, Upload, Download, Plug, RefreshCw, Trash2, ChevronRight, ChevronDown, Check, Gauge, GitBranch, AlertTriangle, TrendingUp } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { vulnerabilitiesApi, vulnImportApi, scannerConnectorsApi, riskScenariosApi } from "@/api/endpoints";
+// Same axios instance as every `api` object (auth header, 401 refresh, outage
+// guard) — used directly only because api/endpoints.ts is owned by another lane
+// in this wave and cannot gain a `trend()` wrapper here. See needs_integration.
+import { apiClient } from "@/api/client";
 import { MultiSelect, type MultiSelectOption } from "@/components/common/MultiSelect";
+import ModuleDashboard from "@/components/dashboards/ModuleDashboard";
+import { useBucketLabel } from "@/components/common/Breakdown";
 
 const SEV_BADGE: Record<string, string> = {
   critical: "bg-red-100 text-red-700 border-red-200",
@@ -27,10 +33,285 @@ const STATUS_OPTIONS = ["pending_validation", "validated", "open", "in_remediati
 const SOURCE_OPTIONS = ["pen_test", "scan", "manual", "bug_bounty"];
 const OPERATIONAL_CONTEXTS = ["internet_facing", "dmz", "production", "internal", "isolated", "test", "development"];
 
+/** Remember whether the operator keeps the dashboard panel open. localStorage
+ *  THROWS outright in some privacy modes — a preference must never take the
+ *  vulnerability page down with it. */
+const DASH_LS_KEY = "grceye.moduledash.vulnerabilities.open";
+
+function readDashOpen(): boolean {
+  try {
+    return window.localStorage.getItem(DASH_LS_KEY) !== "0";
+  } catch {
+    return true;
+  }
+}
+
+/** The server's own message for a failed call — it is the one an operator can
+ *  act on (a 424 names the migration to run). Never a redirect: a 5xx
+ *  hard-redirects this SPA to /service-down, i.e. ejects the user out of the
+ *  application rather than showing them the failure. */
+function errorDetail(err: unknown): string {
+  const detail = (err as { response?: { data?: { detail?: unknown } } })?.response?.data?.detail;
+  return typeof detail === "string" && detail.trim() ? detail : "";
+}
+
+/** Server-computed KPI strip. Every field is optional and `avg_cvss` is
+ *  explicitly nullable: /vulnerabilities/stats returns `avg_cvss: null` when no
+ *  finding carries a CVSS score, and the tile used to print that as "0.0" — a
+ *  figure the backend never asserted, on a bank's screen. */
+interface VulnStats {
+  total?: number;
+  open?: number;
+  in_remediation?: number;
+  avg_cvss?: number | null;
+}
+
+/* ── Historical trend (objectif 2 — « tendances historiques ») ────────────────
+ *
+ * The dashboard above is a point-in-time picture; the objective also asks for
+ * the movement behind it. GET /vulnerabilities/trend returns one point per
+ * calendar month, read from the daily `trend_snapshots` history and degrading
+ * to an intake-volume proxy while that history is still thin — the same shape
+ * RiskSnapshot has been proving in production.
+ *
+ * Four things this panel must never do:
+ *   • Draw a missing month as a zero. `total: null` means "no snapshot existed
+ *     for that month", not "nothing was held". A zero there is a fabricated
+ *     figure on a bank's chart, so a null month is drawn as an explicit gap.
+ *   • Pass an intake-volume series off as a balance. The two answer different
+ *     questions (what was opened in the month vs. what was still carried at the
+ *     end of it), so the source is named on screen, in the user's language.
+ *   • Render the backend's `month` field. It is `strftime("%b")`, i.e. always
+ *     English ("Sep"), which is exactly the class of bug this wave is closing —
+ *     the axis is formatted from `period` ("2026-09") through Intl instead.
+ *   • Take the page down when the route is not deployed. These endpoints ship
+ *     in this wave but the running uvicorn workers predate them, so until the
+ *     backend is restarted the call answers 404 (the `/{vid}` route swallows
+ *     `/trend`). That is shown as a translated "not published yet" note, never
+ *     as an error and never as a redirect.
+ *
+ * It goes through `apiClient` rather than a `vulnerabilitiesApi.trend()`
+ * wrapper because api/endpoints.ts belongs to another lane in this wave — same
+ * axios instance, same auth, same interceptors, so this is not a raw fetch. The
+ * wrapper it should eventually live behind is reported for integration.
+ */
+const TREND_MONTHS = 6;
+
+interface TrendPoint {
+  month: string;
+  period: string;
+  as_of: string | null;
+  /** null = no reading for that month. NEVER coerce to 0. */
+  total: number | null;
+  counts: Record<string, any>;
+}
+
+interface TrendEnvelope {
+  metric: string;
+  months: number;
+  source: string;
+  note?: string;
+  series: TrendPoint[];
+}
+
+/** Operator-actionable message per HTTP status, reusing ModuleDashboard's
+ *  vocabulary so the two panels never describe the same failure differently.
+ *  405 is listed next to 404 because a router that has the module but not this
+ *  path answers "Method Not Allowed" — same cause, same fix (restart). */
+function trendErrorKey(status?: number): string {
+  if (status === 404 || status === 405) return "moduledash.error_not_published";
+  if (status === 424) return "moduledash.error_not_ready";
+  if (status === undefined) return "moduledash.error_unreachable";
+  return "moduledash.error_generic";
+}
+
+function TrendPanel({
+  load,
+  legendLabel,
+  alertOf,
+  footnote,
+}: {
+  load: () => Promise<TrendEnvelope>;
+  /** What the tall bar counts, in the user's language. */
+  legendLabel: string;
+  /** Sub-bar highlighting the criticality signal, when the payload carries one. */
+  alertOf?: (p: TrendPoint) => number;
+  /** Extra reconciliation line the caller may need (built-in catalogue size…). */
+  footnote?: (d: TrendEnvelope) => string;
+}) {
+  const { t, i18n } = useTranslation();
+  const [data, setData] = useState<TrendEnvelope | null>(null);
+  const [status, setStatus] = useState<number | undefined>(undefined);
+  const [state, setState] = useState<"loading" | "ready" | "error">("loading");
+
+  // Month names in the UI language — see the note above about `%b`.
+  const monthFmt = useMemo(() => {
+    try {
+      return new Intl.DateTimeFormat(i18n.language || "en", { month: "short" });
+    } catch {
+      return null;
+    }
+  }, [i18n.language]);
+
+  function monthLabel(p: TrendPoint): string {
+    const m = /^(\d{4})-(\d{2})$/.exec(p.period || "");
+    if (!m || !monthFmt) return p.month || p.period || "";
+    return monthFmt.format(new Date(Number(m[1]), Number(m[2]) - 1, 1));
+  }
+
+  useEffect(() => {
+    let alive = true;
+    setState("loading");
+    load()
+      .then((d) => { if (alive) { setData(d); setState("ready"); } })
+      .catch((err: any) => {
+        if (!alive) return;
+        setStatus(err?.response?.status);
+        setState("error");
+      });
+    return () => { alive = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const series = data?.series ?? [];
+  const readings = series.filter((p) => typeof p.total === "number");
+  const max = Math.max(1, ...readings.map((p) => p.total as number));
+  const intake = data?.source === "intake_volume";
+  // "unavailable" is the envelope the backend returns when even the fallback
+  // could not be READ — every total null because the query failed, not because
+  // nothing was measured. The two must not share a message: « historique encore
+  // insuffisant » states a fact about the register, and stating it when the
+  // truth is a fact about this request is the same fabrication as plotting a 0.
+  // The backend distinguishes them with `source`, so the panel does too.
+  const unavailable = data?.source === "unavailable";
+  const noHistory = state === "ready" && readings.length === 0;
+
+  return (
+    <div className="rounded-xl border border-gray-100 bg-gray-50/50 p-4 space-y-3">
+      <div className="flex items-baseline gap-2 flex-wrap">
+        <TrendingUp className="w-4 h-4 text-gray-400 self-center" aria-hidden="true" />
+        <p className="text-sm font-semibold text-gray-900">{t("moduledash.trend_title")}</p>
+        <span className="text-xs text-gray-400">{t("moduledash.trend_months", { n: TREND_MONTHS })}</span>
+        <span className="ms-auto text-xs text-gray-400">{t("moduledash.trend_updated_monthly")}</span>
+      </div>
+
+      {state === "loading" && (
+        <div className="h-24 rounded-lg bg-gray-100 animate-pulse" role="status" aria-busy="true">
+          <span className="sr-only">{t("moduledash.loading")}</span>
+        </div>
+      )}
+
+      {state === "error" && (
+        <p className="text-xs text-gray-500" role="status">{t(trendErrorKey(status))}</p>
+      )}
+
+      {state === "ready" && noHistory && (
+        <p className="text-xs text-gray-500" role="status">
+          {t(unavailable ? "moduledash.error_not_ready" : "moduledash.trend_no_history")}
+        </p>
+      )}
+
+      {state === "ready" && !noHistory && (
+        <>
+          {intake && (
+            <p className="text-xs text-amber-800 bg-amber-50 rounded-lg px-3 py-2" role="status">
+              {t("moduledash.trend_intake")}
+            </p>
+          )}
+
+          <div className="flex items-end gap-1.5 h-28">
+            {series.map((p) => {
+              const value = p.total;
+              const alert = value != null && alertOf ? Math.min(alertOf(p), value) : 0;
+              const height = value == null ? 0 : Math.max(4, Math.round((value / max) * 92));
+              const alertHeight = value ? Math.round((alert / max) * 92) : 0;
+              const title = value == null
+                ? `${monthLabel(p)} — ${t("moduledash.no_data")}`
+                : `${monthLabel(p)} — ${t("moduledash.trend_count")}: ${value}`
+                  + (alert ? ` (${alert} ${t("moduledash.alert_critical_high")})` : "");
+              return (
+                <div key={p.period} className="flex-1 min-w-0 flex flex-col items-center justify-end gap-1">
+                  {value == null ? (
+                    // An explicit gap. Never a zero-height bar sitting on the
+                    // axis, which reads as "zero" to anyone glancing at it.
+                    <div
+                      className="w-full h-6 rounded-md border border-dashed border-gray-300 bg-white/60"
+                      title={title}
+                      aria-hidden="true"
+                    />
+                  ) : (
+                    <div className="w-full rounded-t-md bg-blue-500/80 relative" style={{ height: `${height}px` }} title={title}>
+                      {alertHeight > 0 && (
+                        <span
+                          className="absolute inset-x-0 bottom-0 rounded-b-md bg-rose-500"
+                          style={{ height: `${Math.min(alertHeight, height)}px` }}
+                          aria-hidden="true"
+                        />
+                      )}
+                    </div>
+                  )}
+                  <span className="text-[10px] font-medium text-gray-600 tabular-nums">
+                    {value == null ? "—" : value}
+                  </span>
+                  <span className="text-[10px] text-gray-400 truncate max-w-full">{monthLabel(p)}</span>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* The same series in text, for a screen reader and for a printed
+              board pack where the bar heights carry nothing. */}
+          <ul className="sr-only">
+            {series.map((p) => (
+              <li key={p.period}>
+                {t("moduledash.trend_period")}: {monthLabel(p)} — {t("moduledash.trend_count")}:{" "}
+                {p.total == null ? t("moduledash.no_data") : p.total}
+              </li>
+            ))}
+          </ul>
+
+          <div className="flex items-center gap-4 flex-wrap text-[11px] text-gray-500">
+            <span className="inline-flex items-center gap-1.5">
+              {/* The legend names what the BAR counts, and that changes with the
+                  source. On the snapshot series a bar is the register balance
+                  (« Vulnérabilités enregistrées »); on the intake fallback it is
+                  what was opened that month, which is a different measurement —
+                  so it is legended neutrally (« Nombre ») rather than asserting
+                  a total the register never held. The banner above says which
+                  source is in force; the legend must not contradict it. */}
+              <span className="w-2.5 h-2.5 rounded-sm bg-blue-500/80" aria-hidden="true" />{" "}
+              {intake ? t("moduledash.trend_count") : legendLabel}
+            </span>
+            {alertOf && (
+              <span className="inline-flex items-center gap-1.5">
+                <span className="w-2.5 h-2.5 rounded-sm bg-rose-500" aria-hidden="true" />
+                {t("moduledash.alert_critical_high")}
+              </span>
+            )}
+          </div>
+
+          <p className="text-[11px] text-gray-400">
+            {intake ? t("moduledash.trend_source_intake") : t("moduledash.trend_source_snapshot")}
+            {data && footnote ? ` ${footnote(data)}` : ""}
+          </p>
+        </>
+      )}
+    </div>
+  );
+}
+
 export default function VulnerabilitiesPage() {
   const { t } = useTranslation();
+  // Translates raw backend enum values (`in_remediation`, `false_positive`)
+  // through the product vocabulary — `key.replace(/_/g," ")` showed a French
+  // user "in remediation" and "false positive".
+  const label = useBucketLabel();
   const [items, setItems] = useState<any[]>([]);
-  const [stats, setStats] = useState<any>({ total: 0, open: 0, in_remediation: 0, avg_cvss: 0 });
+  // null, NOT a zero-filled object: a failed /stats call must not print
+  // "Total 0 · Open 0 · Avg CVSS 0.0" over a register that may hold hundreds.
+  const [stats, setStats] = useState<VulnStats | null>(null);
+  const [loadError, setLoadError] = useState("");
+  const [dashOpen, setDashOpen] = useState<boolean>(readDashOpen);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [search, setSearch] = useState("");
@@ -162,14 +443,19 @@ Weak SSH ciphers,Low,3.7,,Backup Storage Array,Restrict to strong ciphers`;
   });
 
   async function load() {
+    setLoadError("");
     try {
       const params: any = {};
       if (sevFilter) params.severity = sevFilter;
       if (statusFilter) params.status_filter = statusFilter;
       const data = await vulnerabilitiesApi.list(params);
       setItems(Array.isArray(data) ? data : data.items || []);
-    } catch {
+    } catch (err) {
+      // Never swallow this. An empty list on a failed call made the screen say
+      // « aucune vulnérabilité » — telling a bank it has none when the server
+      // refused to answer is the same class of lie as inventing rows.
       setItems([]);
+      setLoadError(errorDetail(err) || t("errors.load_failed"));
     } finally {
       setLoading(false);
     }
@@ -177,9 +463,23 @@ Weak SSH ciphers,Low,3.7,,Backup Storage Array,Restrict to strong ciphers`;
 
   async function loadStats() {
     try {
-      const s = await vulnerabilitiesApi.stats();
-      setStats(s);
-    } catch {}
+      setStats(await vulnerabilitiesApi.stats());
+    } catch {
+      // The KPI strip degrades to « non disponible », never to zeros.
+      setStats(null);
+    }
+  }
+
+  function toggleDash() {
+    setDashOpen((open) => {
+      const next = !open;
+      try {
+        window.localStorage.setItem(DASH_LS_KEY, next ? "1" : "0");
+      } catch {
+        // Private browsing — the panel simply reopens next visit.
+      }
+      return next;
+    });
   }
 
   useEffect(() => {
@@ -323,6 +623,20 @@ Weak SSH ciphers,Low,3.7,,Backup Storage Array,Restrict to strong ciphers`;
     (i.title?.toLowerCase().includes(search.toLowerCase()) || i.ref_id?.toLowerCase().includes(search.toLowerCase()))
   );
 
+  // GET /vulnerabilities caps at `limit` (default 1000, ceiling 5000) and this
+  // page never asks for more, so the table and the free-text search above
+  // describe only what came back. `stats.total` is computed server-side over the
+  // WHOLE register, which makes it the one honest way to detect that gap without
+  // reading X-Total-Count (the api wrapper returns the body only, and
+  // api/endpoints.ts belongs to another lane this wave).
+  //
+  // Compared only when neither server-side filter is on: with `severity` or
+  // `status_filter` set, items.length is legitimately below stats.total and
+  // flagging that would be crying wolf.
+  const serverFiltered = Boolean(sevFilter || statusFilter);
+  const truncated =
+    !serverFiltered && typeof stats?.total === "number" && items.length < stats.total;
+
   return (
     <div className="p-8 max-w-7xl space-y-6">
       {/* Header */}
@@ -353,21 +667,102 @@ Weak SSH ciphers,Low,3.7,,Backup Storage Array,Restrict to strong ciphers`;
         </div>
       </div>
 
-      {/* Stats */}
+      {/*
+        Objectif 2 — « Accessible depuis la page dédiée aux vulnérabilités ».
+        The vulnerability dashboard existed behind GET /dashboards/vulnerabilities
+        but the only screen that ever called it was AnalyticsPage: a card in
+        another navigation group does not make a dashboard accessible from the
+        vulnerability page. The LOCATION is the requirement.
+
+        Access stays « limité aux analystes sécurité » — the endpoint's
+        require_roles_strict(SECURITY_ANALYST, CISO) answers 403 for anyone
+        else, which ModuleDashboard renders as an explicit « vue restreinte »
+        panel rather than a blank card. The Elite plan gate is likewise rendered
+        as a translated upsell, never as silence.
+      */}
+      <div className="space-y-3">
+        <button
+          type="button"
+          onClick={toggleDash}
+          aria-expanded={dashOpen}
+          aria-controls="module-dashboard-vulnerabilities"
+          className="inline-flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+        >
+          {dashOpen
+            ? <ChevronDown className="w-4 h-4 text-gray-400" aria-hidden="true" />
+            : <ChevronRight className="w-4 h-4 text-gray-400" aria-hidden="true" />}
+          <BarChart3 className="w-4 h-4 text-rose-600" aria-hidden="true" />
+          {t("moduledash.dashboard")}
+          <span className="text-xs font-normal text-gray-400">
+            {dashOpen ? t("moduledash.hide") : t("moduledash.show")}
+          </span>
+        </button>
+        {dashOpen && (
+          <ModuleDashboard module="vulnerabilities">
+            {/* Rendered as a CHILD of the dashboard on purpose: ModuleDashboard
+                only renders children once the dashboard itself loaded, so the
+                trend never fires a second request behind the Elite gate or the
+                security-analyst gate, and never appears next to an upsell or a
+                « vue restreinte » panel. */}
+            <TrendPanel
+              load={() =>
+                apiClient
+                  .get<TrendEnvelope>("/vulnerabilities/trend", { params: { months: TREND_MONTHS } })
+                  .then((r) => r.data)
+              }
+              legendLabel={t("moduledash.metric_total_vulnerabilities")}
+              // « Alertes visuelles sur criticité élevée » on the history too:
+              // by_severity is the one grouping BOTH sources carry, so the
+              // critical/high band survives the intake-volume fallback.
+              alertOf={(p) => {
+                const sev = (p.counts?.by_severity ?? {}) as Record<string, number>;
+                return (sev.critical || 0) + (sev.high || 0);
+              }}
+            />
+          </ModuleDashboard>
+        )}
+      </div>
+
+      {/* The register could not be read. Say what the server said — its detail
+          carries the operator's next action. */}
+      {loadError && (
+        <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 flex items-start gap-3" role="status">
+          <AlertTriangle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" aria-hidden="true" />
+          <p className="text-sm text-amber-900 flex-1 min-w-0">{loadError}</p>
+          <button
+            onClick={() => { setLoading(true); load(); loadStats(); }}
+            className="inline-flex items-center gap-1.5 shrink-0 rounded-xl border border-amber-300 px-2.5 py-1.5 text-xs font-medium text-amber-800 hover:bg-amber-100"
+          >
+            <RefreshCw className="w-3.5 h-3.5" aria-hidden="true" /> {t("common.retry")}
+          </button>
+        </div>
+      )}
+
+      {/* Stats — every tile is server-computed over the whole register, and every
+          one of them renders « non disponible » rather than a zero the backend
+          never asserted. `avg_cvss` in particular comes back null when no
+          finding carries a score, and printing "0.0" for that is a fabricated
+          figure a bank will (rightly) stop trusting the screen over. */}
       <div className="grid grid-cols-4 gap-4">
         {[
-          { label: t("vulnerabilities.stat_total"), value: stats.total, icon: Bug, color: "text-blue-600 bg-blue-50" },
-          { label: t("vulnerabilities.stat_open"), value: stats.open, icon: ShieldCheck, color: "text-red-600 bg-red-50" },
-          { label: t("vulnerabilities.stat_in_remediation"), value: stats.in_remediation, icon: Wrench, color: "text-yellow-600 bg-yellow-50" },
-          { label: t("vulnerabilities.stat_avg_cvss"), value: typeof stats.avg_cvss === "number" ? stats.avg_cvss.toFixed(1) : "0.0", icon: BarChart3, color: "text-purple-600 bg-purple-50" },
+          { label: t("vulnerabilities.stat_total"), value: stats?.total, icon: Bug, color: "text-blue-600 bg-blue-50" },
+          { label: t("vulnerabilities.stat_open"), value: stats?.open, icon: ShieldCheck, color: "text-red-600 bg-red-50" },
+          { label: t("vulnerabilities.stat_in_remediation"), value: stats?.in_remediation, icon: Wrench, color: "text-yellow-600 bg-yellow-50" },
+          {
+            label: t("vulnerabilities.stat_avg_cvss"),
+            value: typeof stats?.avg_cvss === "number" ? stats.avg_cvss.toFixed(1) : undefined,
+            icon: BarChart3, color: "text-purple-600 bg-purple-50",
+          },
         ].map((s) => (
           <div key={s.label} className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
             <div className="flex items-center gap-3">
               <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${s.color}`}>
                 <s.icon className="w-5 h-5" />
               </div>
-              <div>
-                <p className="text-2xl font-bold text-gray-900">{s.value}</p>
+              <div className="min-w-0">
+                <p className="text-2xl font-bold text-gray-900 tabular-nums">
+                  {s.value == null ? t("moduledash.not_available") : s.value}
+                </p>
                 <p className="text-xs text-gray-500">{s.label}</p>
               </div>
             </div>
@@ -394,10 +789,25 @@ Weak SSH ciphers,Low,3.7,,Backup Storage Array,Restrict to strong ciphers`;
           </select>
           <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="border border-gray-200 rounded-xl text-sm px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500">
             <option value="">{t("vulnerabilities.all_statuses")}</option>
-            {STATUS_OPTIONS.map((s) => <option key={s} value={s}>{s.replace(/_/g, " ")}</option>)}
+            {STATUS_OPTIONS.map((s) => <option key={s} value={s}>{label(s)}</option>)}
           </select>
         </div>
       </div>
+
+      {/* What the table and the search box above actually cover — saying so beats
+          letting the screen imply it is describing the whole register. */}
+      {!loading && !loadError && items.length > 0 && (
+        <p className="text-xs text-gray-500">
+          <span className="font-semibold text-gray-800">{filtered.length}</span>{" "}
+          {t("common.of")}{" "}
+          <span className="font-semibold text-gray-800">{items.length}</span>
+          {truncated && (
+            <span className="ms-1 text-amber-700">
+              ({t("risks.truncated", { total: stats?.total ?? 0 })})
+            </span>
+          )}
+        </p>
+      )}
 
       {/* Table */}
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
@@ -405,6 +815,9 @@ Weak SSH ciphers,Low,3.7,,Backup Storage Array,Restrict to strong ciphers`;
           <div className="flex items-center justify-center py-16">
             <Loader2 className="w-6 h-6 animate-spin text-blue-500" />
           </div>
+        ) : loadError ? (
+          // Distinct from "no vulnerabilities": the register is unknown, not empty.
+          <div className="text-center py-16 text-gray-400">{t("common.no_data")}</div>
         ) : filtered.length === 0 ? (
           <div className="text-center py-16 text-gray-400">{t("vulnerabilities.no_vulnerabilities")}</div>
         ) : (
@@ -431,13 +844,13 @@ Weak SSH ciphers,Low,3.7,,Backup Storage Array,Restrict to strong ciphers`;
                   <td className="px-6 py-4 font-medium text-gray-900">{item.title}</td>
                   <td className="px-6 py-4">
                     <span className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold border ${SEV_BADGE[item.severity] || "bg-gray-100 text-gray-600"}`}>
-                      {item.severity}
+                      {item.severity ? label(item.severity) : "—"}
                     </span>
                   </td>
                   <td className="px-6 py-4 text-gray-700 font-medium">{item.cvss_score ?? "-"}</td>
                   <td className="px-6 py-4">
                     <span className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold border ${STATUS_BADGE[item.status] || "bg-gray-100 text-gray-600"}`}>
-                      {item.status?.replace(/_/g, " ")}
+                      {item.status ? label(item.status) : "—"}
                     </span>
                   </td>
                   <td className="px-6 py-4 text-gray-500">{item.remediation_due_date ? new Date(item.remediation_due_date).toLocaleDateString() : "-"}</td>
@@ -475,7 +888,7 @@ Weak SSH ciphers,Low,3.7,,Backup Storage Array,Restrict to strong ciphers`;
                 <div>
                   <label className="text-xs font-medium text-gray-500">{t("vulnerabilities.col_status", "Status")}</label>
                   <select value={detailForm.status} onChange={(e) => setDetailForm({ ...detailForm, status: e.target.value })} className="w-full mt-1 border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-                    {STATUS_OPTIONS.map((s) => <option key={s} value={s}>{s.replace(/_/g, " ")}</option>)}
+                    {STATUS_OPTIONS.map((s) => <option key={s} value={s}>{label(s)}</option>)}
                   </select>
                 </div>
                 <div>

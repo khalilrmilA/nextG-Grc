@@ -214,6 +214,12 @@ export const gapEn = {
   },
   assets: {
     eol_banner_title: "{{count}} asset(s) approaching or past end-of-life",
+    // The register page loads one page of assets and filters it client-side;
+    // these two say so instead of letting the screen imply it is describing the
+    // whole estate. `{{n}}`, deliberately not `{{count}}`: `count` switches
+    // i18next into plural resolution and looks for _one/_other keys.
+    page_scope_hint: "— filters and the count above apply to the {{n}} most recent assets loaded on this page.",
+    stat_partial_hint: "Cannot be counted over a partial page — refine the filters or export the inventory.",
   },
   ocr: {
     page: "Page", chars_short: "{{n}} chars", download_pdf: "Download PDF",
@@ -491,6 +497,8 @@ export const gapFr = {
   },
   assets: {
     eol_banner_title: "{{count}} actif(s) en fin de vie ou proches de la fin de vie",
+    page_scope_hint: "— les filtres et le décompte ci-dessus portent sur les {{n}} actifs les plus récents chargés sur cette page.",
+    stat_partial_hint: "Non calculable sur une page partielle — affinez les filtres ou exportez l'inventaire.",
   },
   ocr: {
     page: "Page", chars_short: "{{n}} caractères", download_pdf: "Télécharger le PDF",
@@ -768,6 +776,8 @@ export const gapAr = {
   },
   assets: {
     eol_banner_title: "{{count}} أصل يقترب من أو تجاوز نهاية العمر الافتراضي",
+    page_scope_hint: "— تنطبق عوامل التصفية والعدد أعلاه على أحدث {{n}} أصلًا تم تحميلها في هذه الصفحة.",
+    stat_partial_hint: "لا يمكن احتسابه على صفحة جزئية — نقّح عوامل التصفية أو صدّر الجرد.",
   },
   ocr: {
     page: "صفحة", chars_short: "{{n}} حرف", download_pdf: "تنزيل PDF",

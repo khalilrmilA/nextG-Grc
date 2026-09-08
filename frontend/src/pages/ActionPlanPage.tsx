@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 import {
@@ -23,8 +23,10 @@ import {
   CheckSquare, AlertTriangle, CheckCircle2, XCircle,
   Loader2, Filter, ChevronDown, ChevronUp, User,
   Calendar, ExternalLink, RotateCcw, Circle, GripVertical, Check,
+  Plus, Pencil, Trash2, Paperclip, Upload, Repeat, X, Download, ShieldCheck,
 } from "lucide-react";
-import { complianceApi, type ActionPlanItem } from "@/api/endpoints";
+import { complianceApi, usersApi, type ActionPlanItem, type TenantUserRecord } from "@/api/endpoints";
+import type { ActionItemAttachment } from "@/types";
 
 // ── Styles ────────────────────────────────────────────────────────────────────
 const PRIORITY_STYLE = {
@@ -55,6 +57,472 @@ function isOverdue(d?: string | null) {
   return !!d && new Date(d) < new Date();
 }
 
+function saveBlob(blob: Blob, filename: string) {
+  const url = window.URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  window.URL.revokeObjectURL(url);
+}
+
+const ACTION_TYPES = ["corrective", "preventive"] as const;
+type ActionType = typeof ACTION_TYPES[number];
+
+/** The backend accepts exactly these four (ACTION_RECURRENCES in compliance.py);
+ *  anything else is a 422, so this is a picker and never a free-text field. */
+export const ACTION_RECURRENCES = ["monthly", "quarterly", "semiannual", "annual"] as const;
+
+// ── Create / edit an action ───────────────────────────────────────────────────
+// « Plan d'actions correctives ET préventives » — a preventive action has no
+// gap behind it and could not be planned anywhere before POST /action-plan
+// existed. start_date had schema support and no writer either.
+
+interface ActionDraft {
+  title: string;
+  description: string;
+  actionType: ActionType;
+  priority: string;
+  status: string;
+  ownerId: string;
+  startDate: string;
+  dueDate: string;
+  recurrence: string;
+  notes: string;
+}
+
+function draftFrom(item: ActionPlanItem | null): ActionDraft {
+  return {
+    title: item?.title ?? "",
+    description: item?.description ?? "",
+    actionType: (item?.action_type === "preventive" ? "preventive" : "corrective"),
+    priority: item?.priority ?? "medium",
+    status: item?.status ?? "open",
+    ownerId: item?.owner_id ?? "",
+    startDate: (item?.start_date ?? "").slice(0, 10),
+    dueDate: (item?.due_date ?? "").slice(0, 10),
+    recurrence: item?.recurrence ?? "",
+    notes: item?.notes ?? "",
+  };
+}
+
+function ActionItemModal({
+  item,
+  users,
+  onClose,
+  onSaved,
+}: {
+  readonly item: ActionPlanItem | null;
+  readonly users: TenantUserRecord[];
+  readonly onClose: () => void;
+  readonly onSaved: () => void;
+}) {
+  const { t } = useTranslation();
+  const [draft, setDraft] = useState<ActionDraft>(() => draftFrom(item));
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+
+  const datesInvalid =
+    !!draft.startDate && !!draft.dueDate && new Date(draft.dueDate) < new Date(draft.startDate);
+
+  const fieldCls =
+    "w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-400";
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!draft.title.trim()) { setError(t("action_plan.error_title_required")); return; }
+    if (datesInvalid) { setError(t("action_plan.dates_invalid")); return; }
+    setSaving(true);
+    setError("");
+    try {
+      const recurrence = draft.actionType === "preventive" ? draft.recurrence : "";
+      if (item) {
+        // PATCH treats null as "leave alone" and "" as "clear it" (`body.x or
+        // None` on the server), so an emptied field has to travel as "" or the
+        // user can never unset a date, an owner or a recurrence.
+        await complianceApi.updateActionPlanItem(item.id, {
+          title: draft.title.trim(),
+          description: draft.description.trim(),
+          notes: draft.notes.trim(),
+          owner_id: draft.ownerId,
+          start_date: draft.startDate,
+          due_date: draft.dueDate,
+          priority: draft.priority,
+          status: draft.status,
+          action_type: draft.actionType,
+          recurrence,
+        });
+      } else {
+        await complianceApi.createActionPlanItem({
+          title: draft.title.trim(),
+          description: draft.description.trim() || null,
+          notes: draft.notes.trim() || null,
+          owner_id: draft.ownerId || null,
+          start_date: draft.startDate || null,
+          due_date: draft.dueDate || null,
+          priority: draft.priority,
+          status: draft.status,
+          action_type: draft.actionType,
+          recurrence: recurrence || null,
+        });
+      }
+      onSaved();
+    } catch {
+      setError(t("action_plan.error_save_failed"));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto p-6">
+        <div className="flex items-center justify-between mb-5">
+          <h2 className="text-lg font-semibold text-gray-900">
+            {item ? t("action_plan.edit_action") : t("action_plan.new_action")}
+          </h2>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-700" title={t("common.close")}>
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        <form onSubmit={submit} className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1" htmlFor="ap-title">
+              {t("action_plan.action_title")} *
+            </label>
+            <input
+              id="ap-title"
+              type="text"
+              value={draft.title}
+              onChange={(e) => setDraft({ ...draft, title: e.target.value })}
+              placeholder={t("action_plan.action_title_placeholder")}
+              className={fieldCls}
+              required
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">{t("action_plan.action_type")}</label>
+            <div className="flex gap-2">
+              {ACTION_TYPES.map((tp) => (
+                <button
+                  key={tp}
+                  type="button"
+                  onClick={() => setDraft({ ...draft, actionType: tp })}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
+                    draft.actionType === tp
+                      ? "bg-indigo-600 text-white border-indigo-600"
+                      : "bg-white text-gray-600 border-gray-200 hover:bg-gray-50"
+                  }`}
+                >
+                  {t(`action_plan.action_types.${tp}`)}
+                </button>
+              ))}
+            </div>
+            <p className="text-xs text-gray-400 mt-1">{t("action_plan.action_type_hint")}</p>
+          </div>
+
+          {draft.actionType === "preventive" && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1" htmlFor="ap-recurrence">
+                {t("action_plan.recurrence")}
+              </label>
+              <select
+                id="ap-recurrence"
+                value={draft.recurrence}
+                onChange={(e) => setDraft({ ...draft, recurrence: e.target.value })}
+                className={fieldCls}
+              >
+                <option value="">{t("common.none")}</option>
+                {ACTION_RECURRENCES.map((r) => (
+                  <option key={r} value={r}>
+                    {t(`action_plan.recurrences.${r}`, {
+                      defaultValue: r.charAt(0).toUpperCase() + r.slice(1),
+                    })}
+                  </option>
+                ))}
+              </select>
+              <p className="text-xs text-gray-400 mt-1">{t("action_plan.recurrence_hint")}</p>
+            </div>
+          )}
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1" htmlFor="ap-owner">
+                {t("action_plan.owner")}
+              </label>
+              <select
+                id="ap-owner"
+                value={draft.ownerId}
+                onChange={(e) => setDraft({ ...draft, ownerId: e.target.value })}
+                className={fieldCls}
+              >
+                <option value="">{t("action_plan.select_owner")}</option>
+                {users.map((u) => (
+                  <option key={u.id} value={u.id}>
+                    {`${u.first_name} ${u.last_name}`.trim() || u.email}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1" htmlFor="ap-priority">
+                {t("action_plan.priority")}
+              </label>
+              <select
+                id="ap-priority"
+                value={draft.priority}
+                onChange={(e) => setDraft({ ...draft, priority: e.target.value })}
+                className={fieldCls}
+              >
+                <option value="critical">{t("action_plan.priority_critical")}</option>
+                <option value="high">{t("action_plan.priority_high")}</option>
+                <option value="medium">{t("action_plan.priority_medium")}</option>
+                <option value="low">{t("action_plan.priority_low")}</option>
+              </select>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1" htmlFor="ap-start">
+                {t("action_plan.start_date")}
+              </label>
+              <input
+                id="ap-start"
+                type="date"
+                value={draft.startDate}
+                onChange={(e) => setDraft({ ...draft, startDate: e.target.value })}
+                className={fieldCls}
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1" htmlFor="ap-due">
+                {t("action_plan.end_date")}
+              </label>
+              <input
+                id="ap-due"
+                type="date"
+                value={draft.dueDate}
+                onChange={(e) => setDraft({ ...draft, dueDate: e.target.value })}
+                className={fieldCls}
+              />
+            </div>
+          </div>
+          {datesInvalid && <p className="text-xs text-red-600">{t("action_plan.dates_invalid")}</p>}
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1" htmlFor="ap-status">
+              {t("common.status")}
+            </label>
+            <select
+              id="ap-status"
+              value={draft.status}
+              onChange={(e) => setDraft({ ...draft, status: e.target.value })}
+              className={fieldCls}
+            >
+              <option value="open">{t("action_plan.status_todo")}</option>
+              <option value="in_progress">{t("action_plan.status_in_progress")}</option>
+              <option value="completed">{t("action_plan.status_done")}</option>
+              <option value="cancelled">{t("action_plan.status_cancelled")}</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1" htmlFor="ap-desc">
+              {t("action_plan.action_description")}
+            </label>
+            <textarea
+              id="ap-desc"
+              rows={2}
+              value={draft.description}
+              onChange={(e) => setDraft({ ...draft, description: e.target.value })}
+              placeholder={t("action_plan.action_description_placeholder")}
+              className={`${fieldCls} resize-none`}
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1" htmlFor="ap-notes">
+              {t("common.notes")}
+            </label>
+            <textarea
+              id="ap-notes"
+              rows={2}
+              value={draft.notes}
+              onChange={(e) => setDraft({ ...draft, notes: e.target.value })}
+              className={`${fieldCls} resize-none`}
+            />
+          </div>
+
+          {error && <p className="text-sm text-red-600">{error}</p>}
+
+          <div className="flex justify-end gap-3 pt-1">
+            <button type="button" onClick={onClose} className="px-4 py-2 text-sm text-gray-600 hover:text-gray-900">
+              {t("common.cancel")}
+            </button>
+            <button
+              type="submit"
+              disabled={saving || !draft.title.trim()}
+              className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+            >
+              {saving && <Loader2 className="w-4 h-4 animate-spin" />}
+              {t("common.save")}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+// ── Pièces justificatives ─────────────────────────────────────────────────────
+// Proof the action was actually carried out: upload, list, download, remove.
+
+function AttachmentsModal({
+  item,
+  onClose,
+}: {
+  readonly item: ActionPlanItem;
+  readonly onClose: () => void;
+}) {
+  const { t } = useTranslation();
+  const [files, setFiles] = useState<ActionItemAttachment[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const load = useCallback(() => {
+    setLoading(true);
+    complianceApi.listActionAttachments(item.id)
+      .then(setFiles)
+      .catch(() => setError(t("action_plan.attachment_load_failed", "The supporting documents could not be loaded.")))
+      .finally(() => setLoading(false));
+  }, [item.id, t]);
+
+  useEffect(() => { load(); }, [load]);
+
+  async function upload(fileList: FileList | null) {
+    if (!fileList || fileList.length === 0) return;
+    setBusy(true);
+    setError("");
+    for (const file of Array.from(fileList)) {
+      try {
+        const created = await complianceApi.uploadActionAttachment(item.id, file);
+        setFiles((prev) => [...prev, created]);
+      } catch {
+        setError(t("action_plan.attachment_upload_failed"));
+      }
+    }
+    setBusy(false);
+  }
+
+  async function download(att: ActionItemAttachment) {
+    setError("");
+    try {
+      const blob = await complianceApi.downloadActionAttachment(att.id);
+      saveBlob(blob, att.file_name || att.name || "attachment");
+    } catch {
+      setError(t("action_plan.attachment_load_failed", "The supporting documents could not be loaded."));
+    }
+  }
+
+  async function remove(att: ActionItemAttachment) {
+    if (!window.confirm(t("action_plan.attachment_delete_confirm"))) return;
+    setError("");
+    try {
+      await complianceApi.deleteActionAttachment(att.id);
+      setFiles((prev) => prev.filter((f) => f.id !== att.id));
+    } catch {
+      // Not attachment_upload_failed ("the document could not be attached") —
+      // that describes the opposite operation and told the user the wrong thing.
+      setError(t("common.error_generic"));
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[85vh] overflow-y-auto p-6">
+        <div className="flex items-start justify-between mb-4">
+          <div className="min-w-0">
+            <h2 className="text-lg font-semibold text-gray-900">{t("action_plan.attachments")}</h2>
+            <p className="text-xs text-gray-400 truncate">{item.title}</p>
+          </div>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-700" title={t("common.close")}>
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        <input
+          ref={inputRef}
+          type="file"
+          className="hidden"
+          multiple
+          onChange={(e) => { upload(e.target.files); e.target.value = ""; }}
+        />
+        <button
+          type="button"
+          onClick={() => inputRef.current?.click()}
+          disabled={busy}
+          className="flex items-center gap-2 w-full justify-center border-2 border-dashed border-indigo-200 rounded-xl py-4 text-sm text-indigo-600 hover:bg-indigo-50 transition-colors disabled:opacity-50"
+        >
+          {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
+          {t("action_plan.add_attachment")}
+        </button>
+
+        {error && (
+          <div className="mt-3 bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-700">{error}</div>
+        )}
+
+        <div className="mt-4">
+          {loading ? (
+            <div className="flex justify-center py-8"><Loader2 className="w-5 h-5 animate-spin text-indigo-400" /></div>
+          ) : files.length === 0 ? (
+            <p className="text-sm text-gray-400 text-center py-8">{t("action_plan.no_attachments")}</p>
+          ) : (
+            <>
+              <p className="text-xs text-gray-500 mb-2">
+                {t(
+                  files.length === 1 ? "action_plan.attachments_count_one" : "action_plan.attachments_count_other",
+                  { count: files.length },
+                )}
+              </p>
+              <div className="border border-gray-100 rounded-xl divide-y divide-gray-50">
+                {files.map((att) => (
+                  <div key={att.id} className="flex items-center gap-2 px-3 py-2 text-sm">
+                    <Paperclip className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
+                    <span className="flex-1 min-w-0 truncate text-gray-700">{att.file_name || att.name}</span>
+                    <button
+                      type="button"
+                      onClick={() => download(att)}
+                      title={t("action_plan.attachment_download")}
+                      className="text-indigo-500 hover:text-indigo-700"
+                    >
+                      <Download className="w-4 h-4" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => remove(att)}
+                      title={t("action_plan.attachment_delete")}
+                      className="text-red-400 hover:text-red-600"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Card (used both in sortable and in drag overlay) ─────────────────────────
 function CardContent({
   item,
@@ -62,12 +530,18 @@ function CardContent({
   t,
   onNavigate,
   onStatusChange,
+  onEdit,
+  onDelete,
+  onAttachments,
 }: {
   item: ActionPlanItem;
   isDragging?: boolean;
   t: ReturnType<typeof useTranslation>["t"];
   onNavigate: (id: string) => void;
   onStatusChange?: (id: string, status: string) => void;
+  onEdit?: (item: ActionPlanItem) => void;
+  onDelete?: (item: ActionPlanItem) => void;
+  onAttachments?: (item: ActionPlanItem) => void;
 }) {
   const pStyle  = PRIORITY_STYLE[item.priority as keyof typeof PRIORITY_STYLE] ?? PRIORITY_STYLE.medium;
   const overdue = isOverdue(item.due_date) && item.status !== "completed";
@@ -107,7 +581,7 @@ function CardContent({
           )}
           {item.gap_severity && (
             <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded uppercase ${SEV_COLOR[item.gap_severity] ?? "bg-gray-100 text-gray-600"}`}>
-              {item.gap_severity}
+              {t(`compliance.severities.${item.gap_severity}`, { defaultValue: item.gap_severity })}
             </span>
           )}
         </div>
@@ -129,6 +603,28 @@ function CardContent({
 
       {/* Tags */}
       <div className="flex flex-wrap items-center gap-1.5 text-[10px]">
+        <span
+          className={`px-1.5 py-0.5 rounded font-semibold border ${
+            item.action_type === "preventive"
+              ? "bg-teal-50 text-teal-700 border-teal-100"
+              : "bg-amber-50 text-amber-700 border-amber-100"
+          }`}
+          title={t("action_plan.action_type")}
+        >
+          {t(`action_plan.action_types.${item.action_type === "preventive" ? "preventive" : "corrective"}`)}
+        </span>
+        {item.recurrence && (
+          <span className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-teal-50 text-teal-600 border border-teal-100" title={t("action_plan.recurrence")}>
+            <Repeat className="w-2.5 h-2.5" />
+            {t(`action_plan.recurrences.${item.recurrence}`, { defaultValue: item.recurrence })}
+          </span>
+        )}
+        {item.gap_resolved && (
+          <span className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-green-50 text-green-700 border border-green-100" title={t("action_plan.gap_resolved_hint")}>
+            <ShieldCheck className="w-2.5 h-2.5" />
+            {t("action_plan.gap_resolved")}
+          </span>
+        )}
         {item.framework_short_name && (
           <span className="px-1.5 py-0.5 bg-indigo-50 text-indigo-600 rounded font-semibold border border-indigo-100">
             {item.framework_short_name}
@@ -173,6 +669,36 @@ function CardContent({
             >
               <ExternalLink className="w-3 h-3" />
               <span className="truncate max-w-[80px]">{item.assessment_name}</span>
+            </button>
+          )}
+          {!isDragging && onAttachments && (
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); onAttachments(item); }}
+              title={t("action_plan.attachments")}
+              className="p-1 rounded text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 transition-colors"
+            >
+              <Paperclip className="w-3.5 h-3.5" />
+            </button>
+          )}
+          {!isDragging && onEdit && (
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); onEdit(item); }}
+              title={t("action_plan.edit_action")}
+              className="p-1 rounded text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 transition-colors"
+            >
+              <Pencil className="w-3.5 h-3.5" />
+            </button>
+          )}
+          {!isDragging && onDelete && (
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); onDelete(item); }}
+              title={t("action_plan.delete_action")}
+              className="p-1 rounded text-gray-400 hover:text-red-600 hover:bg-red-50 transition-colors"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
             </button>
           )}
           {/* Quick status buttons — only shown when not dragging */}
@@ -221,11 +747,17 @@ function SortableCard({
   t,
   onNavigate,
   onStatusChange,
+  onEdit,
+  onDelete,
+  onAttachments,
 }: {
   item: ActionPlanItem;
   t: ReturnType<typeof useTranslation>["t"];
   onNavigate: (id: string) => void;
   onStatusChange: (id: string, status: string) => void;
+  onEdit: (item: ActionPlanItem) => void;
+  onDelete: (item: ActionPlanItem) => void;
+  onAttachments: (item: ActionPlanItem) => void;
 }) {
   const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } = useSortable({ id: item.id });
   const style = {
@@ -245,7 +777,15 @@ function SortableCard({
           className="absolute top-4 left-4 z-10 cursor-grab active:cursor-grabbing touch-none"
           style={{ width: 16, height: 16 }}
         />
-        <CardContent item={item} t={t} onNavigate={onNavigate} onStatusChange={onStatusChange} />
+        <CardContent
+          item={item}
+          t={t}
+          onNavigate={onNavigate}
+          onStatusChange={onStatusChange}
+          onEdit={onEdit}
+          onDelete={onDelete}
+          onAttachments={onAttachments}
+        />
       </div>
     </div>
   );
@@ -258,12 +798,18 @@ function KanbanColumn({
   t,
   onNavigate,
   onStatusChange,
+  onEdit,
+  onDelete,
+  onAttachments,
 }: {
   statusKey: ColKey;
   items: ActionPlanItem[];
   t: ReturnType<typeof useTranslation>["t"];
   onNavigate: (id: string) => void;
   onStatusChange: (id: string, status: string) => void;
+  onEdit: (item: ActionPlanItem) => void;
+  onDelete: (item: ActionPlanItem) => void;
+  onAttachments: (item: ActionPlanItem) => void;
 }) {
   const cfg = STATUS_STYLE[statusKey];
   const Icon = cfg.icon;
@@ -312,6 +858,9 @@ function KanbanColumn({
                 t={t}
                 onNavigate={onNavigate}
                 onStatusChange={onStatusChange}
+                onEdit={onEdit}
+                onDelete={onDelete}
+                onAttachments={onAttachments}
               />
             ))
           )}
@@ -334,24 +883,63 @@ export default function ActionPlanPage() {
   // Filters
   const [filterPriority,  setFilterPriority]  = useState("all");
   const [filterFramework, setFilterFramework] = useState("all");
+  const [filterType,      setFilterType]      = useState("all");
   const [showFilters,     setShowFilters]     = useState(false);
+
+  // Create / edit / attachments
+  const [users, setUsers] = useState<TenantUserRecord[]>([]);
+  const [editing, setEditing] = useState<ActionPlanItem | null>(null);
+  const [creating, setCreating] = useState(false);
+  const [attachmentsFor, setAttachmentsFor] = useState<ActionPlanItem | null>(null);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } })
   );
 
+  // The full-page spinner belongs to the FIRST load only. Changing the nature
+  // filter refetches server-side, and blanking the whole screen for it tore the
+  // board and the filter panel out from under the user mid-interaction.
+  const firstLoad = useRef(true);
+
   const load = useCallback(async () => {
     setLoading(true);
+    setError("");
     try {
-      setItems(await complianceApi.listActionPlan());
+      // « corrective / préventive » is filtered by the server so a preventive
+      // action with no gap behind it is never hidden by a client-side rule.
+      setItems(
+        filterType === "all"
+          ? await complianceApi.listActionPlan()
+          : await complianceApi.listActionPlanFiltered({ action_type: filterType }),
+      );
     } catch {
       setError(t("action_plan.load_error", "Failed to load action plan"));
     } finally {
       setLoading(false);
+      firstLoad.current = false;
     }
-  }, [t]);
+  }, [t, filterType]);
 
   useEffect(() => { load(); }, [load]);
+
+  useEffect(() => {
+    let alive = true;
+    usersApi.list()
+      .then((list) => { if (alive) setUsers(list.filter((u) => u.is_active)); })
+      .catch(() => { /* the owner picker degrades to "unassigned" */ });
+    return () => { alive = false; };
+  }, []);
+
+  async function handleDelete(item: ActionPlanItem) {
+    if (!window.confirm(t("action_plan.delete_confirm"))) return;
+    setError("");
+    try {
+      await complianceApi.deleteActionPlanItem(item.id);
+      setItems((all) => all.filter((i) => i.id !== item.id));
+    } catch {
+      setError(t("action_plan.error_delete_failed", "The action could not be deleted. Nothing was changed."));
+    }
+  }
 
   // ── DnD handlers ────────────────────────────────────────────────────────────
   function handleDragStart(event: DragStartEvent) {
@@ -413,7 +1001,7 @@ export default function ActionPlanPage() {
     }),
   }));
 
-  if (loading) {
+  if (loading && firstLoad.current) {
     return (
       <div className="flex items-center justify-center py-24">
         <Loader2 className="w-6 h-6 animate-spin text-indigo-500" />
@@ -434,15 +1022,38 @@ export default function ActionPlanPage() {
             {t("action_plan.page_subtitle", "Prioritized to-do list generated from all open compliance gaps")}
           </p>
         </div>
-        <button
-          type="button"
-          onClick={load}
-          className="p-2 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors"
-          title="Refresh"
-        >
-          <RotateCcw className="w-4 h-4" />
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setCreating(true)}
+            className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+          >
+            <Plus className="w-4 h-4" />
+            {t("action_plan.new_action")}
+          </button>
+          <button
+            type="button"
+            onClick={load}
+            className="p-2 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors"
+            title={t("common.refresh")}
+          >
+            <RotateCcw className="w-4 h-4" />
+          </button>
+        </div>
       </div>
+
+      {(creating || editing) && (
+        <ActionItemModal
+          item={editing}
+          users={users}
+          onClose={() => { setCreating(false); setEditing(null); }}
+          onSaved={() => { setCreating(false); setEditing(null); load(); }}
+        />
+      )}
+
+      {attachmentsFor && (
+        <AttachmentsModal item={attachmentsFor} onClose={() => setAttachmentsFor(null)} />
+      )}
 
       {error && (
         <div className="flex items-center gap-3 px-4 py-3 bg-red-50 border border-red-200 rounded-xl text-sm text-red-700">
@@ -490,6 +1101,7 @@ export default function ActionPlanPage() {
 
       {/* Filters */}
       <div className="flex items-center gap-3 flex-wrap">
+        {loading && <Loader2 className="w-4 h-4 animate-spin text-indigo-400" />}
         <button
           type="button"
           onClick={() => setShowFilters(!showFilters)}
@@ -519,6 +1131,21 @@ export default function ActionPlanPage() {
               <option value="low">{t("action_plan.priority_low", "Low")}</option>
             </select>
           </div>
+          <div className="flex flex-col gap-1">
+            <label className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide" htmlFor="ap-filter-type">
+              {t("action_plan.filter_action_type")}
+            </label>
+            <select
+              id="ap-filter-type"
+              value={filterType}
+              onChange={(e) => setFilterType(e.target.value)}
+              className="border border-gray-200 rounded-lg px-2 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-400"
+            >
+              <option value="all">{t("action_plan.all_action_types")}</option>
+              <option value="corrective">{t("action_plan.action_types.corrective")}</option>
+              <option value="preventive">{t("action_plan.action_types.preventive")}</option>
+            </select>
+          </div>
           {frameworks.length > 0 && (
             <div className="flex flex-col gap-1">
               <label className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide">
@@ -537,8 +1164,9 @@ export default function ActionPlanPage() {
         </div>
       )}
 
-      {/* Empty state */}
-      {total === 0 ? (
+      {/* Empty state — never while a filter refetch is still in flight, or the
+          board flashes « aucune action » between two populated results. */}
+      {total === 0 && !loading ? (
         <div className="flex flex-col items-center gap-4 py-20 text-center">
           <div className="w-16 h-16 bg-green-50 rounded-2xl flex items-center justify-center">
             <CheckCircle2 className="w-8 h-8 text-green-400" />
@@ -547,13 +1175,23 @@ export default function ActionPlanPage() {
             <p className="text-gray-700 font-semibold">{t("action_plan.empty_title", "No action items yet")}</p>
             <p className="text-gray-400 text-sm mt-1">{t("action_plan.empty_hint", "Accept gap recommendations inside a compliance assessment to generate action items here.")}</p>
           </div>
-          <button
-            type="button"
-            onClick={() => navigate("/compliance")}
-            className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
-          >
-            {t("action_plan.go_to_compliance", "Go to Compliance")}
-          </button>
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={() => setCreating(true)}
+              className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+            >
+              <Plus className="w-4 h-4" />
+              {t("action_plan.new_action")}
+            </button>
+            <button
+              type="button"
+              onClick={() => navigate("/compliance")}
+              className="text-sm font-medium text-indigo-600 hover:text-indigo-800"
+            >
+              {t("action_plan.go_to_compliance", "Go to Compliance")}
+            </button>
+          </div>
         </div>
       ) : (
         /* Drag-and-drop Kanban */
@@ -573,6 +1211,9 @@ export default function ActionPlanPage() {
                 t={t}
                 onNavigate={(aid) => navigate(`/compliance/${aid}`)}
                 onStatusChange={handleStatusChange}
+                onEdit={setEditing}
+                onDelete={handleDelete}
+                onAttachments={setAttachmentsFor}
               />
             ))}
           </div>

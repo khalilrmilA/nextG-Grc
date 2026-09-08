@@ -20,6 +20,7 @@ import {
   AlertCircle, Info, ShieldAlert, ClipboardCheck, RefreshCw,
   Eye, Users, Headphones, Map, ListTodo, Boxes, BarChart3, Gauge, Bug, Radar, Scale, Archive, Database, ScanLine, Network,
   Target, Workflow, Siren, ShieldCheck, ShieldOff, Landmark, Webhook,
+  Library, ListChecks, Grid3x3, ScrollText,
 } from "lucide-react";
 
 // roles: null = visible to all authenticated non-auditor users
@@ -62,6 +63,7 @@ const NAV_GROUPS = [
       { to: "/risk-scenarios", icon: Workflow,        label: "Risk Scenarios", module: "risk-scenarios", roles: ["tenant_admin","ciso","risk_manager","compliance_manager","control_owner","business_owner","security_analyst","viewer","executive"] },
       { to: "/compliance", icon: CheckSquare,     label: "Compliance",    module: "compliance", roles: ["tenant_admin","ciso","risk_manager","compliance_manager","policy_manager","control_owner","business_owner","security_analyst","viewer","executive"] },
       { to: "/action-plan", icon: ListTodo,       label: "Action Plan",   module: "action-plan", roles: ["tenant_admin","ciso","risk_manager","compliance_manager","control_owner","business_owner","security_analyst","viewer","executive"] },
+      { to: "/requirements", icon: Library,   label: "Requirements Referential", module: "requirements", roles: ["tenant_admin","ciso","compliance_manager","policy_manager","viewer","executive"] },
       { to: "/framework",  icon: BookOpen,        label: "Frameworks",    module: "frameworks", roles: ["tenant_admin","ciso","compliance_manager","policy_manager","viewer","executive"] },
     ],
   },
@@ -80,6 +82,8 @@ const NAV_GROUPS = [
     label: "Operations",
     items: [
       { to: "/audits",           icon: ClipboardList,  label: "Audits",             module: "audits",           roles: ["tenant_admin","ciso","compliance_manager","viewer","executive"] },
+      { to: "/recommendations", icon: ListChecks,     label: "Recommendation Tracking", module: "recommendations", roles: ["tenant_admin","ciso","compliance_manager","risk_manager","auditor","control_owner","business_owner","viewer","executive"] },
+      { to: "/audit-grids",     icon: Grid3x3,        label: "Evaluation Grids",     module: "audit_grids",     roles: ["tenant_admin","ciso","compliance_manager"] },
       { to: "/policies",         icon: FileText,       label: "Policies",           module: "policies",         roles: ["tenant_admin","ciso","compliance_manager","policy_manager","viewer","executive"] },
       { to: "/policy-generator", icon: Wand2,          label: "Doc Generator",      module: "policy-generator", roles: ["tenant_admin","ciso","policy_manager","viewer","executive"] },
       { to: "/ocr",              icon: ScanLine,       label: "Document Capture",   module: "ocr",              roles: null },
@@ -92,7 +96,8 @@ const NAV_GROUPS = [
     label: "Governance",
     items: [
       { to: "/governance", icon: Scale,   label: "Governance", module: "governance", roles: ["tenant_admin","ciso","compliance_manager","policy_manager","viewer","executive"] },
-      { to: "/archiving",  icon: Archive, label: "Archiving",  module: "archiving",  roles: ["tenant_admin","ciso","compliance_manager","viewer","executive"] },
+      { to: "/activity-log", icon: ScrollText, label: "Activity Log", module: "activity_log", roles: ["tenant_admin","ciso","compliance_manager","auditor","risk_manager"] },
+      { to: "/archiving",  icon: Archive, label: "Archiving",  module: "archiving",  roles: ["tenant_admin","ciso","compliance_manager","auditor","risk_manager"] },
       { to: "/system-check", icon: ClipboardCheck, label: "System Check", module: "system-check", roles: ["tenant_admin"] },
       { to: "/regulatory",          icon: Landmark,   label: "Regulatory Updates",  module: "regulatory",          roles: ["tenant_admin","ciso","compliance_manager","policy_manager","viewer","executive"] },
       { to: "/webhooks",            icon: Webhook,     label: "Webhooks",            module: "webhooks",            roles: ["tenant_admin"] },

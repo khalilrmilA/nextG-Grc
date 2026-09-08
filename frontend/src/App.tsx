@@ -1,5 +1,6 @@
 import { Routes, Route, Navigate, Link } from "react-router-dom";
 import { Lock } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { useAuthStore, hasAnyRole } from "./store/auth";
 import Layout from "./components/layout/Layout";
 import AuditorLayout from "./components/layout/AuditorLayout";
@@ -34,7 +35,12 @@ import TraceabilityPage from "./pages/TraceabilityPage";
 import FrameworksPage from "./pages/FrameworksPage";
 import CustomFrameworkPage from "./pages/CustomFrameworkPage";
 import EditFrameworkPage from "./pages/EditFrameworkPage";
+import ActivityLogPage from "./pages/ActivityLogPage";
 import AuditsPage from "./pages/AuditsPage";
+import AuditDetailPage from "./pages/AuditDetailPage";
+import RecommendationsPage from "./pages/RecommendationsPage";
+import AuditGridBuilderPage from "./pages/AuditGridBuilderPage";
+import RequirementsPage from "./pages/RequirementsPage";
 import PoliciesPage from "./pages/PoliciesPage";
 import VendorsPage from "./pages/VendorsPage";
 import ContractReviewPage from "./pages/ContractReviewPage";
@@ -122,6 +128,23 @@ const ROUTE_ROLES: Record<string, string[]> = {
   "/compliance":          [...CISO_AND_ADMIN, "risk_manager", "compliance_manager", "policy_manager", "control_owner", "business_owner", "security_analyst", "viewer", "executive"],
   "/framework":           [...CISO_AND_ADMIN, "compliance_manager", "policy_manager", "viewer", "executive"],
   "/audits":              [...CISO_AND_ADMIN, "compliance_manager", "viewer", "executive"],
+  // The engagement dossier mirrors the backend's AUDIT_READ_ROLES, which is WIDER than
+  // /audits': auditor and risk_manager may open a dossier by link. Keeping the narrower
+  // /audits list here would 403 an auditor who followed a link from the register.
+  "/audits/:id":          [...CISO_AND_ADMIN, "compliance_manager", "risk_manager", "auditor", "viewer", "executive"],
+  "/recommendations":     [...CISO_AND_ADMIN, "compliance_manager", "risk_manager", "auditor", "control_owner", "business_owner", "viewer", "executive"],
+  // Reading a grid is open to any tenant user server-side; create/update/delete need these.
+  // auditor is deliberately absent: PrivateRoute redirects auditors to /auditor/portal, so
+  // an auditor entry here would be a dead row.
+  "/audit-grids":         [...CISO_AND_ADMIN, "compliance_manager"],
+  // The unified requirements register is read-mostly; its only write (the applicability
+  // decision) is gated server-side to CISO/compliance_manager.
+  "/requirements":        [...CISO_AND_ADMIN, "compliance_manager", "policy_manager", "viewer", "executive"],
+  // These two had NO entry, and RoleRoute treats a missing entry as "allow everyone" —
+  // so the audit trail and the archive were open to every role. They now match the
+  // backend's AUDIT_READERS / _archive_access. Purge itself stays tenant_admin-only.
+  "/activity-log":        [...CISO_AND_ADMIN, "compliance_manager", "auditor", "risk_manager"],
+  "/archiving":           [...CISO_AND_ADMIN, "compliance_manager", "auditor", "risk_manager"],
   "/policies":            [...CISO_AND_ADMIN, "compliance_manager", "policy_manager", "viewer", "executive"],
   "/policy-generator":    [...CISO_AND_ADMIN, "policy_manager", "viewer", "executive"],
   "/vendors":             [...CISO_AND_ADMIN, "vendor_manager", "viewer", "executive"],
@@ -136,6 +159,7 @@ const ROUTE_ROLES: Record<string, string[]> = {
 };
 
 function RoleRoute({ path, children }: { readonly path: string; readonly children: React.ReactNode }) {
+  const { t } = useTranslation();
   const user = useAuthStore((u) => u);
   const allowed = ROUTE_ROLES[path];
   if (!allowed || !user || hasAnyRole(user, allowed)) return <>{children}</>;
@@ -145,10 +169,10 @@ function RoleRoute({ path, children }: { readonly path: string; readonly childre
         <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
           <Lock className="w-8 h-8 text-red-600" />
         </div>
-        <h1 className="text-2xl font-bold text-gray-900 mb-2">Access Restricted</h1>
-        <p className="text-gray-600 mb-6">Your role doesn't have permission to access this page. Contact your administrator if you need access.</p>
+        <h1 className="text-2xl font-bold text-gray-900 mb-2">{t("common.access_restricted")}</h1>
+        <p className="text-gray-600 mb-6">{t("common.access_restricted_hint")}</p>
         <Link to="/dashboard" className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
-          Return to Dashboard
+          {t("common.return_to_dashboard")}
         </Link>
       </div>
     </div>
@@ -180,6 +204,11 @@ export default function App() {
       >
         <Route index element={<AuditorPortalPage />} />
         <Route path="portal" element={<AuditorPortalPage />} />
+        {/* Engagement-scoped first: an auditor is now assigned to an AUDIT, not only to an
+            assessment. Both components accept either param; the legacy assessment routes stay
+            so existing links keep working. */}
+        <Route path="portal/audits/:auditId" element={<AuditChecklistPage />} />
+        <Route path="portal/audits/:auditId/report" element={<AuditReportPage />} />
         <Route path="portal/:assessmentId" element={<AuditChecklistPage />} />
         <Route path="portal/:assessmentId/report" element={<AuditReportPage />} />
         <Route path="settings" element={<SettingsPage />} />
@@ -201,7 +230,7 @@ export default function App() {
         <Route path="risk-treatment" element={<RiskTreatmentPage />} />
         <Route path="control-effectiveness" element={<ControlEffectivenessPage />} />
         <Route path="governance" element={<GovernancePage />} />
-        <Route path="archiving" element={<ArchivingPage />} />
+        <Route path="archiving" element={<RoleRoute path="/archiving"><ArchivingPage /></RoleRoute>} />
         <Route path="cve" element={<CvePage />} />
         <Route path="mfa-setup" element={<MfaSetupPage />} />
         <Route path="ocr" element={<OcrCapturePage />} />
@@ -215,11 +244,15 @@ export default function App() {
         <Route path="compliance/:assessmentId" element={<RoleRoute path="/compliance"><PrivateRoute requiredModule="compliance"><AssessmentDetailPage /></PrivateRoute></RoleRoute>} />
         <Route path="compliance/assessments/:assessmentId/remediation-plan" element={<RoleRoute path="/compliance"><PrivateRoute requiredModule="compliance"><RemediationPlannerPage /></PrivateRoute></RoleRoute>} />
         <Route path="compliance/:assessmentId/traceability" element={<RoleRoute path="/compliance"><PrivateRoute requiredModule="compliance"><TraceabilityPage /></PrivateRoute></RoleRoute>} />
+        <Route path="requirements" element={<RoleRoute path="/requirements"><PrivateRoute requiredModule="frameworks"><RequirementsPage /></PrivateRoute></RoleRoute>} />
         <Route path="framework" element={<RoleRoute path="/framework"><PrivateRoute requiredModule="frameworks"><FrameworksPage /></PrivateRoute></RoleRoute>} />
         <Route path="framework/custom/new" element={<RoleRoute path="/framework"><PrivateRoute requiredModule="frameworks"><CustomFrameworkPage /></PrivateRoute></RoleRoute>} />
         <Route path="framework/builder" element={<RoleRoute path="/framework"><PrivateRoute requiredModule="frameworks"><FrameworkBuilderPage /></PrivateRoute></RoleRoute>} />
         <Route path="framework/:id/edit" element={<RoleRoute path="/framework"><PrivateRoute requiredModule="frameworks"><EditFrameworkPage /></PrivateRoute></RoleRoute>} />
         <Route path="audits" element={<RoleRoute path="/audits"><PrivateRoute requiredModule="audits"><AuditsPage /></PrivateRoute></RoleRoute>} />
+        <Route path="audits/:auditId" element={<RoleRoute path="/audits/:id"><PrivateRoute requiredModule="audits"><AuditDetailPage /></PrivateRoute></RoleRoute>} />
+        <Route path="recommendations" element={<RoleRoute path="/recommendations"><PrivateRoute requiredModule="audits"><RecommendationsPage /></PrivateRoute></RoleRoute>} />
+        <Route path="audit-grids" element={<RoleRoute path="/audit-grids"><PrivateRoute requiredModule="audits"><AuditGridBuilderPage /></PrivateRoute></RoleRoute>} />
         <Route path="policies" element={<RoleRoute path="/policies"><PrivateRoute requiredModule="policies"><PoliciesPage /></PrivateRoute></RoleRoute>} />
         <Route path="policy-generator" element={<RoleRoute path="/policy-generator"><PrivateRoute requiredModule="policy-generator"><PolicyGeneratorPage /></PrivateRoute></RoleRoute>} />
         <Route path="vendors" element={<RoleRoute path="/vendors"><PrivateRoute requiredModule="vendors"><VendorsPage /></PrivateRoute></RoleRoute>} />
@@ -233,7 +266,10 @@ export default function App() {
         <Route path="applied-controls" element={<RoleRoute path="/applied-controls"><AppliedControlsPage /></RoleRoute>} />
         <Route path="security-exceptions" element={<RoleRoute path="/security-exceptions"><SecurityExceptionsPage /></RoleRoute>} />
         <Route path="regulatory" element={<RoleRoute path="/regulatory"><RegulatoryUpdatesPage /></RoleRoute>} />
-        <Route path="activity-log" element={<Navigate to="/super-admin" replace />} />
+        {/* Was a redirect to /super-admin, which made the tenant-facing audit trail
+            unreachable for everyone except a platform admin — objectif 8 asks a tenant to
+            consult its own traceability. The page itself was complete and translated. */}
+        <Route path="activity-log" element={<RoleRoute path="/activity-log"><ActivityLogPage /></RoleRoute>} />
         <Route path="webhooks" element={<RoleRoute path="/webhooks"><WebhooksPage /></RoleRoute>} />
         <Route path="support" element={<SupportPage />} />
         <Route path="company-admin" element={<CompanyAdminPage />} />
