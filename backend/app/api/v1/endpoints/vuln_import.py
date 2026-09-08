@@ -15,9 +15,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import settings
 from app.core.database import get_db
 from app.core.security_utils import assert_safe_upload_name
-from app.models.user import User
+from app.models.user import User, UserRole
 from app.models.scan_journal import ScanJournal
-from app.api.v1.dependencies.auth import get_tenant_id
+from app.api.v1.dependencies.auth import get_tenant_id, require_roles
 from app.api.v1.dependencies.features import require_feature
 from app.services.scanner_import import import_scan
 from app.models.scanner_connector import ScannerConnector
@@ -26,6 +26,12 @@ from app.services.scanner_connectors import sync_connector, test_connector
 router = APIRouter()
 
 _GATE = require_feature("vuln_scanner_import")
+
+# require_feature is the BILLING gate — it says the tenant bought the capability,
+# not that this user may use it. A scanner connector holds the credentials to a
+# security tool, syncs on demand and can be destroyed; that is security-tooling
+# administration, so it also takes a role gate (tenant/super admins auto-pass).
+_CONNECTOR_ADMIN = require_roles(UserRole.CISO, UserRole.SECURITY_ANALYST)
 
 _ALLOWED_TOOLS = {"nessus", "tenable", "qualys", "openvas", "csv"}
 
@@ -154,6 +160,7 @@ async def _get_connector(db: AsyncSession, cid: str, tenant_id: str) -> ScannerC
 async def create_connector(
     body: ConnectorIn,
     current_user: Annotated[User, Depends(_GATE)],
+    _role: Annotated[User, Depends(_CONNECTOR_ADMIN)],
     tenant_id: Annotated[str, Depends(get_tenant_id)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
@@ -187,6 +194,7 @@ async def list_connectors(
 async def delete_connector(
     cid: str,
     current_user: Annotated[User, Depends(_GATE)],
+    _role: Annotated[User, Depends(_CONNECTOR_ADMIN)],
     tenant_id: Annotated[str, Depends(get_tenant_id)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
@@ -200,6 +208,7 @@ async def delete_connector(
 async def test_conn(
     cid: str,
     current_user: Annotated[User, Depends(_GATE)],
+    _role: Annotated[User, Depends(_CONNECTOR_ADMIN)],
     tenant_id: Annotated[str, Depends(get_tenant_id)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
@@ -211,6 +220,7 @@ async def test_conn(
 async def sync_conn(
     cid: str,
     current_user: Annotated[User, Depends(_GATE)],
+    _role: Annotated[User, Depends(_CONNECTOR_ADMIN)],
     tenant_id: Annotated[str, Depends(get_tenant_id)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ):

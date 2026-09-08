@@ -8,6 +8,14 @@ hasn't already been archived — via the exact same snapshot-creation path the
 manual endpoint uses (``create_archive_record``), so there is only one way an
 ArchiveRecord ever gets built.
 
+A snapshot is not a single row: ``serialize_record_with_children`` walks the
+CHILD_SPECS map so archiving an audit also embeds its constats, its evidence
+metadata and its recommendations under ``payload["children"]``. STB objectif 8
+asks for « accès aux rapports et aux preuves archivées », and an archive that
+kept only the audits row was preserving a title and a status while the findings
+and the evidence it exists to prove stayed behind in tables that a later purge
+or delete can empty.
+
 Concurrency, mirrors app.services.report_scheduler: ``run_due_rules`` claims each
 due rule with an optimistic UPDATE conditioned on its current ``next_run_at``, so
 even with 2 uvicorn workers exactly one runner evaluates a given tick — no
@@ -22,13 +30,15 @@ import re
 from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import select, update
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import AsyncSessionLocal
 from app.models.archive import ArchiveRecord, ArchivingRule
 from app.models.risk import Risk
 from app.models.incident import Incident
-from app.models.audit import Audit
+from app.models.audit import Audit, AuditEvidence, AuditFinding
+from app.models.audit_recommendation import AuditRecommendation
 from app.models.vulnerability import Vulnerability
 from app.models.security_exception import SecurityException
 from app.models.applied_control import AppliedControl
@@ -147,6 +157,116 @@ def serialize_record(record) -> dict:
     return payload
 
 
+# ── Child records that travel with the snapshot ──────────────────────────────
+# An ArchiveRecord used to be a copy of exactly one row, so archiving an audit
+# preserved its title, its status and its executive summary and silently left
+# behind every constat and every piece of evidence attached to it — which is the
+# half of « accès aux rapports et aux preuves archivées » that matters. The
+# children are captured INTO the snapshot rather than resolved when it is read,
+# because the whole point of an archive is to still answer once the live rows
+# are gone.
+#
+# entity_type -> ((payload key, child model, FK attribute on the child), ...)
+CHILD_SPECS: dict[str, tuple[tuple[str, type, str], ...]] = {
+    "audit": (
+        ("findings", AuditFinding, "audit_id"),
+        ("evidence", AuditEvidence, "audit_id"),
+        ("recommendations", AuditRecommendation, "audit_id"),
+    ),
+}
+
+
+# Tables that physically exist, resolved once per worker. CHILD_SPECS names
+# tables create_all() only materialises at the next restart (audit_recommendations
+# is one), and asking for a table that is not there must not cost us the archive.
+#
+# The check is a PROBE on the engine rather than a try/except around the query,
+# because there is no good way back from a failed statement inside the caller's
+# transaction: on PostgreSQL it aborts the whole transaction, and the rollback
+# that recovers it expires every ORM instance in the session — including the very
+# row being archived, whose next attribute read then attempts lazy IO from an
+# async context and raises MissingGreenlet. Not issuing the doomed statement is
+# the only fix that leaves the caller's session exactly as it found it.
+_known_tables: set[str] | None = None
+
+
+async def _existing_tables() -> set[str]:
+    """Names of the tables present in the database (cached, best effort).
+
+    An empty set means "could not determine" and callers then simply try the
+    query — never a reason to skip a collection that is probably there.
+    """
+    global _known_tables
+    if _known_tables is None:
+        try:
+            from sqlalchemy import inspect as sa_inspect
+
+            from app.core.database import engine
+            async with engine.connect() as conn:
+                _known_tables = await conn.run_sync(
+                    lambda sync_conn: set(sa_inspect(sync_conn).get_table_names())
+                )
+        except Exception as exc:  # noqa: BLE001 — a failed probe is not a failed archive
+            logger.warning("archiving: could not list tables (%s)", exc)
+            _known_tables = set()
+    return _known_tables
+
+
+async def collect_children(db: AsyncSession, entity_type: str, record) -> dict[str, list[dict]]:
+    """Serialize every child collection declared for `entity_type`.
+
+    A collection whose table does not exist yet degrades to "not captured"
+    instead of aborting the archive: losing the parent snapshot over an optional
+    child would be a far worse outcome than an incomplete one.
+    """
+    specs = CHILD_SPECS.get(entity_type)
+    if not specs:
+        return {}
+    # Read before any statement runs: if one did fail and something rolled the
+    # session back, `record` would be expired and this attribute access would
+    # itself try to hit the database.
+    parent_id = record.id
+    available = await _existing_tables()
+    children: dict[str, list[dict]] = {}
+    for key, model, fk_attr in specs:
+        if available and model.__tablename__ not in available:
+            logger.info(
+                "archiving: %s %s — child collection %r skipped, table %s does not exist yet",
+                entity_type, parent_id, key, model.__tablename__,
+            )
+            continue
+        try:
+            rows = (await db.execute(
+                select(model)
+                .where(getattr(model, fk_attr) == parent_id)
+                .order_by(model.created_at.asc())
+            )).scalars().all()
+        except SQLAlchemyError as exc:  # noqa: BLE001 — see the note above on recovery
+            logger.warning(
+                "archiving: child collection %r of %s %s not captured (%s)",
+                key, entity_type, parent_id, exc,
+            )
+            continue
+        children[key] = [serialize_record(row) for row in rows]
+    return children
+
+
+async def serialize_record_with_children(db: AsyncSession, entity_type: str, record) -> dict:
+    """The payload actually stored on an ArchiveRecord: the row plus its children.
+
+    Evidence is embedded as METADATA (path, size, content type, sha256) — the
+    bytes stay where they were uploaded. Copying them would double a bank's
+    storage for every archive and, worse, break the single sha256 that proves the
+    file has not changed since upload; the archive keeps the pointer and the
+    digest so the retrieval route can re-verify the original.
+    """
+    payload = serialize_record(record)
+    children = await collect_children(db, entity_type, record)
+    if children:
+        payload["children"] = children
+    return payload
+
+
 # ── Shared archive-creation path (also used by the manual POST /archiving) ──
 
 async def create_archive_record(
@@ -176,6 +296,59 @@ async def create_archive_record(
     await db.commit()
     await db.refresh(record)
     return record
+
+
+async def load_archivable(db: AsyncSession, tenant_id: str, entity_type: str, entity_id: str):
+    """The tenant's live row for (entity_type, entity_id), or None.
+
+    Raises ValueError for an entity_type the engine does not know how to read,
+    so callers can answer 422 rather than silently archiving nothing.
+    """
+    spec = ARCHIVABLE_ENTITIES.get(entity_type)
+    if not spec:
+        raise ValueError(
+            f"Unsupported entity_type {entity_type!r}. Supported: {sorted(ARCHIVABLE_ENTITIES)}"
+        )
+    model = spec["model"]
+    return (await db.execute(
+        select(model).where(model.id == entity_id, model.tenant_id == tenant_id)
+    )).scalar_one_or_none()
+
+
+async def snapshot_entity(
+    db: AsyncSession,
+    *,
+    tenant_id: str,
+    entity_type: str,
+    entity_id: str,
+    reason: str | None,
+    retention_days: int | None,
+    archived_by_id: str | None,
+) -> ArchiveRecord:
+    """Archive a live row BY ID, payload built server-side (children included).
+
+    The manual endpoint used to store whatever payload the caller posted, so an
+    "archived audit" was only as truthful as the client that sent it. Anything
+    that must survive the deletion of the original — the audits DELETE route, a
+    retention job — should go through here so the snapshot is the real record.
+
+    Raises ValueError (unknown entity_type / bad retention) or LookupError (no
+    such row in this tenant).
+    """
+    record = await load_archivable(db, tenant_id, entity_type, entity_id)
+    if record is None:
+        raise LookupError(f"{entity_type} {entity_id} not found in this tenant")
+    name = getattr(record, ARCHIVABLE_ENTITIES[entity_type]["name_attr"], None) or entity_id
+    return await create_archive_record(
+        db,
+        tenant_id=tenant_id,
+        entity_type=entity_type,
+        entity_id=entity_id,
+        payload=await serialize_record_with_children(db, entity_type, record),
+        reason=(reason or f"Archived {entity_type} — {name}")[:300],
+        retention_days=retention_days,
+        archived_by_id=archived_by_id,
+    )
 
 
 # ── Rule evaluation ──────────────────────────────────────────────────────────
@@ -220,7 +393,7 @@ async def evaluate_rule(db: AsyncSession, rule: ArchivingRule) -> int:
             tenant_id=rule.tenant_id,
             entity_type=rule.entity_type,
             entity_id=record.id,
-            payload=serialize_record(record),
+            payload=await serialize_record_with_children(db, rule.entity_type, record),
             reason=f"Auto-archived by rule {rule.id} ({rule.criteria}) — {name}"[:300],
             retention_days=rule.retention_days,
             archived_by_id=None,  # system-initiated, no human actor

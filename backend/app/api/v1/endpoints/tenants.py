@@ -1,7 +1,7 @@
 """Tenant Management — organization settings, modules, and configuration."""
 from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -114,12 +114,22 @@ class SecuritySettingsUpdate(BaseModel):
 # ── Endpoints ────────────────────────────────────────────────────────────
 
 def _redacted_settings(raw: dict | None) -> dict:
-    """Tenant settings with the directory bind password removed.
+    """Tenant settings with every stored credential removed.
 
     ``GET /tenants/current`` is readable by every authenticated user, so the
-    settings blob must never carry a credential out of the database. The
-    directory endpoints below report whether a password is set; nothing returns
-    the password itself.
+    settings blob must never carry a credential out of the database. Two live
+    in there:
+
+      - ``ldap.bind_password`` — the directory service account. The directory
+        endpoints below report whether one is set; nothing returns the value.
+      - ``webhooks[*].secret`` — the key that signs our outbound payloads to a
+        customer endpoint, so whoever reads it can forge them. It is exactly
+        why ``GET /webhooks`` is gated to CISO+; without this the same value
+        came back to *any* authenticated tenant user through this blob, and the
+        gate on the webhooks listing protected nothing.
+
+    Each is replaced by a set/not-set marker, keeping "" and null distinct so a
+    settings screen can still tell "cleared" from "never configured".
     """
     settings_dict = dict(raw or {})
     ldap_block = settings_dict.get("ldap")
@@ -127,7 +137,32 @@ def _redacted_settings(raw: dict | None) -> dict:
         redacted = dict(ldap_block)
         redacted["bind_password"] = "__set__" if redacted.get("bind_password") else ""
         settings_dict["ldap"] = redacted
+    hooks = settings_dict.get("webhooks")
+    if isinstance(hooks, list):
+        settings_dict["webhooks"] = [
+            ({**h, "secret": "__set__"} if isinstance(h, dict) and h.get("secret") else h)
+            for h in hooks
+        ]
     return settings_dict
+
+
+def _restore_webhook_secrets(incoming, stored) -> object:
+    """Undo the read redaction on a write.
+
+    ``webhooks`` is a whitelisted settings key, so a client that reads
+    ``GET /tenants/current`` and PATCHes the blob back would post the
+    ``"__set__"`` marker _redacted_settings() substituted and overwrite the real
+    signing key with it — silently breaking every signature we send. Put the
+    stored secret back whenever the caller sends the marker; a genuinely new
+    secret is any other string.
+    """
+    if not isinstance(incoming, list) or not isinstance(stored, list):
+        return incoming
+    by_id = {h.get("id"): h.get("secret") for h in stored if isinstance(h, dict)}
+    return [
+        ({**h, "secret": by_id.get(h.get("id"))} if isinstance(h, dict) and h.get("secret") == "__set__" else h)
+        for h in incoming
+    ]
 
 
 @router.get("/current", response_model=TenantOut)
@@ -158,6 +193,8 @@ async def update_current_tenant(
         existing = dict(t.settings or {})
         for key, value in body.settings.items():
             if key in _SETTINGS_ALLOWED_KEYS:
+                if key == "webhooks":
+                    value = _restore_webhook_secrets(value, existing.get("webhooks"))
                 existing[key] = value
         t.settings = existing
     await db.commit(); await db.refresh(t)
@@ -333,6 +370,40 @@ async def update_ldap_settings(
         except DirectoryAuthError as exc:
             raise HTTPException(422, str(exc))
 
+    if "server_uri" in patch:
+        # Repointing the directory while KEEPING the stored bind password aims
+        # this tenant's service-account credential at a host the caller just
+        # chose: POST /current/ldap/test (and the next directory login) then
+        # simple-binds to it with bind_dn + that password, which turns a
+        # configuration edit into a read-back for the one value _ldap_view()
+        # and _redacted_settings() deliberately never return. The test endpoint
+        # already refuses this for an unsaved draft — saving the new URI first
+        # was the way around it, and target_is_internal() does not help because
+        # an attacker-controlled host is public, not private.
+        #
+        # So: a new server has to be accompanied by the password. Refusing
+        # rather than clearing keeps a working configuration working until the
+        # administrator finishes the move. An anonymous bind (no bind_dn) sends
+        # no password and is unaffected.
+        from app.services.directory_auth import resolve_ldap_config
+        current_cfg = resolve_ldap_config(getattr(t, "settings", None))
+        new_uri = (patch.get("server_uri") or "").strip()
+        old_uri = (current_cfg.get("server_uri") or "").strip()
+        keeps_stored_password = patch.get("bind_password") is None  # absent or explicit null
+        effective_bind_dn = (patch["bind_dn"] if "bind_dn" in patch else current_cfg.get("bind_dn")) or ""
+        if (
+            new_uri != old_uri
+            and keeps_stored_password
+            and (current_cfg.get("bind_password") or "")   # there is a secret to leak
+            and effective_bind_dn.strip()                  # and it would be sent
+        ):
+            raise HTTPException(
+                422,
+                "Changing the directory server requires re-entering the bind password. "
+                "Enter the service-account password, or clear the bind DN to use an "
+                "anonymous bind.",
+            )
+
     if "user_filter" in patch and patch["user_filter"]:
         if "{username}" not in patch["user_filter"]:
             # Without the placeholder the filter matches the same entry for
@@ -379,12 +450,38 @@ async def test_ldap_settings(
         raise HTTPException(404, "Tenant not found")
 
     cfg = resolve_ldap_config(getattr(t, "settings", None))
+    stored_uri = (cfg.get("server_uri") or "").strip()
     if body.draft is not None:
-        for key, value in body.draft.model_dump(exclude_unset=True).items():
+        patch = body.draft.model_dump(exclude_unset=True)
+        # A test binds with bind_dn + bind_password against server_uri. Falling
+        # back to the STORED password while the draft points somewhere else
+        # would send this tenant's directory service-account credential to a
+        # host the caller just chose — turning the one endpoint that reaches
+        # the network into a read-back for the password that _ldap_view() and
+        # _redacted_settings() deliberately never return. So: a different
+        # server has to be tested with a password typed into the form.
+        draft_uri = (patch.get("server_uri") or "").strip() if "server_uri" in patch else stored_uri
+        falls_back_to_stored = patch.get("bind_password") is None  # absent or explicit null
+        # Effective bind_dn after the patch is applied: an explicit "" means the
+        # caller asked for an anonymous bind, which sends no password at all.
+        draft_bind_dn = (patch["bind_dn"] if "bind_dn" in patch else cfg.get("bind_dn")) or ""
+        if (
+            draft_uri != stored_uri
+            and falls_back_to_stored
+            and (cfg.get("bind_password") or "")           # there is a secret to leak
+            and draft_bind_dn.strip()                      # and it would be sent
+        ):
+            raise HTTPException(
+                422,
+                "Testing against a different server requires the bind password. "
+                "Enter the service-account password, or clear the bind DN to test "
+                "an anonymous bind.",
+            )
+        for key, value in patch.items():
             if key not in _DEFAULTS:
                 continue
             if key == "bind_password" and value is None:
-                continue  # test with the stored password
+                continue  # omitted -> test with the stored password
             cfg[key] = value
 
     # ldap3 binds are blocking sockets — keep them off the event loop.
@@ -404,3 +501,4 @@ async def get_enabled_modules(db: AsyncSession = Depends(get_db), _: User = Depe
     if sub and sub.tier.value == "elite":
         return {"modules": {k: True for k in keys}}
     return {"modules": {k: (True if k == "dashboard" else features.get(k, True)) for k in keys}}
+

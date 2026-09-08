@@ -17,11 +17,16 @@ holds MANY evidence files, so uploading a second, unrelated file marks the first
 superseded while it stays live and downloadable. Age plus status is therefore
 never sufficient grounds to delete anything.
 
-*So every candidate is checked against the live tables first.* Five different
+*So every candidate is checked against the live tables first.* Seven different
 records can point at one path — another version row, evidence, an uploaded
-document, a vendor contract, an audit report — and a share-link upload really
-does point an Evidence row and an UploadedDocument at the same file. If any of
-them still references it, the bytes stay.
+document, a vendor contract, an audit report, audit evidence, an action-plan
+attachment — and a share-link upload really does point an Evidence row and an
+UploadedDocument at the same file. If any of them still references it, the
+bytes stay. Each table is matched on BOTH the stored and the resolved path,
+because the tables disagree about which shape they keep. An eighth record —
+a report that was distributed — is matched on the file's DIGEST instead,
+because report_distributions logs what a recipient holds and not where it
+lives; see is_referenced_elsewhere().
 
 The purge order is likewise deliberate: claim the row, then unlink, then delete
 the row. Unlinking first would leave, on a crash, a version row whose file is
@@ -62,23 +67,46 @@ def resolve_path(row: StoredFileVersion) -> Path:
     return Path(row.file_path) if row.is_absolute_path else Path(settings.UPLOADS_DIR) / row.file_path
 
 
+def unresolvable_reason(row: StoredFileVersion) -> str | None:
+    """Why this version's bytes cannot be located on this host, or None.
+
+    A row flagged ``is_absolute_path`` whose stored path is not actually
+    absolute is not a file we can find. The live database holds both shapes:
+    Windows-era contract paths (``uploads\\contracts\\x.txt``) and virtual ones
+    (``collab://<id>``, an executed agreement that never had bytes on disk).
+    ``Path()`` resolves either RELATIVE TO THE PROCESS WORKING DIRECTORY, so a
+    purge would aim its unlink at whatever happens to sit there and then delete
+    the integrity record of an issued document to reclaim nothing.
+    """
+    if row.is_absolute_path and not Path(row.file_path).is_absolute():
+        return "path is not resolvable on this host"
+    return None
+
+
 async def is_referenced_elsewhere(db: AsyncSession, row: StoredFileVersion) -> str | None:
     """Name the live record still pointing at this file, or None if orphaned.
 
-    Checked against the STORED path shape rather than the resolved one, matching
-    how each table stores it: evidence and documents keep a path relative to
-    UPLOADS_DIR, contracts keep an absolute one.
+    Every table is checked against BOTH the stored path and the resolved one,
+    because they disagree in practice: evidence, documents and audit reports
+    keep a path relative to UPLOADS_DIR, contracts keep the exact string they
+    wrote (an absolute path, or a virtual ``collab://<id>``). Matching on one
+    shape alone declared live files orphaned — ``Audit.report_url`` stores the
+    relative path and was only ever compared against the absolute one, and
+    ``Path()`` rewrites ``collab://x`` to ``collab:/x`` so the signed-contract
+    row could not even match itself.
     """
+    from app.models.action_item_attachment import ActionItemAttachment
+    from app.models.audit import Audit, AuditEvidence
     from app.models.compliance import Evidence, UploadedDocument
+    from app.models.report_distribution import ReportDistribution
     from app.models.vendor import VendorContract
-    from app.models.audit import Audit
 
-    rel = row.file_path
-    absolute = str(resolve_path(row))
+    # De-duplicated so a relative row (the two shapes coincide) costs one term.
+    candidates = list({row.file_path, str(resolve_path(row))})
 
     other_version = (await db.execute(
         select(StoredFileVersion.id).where(
-            StoredFileVersion.file_path == rel,
+            StoredFileVersion.file_path.in_(candidates),
             StoredFileVersion.id != row.id,
             StoredFileVersion.status != PURGING,
         ).limit(1)
@@ -86,17 +114,46 @@ async def is_referenced_elsewhere(db: AsyncSession, row: StoredFileVersion) -> s
     if other_version:
         return f"stored_file_versions:{other_version}"
 
-    for model, column, value, label in (
-        (Evidence, Evidence.file_path, rel, "evidence"),
-        (UploadedDocument, UploadedDocument.file_path, rel, "uploaded_documents"),
-        (VendorContract, VendorContract.file_path, absolute, "vendor_contracts"),
-        (Audit, Audit.report_url, absolute, "audits.report_url"),
+    # Every table that points at an uploaded file. AuditEvidence and
+    # ActionItemAttachment were missing, and both are the case this check
+    # exists for: they mirror compliance.Evidence and hang off a PARENT that
+    # holds many files, so a second upload marks the first version superseded
+    # while its record stays live and downloadable. Purging it would delete the
+    # bytes an audit conclusion rests on and leave the record reading MISSING —
+    # which is how tampering looks in the integrity report.
+    for model, column, label in (
+        (Evidence, Evidence.file_path, "evidence"),
+        (UploadedDocument, UploadedDocument.file_path, "uploaded_documents"),
+        (VendorContract, VendorContract.file_path, "vendor_contracts"),
+        (Audit, Audit.report_url, "audits.report_url"),
+        (AuditEvidence, AuditEvidence.file_path, "audit_evidence"),
+        (ActionItemAttachment, ActionItemAttachment.file_path, "action_item_attachments"),
     ):
         hit = (await db.execute(
-            select(model.id).where(column == value).limit(1)
+            select(model.id).where(column.in_(candidates)).limit(1)
         )).scalar_one_or_none()
         if hit:
             return f"{label}:{hit}"
+
+    # A report that was DISTRIBUTED is matched on its DIGEST, not its path:
+    # report_distributions records what a recipient actually holds (file_name +
+    # sha256) and never where the bytes live, so no path predicate can find it.
+    # Archived reports are the case this matters for — record_version supersedes
+    # the previous report the moment a new one is generated for the same tenant
+    # and type, so every report but the newest is purge-eligible on age alone,
+    # and nothing else in this list points at UPLOADS_DIR/reports/. Reclaiming a
+    # report that was e-mailed out would leave the diffusion log naming a
+    # document nobody can produce again, which is exactly the traceability the
+    # historique exists to give.
+    if row.file_sha256:
+        sent = (await db.execute(
+            select(ReportDistribution.id).where(
+                ReportDistribution.tenant_id == row.tenant_id,
+                ReportDistribution.sha256 == row.file_sha256,
+            ).limit(1)
+        )).scalar_one_or_none()
+        if sent:
+            return f"report_distributions:{sent}"
 
     return None
 
@@ -174,13 +231,22 @@ async def purge_one(db: AsyncSession, row: StoredFileVersion) -> dict:
     and row-delete is the case that must not happen the other way round, since
     a row pointing at a missing file reads as tampering.
     """
+    unresolvable = unresolvable_reason(row)
+    if unresolvable:
+        return {"id": row.id, "action": "skipped", "reason": unresolvable}
+
     ref = await is_referenced_elsewhere(db, row)
     if ref:
         return {"id": row.id, "action": "skipped", "reason": f"still referenced by {ref}"}
 
+    # Captured before the claim: an UPDATE issued through the session
+    # synchronises the loaded instance, so afterwards row.status reads
+    # "purging" and the failure path below could no longer tell a superseded
+    # version from a deleted one.
+    original_status = row.status
     claimed = await db.execute(
         update(StoredFileVersion)
-        .where(StoredFileVersion.id == row.id, StoredFileVersion.status == row.status)
+        .where(StoredFileVersion.id == row.id, StoredFileVersion.status == original_status)
         .values(status=PURGING)
     )
     await db.commit()
@@ -193,10 +259,14 @@ async def purge_one(db: AsyncSession, row: StoredFileVersion) -> dict:
         path.unlink(missing_ok=True)
     except OSError as exc:
         logger.error("file_retention: unlink failed for %s: %s", path, exc)
+        # Back to what it was, not a blanket "deleted": a superseded version
+        # whose unlink failed is still a superseded version, and relabelling it
+        # would move it onto the (shorter) deleted-file window and lose the
+        # "keep the last N revisions" protection that goes with its own status.
         await db.execute(
             update(StoredFileVersion)
             .where(StoredFileVersion.id == row.id)
-            .values(status=file_integrity.DELETED)
+            .values(status=original_status)
         )
         await db.commit()
         return {"id": row.id, "action": "failed", "reason": str(exc)}
@@ -215,10 +285,16 @@ async def resume_interrupted(db: AsyncSession) -> int:
         select(StoredFileVersion).where(StoredFileVersion.status == PURGING)
     )).scalars().all())
     for row in rows:
-        try:
-            resolve_path(row).unlink(missing_ok=True)
-        except OSError:
-            pass
+        # Same guard purge_one applies: a row flagged absolute whose path is not
+        # absolute resolves against the process working directory, so unlinking
+        # it would aim at whatever happens to sit there. Such a row can no longer
+        # be claimed, but one claimed by the older code still has to be finished
+        # — drop the row, leave the filesystem alone.
+        if not unresolvable_reason(row):
+            try:
+                resolve_path(row).unlink(missing_ok=True)
+            except OSError:
+                pass
         await db.execute(
             StoredFileVersion.__table__.delete().where(StoredFileVersion.id == row.id)
         )
@@ -238,7 +314,8 @@ async def preview(db: AsyncSession, tenant_id: str | None = None, limit: int = 2
     candidates = await select_purgeable(db, policy, tenant_id=tenant_id, limit=limit)
     would_purge, would_skip = [], []
     for row in candidates:
-        ref = await is_referenced_elsewhere(db, row)
+        unresolvable = unresolvable_reason(row)
+        ref = None if unresolvable else await is_referenced_elsewhere(db, row)
         entry = {
             "id": row.id,
             "entity_type": row.entity_type,
@@ -247,7 +324,9 @@ async def preview(db: AsyncSession, tenant_id: str | None = None, limit: int = 2
             "retired_at": row.retired_at.isoformat() if row.retired_at else None,
             "size_bytes": row.file_size_bytes,
         }
-        if ref:
+        if unresolvable:
+            would_skip.append({**entry, "reason": unresolvable})
+        elif ref:
             would_skip.append({**entry, "reason": f"still referenced by {ref}"})
         else:
             would_purge.append(entry)

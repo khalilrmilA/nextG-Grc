@@ -17,10 +17,20 @@ in ``scanner_import.py``.
 """
 from __future__ import annotations
 
+import re
 import xml.etree.ElementTree as ET
+from enum import Enum
 from typing import Sequence
 
 from defusedxml.ElementTree import fromstring as safe_xml_fromstring
+
+# Characters no XML 1.0 document may contain, not even escaped. ElementTree
+# writes them out verbatim without complaining, so a single one of them in a
+# description turns the whole export into a file no parser will read back —
+# a corrupt download is worse than a refused one, and nothing reported it.
+# They arrive in real data: text pasted out of PDFs and OCR output carry
+# \x0b / \x0c routinely.
+_INVALID_XML_CHARS = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f]")
 
 
 def _scalar_to_text(value) -> str:
@@ -29,7 +39,11 @@ def _scalar_to_text(value) -> str:
         return ""
     if isinstance(value, bool):
         return "true" if value else "false"
-    return str(value)
+    if isinstance(value, Enum):
+        # str() on a (str, Enum) member renders "AuditStatus.Fieldwork"; every
+        # other export format writes the bare value.
+        value = value.value
+    return _INVALID_XML_CHARS.sub("", str(value))
 
 
 def rows_to_xml(root_tag: str, record_tag: str, rows: Sequence[dict]) -> bytes:

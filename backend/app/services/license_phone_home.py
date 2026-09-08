@@ -12,6 +12,12 @@ are all logged and otherwise ignored — a connectivity blip must never lock a
 client out. See services/license_client.py's module docstring for the same
 principle stated from the transport side.
 
+KNOWN GAP: a revocation is recorded by shortening LicenseActivation.expires_at,
+and GET /license/status reports it, but core/license_middleware.py derives its
+402 verdict from the expiry inside the SIGNED payload alone and therefore still
+answers "ok". Until that middleware also honours the stored expiry, "Revoke" in
+the super admin's Licenses tab warns the appliance rather than locking it out.
+
 True no-op unless BOTH this build enforces licensing AND a licence server is
 configured (see start_license_phone_home) — an air-gapped deployment (the
 default; see firstboot.sh, which also sets ENABLE_LICENSE_PHONE_HOME=0) never
@@ -57,6 +63,11 @@ async def _run_once() -> None:
                         activation.lid)
         activation.expires_at = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
         await db.commit()
+        # NOTE: this shortened expiry is honoured by GET /license/status
+        # (endpoints/license.py takes the earlier of the stored and the signed
+        # expiry). core/license_middleware.py still reads ONLY the signed
+        # payload, so the 402 gate does not yet act on a revocation — see the
+        # module docstring.
         invalidate_license_cache()
 
 

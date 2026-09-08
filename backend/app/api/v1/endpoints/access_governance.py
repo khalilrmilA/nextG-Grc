@@ -12,7 +12,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.v1.dependencies.auth import get_current_user, get_tenant_id, require_roles
@@ -253,17 +253,44 @@ class DecisionIn(BaseModel):
     note: str | None = None
 
 
-async def _campaign_out(db, c: AccessReviewCampaign) -> CampaignOut:
-    items = (await db.execute(select(AccessReviewItem).where(
-        AccessReviewItem.campaign_id == c.id))).scalars().all()
+_ZERO_COUNTS = {"total": 0, "pending": 0, "confirmed": 0, "revoked": 0}
+
+
+async def _campaign_counts(db, campaign_ids: list[str]) -> dict[str, dict]:
+    """Decision tallies for many campaigns in ONE grouped query.
+
+    The listing used to load every item of every campaign, one query per
+    campaign, purely to count them — a recertification round holds a row per
+    person in the organisation, so that is the whole user table re-read once per
+    round ever run.
+    """
+    if not campaign_ids:
+        return {}
+    rows = (await db.execute(
+        select(AccessReviewItem.campaign_id, AccessReviewItem.decision, func.count())
+        .where(AccessReviewItem.campaign_id.in_(campaign_ids))
+        .group_by(AccessReviewItem.campaign_id, AccessReviewItem.decision)
+    )).all()
+    out: dict[str, dict] = {}
+    for cid, decision, n in rows:
+        bucket = out.setdefault(cid, dict(_ZERO_COUNTS))
+        bucket["total"] += n
+        if decision in ("pending", "confirmed", "revoked"):
+            bucket[decision] += n
+    return out
+
+
+def _campaign_row(c: AccessReviewCampaign, counts: dict) -> CampaignOut:
     return CampaignOut(
         id=c.id, name=c.name, status=c.status, due_date=c.due_date,
         completed_at=c.completed_at.isoformat() if c.completed_at else None,
-        notes=c.notes, total=len(items),
-        pending=sum(1 for i in items if i.decision == "pending"),
-        confirmed=sum(1 for i in items if i.decision == "confirmed"),
-        revoked=sum(1 for i in items if i.decision == "revoked"),
+        notes=c.notes, **counts,
     )
+
+
+async def _campaign_out(db, c: AccessReviewCampaign) -> CampaignOut:
+    counts = (await _campaign_counts(db, [c.id])).get(c.id) or dict(_ZERO_COUNTS)
+    return _campaign_row(c, counts)
 
 
 @router.post("/access-reviews", response_model=CampaignOut, status_code=201)
@@ -319,7 +346,8 @@ async def list_campaigns(
     rows = (await db.execute(select(AccessReviewCampaign).where(
         AccessReviewCampaign.tenant_id == tenant_id
     ).order_by(AccessReviewCampaign.created_at.desc()))).scalars().all()
-    return [await _campaign_out(db, c) for c in rows]
+    counts = await _campaign_counts(db, [c.id for c in rows])
+    return [_campaign_row(c, counts.get(c.id) or dict(_ZERO_COUNTS)) for c in rows]
 
 
 @router.get("/access-reviews/{campaign_id}/items", response_model=list[ReviewItemOut])
@@ -343,6 +371,96 @@ async def list_items(
         )
         for i in rows
     ]
+
+
+async def _guard_revocation(db, subject: User, actor: User, tenant_id: str) -> None:
+    """Refuse the revocations this route must not be able to make.
+
+    require_roles(TENANT_ADMIN, CISO) lets a CISO reach the decision endpoint,
+    and users.py deliberately never lets a CISO touch an administrator's account
+    — every user mutation there is gated on require_roles(TENANT_ADMIN) and
+    refuses super admins outright ("Cannot modify super admin accounts"). A
+    review decision must not be the way around that rule.
+
+    The last-administrator check is separate: a revocation applies immediately
+    and viewer is blocked from every write in get_current_user, so an
+    organisation that revokes its only administrator — including the reviewer
+    revoking themselves, which is deliberately allowed — cannot appoint a
+    replacement afterwards and needs platform support to recover.
+    """
+    if subject.role == UserRole.SUPER_ADMIN:
+        raise HTTPException(
+            403, "Super admin accounts are managed by the platform and cannot be "
+                 "revoked from a tenant access review.")
+    if subject.role == UserRole.TENANT_ADMIN:
+        if actor.role not in (UserRole.TENANT_ADMIN, UserRole.SUPER_ADMIN):
+            raise HTTPException(
+                403, "Only an administrator can revoke another administrator's access.")
+        remaining = (await db.execute(
+            select(func.count()).select_from(User).where(
+                User.tenant_id == tenant_id,
+                User.role == UserRole.TENANT_ADMIN,
+                User.is_active == True,  # noqa: E712
+                User.id != subject.id,
+            )
+        )).scalar() or 0
+        if remaining == 0:
+            raise HTTPException(
+                400, "This is the organization's last administrator. Appoint another "
+                     "administrator before revoking this one.")
+
+
+async def _strip_effective_access(db, subject: User, actor: User, tenant_id: str) -> dict:
+    """Remove everything get_effective_roles() would otherwise still grant.
+
+    Reducing role/roles to viewer left three other sources untouched — a custom
+    role the account holds, a Group it belongs to, and any delegation still
+    inside its window — and get_effective_roles() unions all of them, so a person
+    whose access had just been "revoked" walked away with every role they held
+    through any of the three. The roles_snapshot the approver judged is itself
+    built from get_effective_roles(), so those are precisely the roles the
+    decision was made about; leaving them is the failure mode the docstring on
+    this endpoint says the ``applied`` flag exists to prevent.
+    """
+    from app.models.group import Group
+
+    removed = {
+        "custom_role_ids": list(subject.custom_role_ids or []),
+        "group_ids": [],
+        "delegation_ids": [],
+    }
+    subject.custom_role_ids = []
+
+    groups = (await db.execute(
+        select(Group).where(Group.tenant_id == tenant_id)
+    )).scalars().all()
+    for g in groups:
+        if subject.id in (g.member_ids or []):
+            # Reassign rather than mutate: SQLAlchemy does not track in-place
+            # edits to a JSON column.
+            g.member_ids = [m for m in (g.member_ids or []) if m != subject.id]
+            removed["group_ids"].append(g.id)
+
+    now = _utcnow()
+    live = (await db.execute(
+        select(AccessDelegation).where(
+            AccessDelegation.tenant_id == tenant_id,
+            AccessDelegation.revoked_at.is_(None),
+            (AccessDelegation.delegate_id == subject.id)
+            | (AccessDelegation.delegator_id == subject.id),
+        )
+    )).scalars().all()
+    for d in live:
+        # Both directions, and future-dated ones too. Delegations TO them would
+        # hand the roles straight back the moment the window opens; delegations
+        # FROM them go on granting authority the delegator no longer holds,
+        # because get_effective_roles reads the delegation's stored role list
+        # rather than re-checking the delegator.
+        d.revoked_at = now
+        d.revoked_by_id = actor.id
+        removed["delegation_ids"].append(d.id)
+
+    return removed
 
 
 @router.patch("/access-reviews/items/{item_id}", response_model=ReviewItemOut)
@@ -370,11 +488,18 @@ async def decide_item(
         raise HTTPException(404, "Review item not found")
 
     campaign = (await db.execute(select(AccessReviewCampaign).where(
-        AccessReviewCampaign.id == item.campaign_id))).scalar_one_or_none()
-    if campaign and campaign.status != "open":
+        AccessReviewCampaign.id == item.campaign_id,
+        AccessReviewCampaign.tenant_id == tenant_id))).scalar_one_or_none()
+    if campaign is None:
+        # An item with no campaign is anchored to nothing: it can never be closed
+        # out by complete_campaign, and a revocation decided on it would still
+        # change an account. Treat it as gone rather than acting on it.
+        raise HTTPException(404, "The review this item belongs to no longer exists.")
+    if campaign.status != "open":
         raise HTTPException(400, "This review is already completed.")
 
-    subject = (await db.execute(select(User).where(User.id == item.user_id))).scalar_one_or_none()
+    subject = (await db.execute(select(User).where(
+        User.id == item.user_id, User.tenant_id == tenant_id))).scalar_one_or_none()
     if subject and subject.id == current_user.id and body.decision == "confirmed":
         # Segregation of duties: confirming your own access defeats the point of
         # the review. Revoking your own is allowed — that direction only ever
@@ -383,13 +508,16 @@ async def decide_item(
                                  "administrator must review your entitlements.")
 
     before = None
+    removed = None
     if body.decision == "revoked" and subject:
+        await _guard_revocation(db, subject, current_user, tenant_id)
         before = {
             "role": subject.role.value if hasattr(subject.role, "value") else subject.role,
             "roles": list(subject.roles or []),
         }
         subject.role = UserRole.VIEWER
         subject.roles = [UserRole.VIEWER.value]
+        removed = await _strip_effective_access(db, subject, current_user, tenant_id)
         item.applied = True
 
     item.decision = body.decision
@@ -406,6 +534,9 @@ async def decide_item(
                           "reviewed_roles": list(item.roles_snapshot or []),
                           "changed": ({"from": before, "to": {"role": "viewer", "roles": ["viewer"]}}
                                       if before else None),
+                          # What else the revocation had to take away for it to
+                          # mean anything — the record has to show it was applied.
+                          "also_removed": removed,
                           "note": body.note})
     return ReviewItemOut(
         id=item.id, user_id=item.user_id, user_email=item.user_email,
@@ -512,13 +643,34 @@ def _validate_base_roles(roles: list[str]) -> list[str]:
     return sorted(wanted)
 
 
-async def _custom_role_out(db, cr) -> CustomRoleOut:
-    holders = (await db.execute(select(User).where(User.tenant_id == cr.tenant_id))).scalars().all()
+async def _custom_role_holder_counts(db, tenant_id: str) -> dict[str, int]:
+    """How many users hold each custom role, in one pass over the tenant's users.
+
+    custom_role_ids is a JSON list, so this cannot be a GROUP BY — but it can be
+    read once for a whole listing instead of once per role, and it can select the
+    one column it needs rather than hydrating every User in the organisation.
+    """
+    rows = (await db.execute(
+        select(User.custom_role_ids).where(User.tenant_id == tenant_id)
+    )).all()
+    counts: dict[str, int] = {}
+    for (ids,) in rows:
+        for cid in (ids or []):
+            counts[cid] = counts.get(cid, 0) + 1
+    return counts
+
+
+def _custom_role_row(cr, assigned_users: int) -> CustomRoleOut:
     return CustomRoleOut(
         id=cr.id, name=cr.name, description=cr.description,
         base_roles=list(cr.base_roles or []), is_active=cr.is_active,
-        assigned_users=sum(1 for u in holders if cr.id in (u.custom_role_ids or [])),
+        assigned_users=assigned_users,
     )
+
+
+async def _custom_role_out(db, cr) -> CustomRoleOut:
+    counts = await _custom_role_holder_counts(db, cr.tenant_id)
+    return _custom_role_row(cr, counts.get(cr.id, 0))
 
 
 @router.post("/custom-roles", response_model=CustomRoleOut, status_code=201)
@@ -562,7 +714,8 @@ async def list_custom_roles(
 
     rows = (await db.execute(select(CustomRole).where(
         CustomRole.tenant_id == tenant_id).order_by(CustomRole.name))).scalars().all()
-    return [await _custom_role_out(db, cr) for cr in rows]
+    counts = await _custom_role_holder_counts(db, tenant_id)
+    return [_custom_role_row(cr, counts.get(cr.id, 0)) for cr in rows]
 
 
 @router.patch("/custom-roles/{role_id}", response_model=CustomRoleOut)

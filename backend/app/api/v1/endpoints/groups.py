@@ -3,6 +3,7 @@
 tenant_admin only. Distinct from /governance/groups (RACI assignment groups,
 feature-gated, no bearing on access control).
 """
+import logging
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -19,6 +20,32 @@ from app.models.activity_log import ActivityLog
 from app.services.activity_chain import chain_and_add
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
+
+
+async def _log_rights_change(
+    db: AsyncSession, tenant_id: str, actor: User, group_id: str, group_name: str, details: dict,
+) -> None:
+    """Append a group rights_change to the hash-chained audit trail.
+
+    Best-effort by design — the group change is already committed and losing the
+    log must not roll it back — but never silent: an unrecorded entitlement
+    change is precisely what an access review exists to catch.
+    """
+    try:
+        await chain_and_add(db, ActivityLog(
+            tenant_id=tenant_id,
+            user_id=actor.id,
+            user_email=actor.email,
+            action="rights_change",
+            entity_type="group",
+            entity_id=group_id,
+            entity_name=group_name,
+            details=details,
+            origin="api",
+        ))
+    except Exception:  # noqa: BLE001
+        logger.warning("rights_change audit entry not recorded for group %s", group_id)
 
 
 def _validate_roles(roles: list[str]) -> list[str]:
@@ -83,7 +110,7 @@ async def list_groups(
 @router.post("", response_model=GroupOut, status_code=201)
 async def create_group(
     body: GroupIn,
-    _: Annotated[User, Depends(require_roles(UserRole.TENANT_ADMIN))],
+    current_user: Annotated[User, Depends(require_roles(UserRole.TENANT_ADMIN))],
     tenant_id: Annotated[str, Depends(get_tenant_id)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
@@ -98,6 +125,28 @@ async def create_group(
     db.add(group)
     await db.commit()
     await db.refresh(group)
+
+    # Creating a group with roles and members grants those roles to those people
+    # (see services/authz.py) — the same rights change update_group already
+    # records, and it left no trace at all here. Written after the commit:
+    # chain_and_add commits, so logging first would publish a grant that is
+    # still pending.
+    if group.roles or group.member_ids:
+        await _log_rights_change(
+            db, tenant_id, current_user, group.id, group.name,
+            {
+                "changed": {
+                    "roles": {"from": [], "to": sorted(group.roles or [])},
+                    "member_ids": {"from": [], "to": sorted(group.member_ids or [])},
+                },
+                "members_added": sorted(group.member_ids or []),
+                "members_removed": [],
+                "affected_user_ids": sorted(group.member_ids or []),
+                "changed_by": current_user.email,
+                "source": "group_admin",
+                "operation": "create",
+            },
+        )
     return group
 
 
@@ -143,38 +192,29 @@ async def update_group(
     if after != before:
         added = sorted(set(after["member_ids"]) - set(before["member_ids"]))
         removed = sorted(set(before["member_ids"]) - set(after["member_ids"]))
-        try:
-            await chain_and_add(db, ActivityLog(
-                tenant_id=tenant_id,
-                user_id=current_user.id,
-                user_email=current_user.email,
-                action="rights_change",
-                entity_type="group",
-                entity_id=group.id,
-                entity_name=group.name,
-                details={
-                    "changed": {
-                        k: {"from": before[k], "to": after[k]}
-                        for k in before if before[k] != after[k]
-                    },
-                    "members_added": added,
-                    "members_removed": removed,
-                    "affected_user_ids": sorted(set(added) | set(removed) | set(after["member_ids"]))
-                    if before["roles"] != after["roles"] else sorted(set(added) | set(removed)),
-                    "changed_by": current_user.email,
-                    "source": "group_admin",
+        await _log_rights_change(
+            db, tenant_id, current_user, group.id, group.name,
+            {
+                "changed": {
+                    k: {"from": before[k], "to": after[k]}
+                    for k in before if before[k] != after[k]
                 },
-                origin="api",
-            ))
-        except Exception:
-            pass
+                "members_added": added,
+                "members_removed": removed,
+                "affected_user_ids": sorted(set(added) | set(removed) | set(after["member_ids"]))
+                if before["roles"] != after["roles"] else sorted(set(added) | set(removed)),
+                "changed_by": current_user.email,
+                "source": "group_admin",
+                "operation": "update",
+            },
+        )
     return group
 
 
 @router.delete("/{group_id}", status_code=204)
 async def delete_group(
     group_id: str,
-    _: Annotated[User, Depends(require_roles(UserRole.TENANT_ADMIN))],
+    current_user: Annotated[User, Depends(require_roles(UserRole.TENANT_ADMIN))],
     tenant_id: Annotated[str, Depends(get_tenant_id)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
@@ -182,6 +222,32 @@ async def delete_group(
     group = result.scalar_one_or_none()
     if group is None:
         raise HTTPException(404, "Group not found")
+
+    # Deleting a group revokes its roles from every member at once — the largest
+    # rights change this file can make, and the only one that left no trace.
+    # Capture the state first: the row is gone by the time the entry is written,
+    # and it is the only remaining record of who held what through this group.
+    deleted_id, deleted_name = group.id, group.name
+    deleted_roles = sorted(group.roles or [])
+    deleted_members = sorted(group.member_ids or [])
+
     await db.delete(group)
     await db.commit()
+
+    if deleted_roles or deleted_members:
+        await _log_rights_change(
+            db, tenant_id, current_user, deleted_id, deleted_name,
+            {
+                "changed": {
+                    "roles": {"from": deleted_roles, "to": []},
+                    "member_ids": {"from": deleted_members, "to": []},
+                },
+                "members_added": [],
+                "members_removed": deleted_members,
+                "affected_user_ids": deleted_members,
+                "changed_by": current_user.email,
+                "source": "group_admin",
+                "operation": "delete",
+            },
+        )
     return None

@@ -13,7 +13,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from app.core.database import get_db
 from app.core.licensing import parse_lid
@@ -25,8 +25,12 @@ router = APIRouter()
 
 
 class VerifyLicenseRequest(BaseModel):
-    license_key: str
-    machine_id: str = ""
+    # Bounded because this route is unauthenticated and there is no request-size
+    # middleware in front of it: parse_lid() base64-decodes whatever arrives, so
+    # an unbounded string is free memory for anyone on the internet. Issued keys
+    # are ~370 chars; /etc/machine-id is 32 hex.
+    license_key: str = Field(..., max_length=4096)
+    machine_id: str = Field(default="", max_length=128)
 
 
 class VerifyLicenseResponse(BaseModel):

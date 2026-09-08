@@ -1,9 +1,11 @@
 """Active Directory / LDAP single sign-on (Elite Pack).
 
 Pre-authentication login flow: a user posts directory credentials, we bind
-against AD/LDAP, then find-or-create the local account and issue the same JWT
-pair as password login. Gated per-tenant by the ``ad_ldap_sso`` Elite feature
-(checked against the tenant's subscription, since there is no current_user yet).
+against AD/LDAP, then find-or-create the local account and finish exactly as
+password login does — the same JWT pair, or the same MFA challenge when the
+account has a confirmed second factor. Gated per-tenant by the ``ad_ldap_sso``
+Elite feature (checked against the tenant's subscription, since there is no
+current_user yet).
 """
 import asyncio
 import logging
@@ -17,13 +19,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_db
 from app.core.config import settings
 from app.core.rate_limit import limiter
-from app.core.security import create_access_token, create_refresh_token
+from app.core.security import create_access_token, create_mfa_challenge_token, create_refresh_token
 # Reuse the password-login journaling helpers verbatim rather than reimplementing
 # them: a directory login has to land in exactly the same LoginEvent /
 # UserSession tables, or "journalisation des connexions" is true for one auth
 # path and silently false for the other.
 from app.api.v1.endpoints.auth import _create_session, _journal_login
 from app.models.user import User, UserRole
+from app.models.mfa_device import MfaDevice
 from app.models.tenant import Tenant
 from app.models.subscription import Subscription
 from app.services.activity_chain import log_system_activity
@@ -49,9 +52,14 @@ class LdapLoginRequest(BaseModel):
 
 
 class TokenResponse(BaseModel):
-    access_token: str
-    refresh_token: str
+    # Same shape as auth.TokenResponse: when a second factor is owed the token
+    # fields stay empty and the client redeems the challenge at
+    # POST /auth/mfa-login, exactly as it already does for password login.
+    access_token: str = ""
+    refresh_token: str = ""
     token_type: str = "bearer"
+    mfa_required: bool = False
+    mfa_challenge_token: str | None = None
 
 
 class SsoStatusResponse(BaseModel):
@@ -180,7 +188,19 @@ async def ldap_login(request: Request, body: LdapLoginRequest, db: Annotated[Asy
         dir_user = await asyncio.to_thread(authenticate, username, body.password, cfg)
     except DirectoryAuthError as exc:
         await _journal_login(request, username, False, "sso_directory_rejected")
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=str(exc))
+        # The DirectoryAuthError text can name the directory host and port, the
+        # service-account DN, or a raw socket error ("Directory unreachable:
+        # ..." in directory_auth.authenticate). That detail is meant for
+        # POST /tenants/current/ldap/test, which is tenant_admin-only and says
+        # so — this endpoint is unauthenticated, so returning it let an
+        # anonymous caller read the bank's internal directory topology out of a
+        # login error. Log the detail, return the same generic sentence password
+        # login uses for every one of its failure reasons.
+        logger.info("LDAP login rejected for tenant %s: %s", tenant.id, exc)
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid directory credentials.",
+        )
 
     # Entitlements from AD group membership, when a group→role map is
     # configured. This is what makes AD the authority for rights and not just
@@ -300,6 +320,29 @@ async def ldap_login(request: Request, body: LdapLoginRequest, db: Annotated[Asy
                 "source": "ldap_sync",
                 "directory_group_count": len(dir_user.groups),
             },
+        )
+
+    # Second factor. A directory bind proves the password and nothing else, and
+    # MFA is enforced at POST /auth/login (auth.py) — so issuing real tokens
+    # here made the directory path a way around an enrolled authenticator for
+    # any account that has one. Same contract as password login: a short-lived
+    # single-use challenge, redeemed with the TOTP code at POST /auth/mfa-login
+    # (which resolves the user from the token, so it needs no SSO-specific
+    # branch). Nothing is journaled as a completed login yet — mfa-login does
+    # that on success — and no session is opened for a login that has not
+    # finished.
+    #
+    # The directory role sync above has already committed: the bind succeeded,
+    # so the entitlements AD reported are current regardless of whether the
+    # second factor is then produced.
+    mfa_device = (await db.execute(
+        select(MfaDevice).where(MfaDevice.user_id == user.id, MfaDevice.confirmed == True)  # noqa: E712
+    )).scalar_one_or_none()
+    if mfa_device is not None:
+        logger.info("LDAP login: MFA challenge issued for user %s", user.id)
+        return TokenResponse(
+            mfa_required=True,
+            mfa_challenge_token=create_mfa_challenge_token({"sub": user.id}),
         )
 
     # Journal the connection and open a session, exactly as password login does.

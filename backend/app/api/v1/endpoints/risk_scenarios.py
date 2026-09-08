@@ -19,6 +19,7 @@ from app.models.notification import NotificationType
 from app.models.activity_log import ActivityLog
 from app.services import risk_scoring, scenario_priority
 from app.services.notification_generator import create_notification, get_recipients_for_tenant, notification_exists
+from app.services.activity_chain import chain_and_add
 from app.api.v1.endpoints.risks import _apply_scoring, _assert_feature
 from app.api.v1.endpoints.scenario_versions import _snapshot as _version_snapshot
 
@@ -175,6 +176,17 @@ async def _priority_for(
         definition, prob, impact, weight, criteria, criticality
     ), criteria
 
+def _scenario_out(s: RiskScenario, criteria: dict) -> ScenarioOut:
+    """ScenarioOut with over_priority_threshold actually evaluated.
+
+    The flag was computed in the list view only, so the detail view and every
+    write response reported False for a scenario the list showed as over the
+    tenant's alert threshold.
+    """
+    item = ScenarioOut.model_validate(s)
+    item.over_priority_threshold = scenario_priority.over_threshold(s.priority_score, criteria)
+    return item
+
 def _new_linked_risk(tenant_id: str, s: RiskScenario) -> Risk:
     """RFP rule: auto-consolidate a scenario into the risk register (additive only —
     only ever called when the scenario has no link yet, so a pre-existing
@@ -223,6 +235,8 @@ async def _alert_scenario_over_appetite(db: AsyncSession, tenant_id: str, s: Ris
     for user in recipients:
         if await notification_exists(db, user.id, NotificationType.SCENARIO_OVER_APPETITE, s.id, within_days=7):
             continue
+        # STB: the client renders the keys with params so the alert reaches a
+        # Tunisian bank in French or Arabic; the strings stay the fallback.
         await create_notification(
             db, user=user, notif_type=NotificationType.SCENARIO_OVER_APPETITE,
             title=f"Scenario over appetite: {s.name[:50]}",
@@ -230,6 +244,10 @@ async def _alert_scenario_over_appetite(db: AsyncSession, tenant_id: str, s: Ris
                      f"its own appetite threshold of {s.appetite_threshold}. Treatment is required."),
             entity_id=s.id, entity_type="risk_scenario",
             link=f"/risk-scenarios?highlight={s.id}", severity="critical",
+            title_key="notifications.scenario_over_appetite.title",
+            message_key="notifications.scenario_over_appetite.message",
+            params={"scenario": s.name, "score": score,
+                    "threshold": s.appetite_threshold},
         )
         created += 1
     return created
@@ -371,13 +389,17 @@ async def set_priority_criteria(
             sc.priority_score = new_score
             rescored += 1
 
-    db.add(ActivityLog(
+    await db.commit()
+    # The trail is hash-chained. A bare db.add wrote an entry with no seq and no
+    # hash — invisible to /activity-log/verify and indistinguishable from one
+    # somebody had unlinked. chain_and_add commits, so the criteria change and
+    # the re-scored scenarios go in first (the order risk_matrices.py uses).
+    await chain_and_add(db, ActivityLog(
         tenant_id=tenant_id, user_id=user.id, user_email=user.email,
         action="update", entity_type="risk_priority_criteria", entity_id=tenant_id,
         entity_name="Risk prioritisation criteria",
         details={"criteria": block, "scenarios_rescored": rescored},
     ))
-    await db.commit()
     return PriorityCriteriaOut(**criteria, configured_keys=sorted(block))
 
 
@@ -395,12 +417,7 @@ async def list_scenarios(
         # Scenarios with no score yet (no current probability/impact) sort last.
         scenarios.sort(key=lambda s: s.priority_score if s.priority_score is not None else -1.0, reverse=True)
     criteria = await _tenant_criteria(db, tenant_id)
-    out = []
-    for sc in scenarios:
-        item = ScenarioOut.model_validate(sc)
-        item.over_priority_threshold = scenario_priority.over_threshold(sc.priority_score, criteria)
-        out.append(item)
-    return out
+    return [_scenario_out(sc, criteria) for sc in scenarios]
 
 @router.post("", response_model=ScenarioOut, status_code=201)
 async def create_scenario(body: ScenarioCreate, db: AsyncSession = Depends(get_db), user: User = Depends(require_roles(UserRole.RISK_MANAGER, UserRole.CISO)), tenant_id: str = Depends(get_tenant_id)):
@@ -412,6 +429,9 @@ async def create_scenario(body: ScenarioCreate, db: AsyncSession = Depends(get_d
     definition, _ = await risk_scoring.resolve_matrix(db, tenant_id)
     ref_id = await _next_ref_id(db, tenant_id)
     reg_weight = _clamp01(body.regulatory_exposure_weight)
+    priority_score, criteria = await _priority_for(
+        db, tenant_id, definition, body.current_probability,
+        body.current_impact, reg_weight, body.asset_ids)
     s = RiskScenario(
         tenant_id=tenant_id, name=body.name, description=body.description,
         treatment=body.treatment, threat_ids=body.threat_ids,
@@ -429,9 +449,7 @@ async def create_scenario(body: ScenarioCreate, db: AsyncSession = Depends(get_d
         next_review_date=body.next_review_date,
         regulatory_exposure_weight=reg_weight,
         ref_id=ref_id,
-        priority_score=(await _priority_for(
-            db, tenant_id, definition, body.current_probability,
-            body.current_impact, reg_weight, body.asset_ids))[0],
+        priority_score=priority_score,
     )
     db.add(s); await db.flush()
 
@@ -449,14 +467,14 @@ async def create_scenario(body: ScenarioCreate, db: AsyncSession = Depends(get_d
         await _alert_scenario_over_appetite(db, tenant_id, s)
 
     await db.commit(); await db.refresh(s)
-    return ScenarioOut.model_validate(s)
+    return _scenario_out(s, criteria)
 
 @router.get("/{sid}", response_model=ScenarioOut)
 async def get_scenario(sid: str, db: AsyncSession = Depends(get_db), _: User = Depends(get_current_user), tenant_id: str = Depends(get_tenant_id)):
     r = await db.execute(select(RiskScenario).where(RiskScenario.id == sid, RiskScenario.tenant_id == tenant_id))
     s = r.scalar_one_or_none()
     if not s: raise HTTPException(404, "Scenario not found")
-    return ScenarioOut.model_validate(s)
+    return _scenario_out(s, await _tenant_criteria(db, tenant_id))
 
 @router.patch("/{sid}", response_model=ScenarioOut)
 async def update_scenario(sid: str, body: ScenarioUpdate, db: AsyncSession = Depends(get_db), current_user: User = Depends(require_roles(UserRole.RISK_MANAGER, UserRole.CISO)), tenant_id: str = Depends(get_tenant_id)):
@@ -491,7 +509,7 @@ async def update_scenario(sid: str, body: ScenarioUpdate, db: AsyncSession = Dep
     s.target_risk_level = _level(definition, s.target_probability, s.target_impact)
     # M5.3: keep priority_score in sync whenever the score inputs (probability,
     # impact) or the weight itself change.
-    s.priority_score, _criteria = await _priority_for(
+    s.priority_score, criteria = await _priority_for(
         db, tenant_id, definition, s.current_probability, s.current_impact,
         s.regulatory_exposure_weight, s.asset_ids,
     )
@@ -520,11 +538,49 @@ async def update_scenario(sid: str, body: ScenarioUpdate, db: AsyncSession = Dep
         await _alert_scenario_over_appetite(db, tenant_id, s)
 
     await db.commit(); await db.refresh(s)
-    return ScenarioOut.model_validate(s)
+    return _scenario_out(s, criteria)
 
 @router.delete("/{sid}", status_code=204)
-async def delete_scenario(sid: str, db: AsyncSession = Depends(get_db), _: User = Depends(require_roles(UserRole.RISK_MANAGER, UserRole.CISO)), tenant_id: str = Depends(get_tenant_id)):
+async def delete_scenario(sid: str, db: AsyncSession = Depends(get_db), current_user: User = Depends(require_roles(UserRole.RISK_MANAGER, UserRole.CISO)), tenant_id: str = Depends(get_tenant_id)):
     r = await db.execute(select(RiskScenario).where(RiskScenario.id == sid, RiskScenario.tenant_id == tenant_id))
     s = r.scalar_one_or_none()
     if not s: raise HTTPException(404, "Scenario not found")
+
+    # This was the last hard-delete in the risk group leaving nothing behind but
+    # the middleware's {method, path}: risks, incidents, vulnerabilities and
+    # assets all chain their final state first. Snapshot the same fields the
+    # version history stores, so the analysis that was destroyed is still
+    # readable from the tamper-evident chain.
+    scenario_name = s.name
+    payload = _version_snapshot(s)
+
+    # RiskScenarioVersion rows hang off scenario_id with no database-level
+    # cascade (SQLite runs with foreign_keys off), and GET /scenario-versions/{id}
+    # resolves the parent scenario first — so left behind they 404 forever while
+    # the rows stay in the table. Record their identity, then remove them here.
+    versions = list((await db.execute(
+        select(RiskScenarioVersion)
+        .where(RiskScenarioVersion.scenario_id == sid)
+        .order_by(RiskScenarioVersion.version_number.desc())
+    )).scalars().all())
+
+    try:
+        await chain_and_add(db, ActivityLog(
+            tenant_id=tenant_id, user_id=current_user.id, user_email=current_user.email,
+            action="delete", entity_type="risk_scenario", entity_id=sid,
+            entity_name=scenario_name,
+            details={"deleted": payload, "archived_versions": [
+                {"version_number": v.version_number, "change_reason": v.change_reason,
+                 "author_id": v.author_id}
+                for v in versions
+            ]},
+            origin="api",
+        ))
+    except Exception:
+        # Log-and-continue, as in risks.delete_risk: an audit failure must not
+        # strand the delete half-done.
+        pass
+
+    for v in versions:
+        await db.delete(v)
     await db.delete(s); await db.commit()

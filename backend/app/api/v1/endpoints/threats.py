@@ -13,30 +13,80 @@ Structure of the register (RFP module 4):
   and is revisited on a cadence. Editing a validated profile returns it to
   draft, because a sign-off applies to what was signed off.
 * Every one of those acts is written to ThreatHistory with before/after values.
+
+STB tender, objectif 3 (« tendances »):
+* GET /trend returns a monthly series for the tenant's own register, read from
+  the daily ``trend_snapshots`` history and degrading to an intake-volume proxy
+  while that history is still empty.
 """
+import asyncio
 from datetime import date, datetime, timezone
 from typing import Annotated
 import httpx
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from pydantic import BaseModel, field_validator
 from sqlalchemy import String, cast, select
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import IntegrityError, OperationalError, ProgrammingError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.core.security_utils import assert_assets_in_tenant
-from app.api.v1.dependencies.auth import get_current_user, get_tenant_id, require_roles
+from app.api.v1.dependencies.auth import (
+    get_current_user, get_tenant_id, require_roles, require_roles_strict,
+)
 from app.api.v1.dependencies.features import require_feature
 from app.models.user import User, UserRole
 from app.models.threat import Threat, ThreatCategory, ThreatType
 from app.models.threat_history import ThreatHistory
 from app.models.threat_watch import ThreatWatchItem, WATCH_KINDS, WATCH_STATUSES
+from app.models.trend_snapshot import METRIC_THREATS, month_buckets
 from app.models.vulnerability import Vulnerability
 from app.services.threat_feeds import fetch_all_threat_feeds
 from app.services.threat_watch_ingest import apply_kev_flags, ingest_for_tenant
 from app.services import threat_registry as registry
+from app.services.trend_snapshot_scheduler import snapshot_series, unavailable_series
+from app.services.ai_locale import get_request_language
 
 router = APIRouter()
+
+
+# ── User-facing message catalogue ─────────────────────────────────────────────
+# ImportOut.message and FetchOut.message are rendered verbatim by the Threat
+# Library screen, so an English-only sentence is a real defect for the French-
+# and Arabic-speaking users this platform ships to. Same key+params table
+# vendors.py and contract_collab.py already use, resolved through
+# ai_locale.get_request_language (Accept-Language). English remains the
+# fallback, so a caller that sends no header gets exactly the sentence it got
+# before. Internal identifiers (feed kind names, MITRE ids) are never
+# translated.
+_MESSAGES: dict[str, dict[str, str]] = {
+    "mitre_imported": {
+        "en": "Imported {imported} MITRE ATT&CK techniques. {skipped} already existed.",
+        "fr": "{imported} technique(s) MITRE ATT&CK importée(s). {skipped} existaient déjà.",
+        "ar": "تم استيراد {imported} من تقنيات MITRE ATT&CK. {skipped} كانت موجودة بالفعل.",
+    },
+    "feed_unreachable": {
+        "en": "Could not reach any threat feed.",
+        "fr": "Aucun flux de menaces n'a pu être contacté.",
+        "ar": "تعذّر الوصول إلى أي تدفق للتهديدات.",
+    },
+    "feed_fetched": {
+        "en": "Fetched {total} items; {created} new in your threat watch",
+        "fr": "{total} élément(s) récupéré(s) ; {created} nouveau(x) dans votre veille des menaces",
+        "ar": "تم جلب {total} عنصراً؛ {created} جديدة في مرصد التهديدات لديك",
+    },
+    "feed_kev_flagged": {
+        "en": "— {flagged} CVE(s) marked as actively exploited",
+        "fr": "— {flagged} CVE marquée(s) comme activement exploitée(s)",
+        "ar": "— {flagged} من الثغرات موسومة بأنها مُستغلّة فعلياً",
+    },
+}
+
+
+def _msg(key: str, lang: str, **values) -> str:
+    table = _MESSAGES[key]
+    text = table.get(lang) or table["en"]
+    return text.format(**values) if values else text
 
 
 def _utcnow() -> datetime:
@@ -243,6 +293,7 @@ def _validate_profile_values(body: ThreatProfileUpdate) -> None:
 
 @router.get("", response_model=list[ThreatOut])
 async def list_threats(
+    response: Response,
     db: Annotated[AsyncSession, Depends(get_db)],
     _: Annotated[User, Depends(get_current_user)],
     tenant_id: Annotated[str, Depends(get_tenant_id)],
@@ -251,12 +302,20 @@ async def list_threats(
     probability_level: str | None = None,
     severity_level: str | None = None,
     review_overdue: bool | None = None,
+    limit: int | None = Query(None, ge=1, le=5000),
+    offset: int = Query(0, ge=0),
 ):
     """The register: built-in catalogue plus this tenant's own, validated threats.
 
     Classifiable by the four families the requirement names and by the
     probability and severity scales, which is what makes the register usable
-    for prioritisation rather than just a list."""
+    for prioritisation rather than just a list.
+
+    Paging is opt-in — `limit` defaults to None and the whole register comes
+    back exactly as before. The sibling bound on list_vulns defaults to 1000,
+    which is BELOW the 1 351 rows here, so borrowing that default would silently
+    cut the Threat Library short for a client that never asked for a page.
+    X-Total-Count is always set, so a caller can tell what it has not seen."""
     if threat_type and threat_type not in THREAT_TYPES:
         raise HTTPException(422, f"threat_type must be one of {THREAT_TYPES}")
     if probability_level and probability_level not in PROBABILITY_LEVELS:
@@ -285,7 +344,136 @@ async def list_threats(
         # belongs to the family its category implies — excluding those would
         # make the filter lie about the register's contents.
         items = [i for i in items if i.threat_type == threat_type]
-    return items
+    # Counted after that Python filter so the total matches the rows a client
+    # would page through, not the pre-filter row set.
+    response.headers["X-Total-Count"] = str(len(items))
+    if limit is None:
+        return items[offset:] if offset else items
+    return items[offset:offset + limit]
+
+
+@router.get("/trend")
+async def get_threat_trend(
+    db: Annotated[AsyncSession, Depends(get_db)],
+    # Billing half + access half, mirroring how endpoints/dashboards.py gates
+    # GET /dashboards/threats. This series is that dashboard's history, so it
+    # carries the same pair — a looser gate here would be a way around the
+    # restriction on the live tile. Objectif 3's clause is an exclusion
+    # (« limité aux analystes sécurité »), hence require_roles_strict: no
+    # tenant_admin/super_admin auto-pass. CISO is listed alongside
+    # SECURITY_ANALYST for the reason dashboards.py records — no account on
+    # this installation holds security_analyst.
+    _plan: Annotated[User, Depends(require_feature("custom_dashboards"))],
+    _role: Annotated[User, Depends(require_roles_strict(UserRole.SECURITY_ANALYST, UserRole.CISO))],
+    tenant_id: Annotated[str, Depends(get_tenant_id)],
+    months: int = Query(6, ge=1, le=24),
+):
+    """« Tendances » for the threat dashboard (objectif 3).
+
+    Counts this tenant's OWN register only. Built-in threats are one shared,
+    read-only catalogue — 729 identical rows for every tenant on this
+    installation — so including them would add the same large constant to every
+    point and hide the movement the trend exists to show. Adoption
+    (POST /{id}/adopt) is what brings a catalogue entry into a tenant's
+    register, and it is what moves this series.
+
+    Note for whoever renders this: GET / lists the catalogue *and* the tenant's
+    own threats, so the Threat Library screen shows a much larger number than
+    this chart's ``total``. That is not a disagreement — the snapshot payload
+    carries ``builtin_catalogue`` so the two can be reconciled on screen.
+
+    Preferred source is the daily ``trend_snapshots`` history: the register as
+    it stood on the last snapshot on or before each month's end. Fallback while
+    that history is still empty is ``created_at`` bucketed by month, i.e. how
+    many threats were *added* per month — labelled ``source: "intake_volume"``
+    because it is a different measurement, not a degraded version of the same
+    one.
+    """
+    buckets = month_buckets(months)
+
+    series = await snapshot_series(db, tenant_id, METRIC_THREATS, buckets)
+    if series is not None:
+        return {
+            "metric": METRIC_THREATS,
+            "months": months,
+            "series": series,
+            "source": "trend_snapshot_daily",
+            "note": (
+                "Threat register size and composition as of the latest daily "
+                "snapshot on or before each month's end."
+            ),
+        }
+
+    # --- Fallback: intake volume from created_at -----------------------------
+    # Bucketed in Python rather than with func.strftime('%Y-%m', ...), which is
+    # SQLite-only while this application also targets PostgreSQL, Oracle and
+    # SQL Server (app/core/database.py).
+    window_start = datetime(buckets[0][0], buckets[0][1], 1)
+    try:
+        rows = (await db.execute(
+            select(Threat.created_at, Threat.category).where(
+                Threat.tenant_id == tenant_id,
+                Threat.is_builtin == False,  # noqa: E712
+                Threat.is_pending == False,  # noqa: E712
+                Threat.created_at.isnot(None),
+                Threat.created_at >= window_start,
+            )
+        )).all()
+    except (OperationalError, ProgrammingError):
+        # Degrade rather than 5xx, and to "unknown" rather than to zeros: this
+        # query names columns (is_pending, threat_type) added to `threats` after
+        # the table first shipped, and alembic is dead here — an installation
+        # whose migration script has not been run would answer "no threats added
+        # in six months", which is a fabricated finding, not a degraded one.
+        await db.rollback()
+        return {
+            "metric": METRIC_THREATS,
+            "months": months,
+            "series": unavailable_series(buckets),
+            "source": "unavailable",
+            "note": (
+                "Threat history could not be read on this database. "
+                "No figures are shown rather than zeros."
+            ),
+        }
+    per_month: dict[str, dict[str, int]] = {}
+    for created_at, category in rows:
+        if not created_at:
+            continue
+        key = f"{created_at.year:04d}-{created_at.month:02d}"
+        cat = category.value if hasattr(category, "value") else str(category)
+        bucket = per_month.setdefault(key, {})
+        bucket[cat] = bucket.get(cat, 0) + 1
+
+    fallback_series = []
+    for (yy, mm) in buckets:
+        key = f"{yy:04d}-{mm:02d}"
+        by_category = per_month.get(key, {})
+        fallback_series.append({
+            "month": datetime(yy, mm, 1).strftime("%b"),
+            "period": key,
+            "as_of": None,
+            "total": sum(by_category.values()),
+            "counts": {"by_category": by_category},
+        })
+    return {
+        "metric": METRIC_THREATS,
+        "months": months,
+        "series": fallback_series,
+        "source": "intake_volume",
+        # Wording is deliberately "no snapshot is available" and not "none has
+        # been recorded yet": snapshot_series() returns None both when the
+        # history is genuinely empty AND when it could not be read (table not
+        # created until the next restart, or a transient SQLite lock under the
+        # 2 workers). Only the first of those is a fact about the register; the
+        # second is a fact about this request. Stating the first when the second
+        # happened is the same fabricated-figure problem as plotting a 0.
+        "note": (
+            "No point-in-time snapshot is available for this period — showing "
+            "threats added to your register per month, not the size of the "
+            "register on that date."
+        ),
+    }
 
 
 @router.post("", response_model=ThreatOut, status_code=201)
@@ -603,13 +791,17 @@ async def import_mitre(
     db: Annotated[AsyncSession, Depends(get_db)],
     _: Annotated[User, Depends(require_roles(UserRole.SECURITY_ANALYST, UserRole.CISO))],
     tenant_id: Annotated[str, Depends(get_tenant_id)],
+    lang: Annotated[str, Depends(get_request_language)],
 ):
     """Bulk-import all MITRE ATT&CK Enterprise techniques (one-time seed)."""
     async with httpx.AsyncClient(timeout=60.0) as client:
         resp = await client.get(MITRE_ATTACK_URL)
         if resp.status_code != 200:
             raise HTTPException(502, "Failed to fetch MITRE ATT&CK data")
-        data = resp.json()
+        # enterprise-attack.json is tens of MB: decoding and parsing it is pure
+        # CPU and would otherwise hold this worker's event loop for seconds,
+        # stalling every other request the worker is serving.
+        data = await asyncio.to_thread(resp.json)
 
     techniques = [
         o for o in data.get("objects", [])
@@ -658,7 +850,7 @@ async def import_mitre(
     return ImportOut(
         imported=imported,
         skipped=skipped,
-        message=f"Imported {imported} MITRE ATT&CK techniques. {skipped} already existed.",
+        message=_msg("mitre_imported", lang, imported=imported, skipped=skipped),
     )
 
 
@@ -669,6 +861,7 @@ async def fetch_threat_news(
     db: Annotated[AsyncSession, Depends(get_db)],
     current_user: Annotated[User, Depends(require_roles(UserRole.SECURITY_ANALYST, UserRole.CISO))],
     tenant_id: Annotated[str, Depends(get_tenant_id)],
+    lang: Annotated[str, Depends(get_request_language)],
 ):
     """Pull CISA KEV, SANS ISC and opensourcemalware into the threat **watch**.
 
@@ -678,17 +871,17 @@ async def fetch_threat_news(
     """
     raw = await fetch_all_threat_feeds()
     if not raw:
-        return FetchOut(created=0, skipped=0, message="Could not reach any threat feed.", names=[])
+        return FetchOut(created=0, skipped=0, message=_msg("feed_unreachable", lang), names=[])
 
     summary = await ingest_for_tenant(db, tenant_id, raw)
     flagged = await apply_kev_flags(db, raw)
     await db.commit()
 
-    parts = [f"Fetched {len(raw)} items; {summary['created']} new in your threat watch"]
+    parts = [_msg("feed_fetched", lang, total=len(raw), created=summary["created"])]
     if summary["by_kind"]:
         parts.append("(" + ", ".join(f"{n} {k.replace('_', ' ')}" for k, n in sorted(summary["by_kind"].items())) + ")")
     if flagged:
-        parts.append(f"— {flagged} CVE(s) marked as actively exploited")
+        parts.append(_msg("feed_kev_flagged", lang, flagged=flagged))
     return FetchOut(
         created=summary["created"],
         skipped=summary["skipped"],

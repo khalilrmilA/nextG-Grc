@@ -1,18 +1,18 @@
 """Support ticket endpoints with real-time chat via WebSocket and SSE notifications."""
 from __future__ import annotations
 import asyncio
-import enum
 import json
 from datetime import datetime, timezone
 from typing import Optional
-from fastapi import APIRouter, Depends, HTTPException, Request, WebSocket, WebSocketDisconnect, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Request, WebSocket, WebSocketDisconnect, Query
 from fastapi.responses import StreamingResponse, Response
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func
+from sqlalchemy import select
 from sqlalchemy.orm import selectinload
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from app.core.database import get_db
+from app.core.security import decode_token
 from app.api.v1.dependencies.auth import get_current_user, get_current_user_ws
 from app.models.user import User, UserRole
 from app.models.support import SupportTicket, TicketMessage, ChatSession, TicketStatus, TicketPriority, ChatStatus
@@ -100,8 +100,11 @@ _notify = _NotifyManager()
 # ── Pydantic schemas ────────────────────────────────────────────────────────
 
 class TicketCreate(BaseModel):
-    title: str
-    description: str
+    # Bounded to the column width: SQLite silently over-stores, but the Oracle /
+    # SQL Server targets reject a longer title with a driver error the caller
+    # sees as a 500. A 422 says what is actually wrong.
+    title: str = Field(..., min_length=1, max_length=255)
+    description: str = Field(..., min_length=1)
     priority: TicketPriority = TicketPriority.MEDIUM
 
 
@@ -127,7 +130,10 @@ class MessageOut(BaseModel):
     ticket_id: str
     content: str
     is_support: bool
-    sender: SenderOut
+    # Nullable, not because the FK is: users are hard-deleted (users.py) with no
+    # FK enforcement on SQLite, so one orphaned author used to 500 the ENTIRE
+    # ticket/message list rather than just its own row. No row is null today.
+    sender: Optional[SenderOut] = None
     created_at: datetime
     model_config = {"from_attributes": True}
 
@@ -152,7 +158,7 @@ class TicketOut(BaseModel):
     priority: TicketPriority
     created_at: datetime
     updated_at: datetime
-    user: SenderOut
+    user: Optional[SenderOut] = None   # see MessageOut.sender
     messages: list[MessageOut] = []
     chat_session: Optional[ChatSessionOut] = None
     model_config = {"from_attributes": True}
@@ -167,7 +173,7 @@ class TicketListItem(BaseModel):
     priority: TicketPriority
     created_at: datetime
     updated_at: datetime
-    user: SenderOut
+    user: Optional[SenderOut] = None   # see MessageOut.sender
     message_count: int = 0
     has_chat: bool = False
     model_config = {"from_attributes": True}
@@ -193,7 +199,7 @@ async def _fetch_full(ticket_id: str, db: AsyncSession) -> SupportTicket:
     return result.scalar_one()
 
 
-async def _get_ticket(ticket_id: str, user: User, db: AsyncSession, require_write: bool = False) -> SupportTicket:
+async def _get_ticket(ticket_id: str, user: User, db: AsyncSession) -> SupportTicket:
     result = await db.execute(
         select(SupportTicket)
         .where(SupportTicket.id == ticket_id)
@@ -207,6 +213,48 @@ async def _get_ticket(ticket_id: str, user: User, db: AsyncSession, require_writ
     return ticket
 
 
+async def _channel_user(token: str, db: AsyncSession) -> User:
+    """Resolve the user behind a query-string token for the SSE / WebSocket channels.
+
+    get_current_user_ws() only reads `sub` + is_active, so on its own it accepts ANY
+    token this deployment signs — including the refresh token and, worse, the
+    `mfa_challenge` token minted between the password check and the TOTP step
+    (see auth.py /login) — and it honours neither the account expiry nor the
+    active-sessions revocation that get_current_user enforces on every HTTP route.
+    Both channels below carry real ticket content and stay open for as long as the
+    client holds them, so the three missing checks are applied here, at the only
+    call site of that dependency: token type, `expires_at`, and the `sid` revocation
+    check (fail-open on a lookup error, exactly like get_current_user, so a session
+    table problem can never lock support out of the channel).
+    """
+    payload = await decode_token(token)
+    # Allowlist, not a denylist of the two types that exist today: get_current_user
+    # applies exactly this rule, and a channel that streams ticket content must not
+    # start accepting a fourth token type the day one is minted.
+    if payload.get("type") != "access":
+        raise HTTPException(status_code=401, detail="Invalid token type")
+    user = await get_current_user_ws(token=token, db=db)
+
+    if user.expires_at is not None and user.expires_at < datetime.now(timezone.utc).replace(tzinfo=None):
+        raise HTTPException(status_code=401, detail="Account has expired")
+
+    sid = payload.get("sid")
+    if sid:
+        try:
+            from app.models.user_session import UserSession
+            sess = (await db.execute(
+                select(UserSession).where(UserSession.id == sid)
+            )).scalar_one_or_none()
+            if sess is not None and sess.revoked_at is not None:
+                raise HTTPException(status_code=401, detail="Session revoked")
+        except HTTPException:
+            raise
+        except Exception:
+            pass  # never break the channel on a session-check error
+
+    return user
+
+
 # ── Routes ──────────────────────────────────────────────────────────────────
 
 @router.get("/notify/stream")
@@ -217,7 +265,7 @@ async def notify_stream(
 ):
     """SSE notification channel — works through any WAF/proxy (plain HTTP GET)."""
     try:
-        user = await get_current_user_ws(token=token, db=db)
+        user = await _channel_user(token, db)
     except Exception:
         return Response(status_code=401)
 
@@ -280,7 +328,14 @@ async def list_tickets(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    q = select(SupportTicket)
+    q = select(SupportTicket).options(
+        # Loaded with the list instead of one db.refresh() per ticket for three
+        # relationships each — that was 3N round trips for N tickets, and it
+        # grows with the support backlog.
+        selectinload(SupportTicket.user),
+        selectinload(SupportTicket.messages),
+        selectinload(SupportTicket.chat_session),
+    )
     if not _is_support(current_user):
         q = q.where(SupportTicket.user_id == current_user.id)
     if status_filter:
@@ -291,10 +346,8 @@ async def list_tickets(
     result = await db.execute(q)
     tickets = result.scalars().all()
 
-    # Eager-load user for each
     out = []
     for t in tickets:
-        await db.refresh(t, ["user", "messages", "chat_session"])
         item = TicketListItem(
             id=t.id,
             tenant_id=t.tenant_id,
@@ -304,7 +357,7 @@ async def list_tickets(
             priority=t.priority,
             created_at=t.created_at,
             updated_at=t.updated_at,
-            user=SenderOut.model_validate(t.user),
+            user=SenderOut.model_validate(t.user) if t.user else None,
             message_count=len(t.messages),
             has_chat=t.chat_session is not None and t.chat_session.status != ChatStatus.ENDED,
         )
@@ -374,12 +427,11 @@ async def list_messages(
     result = await db.execute(
         select(TicketMessage)
         .where(TicketMessage.ticket_id == ticket_id)
+        # Senders loaded with the thread rather than one db.refresh() per message.
+        .options(selectinload(TicketMessage.sender))
         .order_by(TicketMessage.created_at)
     )
-    messages = result.scalars().all()
-    for msg in messages:
-        await db.refresh(msg, ["sender"])
-    return messages
+    return result.scalars().all()
 
 
 @router.post("/{ticket_id}/messages", response_model=MessageOut, status_code=201)
@@ -542,7 +594,7 @@ async def chat_websocket(
     """Real-time bidirectional chat for an active ticket chat session."""
     # authenticate via token query param
     try:
-        user = await get_current_user_ws(token=token, db=db)
+        user = await _channel_user(token, db)
     except Exception:
         await websocket.close(code=4001)
         return
@@ -579,7 +631,14 @@ async def chat_websocket(
                 is_support=is_sup,
             )
             db.add(msg)
-            await db.flush()
+            # Commit per message, not once at disconnect. A WebSocket dependency
+            # lives for the whole connection, so the old code held an OPEN write
+            # transaction for the entire chat: on SQLite that pins the single
+            # writer, and every other request in the deployment blocked on it
+            # until busy_timeout (30s) expired. It also meant the messages were
+            # invisible to the REST thread — and lost outright on any exit that
+            # was not a clean WebSocketDisconnect.
+            await db.commit()
             await db.refresh(msg)
 
             await _manager.broadcast(ticket_id, {
@@ -591,5 +650,9 @@ async def chat_websocket(
                 "created_at": msg.created_at.isoformat(),
             })
     except WebSocketDisconnect:
+        pass
+    finally:
+        # Always leave the room. Only WebSocketDisconnect used to unregister, so
+        # any other error (malformed frame, DB failure) left a dead socket in
+        # _rooms forever and every later broadcast tried to write to it.
         _manager.disconnect(ticket_id, websocket)
-        await db.commit()

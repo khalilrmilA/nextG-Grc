@@ -2,14 +2,14 @@
 from datetime import datetime, timezone
 from typing import Literal
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
 from sqlalchemy import select, and_, func, update, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
-from app.api.v1.dependencies import get_current_user
-from app.models.user import User
+from app.api.v1.dependencies import get_current_user, require_roles
+from app.models.user import User, UserRole
 from app.models.notification import (
     Notification, NotificationPreference,
     NotificationType, NotificationChannel, NotificationStatus,
@@ -29,6 +29,16 @@ class NotificationOut(BaseModel):
     data: dict | None
     created_at: datetime
     read_at: datetime | None
+    # The i18n triple every notification carries since services/
+    # notification_generator started writing it ("the in-app notification is
+    # localised by the client from title_key/message_key"). The feed never put
+    # it on the wire, so the client had nothing to call t() with and the bell
+    # stayed English for a French/Arabic tenant. Additive and optional: title /
+    # message remain the fallback for rows written before the keys existed and
+    # for any key the client does not know.
+    title_key: str | None = None
+    message_key: str | None = None
+    params: dict | None = None
 
     model_config = {"from_attributes": True}
 
@@ -62,8 +72,11 @@ class PreferenceOut(BaseModel):
 @router.get("", response_model=NotificationListOut)
 async def list_notifications(
     status_filter: Literal["all", "unread"] = "all",
-    limit: int = 25,
-    offset: int = 0,
+    # Bounded server-side: an unbounded limit lets a caller pull the whole feed
+    # in one request, and a negative offset is a database error (SQLite tolerates
+    # it, PostgreSQL does not) rather than a 422.
+    limit: int = Query(25, ge=1, le=200),
+    offset: int = Query(0, ge=0),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -180,12 +193,29 @@ async def clear_all_notifications(
 
 @router.post("/check-deadlines", status_code=status.HTTP_200_OK)
 async def check_deadlines_and_generate(
-    current_user: User = Depends(get_current_user),
+    # run_all_checks() takes no tenant_id: it sweeps every tenant on the
+    # platform and returns platform-wide counts. Behind a bare get_current_user
+    # that made an unbounded, unthrottled full-database scan — and notification
+    # writes for other tenants' users — reachable by any account, including an
+    # external auditor. Restrict the trigger to the roles that own the
+    # notification programme (tenant_admin / super_admin auto-pass) until the
+    # generator itself can be scoped to one tenant.
+    current_user: User = Depends(
+        require_roles(UserRole.CISO, UserRole.RISK_MANAGER, UserRole.COMPLIANCE_MANAGER)
+    ),
     db: AsyncSession = Depends(get_db),
 ):
     """
     Run all deadline/threshold checks and generate notifications.
-    Can be called manually or by a scheduled task.
+
+    No longer the only trigger: app/main.py's lifespan now starts
+    start_notification_scheduler(), which runs the same sweep on a loop (one
+    worker at a time via its file lock). This endpoint is the "run it now"
+    button on top of that, and run_all_checks is idempotent, so pressing it
+    between sweeps costs a set of dedup queries and creates nothing twice.
+
+    The counts returned are still platform-wide, because the generator has no
+    tenant parameter — see the handover notes.
     """
     from app.services.notification_generator import run_all_checks
     results = await run_all_checks(db)

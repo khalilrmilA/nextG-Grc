@@ -25,9 +25,13 @@ silently truncated: NVD publishes 300-450 CVEs on a weekday, so even a one-day
 window overflowed a 500-row page and the surplus was dropped without a trace.
 """
 import asyncio
+import contextlib
 import logging
 import os
+import tempfile
+import time
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -38,6 +42,71 @@ from app.models.cve_entry import CveEntry
 logger = logging.getLogger(__name__)
 
 NVD_URL = "https://services.nvd.nist.gov/rest/json/cves/2.0"
+
+# ── One sync at a time, per host ─────────────────────────────────────────────
+# Production runs 2 uvicorn workers, so BOTH start this loop and both walk the
+# same window at the same moment. The loser's INSERTs then collide on the
+# unique cve_id index, which poisons its session and aborts the entire tick —
+# publication pass, refresh pass and CWE catalog together. That is measured,
+# not theoretical: the live error log carries "UNIQUE constraint failed:
+# cve_entries.cve_id" once per restart, and the CWE catalog is still empty.
+# It also wastes NVD's per-IP rate budget, which is what makes a window come
+# back truncated.
+#
+# The other in-process schedulers claim their work with a conditional UPDATE on
+# the row they are about to handle (report_scheduler, vuln_scanner_scheduler).
+# This job has no such row and no table may be added for it, so the claim is an
+# atomic O_EXCL lock file: the workers share a filesystem, and the claim is
+# taken BEFORE the minutes of network work rather than inferred afterwards from
+# the catalog's newest row. It is advisory — any OS problem means we run
+# exactly as before instead of skipping a sync.
+_LOCK_PATH = Path(tempfile.gettempdir()) / "grceye-cve-sync.lock"
+# A sync killed mid-pull must not block the next one for ever. Longer than any
+# real run: 10 pages x 6s of rate-limit pauses is minutes, not hours.
+_LOCK_STALE_SECONDS = 2 * 3600
+
+
+def _acquire_sync_lock() -> tuple[bool, int | None]:
+    """``(owns_the_sync, fd)``. ``fd`` is None when no lock could be taken at all."""
+    try:
+        # Reclaim a lock left behind by a killed sync. Raced with the other
+        # worker doing the same, only one of us then wins the O_EXCL below.
+        age = time.time() - _LOCK_PATH.stat().st_mtime
+        if age > _LOCK_STALE_SECONDS:
+            logger.warning("Removing a stale CVE sync lock (%.0fs old)", age)
+            _LOCK_PATH.unlink(missing_ok=True)
+    except OSError:
+        pass  # no lock file yet, or it vanished under us — both fine
+    try:
+        fd = os.open(str(_LOCK_PATH), os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o644)
+    except FileExistsError:
+        return False, None
+    except OSError as exc:  # read-only tmp, permissions, anything else
+        logger.warning("CVE sync lock unavailable (%s); running without it", exc)
+        return True, None
+    try:
+        os.write(fd, f"pid={os.getpid()} at={datetime.now(timezone.utc).isoformat()}\n".encode())
+    except OSError:
+        pass  # the lock is the file's existence, not its contents
+    return True, fd
+
+
+@contextlib.contextmanager
+def _sync_claim():
+    """Claim the host's CVE sync. Yields False when another run already holds it."""
+    owns, fd = _acquire_sync_lock()
+    try:
+        yield owns
+    finally:
+        if fd is not None:
+            try:
+                os.close(fd)
+            except OSError:
+                pass
+            try:
+                _LOCK_PATH.unlink(missing_ok=True)
+            except OSError:
+                pass
 
 # NVD's documented maximum page size for this endpoint.
 _PAGE_SIZE = 2000
@@ -282,8 +351,24 @@ async def sync_all(db: AsyncSession, days: int = 3, refresh_days: int = 2) -> di
     """Publication pass + refresh pass + the MITRE CWE catalog when stale.
 
     This is what both the scheduled loop and the manual "Sync" button call, so
-    the button does the same work the nightly job does.
+    the button does the same work the nightly job does — and the reason the
+    claim lives here rather than in the loop: the two callers collide with each
+    other exactly as the two workers' loops do.
     """
+    with _sync_claim() as owns:
+        if not owns:
+            # Same summary shape, so every caller and the UI keep working.
+            return {
+                "added": 0, "updated": 0, "fetched": 0, "refreshed": 0,
+                "skipped": True,
+                "errors": ["another CVE sync is already running on this host"],
+                "cwe": {"skipped": True},
+            }
+        return await _sync_all_locked(db, days=days, refresh_days=refresh_days)
+
+
+async def _sync_all_locked(db: AsyncSession, days: int, refresh_days: int) -> dict:
+    """The body of :func:`sync_all`, run while this process holds the claim."""
     published = await sync_recent_cves(db, days=days)
     refreshed = await refresh_known_cves(db, days=refresh_days)
 
@@ -345,5 +430,8 @@ async def start_cve_auto_sync() -> None:
         except asyncio.CancelledError:
             raise
         except Exception as exc:  # noqa: BLE001 — never let the loop die
-            logger.warning("CVE auto-sync tick failed: %s", exc)
+            # exc_info: a bare %s hid the cause of a recurring live failure
+            # (an IntegrityError raised at autoflush) behind SQLAlchemy's
+            # "transaction has been rolled back" wrapper for weeks.
+            logger.warning("CVE auto-sync tick failed: %s", exc, exc_info=True)
         await asyncio.sleep(6 * 3600)

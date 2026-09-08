@@ -60,26 +60,52 @@ def is_perimeter_scoped(user: User, effective_roles: set[str] | None = None) -> 
     return bool(roles & PERIMETER_SCOPED_ROLES)
 
 
+# The refusal below is shown to the client's propriétaires métier, who work in
+# French and Arabic; every other user-facing message in this codebase is
+# localised. Same key/lang/fallback shape as the endpoints' own _msg tables
+# (vendors.py, regulatory.py, contract_collab.py).
+_OUTSIDE_PERIMETER = {
+    "en": "This {what} is outside your business perimeter. "
+          "You may only act on records you own.",
+    "fr": "Cet élément ({what}) est en dehors de votre périmètre métier. "
+          "Vous ne pouvez agir que sur les enregistrements dont vous êtes propriétaire.",
+    "ar": "هذا العنصر ({what}) خارج نطاق مسؤوليتك. "
+          "لا يمكنك التصرف إلا في السجلات التي تملكها.",
+}
+
+# The noun interpolated into the sentence, so a French message does not read
+# "Cet élément (risk)". Unknown kinds fall back to the caller's own word.
+_WHAT_NOUNS = {
+    "risk": {"fr": "risque", "ar": "خطر"},
+    "record": {"fr": "enregistrement", "ar": "سجل"},
+}
+
+
 def owns(user: User, record) -> bool:
     """Whether the record falls inside this user's perimeter."""
     return getattr(record, "owner_id", None) == user.id
 
 
 def assert_in_perimeter(
-    user: User, record, effective_roles: set[str] | None = None, what: str = "record"
+    user: User, record, effective_roles: set[str] | None = None, what: str = "record",
+    lang: str = "en",
 ) -> None:
     """Refuse the action when a perimeter-scoped user does not own the record.
 
     404 rather than 403 would hide that the record exists, but the caller can
     already read it — the tenant, not the perimeter, decides visibility — so
     403 with a plain reason is the honest answer.
+
+    ``lang`` defaults to "en", so a caller that does not resolve a language
+    gets exactly the wording it got before.
     """
     if not is_perimeter_scoped(user, effective_roles):
         return
     if owns(user, record):
         return
+    noun = _WHAT_NOUNS.get(what, {}).get(lang, what)
+    template = _OUTSIDE_PERIMETER.get(lang) or _OUTSIDE_PERIMETER["en"]
     raise HTTPException(
         status_code=status.HTTP_403_FORBIDDEN,
-        detail=f"This {what} is outside your business perimeter. "
-               f"You may only act on records you own.",
+        detail=template.format(what=noun),
     )

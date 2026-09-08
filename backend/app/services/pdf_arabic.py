@@ -133,3 +133,58 @@ def paragraph_markup(text: str, bold: bool = False) -> str:
         rendered.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
     )
     return f'<font name="{font}">{escaped}</font>' if font else escaped
+
+
+def wrapped_markup(text, max_width_pt: float, font_size: float, bold: bool = False) -> str:
+    """``paragraph_markup``, but Arabic is broken into lines *before* shaping.
+
+    ReportLab lays a Paragraph out **after** the bidi algorithm has run, so it
+    wraps the visually-reordered string: the words that belong on the last line
+    get drawn on the first one, and a two-line Arabic sentence reads backwards.
+    Nothing warns about it — every glyph is present and correctly shaped, only
+    the line order is wrong, which is exactly the kind of defect that survives
+    review and lands in the client's artefact.
+
+    So the *logical* text is wrapped here, against the width the caller will
+    actually give the flowable, each line is shaped on its own, and the lines
+    are joined with ``<br/>`` — which ReportLab honours as-is, because every
+    line already fits its column.
+
+    Latin text short-circuits to :func:`paragraph_markup`, so English and French
+    output is byte-for-byte what it was.
+    """
+    if text is None:
+        return ""
+    text = str(text)
+    if (not max_width_pt or max_width_pt <= 0 or not font_size
+            or not _contains_arabic(text) or not ensure_fonts()):
+        return paragraph_markup(text, bold=bold)
+    try:
+        from reportlab.pdfbase.pdfmetrics import stringWidth
+    except Exception:  # noqa: BLE001 — measurement is an optimisation, never a failure
+        return paragraph_markup(text, bold=bold)
+
+    font = ARABIC_FONT_BOLD if bold else ARABIC_FONT
+    # A margin against the metric mismatch of a mixed line: Latin runs inside an
+    # Arabic paragraph are measured with the Arabic face, which is close but not
+    # identical. Breaking one word early is invisible; breaking one word late
+    # would let ReportLab re-wrap the line and reintroduce the bug.
+    limit = max_width_pt * 0.95
+    lines: list[str] = []
+    current = ""
+    for word in text.split():
+        candidate = f"{current} {word}" if current else word
+        try:
+            too_wide = stringWidth(shape(candidate), font, font_size) > limit
+        except Exception:  # noqa: BLE001
+            too_wide = False
+        if current and too_wide:
+            lines.append(current)
+            current = word
+        else:
+            current = candidate
+    if current:
+        lines.append(current)
+    if len(lines) <= 1:
+        return paragraph_markup(text, bold=bold)
+    return "<br/>".join(paragraph_markup(line, bold=bold) for line in lines)

@@ -1,8 +1,8 @@
 """Activity Log endpoints — audit trail for all user actions."""
 from datetime import datetime
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
-from sqlalchemy import select, func
+from sqlalchemy import select, func, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
@@ -13,9 +13,14 @@ from app.models.audit_log_seal import AuditLogSeal
 from app.services import audit_retention
 from app.models.activity_log import ActivityLog
 from app.models.tenant import Tenant
-from app.services.activity_chain import chain_and_add
+from app.services.activity_chain import chain_and_add, is_system_actor
 from app.models.login_event import LoginEvent
 from app.services.activity_chain import compute_entry_hash, _utcnow
+# The verb vocabulary lives with the middleware that writes it, so the filters
+# offered here can never drift from the verbs actually recorded.
+from app.core.activity_middleware import (
+    ACTION_CATEGORIES, KNOWN_ACTIONS, OTHER_CATEGORY, action_category,
+)
 
 router = APIRouter()
 
@@ -23,6 +28,10 @@ router = APIRouter()
 class LogEntry(BaseModel):
     id: str
     user_id: str
+    # Exactly as stored — user_email is one of the fields the entry hash is
+    # computed over, so anyone recomputing a hash from this response must see
+    # the same bytes the chain saw. The resolved-for-display value is a
+    # separate field below; the two are never conflated.
     user_email: str
     action: str
     entity_type: str
@@ -34,12 +43,70 @@ class LogEntry(BaseModel):
     seq: int | None = None
     entry_hash: str | None = None
     created_at: datetime
+    # access | validation | change | other — derived, never stored, so an
+    # examiner can separate "qui a consulté" from "qui a validé" without the
+    # client having to know the verb vocabulary.
+    category: str | None = None
+    # Who the actor is, for the 96% of historical rows written before the actor
+    # email was captured (the access token carries no email claim, so those rows
+    # hold ""). Resolved from users.id at READ time and never written back: the
+    # stored row is inside the hash chain and must stay byte-for-byte as it was.
+    actor_email: str | None = None
+    actor_name: str | None = None
+    # True for the platform's automated-task principal, which is not a person.
+    is_system: bool = False
     model_config = {"from_attributes": True}
 
 
 class LogListResponse(BaseModel):
     items: list[LogEntry]
     total: int
+
+
+async def _decorate(db: AsyncSession, rows: list[ActivityLog]) -> list[LogEntry]:
+    """Turn stored rows into responses, naming the actor and grading the verb.
+
+    One batched lookup for every actor in the page rather than one per row.
+    """
+    entries = [LogEntry.model_validate(r) for r in rows]
+    actor_ids = {r.user_id for r in rows if r.user_id}
+    actors: dict[str, tuple[str, str]] = {}
+    if actor_ids:
+        for uid, email, first, last in (await db.execute(
+            select(User.id, User.email, User.first_name, User.last_name)
+            .where(User.id.in_(actor_ids))
+        )).all():
+            actors[uid] = (email or "", f"{first or ''} {last or ''}".strip())
+    for entry in entries:
+        email, name = actors.get(entry.user_id, ("", ""))
+        entry.actor_email = entry.user_email or email or None
+        entry.actor_name = name or None
+        entry.is_system = is_system_actor(entry.actor_email)
+        entry.category = action_category(entry.action)
+    return entries
+
+
+# ``other`` is the complement of the three named families, not a fourth list:
+# a module that invents a verb tomorrow (the trail already holds
+# lifecycle_change, rights_change, delegation_granted…) stays filterable instead
+# of dropping out of every category the UI can offer.
+CATEGORY_CHOICES = (*ACTION_CATEGORIES, OTHER_CATEGORY)
+
+
+def _category_clause(category: str):
+    """SQL clause for one verb family, or 422 if the family is not one of ours."""
+    if category == OTHER_CATEGORY:
+        return or_(
+            ActivityLog.action.is_(None),
+            ActivityLog.action.notin_(sorted(KNOWN_ACTIONS)),
+        )
+    verbs = ACTION_CATEGORIES.get(category)
+    if verbs is None:
+        raise HTTPException(
+            422,
+            f"Unknown category '{category}'. Expected one of {sorted(CATEGORY_CHOICES)}.",
+        )
+    return ActivityLog.action.in_(verbs)
 
 
 # Who may read the audit trail. "Seules les personnes autorisées peuvent
@@ -65,32 +132,208 @@ async def list_activity_logs(
     entity_type: str | None = None,
     action: str | None = None,
     user_id: str | None = None,
-    limit: int = 50,
-    offset: int = 0,
+    # "Qui a consulté CE rapport ?" is the question an examiner actually asks,
+    # and it needs the object, not just its type.
+    entity_id: str | None = None,
+    category: str | None = Query(
+        None,
+        description="access | validation | change | other — filters on the verb's family",
+    ),
+    origin: str | None = Query(None, description="manual | batch | api"),
+    date_from: datetime | None = None,
+    date_to: datetime | None = None,
+    limit: int = Query(50, ge=1, le=500),
+    offset: int = Query(0, ge=0),
     db: AsyncSession = Depends(get_db),
     _: User = Depends(require_roles(*AUDIT_READERS)),
     tenant_id: str = Depends(get_tenant_id),
 ):
-    """List activity logs with optional filtering."""
+    """List activity logs with optional filtering.
+
+    The filters are the three questions the requirement names — who accessed,
+    who modified, who validated — plus the object and the period they apply to.
+    """
     q = select(ActivityLog).where(ActivityLog.tenant_id == tenant_id)
     cq = select(func.count(ActivityLog.id)).where(ActivityLog.tenant_id == tenant_id)
 
+    def _both(clause):
+        nonlocal q, cq
+        q = q.where(clause)
+        cq = cq.where(clause)
+
     if entity_type:
-        q = q.where(ActivityLog.entity_type == entity_type)
-        cq = cq.where(ActivityLog.entity_type == entity_type)
+        _both(ActivityLog.entity_type == entity_type)
     if action:
-        q = q.where(ActivityLog.action == action)
-        cq = cq.where(ActivityLog.action == action)
+        _both(ActivityLog.action == action)
     if user_id:
-        q = q.where(ActivityLog.user_id == user_id)
-        cq = cq.where(ActivityLog.user_id == user_id)
+        _both(ActivityLog.user_id == user_id)
+    if entity_id:
+        _both(ActivityLog.entity_id == entity_id)
+    if origin:
+        _both(ActivityLog.origin == origin)
+    if category:
+        _both(_category_clause(category))
+    if date_from:
+        _both(ActivityLog.created_at >= date_from)
+    if date_to:
+        _both(ActivityLog.created_at <= date_to)
 
     total = (await db.execute(cq)).scalar() or 0
     items = list((await db.execute(q.order_by(ActivityLog.created_at.desc()).limit(limit).offset(offset))).scalars().all())
 
-    return LogListResponse(
-        items=[LogEntry.model_validate(i) for i in items],
-        total=total,
+    return LogListResponse(items=await _decorate(db, items), total=total)
+
+
+class ActionCatalogue(BaseModel):
+    categories: dict[str, list[str]]
+    # Filterable family names, including "other" — which is a complement, so it
+    # has no fixed verb list and cannot be read off `categories`.
+    category_choices: list[str]
+    # The verbs and entity types this tenant's trail actually contains, so the
+    # filter lists match the data instead of a hard-coded guess.
+    actions_present: list[str]
+    entity_types_present: list[str]
+    origins_present: list[str]
+    # i18n keys the UI should render for each verb — the platform's existing
+    # activity_log.actions.* namespace, not a new mechanism.
+    i18n_prefix: str = "activity_log.actions"
+
+
+@router.get("/actions", response_model=ActionCatalogue)
+async def list_action_catalogue(
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_roles(*AUDIT_READERS)),
+    tenant_id: str = Depends(get_tenant_id),
+):
+    """The verb vocabulary, and what of it this tenant has actually recorded.
+
+    Deliberately not logged as an access itself (see READ_LOGGED): it is the
+    filter catalogue the log page loads before showing anything.
+    """
+    actions = [r[0] for r in (await db.execute(
+        select(ActivityLog.action).where(ActivityLog.tenant_id == tenant_id)
+        .distinct().order_by(ActivityLog.action.asc())
+    )).all() if r[0]]
+    entity_types = [r[0] for r in (await db.execute(
+        select(ActivityLog.entity_type).where(ActivityLog.tenant_id == tenant_id)
+        .distinct().order_by(ActivityLog.entity_type.asc())
+    )).all() if r[0]]
+    origins = [r[0] for r in (await db.execute(
+        select(ActivityLog.origin).where(ActivityLog.tenant_id == tenant_id)
+        .distinct().order_by(ActivityLog.origin.asc())
+    )).all() if r[0]]
+    unclassified = sorted(a for a in actions if a not in KNOWN_ACTIONS)
+    return ActionCatalogue(
+        categories={
+            **{k: list(v) for k, v in ACTION_CATEGORIES.items()},
+            OTHER_CATEGORY: unclassified,
+        },
+        category_choices=list(CATEGORY_CHOICES),
+        actions_present=actions,
+        entity_types_present=entity_types,
+        origins_present=origins,
+    )
+
+
+class AccessByActor(BaseModel):
+    user_id: str
+    user_email: str | None = None
+    user_name: str | None = None
+    is_system: bool = False
+    actions: dict[str, int]
+    total: int
+    first_at: datetime
+    last_at: datetime
+
+
+class EntityAccessReport(BaseModel):
+    entity_type: str
+    entity_id: str
+    entity_name: str | None = None
+    category: str
+    total: int
+    actors: list[AccessByActor]
+    recent: list[LogEntry]
+
+
+@router.get("/access/{entity_type}/{entity_id}", response_model=EntityAccessReport)
+async def entity_access_report(
+    entity_type: str,
+    entity_id: str,
+    category: str = Query("access", description="access | validation | change | other"),
+    recent_limit: int = Query(20, ge=0, le=200),
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_roles(*AUDIT_READERS)),
+    tenant_id: str = Depends(get_tenant_id),
+):
+    """Who consulted (or validated, or changed) one specific object.
+
+    The direct answer to "qui a consulté ce rapport ?": one row per person with
+    how many times and when, plus the most recent entries behind the count.
+    Tenant-scoped like every other read here, so an id from another
+    organisation simply returns an empty report.
+    """
+    base = [
+        ActivityLog.tenant_id == tenant_id,
+        ActivityLog.entity_type == entity_type,
+        ActivityLog.entity_id == entity_id,
+        _category_clause(category),
+    ]
+
+    grouped = (await db.execute(
+        select(
+            ActivityLog.user_id, ActivityLog.action, func.count(ActivityLog.id),
+            func.min(ActivityLog.created_at), func.max(ActivityLog.created_at),
+        ).where(*base).group_by(ActivityLog.user_id, ActivityLog.action)
+    )).all()
+
+    by_actor: dict[str, AccessByActor] = {}
+    for uid, act, count, first_at, last_at in grouped:
+        record = by_actor.get(uid)
+        if record is None:
+            record = by_actor[uid] = AccessByActor(
+                user_id=uid, actions={}, total=0, first_at=first_at, last_at=last_at
+            )
+        record.actions[act] = record.actions.get(act, 0) + int(count or 0)
+        record.total += int(count or 0)
+        record.first_at = min(record.first_at, first_at)
+        record.last_at = max(record.last_at, last_at)
+
+    if by_actor:
+        for uid, email, first, last in (await db.execute(
+            select(User.id, User.email, User.first_name, User.last_name)
+            .where(User.id.in_(list(by_actor)))
+        )).all():
+            record = by_actor[uid]
+            record.user_email = email or None
+            record.user_name = f"{first or ''} {last or ''}".strip() or None
+            record.is_system = is_system_actor(email)
+
+    recent_rows: list[ActivityLog] = []
+    if recent_limit:
+        recent_rows = list((await db.execute(
+            select(ActivityLog).where(*base)
+            .order_by(ActivityLog.created_at.desc()).limit(recent_limit)
+        )).scalars().all())
+
+    # The object's own name comes from the trail rather than from its table:
+    # it answers even after the object itself has been deleted.
+    named = (await db.execute(
+        select(ActivityLog.entity_name).where(
+            ActivityLog.tenant_id == tenant_id,
+            ActivityLog.entity_id == entity_id,
+            ActivityLog.entity_name.isnot(None),
+        ).order_by(ActivityLog.created_at.desc()).limit(1)
+    )).first()
+
+    return EntityAccessReport(
+        entity_type=entity_type,
+        entity_id=entity_id,
+        entity_name=named[0] if named else None,
+        category=category,
+        total=sum(a.total for a in by_actor.values()),
+        actors=sorted(by_actor.values(), key=lambda a: a.last_at, reverse=True),
+        recent=await _decorate(db, recent_rows),
     )
 
 
@@ -369,8 +612,8 @@ class LoginEventOut(BaseModel):
 @router.get("/login-events", response_model=list[LoginEventOut])
 async def list_login_events(
     success: bool | None = None,
-    limit: int = 100,
-    offset: int = 0,
+    limit: int = Query(100, ge=1, le=500),
+    offset: int = Query(0, ge=0),
     db: AsyncSession = Depends(get_db),
     # Who signed in, when and from where is exactly the data the requirement
     # restricts. The feature flag says the tenant bought the capability; the
@@ -401,9 +644,20 @@ async def log_activity(
     entity_name: str | None = None,
     details: dict | None = None,
     ip_address: str | None = None,
+    origin: str = "manual",
 ):
-    """Helper to create an activity log entry. Call from other endpoints."""
-    entry = ActivityLog(
+    """Helper to create an activity log entry. Call from other endpoints.
+
+    Goes through the hash chain like every other writer. The previous version
+    did a bare ``db.add``, which produced an entry with no seq and no hash —
+    invisible to /verify and, worse, indistinguishable from an entry someone
+    had unlinked. It had no callers, so nothing in the trail is affected.
+
+    NOTE for callers: chain_and_add COMMITS the session it is given (it has to —
+    the seq race is resolved by the insert succeeding). Call it after your own
+    business rows are in the session, exactly as risk_matrices.py does.
+    """
+    await chain_and_add(db, ActivityLog(
         tenant_id=tenant_id,
         user_id=user.id,
         user_email=user.email,
@@ -413,5 +667,5 @@ async def log_activity(
         entity_name=entity_name,
         details=details,
         ip_address=ip_address,
-    )
-    db.add(entry)
+        origin=origin,
+    ))

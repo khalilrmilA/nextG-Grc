@@ -91,7 +91,10 @@ async def run_daily_snapshot(db: AsyncSession) -> dict:
                 written += 1
         except Exception as exc:  # noqa: BLE001 — never let one tenant's failure kill the loop
             await db.rollback()
-            logger.error("Risk snapshot: failed for tenant %s: %s", tenant_id, exc)
+            # With the traceback, like the loop handler below: a snapshot that
+            # silently stops being written leaves a hole in the open-risk series
+            # that nothing later can reconstruct.
+            logger.exception("Risk snapshot: failed for tenant %s: %s", tenant_id, exc)
 
     return {"tenants": len(tenant_ids), "written": written, "snapshot_date": today}
 
@@ -121,5 +124,5 @@ async def start_risk_snapshot_scheduler() -> None:
         except asyncio.CancelledError:
             raise
         except Exception as exc:  # noqa: BLE001 — never let the loop die
-            logger.error("Risk snapshot scheduler tick failed: %s", exc)
+            logger.exception("Risk snapshot scheduler tick failed: %s", exc)
         await asyncio.sleep(POLL_SECONDS)

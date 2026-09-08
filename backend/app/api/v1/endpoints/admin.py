@@ -4,15 +4,15 @@ from typing import Annotated
 from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, and_
+from sqlalchemy import select
 from pydantic import BaseModel, EmailStr, Field, field_serializer
 
 from app.core.config import settings
 from app.core.database import get_db
 from app.core.licensing import LICENSE_PRODUCT, sign_license, normalize_plan
-from app.core.security import hash_password, hash_password_async
+from app.core.security import hash_password_async
 from app.models.license import IssuedLicense
 from app.models.user import User, UserRole
 from app.models.tenant import Tenant
@@ -21,17 +21,13 @@ from app.models.subscription import (
     SubscriptionTier,
     SubscriptionStatus,
     TIER_LIMITS,
-    ELITE_FEATURES,
     togglable_features,
 )
 from app.models.ai_access import AiAccessRequest, AiUsageQuota
+from app.models.activity_log import ActivityLog
+from app.services.activity_chain import chain_and_add, is_system_actor
 from app.api.v1.dependencies.auth import get_current_user
-from app.workers.tasks.notifications import (
-    notify_ai_access_approved,
-    notify_ai_access_request,
-    notify_framework_new,
-    notify_framework_updated,
-)
+from app.workers.tasks.notifications import notify_ai_access_approved
 
 logger = logging.getLogger(__name__)
 
@@ -278,11 +274,54 @@ async def delete_user(
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
+    # Same guard as the tenant-admin console (users.py delete_user): the
+    # automated-task principal is the author of every batch audit entry for its
+    # tenant, so deleting it orphans those and breaks batch logging from then
+    # on. It exists here too, and this console can reach every tenant's copy.
+    if is_system_actor(user.email):
+        raise HTTPException(status_code=403, detail="The automated-task account cannot be deleted.")
+
+    # Capture the identity before the row goes: activity_logs.user_id keeps
+    # pointing at it afterwards, and 30 of the 54 already-orphaned rows on this
+    # database carry an empty user_email, so who acted is unrecoverable for
+    # them. Until User grows a deleted_at column (the real fix — see the
+    # handover notes), this entry is the surviving record of which account that
+    # id was. It goes in the SUBJECT's tenant chain, where the orphans are.
+    deleted = {
+        "subject_user_id": user.id,
+        "email": user.email,
+        "name": f"{user.first_name} {user.last_name}".strip(),
+        "role": user.role.value if hasattr(user.role, "value") else user.role,
+        "tenant_id": user.tenant_id,
+        "deleted_by": current_user.email,
+        "source": "super_admin_console",
+    }
+    subject_tenant_id = user.tenant_id
+    subject_name = deleted["name"]
+
     await db.delete(user)
     # Commit here rather than relying on get_db()'s teardown: that runs after
     # ActivityLogMiddleware, which opens its own connection for the audit
     # entry and would wait on the write lock this session still holds.
     await db.commit()
+
+    # After the commit, like every other chained write in this codebase:
+    # chain_and_add commits, so logging first would publish a deletion the
+    # database might still roll back. Best-effort — the user is already gone.
+    try:
+        await chain_and_add(db, ActivityLog(
+            tenant_id=subject_tenant_id,
+            user_id=current_user.id,
+            user_email=current_user.email,
+            action="user_deleted",
+            entity_type="user",
+            entity_id=user_id,
+            entity_name=subject_name,
+            details=deleted,
+            origin="api",
+        ))
+    except Exception:  # noqa: BLE001 — the deletion is already committed
+        logger.warning("user_deleted audit entry not recorded for user %s", user_id)
 
 
 # ── Tenant access control ─────────────────────────────────────────────────────
@@ -472,6 +511,25 @@ async def list_ai_access_requests(
     return result.scalars().all()
 
 
+async def _request_owner_id(db: AsyncSession, request: AiAccessRequest) -> str | None:
+    """The user account an AI access request belongs to, or None.
+
+    ``ai_access_requests.user_id`` is nullable and is NULL on most rows written
+    so far, so ``AiUsageQuota.user_id == request.user_id`` compiled to
+    ``user_id IS NULL`` and matched the orphan quota row that has no owner —
+    approving one request then flipped a quota belonging to nobody (and, over
+    time, created that orphan). user_email is NOT NULL, so fall back to it.
+    """
+    if request.user_id:
+        return request.user_id
+    if not request.user_email:
+        return None
+    owner = (await db.execute(
+        select(User).where(User.email == request.user_email.strip().lower())
+    )).scalar_one_or_none()
+    return owner.id if owner else None
+
+
 @router.patch("/ai-access/requests/{request_id}/approve")
 async def approve_ai_request(
     request_id: str,
@@ -487,37 +545,41 @@ async def approve_ai_request(
     if not request:
         raise HTTPException(status_code=404, detail="Request not found")
 
-    try:
-        logger.info(f"Found request: {request.user_email}, approving...")
-    except Exception as e:
-        logger.error(f"Error accessing request attributes: {str(e)}", exc_info=True)
+    logger.info("Found request: %s, approving...", request.user_email)
     request.status = "approved"
     request.responded_at = datetime.utcnow()
     request.admin_notes = body.admin_notes
 
-    # Create or update usage quota for the user
-    quota_result = await db.execute(
-        select(AiUsageQuota).where(AiUsageQuota.user_id == request.user_id)
-    )
-    quota = quota_result.scalar_one_or_none()
-
-    if quota:
-        quota.is_approved = True
-        logger.info(f"Updated existing quota for user {request.user_email}")
+    # Create or update usage quota for the user. The decision on the request is
+    # recorded either way: it is the record of fact, and ai.py auto-provisions a
+    # quota on first use, so an unidentifiable owner must not lose the decision.
+    owner_id = await _request_owner_id(db, request)
+    if owner_id is None:
+        logger.warning("admin.ai_access.no_owner request_id=%s email=%s — decision "
+                       "recorded, no quota granted", request.id, request.user_email)
     else:
-        quota_id = str(uuid4())
-        quota = AiUsageQuota(
-            id=quota_id,
-            tenant_id=request.tenant_id,
-            user_id=request.user_id,
-            feature=request.feature,
-            is_approved=True,
-            monthly_limit_tokens=10000,
-            monthly_limit_requests=100,
-            reset_date=datetime.utcnow() + timedelta(days=30),
+        quota_result = await db.execute(
+            select(AiUsageQuota).where(AiUsageQuota.user_id == owner_id)
         )
-        db.add(quota)
-        logger.info(f"Created new quota for user {request.user_email}")
+        quota = quota_result.scalar_one_or_none()
+
+        if quota:
+            quota.is_approved = True
+            logger.info(f"Updated existing quota for user {request.user_email}")
+        else:
+            quota_id = str(uuid4())
+            quota = AiUsageQuota(
+                id=quota_id,
+                tenant_id=request.tenant_id,
+                user_id=owner_id,
+                feature=request.feature,
+                is_approved=True,
+                monthly_limit_tokens=10000,
+                monthly_limit_requests=100,
+                reset_date=datetime.utcnow() + timedelta(days=30),
+            )
+            db.add(quota)
+            logger.info(f"Created new quota for user {request.user_email}")
 
     try:
         await db.flush()
@@ -530,7 +592,9 @@ async def approve_ai_request(
 
     # Send notification to user (fire-and-forget — Redis may be down).
     try:
-        notify_ai_access_approved.delay(request.user_id, request.user_email)
+        # owner_id, not request.user_id: the latter is NULL on most rows, and the
+        # task does db.get(User, None) -> None and drops the notification.
+        notify_ai_access_approved.delay(owner_id, request.user_email)
     except Exception:
         logger.warning("admin.ai_access.notify_delay_failed user_id=%s", request.user_id)
 
@@ -566,13 +630,16 @@ async def deny_ai_request(
     request.responded_at = datetime.utcnow()
     request.admin_notes = body.admin_notes
 
-    # Update quota to mark as not approved
-    quota_result = await db.execute(
-        select(AiUsageQuota).where(AiUsageQuota.user_id == request.user_id)
-    )
-    quota = quota_result.scalar_one_or_none()
-    if quota:
-        quota.is_approved = False
+    # Update quota to mark as not approved (same NULL-user_id trap as approve:
+    # without this the denial revoked the orphan quota instead of this user's).
+    owner_id = await _request_owner_id(db, request)
+    if owner_id is not None:
+        quota_result = await db.execute(
+            select(AiUsageQuota).where(AiUsageQuota.user_id == owner_id)
+        )
+        quota = quota_result.scalar_one_or_none()
+        if quota:
+            quota.is_approved = False
 
     try:
         await db.flush()
@@ -606,16 +673,37 @@ async def set_user_quota(
     feature = body.get("feature", "document-generation")
     monthly_limit = body.get("monthly_limit", 10000)
 
-    # Update or create quota
+    # user_id was taken straight from an untyped body: when it was absent the
+    # filter below became `user_id IS NULL` and quietly rewrote the ownerless
+    # quota row instead of failing.
+    if not isinstance(user_id, str) or not user_id.strip():
+        raise HTTPException(status_code=422, detail="user_id is required")
+    user_id = user_id.strip()
+    if isinstance(monthly_limit, bool) or not isinstance(monthly_limit, int) or monthly_limit < 0:
+        raise HTTPException(status_code=422, detail="monthly_limit must be a non-negative integer")
+    if not isinstance(feature, str) or not feature.strip():
+        raise HTTPException(status_code=422, detail="feature must be a non-empty string")
+    feature = feature.strip()
+
+    # Look up by user_id ALONE. ai_usage_quotas.user_id is UNIQUE, so there is
+    # at most one row per user; matching on (user_id, feature) missed it
+    # whenever the stored label differed — every live row says "all" while this
+    # route defaults to "document-generation" — and the insert that followed
+    # then violated that unique constraint and 500'd. ai.py and ai_access.py
+    # both read the quota by user_id only, so the label is descriptive, not a
+    # key.
     result = await db.execute(
-        select(AiUsageQuota).where(
-            and_(AiUsageQuota.user_id == user_id, AiUsageQuota.feature == feature)
-        )
+        select(AiUsageQuota).where(AiUsageQuota.user_id == user_id)
     )
     quota = result.scalar_one_or_none()
 
     if quota:
         quota.monthly_limit_tokens = monthly_limit
+        if "feature" in body:
+            # Only when the caller actually named one: the parameter defaults to
+            # "document-generation", and silently rewriting a row labelled "all"
+            # (every live row) would change stored data nobody asked to change.
+            quota.feature = feature
         await db.commit()
     else:
         quota_id = str(uuid4())
@@ -717,10 +805,15 @@ async def update_subscription(
         if body.trial_ends_at is None:
             sub.trial_ends_at = None
         else:
+            # The old try/except wrapped a plain attribute assignment, so it
+            # could never fire and any string at all was stored into a column
+            # the SPA hands to new Date() — "Invalid Date" in the UI. Parse it
+            # here so that 400 is actually reachable.
             try:
-                sub.trial_ends_at = body.trial_ends_at  # store as-is (ISO string)
-            except Exception:
+                datetime.fromisoformat(body.trial_ends_at.replace("Z", "+00:00"))
+            except (AttributeError, ValueError):
                 raise HTTPException(status_code=400, detail="Invalid trial_ends_at date format")
+            sub.trial_ends_at = body.trial_ends_at  # store as-is (ISO string)
 
     await db.commit()
     await db.refresh(sub)
@@ -838,6 +931,13 @@ async def _set_license_status(
         raise HTTPException(status_code=404, detail="License not found")
     lic.status = new_status
     await db.flush()
+    # Commit here rather than relying on get_db()'s teardown: that runs after
+    # ActivityLogMiddleware, which opens its own connection for the audit
+    # entry and would wait on the write lock this session still holds — for
+    # revoke/reactivate that meant a 5s stall and, worse, the middleware
+    # giving up, so the one action an examiner asks about ("who revoked this
+    # client's licence, and when?") was the one missing from the chain.
+    await db.commit()
     logger.info("super-admin %s set license %s (%s) to status=%s",
                 current_user.email, lic.lid, lic.customer_name, new_status)
     return lic

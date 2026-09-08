@@ -45,6 +45,19 @@ def _demo_findings() -> list[ParsedFinding]:
 _TENABLE_SEVERITY = {4: "critical", 3: "high", 2: "medium", 1: "low", 0: "informational"}
 
 
+def _tenable_severity(raw) -> str:
+    """Map Tenable's 0-4 index, tolerating a missing or non-numeric value.
+
+    ``int(None)`` raises, and one such row used to abort the entire pull with a
+    TypeError recorded as a failed journal — losing every other finding in the
+    response over a single malformed entry.
+    """
+    try:
+        return _TENABLE_SEVERITY.get(int(raw), "medium")
+    except (TypeError, ValueError):
+        return "medium"
+
+
 async def _fetch_tenable(conn: ScannerConnector) -> list[ParsedFinding]:
     """Tenable.io workbenches API. Auth via X-ApiKeys (access/secret keys)."""
     if not (conn.api_key and conn.api_secret):
@@ -59,12 +72,11 @@ async def _fetch_tenable(conn: ScannerConnector) -> list[ParsedFinding]:
         r.raise_for_status()
         data = r.json()
     findings: list[ParsedFinding] = []
-    for v in data.get("vulnerabilities", []):
-        sev = _TENABLE_SEVERITY.get(int(v.get("severity", 2)), "medium")
+    for v in data.get("vulnerabilities") or []:
         findings.append(ParsedFinding(
             title=(v.get("plugin_name") or "Tenable finding")[:500],
             ref_id=str(v.get("plugin_id") or "") or None,
-            severity=sev,
+            severity=_tenable_severity(v.get("severity")),
             cvss_score=None,
         ))
     return findings

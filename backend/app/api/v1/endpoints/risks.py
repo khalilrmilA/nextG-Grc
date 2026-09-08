@@ -1,4 +1,5 @@
 """Risk management endpoints."""
+import asyncio
 from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -7,20 +8,24 @@ from pydantic import BaseModel
 from typing import Any
 
 from app.core.database import get_db
-from app.models.risk import Risk, RiskStatus, RiskSeverity, RiskTreatment, RiskTreatmentOption
+from app.models.risk import Risk, RiskStatus, RiskSeverity, RiskTreatment
+from app.models.risk_treatment_version import RiskTreatmentVersion
+from app.models.activity_log import ActivityLog
+from app.services.activity_chain import chain_and_add
 from app.models.risk_scenario import RiskScenario
 from app.models.subscription import Subscription
 from app.models.notification import NotificationType
 from app.models.user import UserRole
 from app.api.v1.dependencies import get_current_user, require_roles, get_tenant_id, PaginationParams
-from app.api.v1.dependencies.features import require_feature
 from app.models.user import User
 from app.services import risk_scoring, residual_risk, risk_versioning
 from app.models.risk_version import RiskVersion
 from app.models.applied_control import AppliedControl
+from app.models.org_unit import OrgEntity, BusinessProcess
 from app.services.notification_generator import create_notification, get_recipients_for_tenant, notification_exists
 from app.services import perimeter
 from app.services.authz import get_effective_roles
+from app.services.ai_locale import get_request_language
 
 router = APIRouter()
 
@@ -68,6 +73,9 @@ async def _alert_over_appetite(db: AsyncSession, risk: Risk) -> int:
     for user in recipients:
         if await notification_exists(db, user.id, NotificationType.RISK_OVER_APPETITE, risk.id, within_days=7):
             continue
+        # STB: a Tunisian bank cannot be sent English sentences. The client
+        # renders title_key/message_key with params; the stored strings stay as
+        # the fallback and as the e-mail body.
         await create_notification(
             db, user=user, notif_type=NotificationType.RISK_OVER_APPETITE,
             title=f"Risk over appetite: {risk.title[:50]}",
@@ -75,6 +83,10 @@ async def _alert_over_appetite(db: AsyncSession, risk: Risk) -> int:
                      f"the appetite threshold of {risk.appetite_threshold}. Treatment is required."),
             entity_id=risk.id, entity_type="risk",
             link=f"/risks?highlight={risk.id}", severity="critical",
+            title_key="notifications.risk_over_appetite.title",
+            message_key="notifications.risk_over_appetite.message",
+            params={"risk": risk.title, "score": score,
+                    "threshold": risk.appetite_threshold},
         )
         created += 1
     return created
@@ -98,6 +110,10 @@ async def _alert_target_over_appetite(db: AsyncSession, risk: Risk) -> int:
                      f"treatment. The treatment plan may need to be strengthened."),
             entity_id=risk.id, entity_type="risk",
             link=f"/risks?highlight={risk.id}", severity="high",
+            title_key="notifications.risk_target_over_appetite.title",
+            message_key="notifications.risk_target_over_appetite.message",
+            params={"risk": risk.title, "target_score": risk.target_risk_score,
+                    "threshold": risk.appetite_threshold},
         )
         created += 1
     return created
@@ -119,6 +135,9 @@ class RiskCreate(BaseModel):
     linked_controls: list[str] = []
     linked_assets: list[str] = []
     next_review_date: str | None = None
+    # STB gap 19.d — département / processus porteur
+    org_entity_id: str | None = None
+    business_process_id: str | None = None
 
 
 class RiskUpdate(BaseModel):
@@ -141,6 +160,8 @@ class RiskUpdate(BaseModel):
     appetite_threshold: float | None = None
     # RFP rule: required when `status` transitions FROM closed to anything else.
     reopen_reason: str | None = None
+    org_entity_id: str | None = None
+    business_process_id: str | None = None
 
 
 class RiskResponse(BaseModel):
@@ -176,6 +197,8 @@ class RiskResponse(BaseModel):
     reopen_reason: str | None = None
     target_validated_at: str | None = None
     target_calculation_notes: str | None = None
+    org_entity_id: str | None = None
+    business_process_id: str | None = None
     created_at: datetime
     updated_at: datetime
 
@@ -220,6 +243,9 @@ async def list_risks(
     pagination: PaginationParams = Depends(),
     status_filter: RiskStatus | None = Query(None, alias="status"),
     severity: RiskSeverity | None = None,
+    # STB gap 19.d — « les risques de la DSI », « les risques du processus Crédit »
+    org_entity_id: str | None = Query(None),
+    business_process_id: str | None = Query(None),
     tenant_id: str = Depends(get_tenant_id),
     db: AsyncSession = Depends(get_db),
     _: User = Depends(get_current_user),
@@ -231,6 +257,10 @@ async def list_risks(
         query = query.where(Risk.status == status_filter)
     if severity:
         query = query.where(Risk.severity == severity)
+    if org_entity_id:
+        query = query.where(Risk.org_entity_id == org_entity_id)
+    if business_process_id:
+        query = query.where(Risk.business_process_id == business_process_id)
 
     # Count
     count_result = await db.execute(select(func.count()).select_from(query.subquery()))
@@ -251,6 +281,29 @@ async def list_risks(
     )
 
 
+async def _assert_scope_in_tenant(db: AsyncSession, tenant_id: str, org_entity_id, business_process_id) -> None:
+    """Refuse a département or processus belonging to another organisation.
+
+    Without this the caller could attach one tenant's risk to another tenant's
+    org entity — the id would then leak through every filtered listing that
+    joins on it. Same rule compliance.py applies to an assessment's scope.
+    """
+    if org_entity_id:
+        r = await db.execute(
+            select(OrgEntity.id).where(OrgEntity.id == org_entity_id, OrgEntity.tenant_id == tenant_id)
+        )
+        if r.scalar_one_or_none() is None:
+            raise HTTPException(status_code=422, detail="org_entity_id does not belong to this organisation")
+    if business_process_id:
+        r = await db.execute(
+            select(BusinessProcess.id).where(
+                BusinessProcess.id == business_process_id, BusinessProcess.tenant_id == tenant_id
+            )
+        )
+        if r.scalar_one_or_none() is None:
+            raise HTTPException(status_code=422, detail="business_process_id does not belong to this organisation")
+
+
 @router.post("", response_model=RiskResponse, status_code=status.HTTP_201_CREATED)
 async def create_risk(
     body: RiskCreate,
@@ -260,6 +313,7 @@ async def create_risk(
         UserRole.CISO, UserRole.RISK_MANAGER
     )),
 ):
+    await _assert_scope_in_tenant(db, tenant_id, body.org_entity_id, body.business_process_id)
     risk = Risk(tenant_id=tenant_id, **body.model_dump())
     definition, matrix_name = await _apply_scoring(db, tenant_id, risk)
     db.add(risk)
@@ -298,6 +352,9 @@ async def update_risk(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_roles(
         UserRole.CISO, UserRole.RISK_MANAGER, UserRole.BUSINESS_OWNER)),
+    # The perimeter refusal below is one of the few 403s the SPA renders
+    # verbatim, so it has to answer in the caller's language.
+    lang: str = Depends(get_request_language),
 ):
     result = await db.execute(
         select(Risk).where(Risk.id == risk_id, Risk.tenant_id == tenant_id)
@@ -309,9 +366,13 @@ async def update_risk(
     # A perimeter-scoped role may only act on what it owns. Reading stays
     # tenant-wide — see app/services/perimeter.py for why that asymmetry.
     perimeter.assert_in_perimeter(
-        current_user, risk, await get_effective_roles(current_user, db), what="risk")
+        current_user, risk, await get_effective_roles(current_user, db), what="risk",
+        lang=lang)
 
     provided = body.model_dump(exclude_none=True)
+    await _assert_scope_in_tenant(
+        db, tenant_id, provided.get("org_entity_id"), provided.get("business_process_id")
+    )
     # Risk appetite is an Elite Pack capability — gate the write.
     if "appetite_threshold" in provided:
         await _assert_feature(db, tenant_id, current_user, "risk_appetite")
@@ -331,7 +392,6 @@ async def update_risk(
     # reopen justification the rule demands is carried here — it used to be
     # validated and then discarded, so the one place a reason is mandatory kept
     # none.
-    before_snapshot = risk_versioning.snapshot(risk)
     old_status = getattr(risk.status, "value", risk.status)
     moving = new_status is not None and new_status != risk.status
     await risk_versioning.archive(
@@ -376,7 +436,7 @@ async def delete_risk(
     risk_id: str,
     tenant_id: str = Depends(get_tenant_id),
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(require_roles(UserRole.CISO)),
+    current_user: User = Depends(require_roles(UserRole.CISO)),
 ):
     result = await db.execute(
         select(Risk).where(Risk.id == risk_id, Risk.tenant_id == tenant_id)
@@ -384,6 +444,131 @@ async def delete_risk(
     risk = result.scalar_one_or_none()
     if not risk:
         raise HTTPException(status_code=404, detail=_RISK_NOT_FOUND)
+
+    # A closed or formally accepted risk records a decision somebody took, and a
+    # scenario's linked register entry is one half of a chain — neither is a
+    # draft to be removed. There is no deleted_at column on risks to soft-delete
+    # into, so refusing is the honest answer rather than destroying the trail.
+    # Anything still open deletes exactly as before.
+    current_status = getattr(risk.status, "value", risk.status)
+    if current_status in (RiskStatus.CLOSED.value, RiskStatus.ACCEPTED.value):
+        raise HTTPException(
+            status_code=409,
+            detail=(f"A risk in status '{current_status}' records a decision that was taken and "
+                    "cannot be deleted. Reopen it first if it was created in error."),
+        )
+    consolidated_from = (await db.execute(
+        select(func.count()).select_from(RiskScenario).where(
+            RiskScenario.tenant_id == tenant_id, RiskScenario.linked_risk_id == risk_id
+        )
+    )).scalar() or 0
+    if consolidated_from:
+        raise HTTPException(
+            status_code=409,
+            detail=("This risk is the register entry consolidated from a risk scenario. Delete "
+                    "the scenario instead — removing the risk alone would leave it pointing at "
+                    "a row that no longer exists."),
+        )
+
+    # Snapshot the fields the chain will record BEFORE anything commits, so the
+    # entry describes the row as it stood on entry to this handler regardless of
+    # what the writes below do to the instance.
+    risk_title = risk.title
+    risk_payload = {
+        "title": risk.title,
+        "description": risk.description,
+        "risk_category": risk.risk_category,
+        "status": current_status,
+        "severity": getattr(risk.severity, "value", risk.severity),
+        "owner_id": risk.owner_id,
+        "likelihood": risk.likelihood, "impact": risk.impact,
+        "residual_likelihood": risk.residual_likelihood,
+        "residual_impact": risk.residual_impact,
+        "target_likelihood": risk.target_likelihood,
+        "target_impact": risk.target_impact,
+        "appetite_threshold": risk.appetite_threshold,
+        "org_entity_id": risk.org_entity_id,
+        "business_process_id": risk.business_process_id,
+        "linked_controls": list(risk.linked_controls or []),
+        "linked_assets": list(risk.linked_assets or []),
+        "next_review_date": risk.next_review_date,
+        "last_reviewed_at": risk.last_reviewed_at,
+        "reopen_reason": risk.reopen_reason,
+        "tags": list(risk.tags or []),
+    }
+
+    # A treatment plan and its superseded versions hang off risk_id with no
+    # database-level cascade (SQLite runs with foreign_keys off). Left behind
+    # they become unreachable rather than harmless: list_treatments joins Risk,
+    # and GET /risk-treatment/{risk_id}/versions resolves the parent risk first,
+    # so both the live plan and its history 404 forever while the rows — cost,
+    # justification, responsible, deadlines — stay in the table. Record the
+    # decision in the tamper-evident chain, then remove them with the risk.
+    treatment = (await db.execute(
+        select(RiskTreatment).where(RiskTreatment.risk_id == risk_id)
+    )).scalar_one_or_none()
+    versions: list[RiskTreatmentVersion] = []
+    if treatment is not None:
+        versions = list((await db.execute(
+            select(RiskTreatmentVersion)
+            .where(RiskTreatmentVersion.risk_id == risk_id)
+            .order_by(RiskTreatmentVersion.version_number.desc())
+        )).scalars().all())
+        try:
+            await chain_and_add(db, ActivityLog(
+                tenant_id=tenant_id, user_id=current_user.id, user_email=current_user.email,
+                action="delete", entity_type="risk_treatment", entity_id=treatment.id,
+                entity_name=risk_title,
+                details={"deleted_with_risk": risk_id, "plan": {
+                    "treatment_option": getattr(treatment.treatment_option, "value",
+                                                treatment.treatment_option),
+                    "description": treatment.description,
+                    "acceptance_justification": treatment.acceptance_justification,
+                    "delay_justification": treatment.delay_justification,
+                    "transfer_to": treatment.transfer_to,
+                    "owner_id": treatment.owner_id,
+                    "due_date": treatment.due_date,
+                    "start_date": treatment.start_date,
+                    "progress_percentage": treatment.progress_percentage,
+                    "estimated_cost": treatment.estimated_cost,
+                    "actual_cost": treatment.actual_cost,
+                    "priority": treatment.priority,
+                    "complexity": treatment.complexity,
+                    "linked_scenario_ids": list(treatment.linked_scenario_ids or []),
+                },
+                # Snapshots are already-archived states of the same small row;
+                # the chain keeps their identity and reason, not every field.
+                "archived_versions": [
+                    {"version_number": v.version_number,
+                     "change_summary": v.change_summary,
+                     "created_by_id": v.created_by_id}
+                    for v in versions
+                ]},
+                origin="api",
+            ))
+        except Exception:
+            # Same log-and-continue posture incidents.py uses: a chain failure
+            # must not strand the delete half-done.
+            pass
+        for v in versions:
+            await db.delete(v)
+        await db.delete(treatment)
+
+    # The register entry itself is the record of fact here, and it was the one
+    # hard-delete in this group still leaving nothing behind but the middleware's
+    # {method, path}: incidents, vulnerabilities, assets and governance documents
+    # all chain their final state before the row goes. Same log-and-continue
+    # posture — an audit failure must not strand the delete half-done.
+    try:
+        await chain_and_add(db, ActivityLog(
+            tenant_id=tenant_id, user_id=current_user.id, user_email=current_user.email,
+            action="delete", entity_type="risk", entity_id=risk_id, entity_name=risk_title,
+            details={"deleted": risk_payload, "had_treatment_plan": treatment is not None},
+            origin="api",
+        ))
+    except Exception:
+        pass
+
     await db.delete(risk)
     # Commit before returning. get_db() commits at teardown, but that runs AFTER
     # ActivityLogMiddleware, which opens its own connection to write the audit
@@ -561,13 +746,37 @@ async def set_risk_appetite(
     body: AppetiteInput,
     tenant_id: str = Depends(get_tenant_id),
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_feature("risk_appetite")),
+    current_user: User = Depends(require_roles(
+        UserRole.CISO, UserRole.RISK_MANAGER, UserRole.BUSINESS_OWNER)),
+    # The perimeter refusal below is one of the few 403s the SPA renders
+    # verbatim, so it has to answer in the caller's language.
+    lang: str = Depends(get_request_language),
 ):
-    """Elite Pack: set a risk's appetite threshold + optional target tier; alert on new breach."""
+    """Elite Pack: set a risk's appetite threshold + optional target tier; alert on new breach.
+
+    require_feature only answers "is this in the plan" — it is a billing gate and
+    grants no authority, so on its own it let any authenticated user rewrite the
+    appetite threshold that PATCH /risks/{id} restricts to the risk roles. The
+    plan check is kept (as _assert_feature, which raises the same 402), now
+    behind the same role gate and perimeter rule the equivalent PATCH applies.
+    """
+    await _assert_feature(db, tenant_id, current_user, "risk_appetite")
     result = await db.execute(select(Risk).where(Risk.id == risk_id, Risk.tenant_id == tenant_id))
     risk = result.scalar_one_or_none()
     if not risk:
         raise HTTPException(status_code=404, detail=_RISK_NOT_FOUND)
+
+    # A perimeter-scoped role may only act on the risks it owns — same rule as
+    # update_risk (see app/services/perimeter.py).
+    perimeter.assert_in_perimeter(
+        current_user, risk, await get_effective_roles(current_user, db), what="risk",
+        lang=lang)
+
+    # Archive the state this edit starts from, as update_risk does. Both fields
+    # this route writes (appetite_threshold and the target tier) are in
+    # SNAPSHOT_FIELDS, so changing them here used to leave no version behind
+    # while changing the very same fields through PATCH did.
+    await risk_versioning.archive(db, risk, current_user)
 
     was_over = risk.over_appetite
     was_target_over = risk.target_over_appetite
@@ -599,6 +808,9 @@ async def validate_target(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_roles(
         UserRole.CISO, UserRole.RISK_MANAGER, UserRole.BUSINESS_OWNER)),
+    # The perimeter refusal below is one of the few 403s the SPA renders
+    # verbatim, so it has to answer in the caller's language.
+    lang: str = Depends(get_request_language),
 ):
     """Elite Pack: final validation gate for a risk's treatment plan.
 
@@ -624,7 +836,8 @@ async def validate_target(
     # "Validation ... sur son périmètre métier": a business owner validates the
     # risks they own, not the organisation's.
     perimeter.assert_in_perimeter(
-        current_user, risk, await get_effective_roles(current_user, db), what="risk")
+        current_user, risk, await get_effective_roles(current_user, db), what="risk",
+        lang=lang)
 
     if risk.appetite_threshold is None:
         raise HTTPException(
@@ -749,51 +962,27 @@ async def residual_suggestion(
     )
 
 
-@router.post("/quantify", response_model=RiskQuantResult)
-async def quantify_risk(
-    body: RiskQuantInput,
-    db: AsyncSession = Depends(get_db),
-    _: User = Depends(get_current_user),
-    tenant_id: str = Depends(get_tenant_id),
-):
-    """Run Monte Carlo simulation for financial risk quantification (Risk or Risk Scenario)."""
+def _monte_carlo(
+    loss_min: float, loss_max: float, loss_likely: float, aro: float, num_simulations: int
+) -> tuple[float, float, float, list[dict]]:
+    """The simulation itself: returns (ale, p90, p95, distribution).
+
+    Pure CPU — 10 000 triangular draws plus a ten-bucket histogram over them.
+    Kept out of the async handler and run through asyncio.to_thread: inline it
+    blocks the event loop, and with two uvicorn workers one quantification
+    stalls every other request that worker is serving until it finishes.
+    """
     import random
 
-    # Try Risk first, then RiskScenario
-    risk_result = await db.execute(select(Risk).where(Risk.id == body.risk_id, Risk.tenant_id == tenant_id))
-    risk = risk_result.scalar_one_or_none()
-
-    display_title: str = risk.title if risk else ""  # overwritten below if scenario
-    if not risk:
-        sc_result = await db.execute(select(RiskScenario).where(RiskScenario.id == body.risk_id, RiskScenario.tenant_id == tenant_id))
-        scenario = sc_result.scalar_one_or_none()
-        if not scenario:
-            raise HTTPException(status_code=404, detail="Risk or Scenario not found")
-        display_title = getattr(scenario, "name", None) or getattr(scenario, "title", None) or f"Scenario {scenario.id[:8]}"
-
-    # Monte Carlo parameters
-    num_simulations = 10000
-    aro = body.probability_percent / 100.0  # Annual Rate of Occurrence
-    control_eff = body.control_effectiveness / 100.0
-
-    # Run Monte Carlo using PERT distribution (triangular approximation)
     losses = []
     for _ in range(num_simulations):
-        # Generate loss amount using triangular distribution
-        loss = random.triangular(body.annual_loss_min, body.annual_loss_max, body.annual_loss_most_likely)
-        # Apply occurrence probability
-        occurs = random.random() < aro
-        if occurs:
-            losses.append(loss)
-        else:
-            losses.append(0.0)
+        # Loss amount from a triangular (PERT approximation) distribution,
+        # counted only in the years the risk actually occurs.
+        loss = random.triangular(loss_min, loss_max, loss_likely)
+        losses.append(loss if random.random() < aro else 0.0)
 
-    # Calculate statistics
     losses.sort()
-    total_losses = [l for l in losses if l > 0]
     ale = sum(losses) / num_simulations  # Average annual loss
-    sle = body.annual_loss_most_likely  # Single Loss Expectancy
-    residual_ale = ale * (1 - control_eff)
     p90 = losses[int(num_simulations * 0.90)]
     p95 = losses[int(num_simulations * 0.95)]
 
@@ -813,6 +1002,41 @@ async def quantify_risk(
             })
     else:
         distribution = [{"range_min": 0, "range_max": 0, "count": num_simulations, "percentage": 100}]
+    return ale, p90, p95, distribution
+
+
+@router.post("/quantify", response_model=RiskQuantResult)
+async def quantify_risk(
+    body: RiskQuantInput,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(get_current_user),
+    tenant_id: str = Depends(get_tenant_id),
+):
+    """Run Monte Carlo simulation for financial risk quantification (Risk or Risk Scenario)."""
+    # Try Risk first, then RiskScenario
+    risk_result = await db.execute(select(Risk).where(Risk.id == body.risk_id, Risk.tenant_id == tenant_id))
+    risk = risk_result.scalar_one_or_none()
+
+    display_title: str = risk.title if risk else ""  # overwritten below if scenario
+    if not risk:
+        sc_result = await db.execute(select(RiskScenario).where(RiskScenario.id == body.risk_id, RiskScenario.tenant_id == tenant_id))
+        scenario = sc_result.scalar_one_or_none()
+        if not scenario:
+            raise HTTPException(status_code=404, detail="Risk or Scenario not found")
+        display_title = getattr(scenario, "name", None) or getattr(scenario, "title", None) or f"Scenario {scenario.id[:8]}"
+
+    # Monte Carlo parameters
+    num_simulations = 10000
+    aro = body.probability_percent / 100.0  # Annual Rate of Occurrence
+    control_eff = body.control_effectiveness / 100.0
+
+    # The simulation runs off the event loop — see _monte_carlo.
+    ale, p90, p95, distribution = await asyncio.to_thread(
+        _monte_carlo, body.annual_loss_min, body.annual_loss_max,
+        body.annual_loss_most_likely, aro, num_simulations,
+    )
+    sle = body.annual_loss_most_likely  # Single Loss Expectancy
+    residual_ale = ale * (1 - control_eff)
 
     return RiskQuantResult(
         risk_id=body.risk_id,

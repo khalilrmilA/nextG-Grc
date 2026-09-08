@@ -27,6 +27,7 @@ earlier sync first imported them).
 """
 from __future__ import annotations
 
+import asyncio
 import csv
 import hashlib
 import io
@@ -125,7 +126,7 @@ def _parse_float(raw: str | None) -> float | None:
         return None
 
 
-def _normalize_severity(raw: str | None, has_separate_cvss: bool) -> str:
+def _normalize_severity(raw: str | None) -> str:
     """Best-effort map a scanner severity cell to our vocabulary.
 
     Handles text ("High"), Qualys 1-5 bands, and CVSS-like decimals ("7.5").
@@ -270,7 +271,7 @@ def parse_csv(content: bytes | str) -> list[ParsedFinding]:
 
         cvss = _parse_float(_pick(row, _CSV_COLUMNS["cvss"]))
         sev_raw = _pick(row, _CSV_COLUMNS["severity"])
-        severity = _normalize_severity(sev_raw, has_separate_cvss=cvss is not None)
+        severity = _normalize_severity(sev_raw)
         if cvss is not None and not sev_raw:
             severity = _cvss_to_severity(cvss)
 
@@ -300,13 +301,21 @@ def parse_csv(content: bytes | str) -> list[ParsedFinding]:
 # ---------------------------------------------------------------------------
 
 async def _build_asset_index(db: AsyncSession, tenant_id: str) -> dict[str, str]:
-    """Map normalized identifiers (name / external_id / location) -> asset id."""
-    result = await db.execute(select(Asset).where(Asset.tenant_id == tenant_id))
+    """Map normalized identifiers (name / external_id / location) -> asset id.
+
+    Columns only: a real scan import runs against the whole asset inventory and
+    only ever reads these four fields, so hydrating entities (and filling the
+    identity map with them) buys nothing.
+    """
+    result = await db.execute(
+        select(Asset.id, Asset.name, Asset.external_id, Asset.location)
+        .where(Asset.tenant_id == tenant_id)
+    )
     index: dict[str, str] = {}
-    for asset in result.scalars().all():
-        for token in (asset.name, asset.external_id, asset.location):
+    for asset_id, name, external_id, location in result.all():
+        for token in (name, external_id, location):
             if token:
-                index.setdefault(token.strip().lower(), asset.id)
+                index.setdefault(token.strip().lower(), asset_id)
     return index
 
 
@@ -320,14 +329,22 @@ def _match_asset(index: dict[str, str], host_name: str | None, host_ip: str | No
 
 
 async def _existing_dedup_keys(db: AsyncSession, tenant_id: str) -> set[tuple[str, str | None]]:
-    """Build the set of (ident, asset_id) keys already present for the tenant."""
-    result = await db.execute(select(Vulnerability).where(Vulnerability.tenant_id == tenant_id))
+    """Build the set of (ident, asset_id) keys already present for the tenant.
+
+    Columns only, for the same reason as _build_asset_index: after a couple of
+    real imports the register holds tens of thousands of rows, and this needs
+    three fields of each — not the description and remediation text too.
+    """
+    result = await db.execute(
+        select(Vulnerability.ref_id, Vulnerability.title, Vulnerability.affected_assets)
+        .where(Vulnerability.tenant_id == tenant_id)
+    )
     keys: set[tuple[str, str | None]] = set()
-    for v in result.scalars().all():
-        ident = (v.ref_id or v.title or "").strip().lower()
+    for ref_id, title, affected_assets in result.all():
+        ident = (ref_id or title or "").strip().lower()
         if not ident:
             continue
-        assets = v.affected_assets or []
+        assets = affected_assets or []
         if assets:
             for aid in assets:
                 keys.add((ident, aid))
@@ -477,7 +494,10 @@ async def import_scan(
     """Parse a scanner export file, then ingest the findings (file-import path)."""
     tool_l = (tool or "csv").strip().lower()
     try:
-        findings = _parse_findings(tool, filename, content)
+        # XML/CSV parsing is pure CPU over the whole upload; on the event loop it
+        # stalls every other request this worker is serving. Same treatment the
+        # contract text extraction in vendors.py already gets.
+        findings = await asyncio.to_thread(_parse_findings, tool, filename, content)
     except Exception as exc:  # noqa: BLE001 — record a failed journal, don't 500
         journal = ScanJournal(
             tenant_id=tenant_id, tool=tool_l, filename=filename,

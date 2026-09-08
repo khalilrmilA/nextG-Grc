@@ -12,6 +12,7 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, Response, Upl
 from pydantic import BaseModel
 
 from app.core.config import settings
+from app.core.security_utils import assert_safe_upload_name
 from app.models.user import User
 from app.api.v1.dependencies.features import require_feature
 from app.services.ocr_service import (
@@ -68,14 +69,19 @@ class OcrStatusOut(BaseModel):
 
 @router.get("/languages", response_model=OcrLangsOut)
 async def languages(current_user: Annotated[User, Depends(_GATE)]):
-    return OcrLangsOut(languages=available_languages())
+    # Probing the engine is blocking work, not async: it spawns
+    # `tesseract --list-langs` and, on first call in a worker, imports Pillow /
+    # pypdf / pdf2image. Run in a thread like every other tesseract call here,
+    # so a cold worker does not stall every other request while it answers.
+    return OcrLangsOut(languages=await asyncio.to_thread(available_languages))
 
 
 @router.get("/status", response_model=OcrStatusOut)
 async def status(current_user: Annotated[User, Depends(_GATE)]):
     """What this host can do: engine, language packs, PDF support, limits."""
+    engine = await asyncio.to_thread(engine_status)   # blocking probe — see above
     return OcrStatusOut(
-        **engine_status(),
+        **engine,
         max_upload_mb=settings.OCR_MAX_UPLOAD_SIZE_MB,
         max_pages=MAX_PAGES,
     )

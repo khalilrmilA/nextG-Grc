@@ -182,7 +182,11 @@ async def load_ai_config(db, tenant_id: str) -> AIConfig:
         return resolve_ai_config(result.scalar_one_or_none())
     except Exception:
         # A missing table on an older database, or any query problem, must not
-        # take AI down. Fall back to the deployment default.
+        # take AI down. Fall back to the deployment default -- but SAY SO: for a
+        # customer who configured their own endpoint this silently reroutes their
+        # data to the bundled model, and that has to be visible in the log.
+        logger.warning("tenant AI configuration could not be read (tenant=%s); "
+                       "falling back to the deployment default", tenant_id, exc_info=True)
         return env_ai_config()
 
 

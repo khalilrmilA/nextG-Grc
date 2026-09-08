@@ -199,6 +199,17 @@ def get_settings() -> Settings:
             )
         if s.DEBUG:
             raise RuntimeError("DEBUG must be False in production")
+
+    # STB « SGBD : Oracle 19C et SQL Server 2019 » — an administrator may select the
+    # datastore from the web interface (Paramètres > Base de données). That selection
+    # lives in a FILE, not in a table: the connection settings cannot be stored in the
+    # database they configure, or a wrong entry would be unrecoverable. Strictly
+    # opt-in — effective_database_url() returns this value unchanged unless a saved
+    # configuration exists, is enabled, and assembles into a valid URL, and it never
+    # raises. Takes effect on the next start-up; app.core.database builds the engine
+    # from settings.DATABASE_URL and is already dialect-aware.
+    from app.core.db_config import effective_database_url
+    s.DATABASE_URL = effective_database_url(s.DATABASE_URL)
     return s
 
 

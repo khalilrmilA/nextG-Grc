@@ -56,6 +56,14 @@ from app.api.v1.endpoints import (
     ocr,
     report_schedules,
     system,
+    database_config,
+    dashboard_export,
+    # STB tender (bloc « conformité & audit ») — new modules
+    requirements,
+    audit_campaigns,
+    audit_grids,
+    audit_comments,
+    compliance_scales,
 )
 
 api_router = APIRouter()
@@ -78,6 +86,15 @@ api_router.include_router(subscriptions.router, prefix="/subscriptions", tags=["
 api_router.include_router(ai.router, prefix="/ai", tags=["AI Assistant"])
 api_router.include_router(notifications.router, prefix="/notifications", tags=["Notifications"])
 api_router.include_router(auditor_portal.router, prefix="/auditor-portal", tags=["Auditor Portal"])
+
+# --- STB tender: référentiel centralisé, campagnes, grilles, échanges, échelles ---
+# The prefixes are load-bearing: audit_grids declares /audits/{audit_id}/... sub-paths
+# that only stay unambiguous underneath /audit-grids.
+api_router.include_router(requirements.router, prefix="/requirements", tags=["Requirements Referential"])
+api_router.include_router(audit_campaigns.router, prefix="/audit-campaigns", tags=["Audit Campaigns"])
+api_router.include_router(audit_grids.router, prefix="/audit-grids", tags=["Audit Grids"])
+api_router.include_router(audit_comments.router, prefix="/audit-comments", tags=["Audit Comments"])
+api_router.include_router(compliance_scales.router, prefix="/compliance-scales", tags=["Compliance Scales"])
 api_router.include_router(admin.router, prefix="/admin", tags=["Super Admin"])
 api_router.include_router(reports.router, prefix="/reports", tags=["Reports"])
 api_router.include_router(data_io.router, prefix="/data", tags=["Data Import/Export"])
@@ -115,3 +132,9 @@ api_router.include_router(scenario_versions.router, prefix="/scenario-versions",
 api_router.include_router(ocr.router, prefix="/ocr", tags=["OCR Document Capture (Elite Pack)"])
 api_router.include_router(report_schedules.router, prefix="/report-schedules", tags=["Scheduled Reports (Elite Pack)"])
 api_router.include_router(system.router, prefix="/system", tags=["System Self-Test"])
+# STB « SGBD : Oracle 19C et SQL Server 2019 » — datastore selection from the UI.
+# Shares the /system prefix; its own paths are /system/database*.
+api_router.include_router(database_config.router, prefix="/system", tags=["Database Configuration"])
+# STB « Export PDF/Excel » — exports the dashboard itself, reusing the same
+# aggregation the screen renders, behind the same role gate as the dashboard.
+api_router.include_router(dashboard_export.router, prefix="/dashboard-export", tags=["Dashboard Export"])

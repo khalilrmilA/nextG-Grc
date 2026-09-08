@@ -11,10 +11,42 @@ from app.core.database import get_db
 from app.api.v1.dependencies import get_current_user
 from app.models.user import User
 from app.models.ai_access import AiAccessRequest, AiUsageQuota, ApiToken
+from app.services.ai_locale import get_request_language, normalize_language
 from app.workers.tasks.notifications import notify_ai_access_request
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/auth/ai-access", tags=["AI Access"])
+
+
+# ─── Localised, platform-authored sentences (same pattern as compliance.py's _t) ──
+# The client is francophone/arabophone; an English sentence in an API `detail` is what
+# the user actually reads, so these four failure lines follow the UI language.
+_L10N: dict[str, dict[str, str]] = {
+    "en": {
+        "check_failed": "Failed to check access",
+        "request_failed": "Failed to create request",
+        "status_failed": "Failed to retrieve status",
+        "usage_failed": "Failed to retrieve usage",
+    },
+    "fr": {
+        "check_failed": "Échec de la vérification de l'accès",
+        "request_failed": "Échec de la création de la demande",
+        "status_failed": "Échec de la récupération du statut",
+        "usage_failed": "Échec de la récupération de l'utilisation",
+    },
+    "ar": {
+        "check_failed": "تعذر التحقق من الوصول",
+        "request_failed": "تعذر إنشاء الطلب",
+        "status_failed": "تعذر استرجاع الحالة",
+        "usage_failed": "تعذر استرجاع بيانات الاستخدام",
+    },
+}
+
+
+def _t(lang: str, key: str) -> str:
+    """Platform-authored sentence in the resolved UI language (en/fr/ar; English fallback)."""
+    table = _L10N.get(normalize_language(lang) or "en") or _L10N["en"]
+    return table.get(key) or _L10N["en"][key]
 
 
 class AiAccessRequestCreate(BaseModel):
@@ -69,6 +101,7 @@ class AiAccessCheckResponse(BaseModel):
 async def check_ai_access(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
+    lang: str = Depends(get_request_language),
 ):
     """Check if user has AI access and get current token usage."""
     try:
@@ -127,7 +160,7 @@ async def check_ai_access(
         logger.error(f"Failed to check AI access: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to check access",
+            detail=_t(lang, "check_failed"),
         )
 
 
@@ -136,6 +169,7 @@ async def request_ai_access(
     body: AiAccessRequestCreate,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
+    lang: str = Depends(get_request_language),
 ):
     """User requests access to AI features."""
     try:
@@ -156,18 +190,23 @@ async def request_ai_access(
 
         logger.info(f"AI access request created: {request_id} by {current_user.email}")
 
-        # Send notification to admins
-        notify_ai_access_request.delay(
-            request_id, current_user.full_name, current_user.email,
-            body.feature, body.reason
-        )
+        # Send notification to admins (fire-and-forget — Redis/Celery may be down).
+        # The request row is already committed above: an unreachable broker must not turn
+        # a saved request into a 500 that makes the user submit it again.
+        try:
+            notify_ai_access_request.delay(
+                request_id, current_user.full_name, current_user.email,
+                body.feature, body.reason
+            )
+        except Exception:  # noqa: BLE001
+            logger.warning("ai_access.notify_delay_failed request_id=%s", request_id)
 
         return ai_request
     except Exception as e:
         logger.error(f"Failed to create AI access request: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to create request",
+            detail=_t(lang, "request_failed"),
         )
 
 
@@ -175,6 +214,7 @@ async def request_ai_access(
 async def get_ai_access_status(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
+    lang: str = Depends(get_request_language),
 ):
     """Get user's AI access requests and current quotas."""
     try:
@@ -209,7 +249,7 @@ async def get_ai_access_status(
         logger.error(f"Failed to get AI access status: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to retrieve status",
+            detail=_t(lang, "status_failed"),
         )
 
 
@@ -217,17 +257,16 @@ async def get_ai_access_status(
 async def get_ai_usage(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
+    lang: str = Depends(get_request_language),
 ):
     """Get current AI token usage and limits."""
     try:
-        # Get user's AI quota (for now assume document-generation)
+        # The user's AI quota. AiUsageQuota.user_id is UNIQUE, so a user has at most one
+        # row and it is the row every AI route meters against (ai.py provisions it with
+        # feature="all"). The old `feature == "document-generation"` predicate therefore
+        # never matched and this endpoint always reported the placeholder limits below.
         result = await db.execute(
-            select(AiUsageQuota).where(
-                and_(
-                    AiUsageQuota.user_id == current_user.id,
-                    AiUsageQuota.feature == "document-generation",
-                )
-            )
+            select(AiUsageQuota).where(AiUsageQuota.user_id == current_user.id)
         )
         quota = result.scalar_one_or_none()
 
@@ -267,5 +306,5 @@ async def get_ai_usage(
         logger.error(f"Failed to get AI usage: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to retrieve usage",
+            detail=_t(lang, "usage_failed"),
         )

@@ -111,6 +111,17 @@ def _build_status(activation: LicenseActivation | None) -> LicenseStatusResponse
 
     response.plan = normalize_plan(payload.get("plan"))
     response.expires_at = payload.get("expires_at")
+
+    # A locally recorded expiry that is EARLIER than the signed one is how the
+    # phone-home scheduler records a revocation (services/license_phone_home.py).
+    # It was written and never read, so a revoked appliance still reported
+    # "valid". Only ever shortens the licence — for every ordinary activation
+    # the two are the same string, so this changes nothing.
+    stored_expiry = _parse_iso(activation.expires_at)
+    if stored_expiry is not None and stored_expiry < expires_at:
+        expires_at = stored_expiry
+        response.expires_at = activation.expires_at
+
     if now >= expires_at:
         response.status = "expired"
     else:
@@ -220,8 +231,16 @@ async def _verify_and_store(
     # Grant the licensed plan to the activating user's tenant so features unlock
     # immediately. Best-effort — a subscription hiccup must never block
     # activation, which is what the enforcement gate actually depends on.
+    #
+    # Only on a deployment whose access actually depends on a licence, i.e. the
+    # self-hosted appliance this endpoint exists for. On the multi-tenant SaaS
+    # enforcement is off, the activation row is inert, and billing tier is the
+    # platform owner's to set (admin.py) — so leaving this ungated meant any
+    # tenant_admin holding a validly signed key could raise their own tenant's
+    # subscription to the licensed plan. The activation itself is still
+    # recorded either way; only the billing side-effect is gated.
     try:
-        if current_user.tenant_id:
+        if enforcement_enabled() and current_user.tenant_id:
             sub_res = await db.execute(
                 select(Subscription).where(Subscription.tenant_id == current_user.tenant_id)
             )

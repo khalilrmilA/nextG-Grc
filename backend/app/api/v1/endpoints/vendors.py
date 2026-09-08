@@ -17,10 +17,10 @@ import re
 import uuid
 from collections import Counter
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File
-from sqlalchemy import select
+from sqlalchemy import and_, delete, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from pydantic import BaseModel
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 import json
 from pathlib import Path
 
@@ -29,7 +29,11 @@ from app.core.security_utils import assert_path_within, sanitize_filename, verif
 from app.core import ai_quota
 from app.api.v1.dependencies.auth import get_current_user, get_tenant_id, require_roles
 from app.models.user import User, UserRole
-from app.models.vendor import Vendor, VendorRiskTier, VendorStatus, VendorContract, ContractValidationStatus
+from app.models.vendor import (
+    Vendor, VendorRiskTier, VendorStatus, VendorContract, ContractValidationStatus,
+    VendorAssessment, VendorRisk,
+)
+from app.models.contract_collaboration import ContractCollaboration, ContractMessage
 from app.core.config import settings
 from app.services import ai_chunking, ai_prompts, ai_provider
 from app.services.ai_locale import failure_message, get_request_language, guess_language
@@ -428,6 +432,97 @@ def _public_findings_block(web_results: list[dict]) -> str:
                                             r.get("url") or "unknown") for i, r in enumerate(web_results, 1)]
     return ai_provider.delimit_untrusted("\n".join(lines), "PUBLIC FINDINGS")
 
+# ── User-facing messages (en | fr | ar) ─────────────────────────────────────
+# The AI paths already answer in the caller's language (ai_locale); these are the
+# plain workflow answers — not found, upload refused, approval gate — which the
+# same users read in the same screens. Table + _msg() as in endpoints/regulatory.py.
+
+_MESSAGES: dict[str, dict[str, str]] = {
+    "vendor_not_found": {
+        "en": "Vendor not found",
+        "fr": "Fournisseur introuvable",
+        "ar": "المورّد غير موجود",
+    },
+    "contract_not_found": {
+        "en": "Contract not found",
+        "fr": "Contrat introuvable",
+        "ar": "العقد غير موجود",
+    },
+    "bad_tier_or_status": {
+        "en": "Unknown risk tier or status. Accepted risk tiers: {tiers}. Accepted statuses: {statuses}.",
+        "fr": "Niveau de risque ou statut inconnu. Niveaux acceptés : {tiers}. Statuts acceptés : {statuses}.",
+        "ar": "مستوى الخطر أو الحالة غير معروف. المستويات المقبولة: {tiers}. الحالات المقبولة: {statuses}.",
+    },
+    "vendor_has_records": {
+        "en": "This vendor cannot be deleted: {n} contract(s) already carry a CISO decision or a signature. "
+              "Set the vendor's status to 'inactive' to retire the relationship and keep the record.",
+        "fr": "Ce fournisseur ne peut pas être supprimé : {n} contrat(s) portent déjà une décision du RSSI ou une signature. "
+              "Passez le statut du fournisseur à « inactive » pour clore la relation en conservant le dossier.",
+        "ar": "لا يمكن حذف هذا المورّد: {n} من العقود تحمل بالفعل قرار مسؤول أمن المعلومات أو توقيعاً. "
+              "غيّر حالة المورّد إلى \"inactive\" لإنهاء العلاقة مع الاحتفاظ بالسجل.",
+    },
+    "no_analysis": {
+        "en": "No AI analysis is available to approve for this vendor. Run the AI risk assessment first.",
+        "fr": "Aucune analyse IA n'est disponible pour approbation sur ce fournisseur. Lancez d'abord l'évaluation des risques par l'IA.",
+        "ar": "لا يوجد تحليل بالذكاء الاصطناعي جاهز للاعتماد لهذا المورّد. شغّل تقييم المخاطر أولاً.",
+    },
+    "questionnaire_empty": {
+        "en": "questionnaire_responses is empty: answer the questionnaire before running the analysis.",
+        "fr": "Le questionnaire est vide : répondez au questionnaire avant de lancer l'analyse.",
+        "ar": "الاستبيان فارغ: أجب عن الاستبيان قبل تشغيل التحليل.",
+    },
+    "prescreen_empty": {
+        "en": "The questionnaire contains no answers to analyse.",
+        "fr": "Le questionnaire ne contient aucune réponse à analyser.",
+        "ar": "لا يحتوي الاستبيان على أي إجابات لتحليلها.",
+    },
+    "file_too_large": {
+        "en": "File exceeds {mb} MB limit",
+        "fr": "Le fichier dépasse la limite de {mb} Mo",
+        "ar": "يتجاوز الملف الحد المسموح به وهو {mb} ميغابايت",
+    },
+    "unsupported_type": {
+        "en": "Only PDF, DOCX, XLSX, XLS, and TXT files are supported",
+        "fr": "Seuls les fichiers PDF, DOCX, XLSX, XLS et TXT sont acceptés",
+        "ar": "الملفات المقبولة هي PDF وDOCX وXLSX وXLS وTXT فقط",
+    },
+    "signature_mismatch": {
+        "en": "File contents do not match the declared {kind} type.",
+        "fr": "Le contenu du fichier ne correspond pas au type {kind} déclaré.",
+        "ar": "محتوى الملف لا يطابق النوع المُعلن {kind}.",
+    },
+    "upload_failed": {
+        "en": "File upload failed",
+        "fr": "Échec du téléversement du fichier",
+        "ar": "فشل رفع الملف",
+    },
+    "bad_review_action": {
+        "en": "Action must be 'approve' or 'reject'",
+        "fr": "L'action doit être « approve » ou « reject »",
+        "ar": "يجب أن يكون الإجراء \"approve\" أو \"reject\"",
+    },
+    "vendor_has_signed_negotiation": {
+        "en": "This vendor cannot be deleted: {n} contract negotiation(s) already carry a signature or a "
+              "mutual agreement. Set the vendor's status to 'inactive' to retire the relationship and keep the record.",
+        "fr": "Ce fournisseur ne peut pas être supprimé : {n} négociation(s) de contrat portent déjà une signature ou "
+              "un accord mutuel. Passez le statut du fournisseur à « inactive » pour clore la relation en conservant le dossier.",
+        "ar": "لا يمكن حذف هذا المورّد: {n} من مفاوضات العقود تحمل بالفعل توقيعاً أو اتفاقاً متبادلاً. "
+              "غيّر حالة المورّد إلى \"inactive\" لإنهاء العلاقة مع الاحتفاظ بالسجل.",
+    },
+    "needs_ciso_approval": {
+        "en": "Contract must be approved by CISO before sending to vendor",
+        "fr": "Le contrat doit être approuvé par le RSSI avant d'être envoyé au fournisseur",
+        "ar": "يجب أن يوافق مسؤول أمن المعلومات على العقد قبل إرساله إلى المورّد",
+    },
+}
+
+
+def _msg(key: str, lang: str, **values) -> str:
+    table = _MESSAGES[key]
+    text = table.get(lang) or table["en"]
+    return text.format(**values) if values else text
+
+
 # ── Request / Response schemas ──────────────────────────────────────────────
 
 class VendorCreateRequest(BaseModel):
@@ -443,6 +538,22 @@ class VendorCreateRequest(BaseModel):
     contract_expiry: str | None = None
     primary_contact_name: str | None = None
     primary_contact_email: str | None = None
+
+
+def _parse_tier_status(body: "VendorCreateRequest", lang: str) -> tuple[VendorRiskTier, VendorStatus]:
+    """``(risk_tier, status)`` or HTTP 422 — never a ValueError.
+
+    An unknown value used to escape as a 500, which the SPA turns into a hard redirect
+    to /service-down instead of showing the field error.
+    """
+    try:
+        return VendorRiskTier(body.risk_tier), VendorStatus(body.status)
+    except ValueError:
+        raise HTTPException(status_code=422, detail=_msg(
+            "bad_tier_or_status", lang,
+            tiers=", ".join(t.value for t in VendorRiskTier),
+            statuses=", ".join(s.value for s in VendorStatus),
+        ))
 
 
 class VendorResponse(BaseModel):
@@ -595,16 +706,18 @@ async def create_vendor(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_roles(UserRole.VENDOR_MANAGER, UserRole.CISO)),
     tenant_id: str = Depends(get_tenant_id),
+    lang: str = Depends(get_request_language),
 ):
     """Create a new vendor."""
+    risk_tier, vstatus = _parse_tier_status(body, lang)
     vendor = Vendor(
         tenant_id=tenant_id,
         name=body.name.strip(),
         industry=body.industry,
         country=body.country.upper() if body.country else None,
         website=body.website,
-        risk_tier=VendorRiskTier(body.risk_tier),
-        status=VendorStatus(body.status),
+        risk_tier=risk_tier,
+        status=vstatus,
         risk_score=body.risk_score,
         services_provided=body.services_provided,
         has_data_processing_agreement=body.has_data_processing_agreement,
@@ -627,6 +740,7 @@ async def get_vendor(
     db: AsyncSession = Depends(get_db),
     _: User = Depends(get_current_user),
     tenant_id: str = Depends(get_tenant_id),
+    lang: str = Depends(get_request_language),
 ):
     """Get a specific vendor."""
     result = await db.execute(
@@ -638,7 +752,7 @@ async def get_vendor(
     vendor = result.scalar_one_or_none()
 
     if not vendor:
-        raise HTTPException(status_code=404, detail="Vendor not found")
+        raise HTTPException(status_code=404, detail=_msg("vendor_not_found", lang))
 
     return VendorResponse.model_validate(vendor)
 
@@ -650,6 +764,7 @@ async def update_vendor(
     db: AsyncSession = Depends(get_db),
     _: User = Depends(require_roles(UserRole.VENDOR_MANAGER, UserRole.CISO)),
     tenant_id: str = Depends(get_tenant_id),
+    lang: str = Depends(get_request_language),
 ):
     """Update a vendor."""
     result = await db.execute(
@@ -661,15 +776,17 @@ async def update_vendor(
     vendor = result.scalar_one_or_none()
 
     if not vendor:
-        raise HTTPException(status_code=404, detail="Vendor not found")
+        raise HTTPException(status_code=404, detail=_msg("vendor_not_found", lang))
+
+    risk_tier, vstatus = _parse_tier_status(body, lang)
 
     # Update fields
     vendor.name = body.name.strip()
     vendor.industry = body.industry
     vendor.country = body.country.upper() if body.country else None
     vendor.website = body.website
-    vendor.risk_tier = VendorRiskTier(body.risk_tier)
-    vendor.status = VendorStatus(body.status)
+    vendor.risk_tier = risk_tier
+    vendor.status = vstatus
     vendor.services_provided = body.services_provided
     vendor.has_data_processing_agreement = body.has_data_processing_agreement
     vendor.contract_expiry = body.contract_expiry
@@ -689,6 +806,7 @@ async def delete_vendor(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_roles(UserRole.VENDOR_MANAGER, UserRole.CISO)),
     tenant_id: str = Depends(get_tenant_id),
+    lang: str = Depends(get_request_language),
 ):
     """Delete a vendor."""
     result = await db.execute(
@@ -700,21 +818,71 @@ async def delete_vendor(
     vendor = result.scalar_one_or_none()
 
     if not vendor:
-        raise HTTPException(status_code=404, detail="Vendor not found")
+        raise HTTPException(status_code=404, detail=_msg("vendor_not_found", lang))
+
+    contracts = (await db.execute(
+        select(VendorContract).where(VendorContract.vendor_id == vendor_id)
+    )).scalars().all()
+
+    # A contract that a CISO has approved/rejected, or that both parties have signed,
+    # is a record of fact an auditor expects to still be there. Deleting the vendor
+    # does not delete those rows — it only detaches them (every query reaches a
+    # contract through its vendor, and SQLite has no FK enforcement here), so the
+    # decision silently becomes unreachable. There is no deleted_at on this model to
+    # soft-delete into, so the destructive path is refused instead: the vendor status
+    # ('inactive') is the supported way to retire a relationship.
+    decided_statuses = {
+        ContractValidationStatus.APPROVED.value,
+        ContractValidationStatus.REJECTED.value,
+        ContractValidationStatus.SENT_TO_VENDOR.value,
+        "signed",   # written by contract_collab when both parties have signed
+    }
+    of_record = [c for c in contracts if c.validation_status in decided_statuses or c.ciso_reviewed_at]
+    if of_record:
+        raise HTTPException(status_code=409, detail=_msg("vendor_has_records", lang, n=len(of_record)))
+
+    collabs = (await db.execute(
+        select(ContractCollaboration).where(ContractCollaboration.vendor_id == vendor_id)
+    )).scalars().all()
+
+    # The signature state of a negotiation lives on the collaboration, not on the
+    # contract: a session both parties agreed to, or that either party has signed,
+    # is a record of fact even when _create_signed_contract has not run yet (so the
+    # 'signed' contract the check above looks for does not exist). Refuse the same way.
+    signed_collabs = [c for c in collabs if c.ciso_signature or c.vendor_signature or c.agreed_at]
+    if signed_collabs:
+        raise HTTPException(status_code=409,
+                            detail=_msg("vendor_has_signed_negotiation", lang, n=len(signed_collabs)))
 
     # Retire the file versions of this vendor's contracts. Without this their
     # rows vanish while the PDFs stay on disk with nothing referencing them —
     # unreachable through the app and invisible to retention, so the space is
     # never reclaimable. Retiring keeps them recoverable and lets the policy
     # decide when they go.
-    contracts = (await db.execute(
-        select(VendorContract).where(VendorContract.vendor_id == vendor_id)
-    )).scalars().all()
     for contract in contracts:
         await file_integrity.retire_versions(
             db, entity_type=file_integrity.CONTRACT, entity_id=contract.id,
             note=f"Vendor {vendor.name} deleted by {current_user.email}",
         )
+
+    # Delete the children explicitly. SQLite runs here without PRAGMA foreign_keys
+    # (core/database.py sets only journal_mode/busy_timeout) and none of these
+    # relationships declares a cascade, so deleting the vendor alone leaves every
+    # child row behind — unreachable through the app, because each of them is only
+    # ever queried through its vendor. The collaboration rows matter most: their
+    # share_token routes (/contract-collab/vendor/{share_token}) are UNAUTHENTICATED
+    # and validate nothing but the token and its expiry, so an orphaned session would
+    # keep serving the contract text, the AI suggestions and the message thread to
+    # whoever holds the link — with no vendor left in the UI to revoke it from.
+    for collab in collabs:
+        await db.execute(
+            delete(ContractMessage).where(ContractMessage.collaboration_id == collab.id)
+        )
+        await db.delete(collab)
+    for child_model in (VendorAssessment, VendorRisk):
+        await db.execute(delete(child_model).where(child_model.vendor_id == vendor_id))
+    for contract in contracts:
+        await db.delete(contract)
 
     await db.delete(vendor)
     await db.commit()
@@ -725,6 +893,7 @@ async def approve_vendor_analysis(
     db: AsyncSession = Depends(get_db),
     _: User = Depends(require_roles(UserRole.VENDOR_MANAGER, UserRole.CISO)),
     tenant_id: str = Depends(get_tenant_id),
+    lang: str = Depends(get_request_language),
 ):
     """Approve AI analysis and update vendor risk score."""
     result = await db.execute(
@@ -736,7 +905,7 @@ async def approve_vendor_analysis(
     vendor = result.scalar_one_or_none()
 
     if not vendor:
-        raise HTTPException(status_code=404, detail="Vendor not found")
+        raise HTTPException(status_code=404, detail=_msg("vendor_not_found", lang))
 
     # Guard against the frontend's silent fallback: VendorAIModal's Approve & Save defaults to
     # risk_score=5 with analysis_notes="" when the AI call actually failed (analyzeStream's catch
@@ -749,10 +918,7 @@ async def approve_vendor_analysis(
     # on an already-analyzed vendor hits exactly that case (old description non-blank, new notes
     # blank) and must 422 too, not silently overwrite risk_score with the fallback default.
     if not (body.analysis_notes or "").strip():
-        raise HTTPException(
-            status_code=422,
-            detail="No AI analysis is available to approve for this vendor. Run the AI risk assessment first.",
-        )
+        raise HTTPException(status_code=422, detail=_msg("no_analysis", lang))
 
     # Update risk score + description together — both come from this call's analysis_notes, which
     # the guard above has just confirmed is non-blank, so neither is ever persisted unbacked.
@@ -792,11 +958,11 @@ async def analyze_vendor_with_web_search(
     vendor = result.scalar_one_or_none()
 
     if not vendor:
-        raise HTTPException(status_code=404, detail="Vendor not found")
+        raise HTTPException(status_code=404, detail=_msg("vendor_not_found", lang))
 
     responses = _bounded_responses(body.questionnaire_responses)
     if not responses:
-        raise HTTPException(status_code=422, detail="questionnaire_responses is empty: answer the questionnaire before running the analysis.")
+        raise HTTPException(status_code=422, detail=_msg("questionnaire_empty", lang))
     counts = _answer_counts(responses)
     extra_warnings: list[str] = []
     if len(body.questionnaire_responses) > len(responses):
@@ -1163,7 +1329,7 @@ async def upload_vendor_contract(
     vendor = result.scalar_one_or_none()
 
     if not vendor:
-        raise HTTPException(status_code=404, detail="Vendor not found")
+        raise HTTPException(status_code=404, detail=_msg("vendor_not_found", lang))
 
     # Create upload directory if it doesn't exist
     upload_dir = Path(settings.UPLOADS_DIR) / "contracts"
@@ -1189,7 +1355,7 @@ async def upload_vendor_contract(
     try:
         content = await contract_file.read()
         if len(content) > max_bytes:
-            raise HTTPException(413, f"File exceeds {settings.MAX_UPLOAD_SIZE_MB} MB limit")
+            raise HTTPException(413, _msg("file_too_large", lang, mb=settings.MAX_UPLOAD_SIZE_MB))
         # Enforce PDF, DOCX, XLSX, XLS, TXT only.
         name_lower = safe_name.lower()
         type_allowed = (
@@ -1201,21 +1367,30 @@ async def upload_vendor_contract(
             or name_lower.endswith(".txt")
         )
         if not type_allowed:
-            raise HTTPException(422, "Only PDF, DOCX, XLSX, XLS, and TXT files are supported")
-        declared = ct
-        if "pdf" in declared and not verify_file_signature(content, "application/pdf"):
-            raise HTTPException(415, "File contents do not match the declared PDF type.")
-        if "spreadsheetml" in declared and not verify_file_signature(content, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"):
-            raise HTTPException(415, "File contents do not match the declared XLSX type.")
-        if "ms-excel" in declared and not verify_file_signature(content, "application/vnd.ms-excel"):
-            raise HTTPException(415, "File contents do not match the declared XLS type.")
-        with open(file_path, "wb") as f:
-            f.write(content)
+            raise HTTPException(422, _msg("unsupported_type", lang))
+        # Magic-byte check on the EFFECTIVE type, not only on what the browser declared:
+        # a file sent as application/octet-stream (or with no Content-Type at all) matched
+        # none of the "declared" tests and used to skip every check, so arbitrary bytes
+        # could land on disk under a .pdf/.xlsx name. The extension decides whenever the
+        # declared type says nothing useful. .txt has no reliable magic and stays unchecked.
+        expected: tuple[str, str] | None = None      # (label shown to the user, MIME to verify)
+        if "pdf" in ct or name_lower.endswith(".pdf"):
+            expected = ("PDF", "application/pdf")
+        elif "spreadsheetml" in ct or name_lower.endswith(".xlsx"):
+            expected = ("XLSX", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+        elif "ms-excel" in ct or name_lower.endswith(".xls"):
+            expected = ("XLS", "application/vnd.ms-excel")
+        elif "wordprocessingml" in ct or "docx" in ct or name_lower.endswith(".docx"):
+            expected = ("DOCX", "application/vnd.openxmlformats-officedocument.wordprocessingml.document")
+        if expected and not verify_file_signature(content, expected[1]):
+            raise HTTPException(415, _msg("signature_mismatch", lang, kind=expected[0]))
+        # Writing the bytes is blocking I/O: off the event loop, like the text extraction below.
+        await asyncio.to_thread(file_path.write_bytes, content)
     except HTTPException:
         raise
     except Exception:
         logger.exception("vendor.contract.write_failed vendor_id=%s", vendor_id)
-        raise HTTPException(status_code=500, detail="File upload failed")
+        raise HTTPException(status_code=500, detail=_msg("upload_failed", lang))
 
     # Extract the WHOLE text (PDF/DOCX/XLSX/TXT) off the event loop; an empty result is reported explicitly
     # by the background review instead of being analysed as if it were the contract.
@@ -1223,12 +1398,14 @@ async def upload_vendor_contract(
     if not extracted_text.strip():
         logger.warning("vendor.contract.no_text vendor_id=%s file=%s note=%s", vendor_id, safe_name, extraction_note)
 
-    # Determine version (check if there are existing contracts for this vendor)
-    existing_result = await db.execute(
-        select(VendorContract).where(VendorContract.vendor_id == vendor_id)
-    )
-    existing_contracts = existing_result.scalars().all()
-    next_version = len(existing_contracts) + 1
+    # Determine version. Counting rows skipped/duplicated numbers as soon as anything
+    # else added a contract row for this vendor (contract_collab files the signed
+    # agreement as one), and it loaded every row — extracted_text and ai_review
+    # included — only to take its length.
+    last_version = (await db.execute(
+        select(func.max(VendorContract.version)).where(VendorContract.vendor_id == vendor_id)
+    )).scalar()
+    next_version = int(last_version or 0) + 1
 
     # Create contract record
     contract = VendorContract(
@@ -1346,16 +1523,37 @@ async def list_contracts_pending_review(
     _: User = Depends(get_current_user),
     tenant_id: str = Depends(get_tenant_id),
 ):
-    """List all contracts pending CISO review (AI reviewed but not yet approved/rejected)."""
+    """List all contracts pending CISO review (AI reviewed but not yet approved/rejected).
+
+    Also returns contracts STRANDED in ``pending_ai``. analyze_contract_async is an
+    in-process background task with no retry, so a worker restart (every
+    `pm2 restart grceye-backend`) mid-review leaves the contract in ``pending_ai``
+    for good — it then appears in no queue and can never be actioned, even though
+    ciso_review_contract accepts it. Older rows carry the same shape from before that
+    task learned to move a FAILED review to ``ai_reviewed``. The review is bounded by
+    settings.AI_ANALYSIS_TIMEOUT_S (240 s), so anything still ``pending_ai`` an hour
+    after upload is stranded, not running; ``review_status='error'`` is stranded
+    whatever its age.
+    """
+    stranded_cutoff = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(hours=1)
     result = await db.execute(
         select(VendorContract)
         .join(Vendor, VendorContract.vendor_id == Vendor.id)
         .where(
             Vendor.tenant_id == tenant_id,
-            VendorContract.validation_status.in_([
-                ContractValidationStatus.AI_REVIEWED.value,
-                ContractValidationStatus.PENDING_CISO.value,
-            ])
+            or_(
+                VendorContract.validation_status.in_([
+                    ContractValidationStatus.AI_REVIEWED.value,
+                    ContractValidationStatus.PENDING_CISO.value,
+                ]),
+                and_(
+                    VendorContract.validation_status == ContractValidationStatus.PENDING_AI.value,
+                    or_(
+                        VendorContract.review_status == "error",
+                        VendorContract.created_at < stranded_cutoff,
+                    ),
+                ),
+            ),
         )
         .order_by(VendorContract.created_at.desc())
     )
@@ -1369,6 +1567,7 @@ async def list_vendor_contracts(
     db: AsyncSession = Depends(get_db),
     _: User = Depends(get_current_user),
     tenant_id: str = Depends(get_tenant_id),
+    lang: str = Depends(get_request_language),
 ):
     """List all contracts for a specific vendor."""
     # Verify vendor exists and belongs to tenant
@@ -1377,7 +1576,7 @@ async def list_vendor_contracts(
     )
     vendor = vendor_result.scalar_one_or_none()
     if not vendor:
-        raise HTTPException(status_code=404, detail="Vendor not found")
+        raise HTTPException(status_code=404, detail=_msg("vendor_not_found", lang))
 
     result = await db.execute(
         select(VendorContract)
@@ -1394,6 +1593,7 @@ async def get_contract(
     db: AsyncSession = Depends(get_db),
     _: User = Depends(get_current_user),
     tenant_id: str = Depends(get_tenant_id),
+    lang: str = Depends(get_request_language),
 ):
     """Get a specific contract with full details."""
     result = await db.execute(
@@ -1406,7 +1606,7 @@ async def get_contract(
     )
     contract = result.scalar_one_or_none()
     if not contract:
-        raise HTTPException(status_code=404, detail="Contract not found")
+        raise HTTPException(status_code=404, detail=_msg("contract_not_found", lang))
 
     return VendorContractResponse.model_validate(contract)
 
@@ -1423,6 +1623,7 @@ async def ciso_review_contract(
     # send_contract_to_vendor.
     current_user: User = Depends(require_roles(UserRole.CISO)),
     tenant_id: str = Depends(get_tenant_id),
+    lang: str = Depends(get_request_language),
 ):
     """CISO approves or rejects a contract after review."""
     result = await db.execute(
@@ -1436,10 +1637,10 @@ async def ciso_review_contract(
     contract = result.scalar_one_or_none()
 
     if not contract:
-        raise HTTPException(status_code=404, detail="Contract not found")
+        raise HTTPException(status_code=404, detail=_msg("contract_not_found", lang))
 
     if body.action not in ["approve", "reject"]:
-        raise HTTPException(status_code=400, detail="Action must be 'approve' or 'reject'")
+        raise HTTPException(status_code=400, detail=_msg("bad_review_action", lang))
 
     # Update contract with CISO decision
     contract.ciso_reviewer_id = current_user.id
@@ -1463,6 +1664,7 @@ async def send_contract_to_vendor(
     db: AsyncSession = Depends(get_db),
     _: User = Depends(require_roles(UserRole.VENDOR_MANAGER, UserRole.CISO)),
     tenant_id: str = Depends(get_tenant_id),
+    lang: str = Depends(get_request_language),
 ):
     """Mark contract as sent to vendor after CISO approval."""
     result = await db.execute(
@@ -1476,13 +1678,10 @@ async def send_contract_to_vendor(
     contract = result.scalar_one_or_none()
 
     if not contract:
-        raise HTTPException(status_code=404, detail="Contract not found")
+        raise HTTPException(status_code=404, detail=_msg("contract_not_found", lang))
 
     if contract.validation_status != ContractValidationStatus.APPROVED.value:
-        raise HTTPException(
-            status_code=400,
-            detail="Contract must be approved by CISO before sending to vendor"
-        )
+        raise HTTPException(status_code=400, detail=_msg("needs_ciso_approval", lang))
 
     contract.validation_status = ContractValidationStatus.SENT_TO_VENDOR.value
     contract.sent_to_vendor_at = datetime.utcnow().isoformat()
@@ -1729,6 +1928,7 @@ async def get_vendor_risk_cartography(
     db: AsyncSession = Depends(get_db),
     _: User = Depends(get_current_user),
     tenant_id: str = Depends(get_tenant_id),
+    lang: str = Depends(get_request_language),
 ):
     """Compute and return risk cartography (6 dimensions) for a vendor."""
     # Get vendor
@@ -1741,7 +1941,7 @@ async def get_vendor_risk_cartography(
     vendor = result.scalar_one_or_none()
 
     if not vendor:
-        raise HTTPException(status_code=404, detail="Vendor not found")
+        raise HTTPException(status_code=404, detail=_msg("vendor_not_found", lang))
 
     # Get vendor contracts
     contracts_result = await db.execute(
@@ -1787,7 +1987,7 @@ async def prescreen_vendor_questionnaire(
     ai_quota.check_quota_or_raise(current_user.id)
     responses = _bounded_responses(body.responses)
     if not responses:
-        raise HTTPException(status_code=422, detail="The questionnaire contains no answers to analyse.")
+        raise HTTPException(status_code=422, detail=_msg("prescreen_empty", lang))
     counts = _answer_counts(responses)
     baseline_score, baseline_level, _tiers = ai_prompts.prescreen_baseline(responses)
 

@@ -41,14 +41,20 @@ VALID_EVENTS = [
 
 
 @router.get("/events")
-async def list_available_events():
+async def list_available_events(_: User = Depends(get_current_user)):
     """List all available webhook event types."""
     return {"events": VALID_EVENTS}
 
 
 @router.get("", response_model=WebhookListResponse)
 async def list_webhooks(
-    db: AsyncSession = Depends(get_db), _: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+    # Same gate as create/delete/test: the listing carries each hook's signing
+    # `secret`, which authenticates our payloads to the customer's endpoint.
+    # Behind a bare get_current_user any authenticated tenant user could read
+    # (and then forge with) it. require_roles still auto-passes tenant_admin /
+    # super_admin, which is exactly who the SPA's /webhooks page is gated to.
+    _: User = Depends(require_roles(UserRole.CISO)),
     tenant_id: str = Depends(get_tenant_id),
 ):
     r = await db.execute(select(Tenant).where(Tenant.id == tenant_id))
@@ -77,8 +83,15 @@ async def create_webhook(
     tenant = r.scalar_one_or_none()
     if not tenant: raise HTTPException(404, "Tenant not found")
 
-    settings = tenant.settings or {}
-    hooks = settings.get("webhooks", [])
+    # Copy before mutating. Tenant.settings is a plain JSON column (not
+    # MutableDict), so mutating the loaded dict in place and re-assigning the
+    # SAME object leaves SQLAlchemy comparing the value against itself at flush:
+    # no UPDATE is emitted and the new webhook is silently lost. It only
+    # "worked" for a tenant whose settings were still empty ({} or None), where
+    # `or {}` happened to produce a fresh dict. Same copy-then-assign pattern as
+    # tenants.py's settings merge.
+    settings = dict(tenant.settings or {})
+    hooks = list(settings.get("webhooks") or [])
 
     import uuid
     body.id = str(uuid.uuid4())[:8]
@@ -100,8 +113,11 @@ async def delete_webhook(
     tenant = r.scalar_one_or_none()
     if not tenant: raise HTTPException(404, "Tenant not found")
 
-    settings = tenant.settings or {}
-    hooks = settings.get("webhooks", [])
+    # Copy before mutating — see create_webhook: without it the DELETE returned
+    # 204 while the hook stayed in the settings blob (a revocation that did not
+    # revoke).
+    settings = dict(tenant.settings or {})
+    hooks = settings.get("webhooks") or []
     settings["webhooks"] = [h for h in hooks if h.get("id") != webhook_id]
     tenant.settings = settings
     await db.commit()

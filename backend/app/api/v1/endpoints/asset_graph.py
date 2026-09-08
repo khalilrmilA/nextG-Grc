@@ -6,26 +6,38 @@ business processes and org entities they support.
 
 Every route is gated behind ``require_feature("asset_cartography")`` — the gate
 returns the authenticated ``User`` and answers 402 when the tenant's plan does
-not include the Elite Pack feature. Tenant isolation is enforced on every query
-via ``get_tenant_id``.
+not include the Elite Pack feature. That gate is a billing check, so every
+*write* additionally carries a role gate (``_WRITE_GATE`` below). Tenant
+isolation is enforced on every query via ``get_tenant_id``.
 """
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
-from app.api.v1.dependencies.auth import get_tenant_id
+from app.core.security_utils import assert_assets_in_tenant, assert_user_in_tenant
+from app.api.v1.dependencies.auth import get_tenant_id, require_roles
 from app.api.v1.dependencies.features import require_feature
-from app.models.user import User
+from app.models.user import User, UserRole
 from app.models.asset import Asset
 from app.models.org_unit import OrgEntity, BusinessProcess
 
 router = APIRouter()
 
 _FEATURE = "asset_cartography"
+
+# Feature entitlement AND role on every write. require_feature is a billing
+# check: it answers "did this tenant buy the Elite Pack?", never "may this
+# account edit the organisation chart?". On its own it left every authenticated
+# user of an Elite tenant — an auditor, a vendor manager — able to rename or
+# delete the org entities and business processes that compliance assessments,
+# policies and control applicability are all scoped to. These are the same two
+# roles that gate asset writes in endpoints/assets.py; tenant_admin and
+# super_admin auto-pass inside require_roles(), as everywhere else.
+_WRITE_GATE = require_roles(UserRole.BUSINESS_OWNER, UserRole.CISO)
 
 
 # -- Schemas ---------------------------------------------------------------
@@ -133,6 +145,28 @@ async def _get_process(db: AsyncSession, tenant_id: str, pid: str) -> BusinessPr
     return p
 
 
+async def _assert_no_parent_cycle(db: AsyncSession, tenant_id: str, eid: str, parent_id: str) -> None:
+    """Refuse a reparent that would close a loop (A -> B -> A).
+
+    Self-parenting was already refused, but a longer cycle was not, and an
+    org chart that eats its own tail has no root: get_cartography's subtree
+    filter survives it only because of a visited set, and every future
+    consumer (a hierarchy export, a perimeter roll-up) would have to carry
+    the same defence or hang.
+    """
+    seen = {eid}
+    cur: str | None = parent_id
+    while cur:
+        if cur in seen:
+            raise HTTPException(400, "That parent would create a cycle in the org chart")
+        seen.add(cur)
+        cur = (await db.execute(
+            select(OrgEntity.parent_id).where(
+                OrgEntity.id == cur, OrgEntity.tenant_id == tenant_id
+            )
+        )).scalar_one_or_none()
+
+
 # -- Org entities ----------------------------------------------------------
 
 @router.get("/org-entities", response_model=list[OrgEntityOut])
@@ -150,10 +184,14 @@ async def create_org_entity(
     body: OrgEntityCreate,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_feature(_FEATURE)),
+    _: User = Depends(_WRITE_GATE),
     tenant_id: str = Depends(get_tenant_id),
 ):
     if body.parent_id:
         await _get_entity(db, tenant_id, body.parent_id)  # validate parent belongs to tenant
+    # parent_id was validated, owner_id was not — so the head of a department
+    # could be set to a user id from another tenant.
+    await assert_user_in_tenant(db, body.owner_id, tenant_id, field_name="owner_id")
     e = OrgEntity(
         tenant_id=tenant_id,
         name=body.name,
@@ -185,6 +223,7 @@ async def update_org_entity(
     body: OrgEntityUpdate,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_feature(_FEATURE)),
+    _: User = Depends(_WRITE_GATE),
     tenant_id: str = Depends(get_tenant_id),
 ):
     e = await _get_entity(db, tenant_id, eid)
@@ -193,6 +232,8 @@ async def update_org_entity(
             raise HTTPException(400, "An org entity cannot be its own parent")
         if body.parent_id:
             await _get_entity(db, tenant_id, body.parent_id)
+            await _assert_no_parent_cycle(db, tenant_id, eid, body.parent_id)
+    await assert_user_in_tenant(db, body.owner_id, tenant_id, field_name="owner_id")
     for f in ["name", "parent_id", "entity_type", "description", "owner_id"]:
         v = getattr(body, f, None)
         if v is not None:
@@ -207,6 +248,7 @@ async def delete_org_entity(
     eid: str,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_feature(_FEATURE)),
+    _: User = Depends(_WRITE_GATE),
     tenant_id: str = Depends(get_tenant_id),
 ):
     e = await _get_entity(db, tenant_id, eid)
@@ -221,6 +263,14 @@ async def delete_org_entity(
         )
     )).scalars().all():
         proc.entity_id = None
+    # Assets carry the same link (Asset.org_entity_id) and were the one
+    # referencing table this detach missed, so an asset kept pointing at an
+    # entity that no longer existed.
+    await db.execute(
+        update(Asset)
+        .where(Asset.tenant_id == tenant_id, Asset.org_entity_id == eid)
+        .values(org_entity_id=None)
+    )
     await db.delete(e)
     await db.commit()
 
@@ -246,10 +296,15 @@ async def create_business_process(
     body: BusinessProcessCreate,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_feature(_FEATURE)),
+    _: User = Depends(_WRITE_GATE),
     tenant_id: str = Depends(get_tenant_id),
 ):
     if body.entity_id:
         await _get_entity(db, tenant_id, body.entity_id)  # validate entity belongs to tenant
+    # entity_id was validated; the process owner and the assets it depends on
+    # were not, so either could be pointed at another tenant's row by id.
+    await assert_user_in_tenant(db, body.owner_id, tenant_id, field_name="owner_id")
+    await assert_assets_in_tenant(db, body.asset_ids, tenant_id, field_name="asset_ids")
     p = BusinessProcess(
         tenant_id=tenant_id,
         name=body.name,
@@ -282,11 +337,14 @@ async def update_business_process(
     body: BusinessProcessUpdate,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_feature(_FEATURE)),
+    _: User = Depends(_WRITE_GATE),
     tenant_id: str = Depends(get_tenant_id),
 ):
     p = await _get_process(db, tenant_id, pid)
     if body.entity_id:
         await _get_entity(db, tenant_id, body.entity_id)
+    await assert_user_in_tenant(db, body.owner_id, tenant_id, field_name="owner_id")
+    await assert_assets_in_tenant(db, body.asset_ids, tenant_id, field_name="asset_ids")
     for f in ["name", "description", "criticality", "owner_id", "entity_id", "asset_ids"]:
         v = getattr(body, f, None)
         if v is not None:
@@ -301,9 +359,17 @@ async def delete_business_process(
     pid: str,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_feature(_FEATURE)),
+    _: User = Depends(_WRITE_GATE),
     tenant_id: str = Depends(get_tenant_id),
 ):
     p = await _get_process(db, tenant_id, pid)
+    # Same rule as delete_org_entity: nothing should keep a link to a row that
+    # is about to disappear. Asset.business_process_id has no cascade.
+    await db.execute(
+        update(Asset)
+        .where(Asset.tenant_id == tenant_id, Asset.business_process_id == pid)
+        .values(business_process_id=None)
+    )
     await db.delete(p)
     await db.commit()
 
@@ -324,7 +390,9 @@ async def get_cartography(
     Edges:
       * entity   -> parent entity  (kind="belongs_to")
       * process  -> org entity      (kind="operated_by")
-      * process  -> asset           (kind="depends_on", from BusinessProcess.asset_ids)
+      * process  -> asset           (kind="depends_on", from BusinessProcess.asset_ids
+                                     and from Asset.business_process_id)
+      * asset    -> org entity      (kind="belongs_to", from Asset.org_entity_id)
       * asset    -> process         (kind="owned_by", inferred when they share owner_id)
 
     Optional filters:
@@ -360,14 +428,19 @@ async def get_cartography(
         entities = [e for e in entities if e.id in included_entity_ids]
         processes = [p for p in processes if p.entity_id in included_entity_ids]
 
-        # Keep only assets connected to the included processes (explicit link or shared owner).
+        # Keep only assets connected to the included processes (explicit link,
+        # a link held on the asset itself, or shared owner).
         proc_owner_ids = {p.owner_id for p in processes if p.owner_id}
+        included_process_ids = {p.id for p in processes}
         explicit_asset_ids: set[str] = set()
         for p in processes:
             explicit_asset_ids.update(p.asset_ids or [])
         assets = [
             a for a in assets
-            if a.id in explicit_asset_ids or (a.owner_id and a.owner_id in proc_owner_ids)
+            if a.id in explicit_asset_ids
+            or a.org_entity_id in included_entity_ids
+            or a.business_process_id in included_process_ids
+            or (a.owner_id and a.owner_id in proc_owner_ids)
         ]
 
     # -- build nodes --
@@ -404,12 +477,23 @@ async def get_cartography(
     # of iterations per request, blocking every other request on the worker.
     # This is O(assets + processes) and produces exactly the same edges.
     assets_by_owner: dict[str, list[str]] = {}
+    # An asset can also name its process and its entity directly
+    # (Asset.business_process_id / Asset.org_entity_id — "Cartography links" in
+    # the model). Both were accepted and stored by the asset API and read by
+    # nothing: the graph only ever looked at BusinessProcess.asset_ids and the
+    # shared-owner heuristic, so setting them on the asset drew no edge at all.
+    # They are indexed here so they behave exactly like the link from the other
+    # side — same "depends_on" kind, and equally able to suppress the weaker
+    # shared-owner inference below.
+    assets_by_process: dict[str, list[str]] = {}
     for a in assets:
         if a.owner_id:
             assets_by_owner.setdefault(a.owner_id, []).append(a.id)
+        if a.business_process_id:
+            assets_by_process.setdefault(a.business_process_id, []).append(a.id)
 
     for p in processes:
-        linked = set(p.asset_ids or [])
+        linked = set(p.asset_ids or []) | set(assets_by_process.get(p.id, ()))
         # explicit process -> asset dependency
         for aid in linked:
             _add_edge(p.id, aid, "depends_on")
@@ -418,6 +502,11 @@ async def get_cartography(
             for aid in assets_by_owner.get(p.owner_id, ()):
                 if aid not in linked:
                     _add_edge(aid, p.id, "owned_by")
+
+    # asset -> owning org entity, the second link the asset carries itself.
+    for a in assets:
+        if a.org_entity_id:
+            _add_edge(a.id, a.org_entity_id, "belongs_to")
 
     stats = {
         "entities": len(entities),

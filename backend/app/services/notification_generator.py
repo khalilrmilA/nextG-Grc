@@ -21,13 +21,49 @@ Handles:
 - Audit finding (recommendation) deadlines within 7 days or overdue, for OPEN/
   IN_REMEDIATION findings (RFP gap fix — "pas de notification sur les
   échéances critiques des recommandations")
+
+STB tender additions (objectifs 3, 4 and 7):
+- check_action_item_overdue — the "relances automatiques". An overdue action is
+  chased on an ESCALATION LADDER (J+1, J+3, J+7, J+14, J+30, then monthly) that
+  widens the audience at each rung, instead of being announced once and
+  forgotten. It never gives up: the old checks stopped at 30 days overdue,
+  which is precisely when a corrective action needs chasing hardest.
+- check_audit_schedule — J-30 / J-7 / J-0 before a planned audit starts, to the
+  lead auditor, the assigned auditors and the tenant's stakeholders
+  ("notification automatique des parties prenantes").
+- check_finding_assigned — catches a finding that has a remediation owner who
+  was never told (bulk import, an assignment made before audits.py notified on
+  assignment, an owner swapped by a path that does not notify).
+- check_recommendation_due — AuditRecommendation deadlines, chased to closure
+  on the same ladder ("jusqu'à leur clôture effective").
+
+run_all_checks is driven automatically by start_notification_scheduler() at the
+bottom of this file — it needs one asyncio.create_task in app.main's lifespan,
+because until now its only caller was the "Check deadlines" button.
+
+Every notification written here carries title_key / message_key / params so the
+client renders it in French or Arabic; title/message stay populated as the
+fallback for old clients and for the e-mail body. Escalation notifications are
+also delivered by e-mail over the configured SMTP relay ("la relance doit
+atteindre le responsable hors application"), honouring each user's EMAIL
+notification preference and capped per run so a backlog cannot become a blast.
 """
+import asyncio
+import contextlib
 import json
+import logging
+import os
+import tempfile
+from pathlib import Path
 from datetime import date, datetime, timedelta
-from sqlalchemy import select, and_
+from sqlalchemy import or_, select, and_
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.notification import Notification, NotificationType, NotificationStatus
+from app.core.config import settings as app_settings
+from app.models.notification import (
+    Notification, NotificationChannel, NotificationPreference,
+    NotificationStatus, NotificationType,
+)
 from app.models.user import User, UserRole
 from app.models.risk import Risk, RiskTreatment
 from app.models.vendor import Vendor, VendorContract, ContractValidationStatus
@@ -38,26 +74,152 @@ from app.models.asset import Asset
 from app.models.applied_control import AppliedControl
 from app.models.login_event import LoginEvent
 from app.models.risk_scenario import RiskScenario
-from app.models.audit import Audit, AuditFinding, FindingStatus
+from app.models.audit import Audit, AuditFinding, AuditStatus, FindingStatus
+from app.models.tenant import Tenant
+
+logger = logging.getLogger(__name__)
+
+# ── Kill switches ────────────────────────────────────────────────────────────
+# The two flags below are the only brakes on a sweep that now runs by itself and
+# sends real mail, so they have to work from the one place an operator can edit
+# without touching PM2: backend/.env.local.
+#
+# They did not. Settings in app.core.config is a pydantic-settings model with
+# extra="ignore", and pydantic-settings never exports anything to os.environ —
+# so ENABLE_NOTIFICATION_EMAILS=0 written into .env.local was read by nobody and
+# os.getenv() returned the "on" default anyway. Nothing in the codebase calls
+# load_dotenv either. _env_flag closes that: process environment first (a PM2
+# ecosystem variable still wins), then the same env-file chain config.py loads,
+# in the same precedence — later file overrides earlier.
+_ENV_DIR = Path(__file__).resolve().parents[2]          # backend/
+_ENV_FILES = (".env", ".env.dev", ".env.local")         # mirrors config.py's order
+
+
+def _env_flag(name: str, default: str = "1") -> str:
+    """Read a kill switch from the process env, falling back to the .env files.
+
+    Re-read on every call rather than cached: it means an operator can stop the
+    sweep, or its outbound mail, by editing .env.local and waiting for the next
+    tick — no pm2 restart, which on this box is the risky operation, not the
+    safe one. The cost is three small file reads a few times a day.
+
+    Parsing deliberately mirrors what pydantic-settings does to the same files,
+    because an operator who writes a line that config.py would honour must not
+    find that this reader silently ignored it: keys are matched case-insensitively
+    (config.py sets case_sensitive=False), a leading ``export`` is dropped, and an
+    unquoted trailing ``# comment`` is stripped. Getting any of those wrong turns
+    the kill switch back into the decoration it used to be.
+    """
+    value = os.environ.get(name)
+    if value is not None:
+        return value.strip()
+    found = default
+    target = name.lower()
+    for fname in _ENV_FILES:
+        try:
+            with open(_ENV_DIR / fname, encoding="utf-8") as fh:
+                for line in fh:
+                    line = line.strip()
+                    if not line or line.startswith("#") or "=" not in line:
+                        continue
+                    key, _, raw = line.partition("=")
+                    key = key.strip()
+                    if key.startswith("export "):
+                        key = key[len("export "):].strip()
+                    if key.lower() != target:
+                        continue
+                    raw = raw.strip()
+                    if raw[:1] in ('"', "'") and raw[:1] == raw[-1:] and len(raw) > 1:
+                        found = raw[1:-1]          # quoted: a '#' inside is literal
+                    else:
+                        found = raw.split("#", 1)[0].strip()
+        except OSError:
+            continue        # absent or unreadable file = nothing declared here
+    return found
+
+
+# Roles that receive tenant-wide ("parties prenantes") notifications.
+# TENANT_ADMIN is in the list because on the live database 5 of the 11 tenants
+# have NO ciso / risk_manager / compliance_manager at all — every automatic
+# notification for those tenants was being computed and then dropped on the
+# floor for want of a recipient, which is most of why "notification automatique
+# des parties prenantes" reads as absent. The admin is the stakeholder of last
+# resort, exactly as this function's docstring always claimed.
+STAKEHOLDER_ROLES = (
+    UserRole.CISO,
+    UserRole.RISK_MANAGER,
+    UserRole.COMPLIANCE_MANAGER,
+    UserRole.TENANT_ADMIN,
+)
+
+# Who an escalated relance is copied to once the owner has stopped responding.
+# Kept separate from STAKEHOLDER_ROLES so the first rungs of the ladder stay
+# quiet: escalation only means something if it is not the default.
+ESCALATION_ROLES = (UserRole.CISO, UserRole.TENANT_ADMIN, UserRole.EXECUTIVE)
 
 
 async def get_recipients_for_tenant(db: AsyncSession, tenant_id: str) -> list[User]:
     """Get users who should receive CISO-type notifications (CISO, admin roles).
     Roles are stored as uppercase enum names in the DB (e.g. 'CISO', 'RISK_MANAGER').
     """
-    from sqlalchemy import or_
     from sqlalchemy import String, cast
+    if not tenant_id:
+        return []
     result = await db.execute(
         select(User).where(
             User.tenant_id == tenant_id,
             User.is_active == True,  # noqa: E712
             or_(
-                cast(User.role, String).in_(["CISO", "RISK_MANAGER", "COMPLIANCE_MANAGER"]),
-                User.role.in_([UserRole.CISO, UserRole.RISK_MANAGER, UserRole.COMPLIANCE_MANAGER]),
+                cast(User.role, String).in_([r.name for r in STAKEHOLDER_ROLES]),
+                User.role.in_(list(STAKEHOLDER_ROLES)),
             )
         )
     )
     return list(result.scalars().all())
+
+
+async def get_users_with_roles(
+    db: AsyncSession, tenant_id: str, roles: tuple[UserRole, ...]
+) -> list[User]:
+    """Active users of one tenant holding any of `roles`.
+
+    Same dual uppercase-name / enum match as get_recipients_for_tenant: the
+    column was written by two different code paths over the life of the
+    database and holds both spellings.
+    """
+    from sqlalchemy import String, cast
+    if not tenant_id:
+        return []
+    result = await db.execute(
+        select(User).where(
+            User.tenant_id == tenant_id,
+            User.is_active == True,  # noqa: E712
+            or_(
+                cast(User.role, String).in_([r.name for r in roles]),
+                User.role.in_(list(roles)),
+            )
+        )
+    )
+    return list(result.scalars().all())
+
+
+async def get_owner_in_tenant(
+    db: AsyncSession, owner_id: str | None, tenant_id: str | None
+) -> User | None:
+    """Resolve an owner/assignee, refusing to cross a tenant boundary.
+
+    Every owner lookup in this file used to be `User.id == owner_id` with no
+    tenant predicate. create_notification derives the row's tenant_id from the
+    *user*, so a stale or mistyped owner_id pointing at another tenant's user
+    would have written that tenant a notification quoting this tenant's data —
+    a silent cross-tenant leak. A well-formed row is unaffected by this check.
+    """
+    if not owner_id:
+        return None
+    conditions = [User.id == owner_id, User.is_active == True]  # noqa: E712
+    if tenant_id:
+        conditions.append(User.tenant_id == tenant_id)
+    return (await db.execute(select(User).where(*conditions))).scalar_one_or_none()
 
 
 async def notification_exists(
@@ -96,8 +258,32 @@ async def create_notification(
     entity_type: str | None = None,
     link: str | None = None,
     severity: str = "info",
+    *,
+    title_key: str | None = None,
+    message_key: str | None = None,
+    params: dict | None = None,
+    extra_data: dict | None = None,
+    outbox: list | None = None,
+    email: bool = False,
 ) -> Notification:
-    """Create a single notification."""
+    """Create a single notification.
+
+    The keyword-only arguments are additive so the dozen existing callers
+    (risks.py, governance.py, threat_scheduler, contract_collab, ...) keep
+    working unchanged:
+
+    * title_key / message_key / params — the i18n triple the client renders
+      with t(); `title` and `message` stay populated as the fallback and as the
+      e-mail body. Same shape as audits.py's _notify.
+    * extra_data — merged into `data` (e.g. the relance rung), so dedup can ask
+      "has THIS escalation step already gone out" rather than only "has anything
+      gone out about this entity".
+    * outbox / email — queue the e-mail leg. Nothing is sent from here: the mail
+      is appended to the caller's outbox and flushed by flush_email_outbox()
+      AFTER the transaction commits, so we never mail about a row that then
+      failed to persist, and never hold SQLite's write lock across an SMTP
+      round-trip.
+    """
     data = {}
     if entity_id:
         data["entity_id"] = entity_id
@@ -106,6 +292,8 @@ async def create_notification(
     if link:
         data["link"] = link
     data["severity"] = severity
+    if extra_data:
+        data.update(extra_data)
 
     notif = Notification(
         tenant_id=user.tenant_id,
@@ -114,10 +302,399 @@ async def create_notification(
         status=NotificationStatus.UNREAD,
         title=title,
         message=message,
+        title_key=title_key,
+        message_key=message_key,
+        params=params,
         data=data,
     )
     db.add(notif)
+
+    if email and outbox is not None and user.email:
+        outbox.append({
+            "user_id": user.id,
+            "tenant_id": user.tenant_id,
+            "to_email": user.email,
+            "type": notif_type,
+            "title": title,
+            "message": message,
+            "title_key": title_key,
+            "message_key": message_key,
+            "params": params or {},
+            "link": link,
+        })
+
     return notif
+
+
+# ── i18n for the e-mail leg ──────────────────────────────────────────────────
+# The in-app notification is localised by the client from title_key/message_key.
+# An e-mail has no client, so the FR/AR/EN wording lives here, keyed by the same
+# message_key and formatted with the same params. A key that is absent falls
+# back to the stored English title/message rather than failing to send — a
+# relance that arrives in English still arrives.
+EMAIL_LANGS = ("en", "fr", "ar")
+
+EMAIL_I18N: dict[str, dict[str, str]] = {
+    "notifications.action_item_relance.title": {
+        "en": "Reminder {stage}: action '{title}' is {days} day(s) overdue",
+        "fr": "Relance {stage} : l'action « {title} » accuse {days} jour(s) de retard",
+        "ar": "تذكير {stage}: الإجراء «{title}» متأخر بـ {days} يوم/أيام",
+    },
+    "notifications.action_item_relance.message": {
+        "en": ("The corrective/preventive action '{title}' was due on {due} and is not "
+               "closed. Update its progress or record why it cannot be closed."),
+        "fr": ("L'action corrective/préventive « {title} » était due le {due} et n'est pas "
+               "clôturée. Mettez à jour son avancement ou justifiez son maintien."),
+        "ar": ("كان من المقرر إنجاز الإجراء «{title}» بتاريخ {due} ولم يُغلق بعد. "
+               "يرجى تحديث التقدم أو تبرير عدم الإغلاق."),
+    },
+    "notifications.action_item_relance_escalation.title": {
+        "en": "Escalation: action '{title}' is {days} day(s) overdue",
+        "fr": "Escalade : l'action « {title} » accuse {days} jour(s) de retard",
+        "ar": "تصعيد: الإجراء «{title}» متأخر بـ {days} يوم/أيام",
+    },
+    "notifications.action_item_relance_escalation.message": {
+        "en": ("Action '{title}' (owner: {owner}) was due on {due} and has not moved after "
+               "{reminders} reminder(s). It is escalated to you as the responsible authority."),
+        "fr": ("L'action « {title} » (responsable : {owner}) était due le {due} et n'a pas "
+               "progressé après {reminders} relance(s). Elle vous est remontée."),
+        "ar": ("الإجراء «{title}» (المسؤول: {owner}) كان مستحقاً في {due} ولم يتقدم بعد "
+               "{reminders} تذكير/تذكيرات. تمت إحالته إليكم."),
+    },
+    "notifications.audit_schedule.title": {
+        "en": "Audit '{audit}' starts in {days} day(s)",
+        "fr": "L'audit « {audit} » démarre dans {days} jour(s)",
+        "ar": "تبدأ مهمة التدقيق «{audit}» خلال {days} يوم/أيام",
+    },
+    "notifications.audit_schedule.message": {
+        "en": ("Audit '{audit}' is planned to start on {start}. Confirm the scope, the "
+               "auditors and the availability of the audited teams."),
+        "fr": ("L'audit « {audit} » est planifié pour le {start}. Confirmez le périmètre, "
+               "les auditeurs et la disponibilité des équipes auditées."),
+        "ar": ("من المقرر أن تبدأ مهمة التدقيق «{audit}» في {start}. يرجى تأكيد النطاق "
+               "والمدققين وجاهزية الفرق المعنية."),
+    },
+    "notifications.audit_starting_today.title": {
+        "en": "Audit '{audit}' starts today",
+        "fr": "L'audit « {audit} » démarre aujourd'hui",
+        "ar": "تبدأ مهمة التدقيق «{audit}» اليوم",
+    },
+    "notifications.audit_starting_today.message": {
+        "en": "Audit '{audit}' is planned to start today ({start}).",
+        "fr": "L'audit « {audit} » est planifié pour aujourd'hui ({start}).",
+        "ar": "من المقرر أن تبدأ مهمة التدقيق «{audit}» اليوم ({start}).",
+    },
+    "notifications.audit_start_overdue.title": {
+        "en": "Audit '{audit}' has not started ({days} day(s) late)",
+        "fr": "L'audit « {audit} » n'a pas démarré ({days} jour(s) de retard)",
+        "ar": "لم تبدأ مهمة التدقيق «{audit}» ({days} يوم/أيام تأخير)",
+    },
+    "notifications.audit_start_overdue.message": {
+        "en": ("Audit '{audit}' was planned to start on {start} and is still in planning. "
+               "Re-plan it or start the fieldwork."),
+        "fr": ("L'audit « {audit} » devait démarrer le {start} et reste en planification. "
+               "Replanifiez-le ou lancez les travaux."),
+        "ar": ("كان من المقرر بدء مهمة التدقيق «{audit}» في {start} ولا تزال في مرحلة "
+               "التخطيط. يرجى إعادة التخطيط أو بدء الأعمال."),
+    },
+    # Reuses audits.py's key and params so the client needs a single entry.
+    "notifications.audit_finding_assigned.title": {
+        "en": "A finding was assigned to you",
+        "fr": "Un constat vous a été affecté",
+        "ar": "تم إسناد ملاحظة إليكم",
+    },
+    "notifications.audit_finding_assigned.message": {
+        "en": "'{finding}' was raised in the audit '{audit}'.",
+        "fr": "« {finding} » a été relevé lors de l'audit « {audit} ».",
+        "ar": "تم تسجيل «{finding}» ضمن مهمة التدقيق «{audit}».",
+    },
+    # Three separate keys rather than one key with an interpolated "when"
+    # fragment: a half-translated sentence is the classic i18n trap, and the
+    # client renders these with the same t() call the e-mail leg formats here.
+    "notifications.recommendation_due.title": {
+        "en": "Recommendation {ref} is due in {days} day(s)",
+        "fr": "La recommandation {ref} est due dans {days} jour(s)",
+        "ar": "التوصية {ref} مستحقة خلال {days} يوم/أيام",
+    },
+    "notifications.recommendation_due.message": {
+        "en": ("Recommendation '{title}' from audit '{audit}' is due on {due} and is "
+               "{progress}% complete. Track it through to effective closure."),
+        "fr": ("La recommandation « {title} » de l'audit « {audit} » est due le {due} et "
+               "avance à {progress}%. Suivez-la jusqu'à sa clôture effective."),
+        "ar": ("التوصية «{title}» الصادرة عن مهمة التدقيق «{audit}» مستحقة في {due} وبلغت "
+               "نسبة إنجازها {progress}%. يرجى متابعتها حتى الإغلاق الفعلي."),
+    },
+    "notifications.recommendation_due_today.title": {
+        "en": "Recommendation {ref} is due today",
+        "fr": "La recommandation {ref} est due aujourd'hui",
+        "ar": "التوصية {ref} مستحقة اليوم",
+    },
+    "notifications.recommendation_due_today.message": {
+        "en": ("Recommendation '{title}' from audit '{audit}' is due today ({due}) and is "
+               "{progress}% complete."),
+        "fr": ("La recommandation « {title} » de l'audit « {audit} » est due aujourd'hui "
+               "({due}) et avance à {progress}%."),
+        "ar": ("التوصية «{title}» الصادرة عن مهمة التدقيق «{audit}» مستحقة اليوم ({due}) "
+               "وبلغت نسبة إنجازها {progress}%."),
+    },
+    "notifications.recommendation_overdue.title": {
+        "en": "Recommendation {ref} is {days} day(s) overdue",
+        "fr": "La recommandation {ref} accuse {days} jour(s) de retard",
+        "ar": "التوصية {ref} متأخرة بـ {days} يوم/أيام",
+    },
+    "notifications.recommendation_overdue.message": {
+        "en": ("Recommendation '{title}' from audit '{audit}' was due on {due} and is still "
+               "only {progress}% complete. It remains open until effective closure."),
+        "fr": ("La recommandation « {title} » de l'audit « {audit} » était due le {due} et "
+               "n'avance qu'à {progress}%. Elle reste ouverte jusqu'à sa clôture effective."),
+        "ar": ("التوصية «{title}» الصادرة عن مهمة التدقيق «{audit}» كانت مستحقة في {due} "
+               "ولم تتجاوز نسبة إنجازها {progress}%. تبقى مفتوحة حتى الإغلاق الفعلي."),
+    },
+}
+
+
+def render_i18n(key: str | None, lang: str, params: dict, fallback: str) -> str:
+    """Render an i18n key in `lang`, falling back to the stored English text.
+
+    A missing key or a params mismatch must never stop the mail going out: an
+    unlocalised relance still reaches the responsible person, which is the
+    requirement. Only the wording degrades.
+    """
+    entry = EMAIL_I18N.get(key or "")
+    if not entry:
+        return fallback
+    template = entry.get(lang) or entry.get("en") or fallback
+    try:
+        return template.format(**(params or {}))
+    except (KeyError, IndexError, ValueError):
+        return fallback
+
+
+def tenant_language(tenant: Tenant | None) -> str:
+    """The language a tenant's e-mails are written in.
+
+    Read from the tenant settings blob, whose `locale` and `notifications`
+    sub-keys are already writable through PATCH /tenants/settings — no new
+    mechanism, no migration. Accepts `locale: "fr"`, `locale: {"language": "fr"}`
+    and `notifications: {"language": "fr"}`. Defaults to English so nothing
+    changes for a tenant that has expressed no preference.
+    """
+    raw = getattr(tenant, "settings", None) or {}
+    candidates: list = []
+    locale = raw.get("locale")
+    if isinstance(locale, str):
+        candidates.append(locale)
+    elif isinstance(locale, dict):
+        candidates.extend([locale.get("language"), locale.get("lang"), locale.get("default")])
+    notif_cfg = raw.get("notifications")
+    if isinstance(notif_cfg, dict):
+        candidates.extend([notif_cfg.get("language"), notif_cfg.get("lang")])
+    for candidate in candidates:
+        if isinstance(candidate, str) and candidate[:2].lower() in EMAIL_LANGS:
+            return candidate[:2].lower()
+    return "en"
+
+
+def tenant_emails_enabled(tenant: Tenant | None) -> bool:
+    """Per-tenant kill switch: settings.notifications.email_enabled = false.
+
+    This is a live production platform with a working relay; a tenant must be
+    able to stop the outbound leg without stopping the in-app one."""
+    raw = getattr(tenant, "settings", None) or {}
+    notif_cfg = raw.get("notifications")
+    if isinstance(notif_cfg, dict) and notif_cfg.get("email_enabled") is False:
+        return False
+    return True
+
+
+async def user_wants_email(db: AsyncSession, user_id: str, notif_type: NotificationType) -> bool:
+    """Honour the user's EMAIL preference for this type. Absent row = enabled,
+    the same default the Celery notification workers use."""
+    pref = (await db.execute(
+        select(NotificationPreference).where(
+            NotificationPreference.user_id == user_id,
+            NotificationPreference.notification_type == notif_type,
+            NotificationPreference.channel == NotificationChannel.EMAIL,
+        )
+    )).scalar_one_or_none()
+    return pref.enabled if pref is not None else True
+
+
+# Hard ceiling on one run's outbound mail. A first run over a long-neglected
+# backlog could otherwise mail hundreds of messages to real clients in one go.
+# Note what the cap actually costs: the in-app notification — and with it the
+# dedup marker — is already committed by the time we get here, so a message
+# past the ceiling is DROPPED, not deferred; the next run will not re-queue it
+# because that rung is already recorded as sent. The ceiling is therefore a
+# deliberate "in-app only" degradation for the tail of a backlog, and it is
+# logged as such rather than silently swallowed.
+MAX_EMAILS_PER_RUN = 200
+
+
+async def flush_email_outbox(db: AsyncSession, outbox: list[dict]) -> int:
+    """Send the queued relance/escalation e-mails. Called AFTER the commit.
+
+    Never raises: SMTP is best-effort and an unreachable relay must not lose the
+    in-app notifications that are already durable by this point.
+    """
+    if not outbox:
+        return 0
+    if _env_flag("ENABLE_NOTIFICATION_EMAILS") == "0":
+        logger.info("Notification e-mails disabled via ENABLE_NOTIFICATION_EMAILS=0 (%d queued)", len(outbox))
+        return 0
+
+    from app.services import email_service
+
+    sent = 0
+    tenant_cache: dict[str, Tenant | None] = {}
+    for item in outbox[:MAX_EMAILS_PER_RUN]:
+        try:
+            tenant_id = item.get("tenant_id")
+            if tenant_id not in tenant_cache:
+                tenant_cache[tenant_id] = (await db.execute(
+                    select(Tenant).where(Tenant.id == tenant_id)
+                )).scalar_one_or_none() if tenant_id else None
+            tenant = tenant_cache[tenant_id]
+            if not tenant_emails_enabled(tenant):
+                continue
+            if not await user_wants_email(db, item["user_id"], item["type"]):
+                continue
+
+            lang = tenant_language(tenant)
+            subject = render_i18n(item.get("title_key"), lang, item.get("params") or {}, item["title"])
+            body = render_i18n(item.get("message_key"), lang, item.get("params") or {}, item["message"])
+            link = item.get("link")
+            action_url = f"{app_settings.FRONTEND_URL}{link}" if link and link.startswith("/") else link
+
+            # EMAIL_FROM stays whatever the environment sets (@next-step.tn in
+            # production, required by the relay's SPF record) — send_email owns
+            # the envelope; this service never overrides the sender.
+            # lang is passed through: email_service localises the call-to-action
+            # label from it. Without it a French or Arabic relance carried an
+            # English "Open" button — the one user-facing string this service
+            # does not render itself.
+            ok = await email_service.send_notification_email(
+                to_email=item["to_email"], subject=subject, body=body,
+                action_url=action_url, lang=lang,
+            )
+            if ok:
+                sent += 1
+        except Exception as exc:  # noqa: BLE001 — a bad address must not stop the rest
+            logger.warning("Notification e-mail failed for %s: %s", item.get("to_email"), exc)
+
+    if len(outbox) > MAX_EMAILS_PER_RUN:
+        logger.error(
+            "Notification e-mail cap reached: %d queued, %d attempted, %d DROPPED "
+            "(their in-app notifications are written, so they will not be re-queued)",
+            len(outbox), MAX_EMAILS_PER_RUN, len(outbox) - MAX_EMAILS_PER_RUN,
+        )
+    return sent
+
+
+# ── Relance ladder ───────────────────────────────────────────────────────────
+# Rungs, in days overdue, at which an overdue item is chased again. The ladder
+# starts at J+1, not J+0: the due date itself is already announced by the
+# "due today" checks, and two notifications for one date is how alert fatigue
+# starts. After the last fixed rung the cadence becomes monthly and never
+# stops — an action that is 200 days late is the one that most needs a
+# reminder, and the previous checks in this file went silent at 30 days.
+RELANCE_RUNGS = (1, 3, 7, 14, 30)
+RELANCE_MONTHLY_AFTER = 30
+# From this rung on, the reminder is also copied to CISO / admin / direction.
+RELANCE_ESCALATE_FROM = 7
+
+
+def relance_rung(days_overdue: int) -> int | None:
+    """The ladder rung a given lateness belongs to, or None if not yet overdue.
+
+    Returns the largest rung <= days_overdue, so a check that runs daily fires
+    once per rung rather than once per day, and a check that misses a few days
+    (the app was down, the scheduler was off) still fires the rung it landed in
+    rather than skipping it silently.
+    """
+    if days_overdue < RELANCE_RUNGS[0]:
+        return None
+    if days_overdue < RELANCE_MONTHLY_AFTER:
+        return max(r for r in RELANCE_RUNGS if r <= days_overdue)
+    # Monthly from then on: 30, 60, 90, ...
+    return (days_overdue // 30) * 30
+
+
+async def stage_already_sent(
+    db: AsyncSession,
+    user_id: str,
+    notif_type: NotificationType,
+    entity_id: str,
+    stage: int | str,
+    marker_key: str = "relance_rung",
+) -> bool:
+    """Has this exact stage already been sent to this user for this entity?
+
+    Deliberately NOT a time window: the ladder is the dedup. A time window
+    either re-sends the same rung (spam) or blocks the next one (the relance
+    stops), which is exactly how the existing checks manage to be both noisy
+    and silent. Bounded to a year so the scan stays cheap.
+    """
+    cutoff = datetime.utcnow() - timedelta(days=366)
+    rows = (await db.execute(
+        select(Notification).where(
+            Notification.user_id == user_id,
+            Notification.type == notif_type,
+            Notification.created_at >= cutoff,
+        )
+    )).scalars().all()
+    for notif in rows:
+        data = notif.data or {}
+        if data.get("entity_id") == entity_id and data.get(marker_key) == stage:
+            return True
+    return False
+
+
+async def table_exists(db: AsyncSession, table_name: str) -> bool:
+    """Is this table physically present?
+
+    The STB models are created by create_all() at the next restart, so a check
+    that reads one of them must be able to no-op until then. Asking the
+    inspector is portable (the platform targets SQLite in dev and PostgreSQL in
+    production) and, unlike catching the error, leaves the session usable.
+    """
+    from sqlalchemy import inspect as sa_inspect
+    try:
+        return await db.run_sync(
+            lambda sync_session: sa_inspect(sync_session.connection()).has_table(table_name)
+        )
+    except Exception as exc:  # noqa: BLE001 — an unusable inspector means "skip"
+        logger.warning("table_exists(%s) failed: %s", table_name, exc)
+        return False
+
+
+async def notified_about(
+    db: AsyncSession,
+    user_id: str,
+    entity_id: str,
+    types: tuple[NotificationType, ...],
+    within_days: int | None = 90,
+) -> bool:
+    """Has this user had ANY of `types` about this entity?
+
+    Used by check_finding_assigned, which is a safety net for assignments the
+    endpoint already notifies about (audits.py writes its own notification with
+    type SYSTEM when an owner is set). Matching across types is what keeps the
+    net from duplicating the endpoint's message.
+
+    `within_days=None` means "ever". An assignment is a one-time event, so a
+    windowed dedup makes the safety net re-announce — and re-mail — the same
+    assignment to the same person every time the window lapses. Only checks
+    whose event genuinely recurs should pass a window.
+    """
+    conditions = [
+        Notification.user_id == user_id,
+        Notification.type.in_(list(types)),
+    ]
+    if within_days is not None:
+        conditions.append(Notification.created_at >= datetime.utcnow() - timedelta(days=within_days))
+    rows = (await db.execute(select(Notification).where(*conditions))).scalars().all()
+    return any((n.data or {}).get("entity_id") == entity_id for n in rows)
 
 
 async def check_vendor_contract_expiry(db: AsyncSession) -> int:
@@ -145,25 +722,33 @@ async def check_vendor_contract_expiry(db: AsyncSession) -> int:
         trigger_points = [90, 60, 30, 7, 0]
         if days_remaining not in trigger_points and days_remaining > 0:
             continue
+        # A key per situation rather than one key with an interpolated
+        # fragment: the client renders these with t(), and a half-translated
+        # sentence is the classic i18n trap.
         if days_remaining < 0:
             # Already expired
             severity = "critical"
+            key = "notifications.contract_expired"
             title = f"Contract EXPIRED: {vendor.name}"
             message = f"The contract with {vendor.name} expired {abs(days_remaining)} days ago. Immediate action required."
         elif days_remaining == 0:
             severity = "critical"
+            key = "notifications.contract_expires_today"
             title = f"Contract expires TODAY: {vendor.name}"
             message = f"The contract with {vendor.name} expires today!"
         elif days_remaining <= 7:
             severity = "high"
+            key = "notifications.contract_expiring"
             title = f"Contract expiring in {days_remaining} days: {vendor.name}"
             message = f"The contract with {vendor.name} will expire in {days_remaining} days. Renewal needed."
         elif days_remaining <= 30:
             severity = "medium"
+            key = "notifications.contract_expiring"
             title = f"Contract expiring in {days_remaining} days: {vendor.name}"
             message = f"The contract with {vendor.name} expires in {days_remaining} days. Start renewal process."
         else:
             severity = "info"
+            key = "notifications.contract_renewal_reminder"
             title = f"Contract renewal reminder: {vendor.name}"
             message = f"Contract with {vendor.name} expires in {days_remaining} days. Plan renewal activities."
 
@@ -181,6 +766,10 @@ async def check_vendor_contract_expiry(db: AsyncSession) -> int:
                     entity_type="vendor",
                     link=f"/vendors?highlight={vendor.id}",
                     severity=severity,
+                    title_key=f"{key}.title",
+                    message_key=f"{key}.message",
+                    params={"vendor": vendor.name, "days": abs(days_remaining),
+                            "expiry": vendor.contract_expiry},
                 )
                 created += 1
 
@@ -213,18 +802,22 @@ async def check_risk_review_deadlines(db: AsyncSession) -> int:
 
         if days_remaining < 0:
             severity = "critical"
+            key = "notifications.risk_review_overdue"
             title = f"Risk review OVERDUE: {risk.title[:50]}"
             message = f"Risk '{risk.title}' review is overdue by {abs(days_remaining)} days."
         elif days_remaining == 0:
             severity = "high"
+            key = "notifications.risk_review_today"
             title = f"Risk review due TODAY: {risk.title[:50]}"
             message = f"Risk '{risk.title}' needs to be reviewed today."
         elif days_remaining <= 7:
             severity = "medium"
+            key = "notifications.risk_review_due"
             title = f"Risk review due in {days_remaining} days"
             message = f"Risk '{risk.title}' needs review within {days_remaining} days."
         else:
             severity = "info"
+            key = "notifications.risk_review_upcoming"
             title = f"Upcoming risk review in {days_remaining} days"
             message = f"Risk '{risk.title}' scheduled for review in {days_remaining} days."
 
@@ -241,6 +834,10 @@ async def check_risk_review_deadlines(db: AsyncSession) -> int:
                     entity_type="risk",
                     link=f"/risks?highlight={risk.id}",
                     severity=severity,
+                    title_key=f"{key}.title",
+                    message_key=f"{key}.message",
+                    params={"risk": risk.title, "days": abs(days_remaining),
+                            "due": risk.next_review_date},
                 )
                 created += 1
 
@@ -269,6 +866,11 @@ async def check_risk_appetite_breaches(db: AsyncSession) -> int:
                     entity_type="risk",
                     link=f"/risks?highlight={risk.id}",
                     severity="critical",
+                    # Same key/params as risks.py's on-write alert.
+                    title_key="notifications.risk_over_appetite.title",
+                    message_key="notifications.risk_over_appetite.message",
+                    params={"risk": risk.title, "score": score,
+                            "threshold": risk.appetite_threshold},
                 )
                 created += 1
     return created
@@ -307,13 +909,9 @@ async def check_treatment_overdue(db: AsyncSession) -> int:
         )
 
         recipients: dict[str, User] = {}
-        if treatment.owner_id:
-            owner_result = await db.execute(
-                select(User).where(User.id == treatment.owner_id, User.is_active == True)  # noqa: E712
-            )
-            owner = owner_result.scalar_one_or_none()
-            if owner:
-                recipients[owner.id] = owner
+        owner = await get_owner_in_tenant(db, treatment.owner_id, risk.tenant_id)
+        if owner:
+            recipients[owner.id] = owner
         for user in await get_recipients_for_tenant(db, risk.tenant_id):
             recipients[user.id] = user
 
@@ -329,6 +927,11 @@ async def check_treatment_overdue(db: AsyncSession) -> int:
                     entity_type="risk_treatment",
                     link=f"/risks?highlight={risk.id}",
                     severity="critical",
+                    title_key="notifications.treatment_overdue.title",
+                    message_key="notifications.treatment_overdue.message",
+                    params={"risk": risk.title, "option": treatment.treatment_option.value,
+                            "days": days_overdue,
+                            "progress": treatment.progress_percentage or 0},
                 )
                 created += 1
 
@@ -363,13 +966,9 @@ async def check_treatment_budget_overrun(db: AsyncSession) -> int:
         )
 
         recipients: dict[str, User] = {}
-        if treatment.owner_id:
-            owner_result = await db.execute(
-                select(User).where(User.id == treatment.owner_id, User.is_active == True)  # noqa: E712
-            )
-            owner = owner_result.scalar_one_or_none()
-            if owner:
-                recipients[owner.id] = owner
+        owner = await get_owner_in_tenant(db, treatment.owner_id, risk.tenant_id)
+        if owner:
+            recipients[owner.id] = owner
         for user in await get_recipients_for_tenant(db, risk.tenant_id):
             recipients[user.id] = user
 
@@ -385,6 +984,11 @@ async def check_treatment_budget_overrun(db: AsyncSession) -> int:
                     entity_type="risk_treatment",
                     link=f"/risks?highlight={risk.id}",
                     severity="high",
+                    title_key="notifications.treatment_budget_overrun.title",
+                    message_key="notifications.treatment_budget_overrun.message",
+                    params={"risk": risk.title, "option": treatment.treatment_option.value,
+                            "actual": treatment.actual_cost,
+                            "estimated": treatment.estimated_cost, "overrun": overrun},
                 )
                 created += 1
 
@@ -421,8 +1025,10 @@ async def check_pending_ciso_contracts(db: AsyncSession) -> int:
         # Only notify CISO specifically
         cisos = [u for u in recipients if u.role == UserRole.CISO]
         if not cisos:
-            # If no CISO, notify admins
-            cisos = [u for u in recipients if u.role == UserRole.CISO]
+            # If no CISO, notify admins. The fallback used to re-test for CISO,
+            # so on a tenant without one the contract sat waiting for a review
+            # nobody had been asked for.
+            cisos = [u for u in recipients if u.role == UserRole.TENANT_ADMIN]
 
         for user in cisos:
             if not await notification_exists(db, user.id, NotificationType.VENDOR_ALERT, contract.id, within_days=3):
@@ -436,6 +1042,9 @@ async def check_pending_ciso_contracts(db: AsyncSession) -> int:
                     entity_type="contract",
                     link="/vendors/contract-review",
                     severity="high",
+                    title_key="notifications.contract_pending_review.title",
+                    message_key="notifications.contract_pending_review.message",
+                    params={"vendor": vendor.name},
                 )
                 created += 1
 
@@ -475,6 +1084,10 @@ async def check_compliance_gaps(db: AsyncSession) -> int:
                     entity_type="compliance_gap",
                     link=f"/compliance/{gap.assessment_id}",
                     severity=gap.severity,
+                    title_key="notifications.compliance_gap.title",
+                    message_key="notifications.compliance_gap.message",
+                    params={"control": gap.control_id, "severity": gap.severity,
+                            "description": (gap.gap_description or "")[:150]},
                 )
                 created += 1
 
@@ -525,6 +1138,7 @@ async def check_action_plan_deadlines(db: AsyncSession) -> int:
 
             if days_remaining < 0:
                 severity = "critical"
+                key = "notifications.vendor_action_overdue"
                 title = f"Action plan item OVERDUE: {collab.vendor_name}"
                 message = (
                     f"Item '{action_text}' was due {abs(days_remaining)} day(s) ago "
@@ -532,10 +1146,12 @@ async def check_action_plan_deadlines(db: AsyncSession) -> int:
                 )
             elif days_remaining == 0:
                 severity = "high"
+                key = "notifications.vendor_action_today"
                 title = f"Action plan item due TODAY: {collab.vendor_name}"
                 message = f"Item '{action_text}' is due today. Verify with {collab.vendor_name}."
             else:
                 severity = "high"
+                key = "notifications.vendor_action_due"
                 title = f"Action plan deadline in {days_remaining} day(s): {collab.vendor_name}"
                 message = (
                     f"Item '{action_text}' deadline is in {days_remaining} day(s). "
@@ -544,7 +1160,9 @@ async def check_action_plan_deadlines(db: AsyncSession) -> int:
 
             recipients = await get_recipients_for_tenant(db, collab.tenant_id)
             # Only notify CISO / admins
-            cisos = [u for u in recipients if u.role in (UserRole.CISO, UserRole.CISO)]
+            # (UserRole.CISO, UserRole.CISO) was a typo for the admin fallback:
+            # on a tenant with no CISO the action-plan deadline notified nobody.
+            cisos = [u for u in recipients if u.role in (UserRole.CISO, UserRole.TENANT_ADMIN)]
             for user in cisos:
                 if not await notification_exists(db, user.id, NotificationType.VENDOR_ALERT, entity_id, within_days=3):
                     await create_notification(
@@ -557,6 +1175,10 @@ async def check_action_plan_deadlines(db: AsyncSession) -> int:
                         entity_type="action_plan_item",
                         link=f"/vendors/collaboration/{collab.id}",
                         severity=severity,
+                        title_key=f"{key}.title",
+                        message_key=f"{key}.message",
+                        params={"vendor": collab.vendor_name, "action": action_text,
+                                "days": abs(days_remaining), "due": deadline_str},
                     )
                     created += 1
 
@@ -565,7 +1187,13 @@ async def check_action_plan_deadlines(db: AsyncSession) -> int:
 
 async def check_compliance_action_deadlines(db: AsyncSession) -> int:
     """Notify the owner + CISO/admins when a compliance ActionItem (remediation task
-    created from a gap recommendation) is within 7 days of its due date or overdue.
+    created from a gap recommendation) is within 7 days of its due date.
+
+    The overdue half of this check moved to check_action_item_overdue, which
+    chases it on the relance ladder instead of giving up after 30 days. Keeping
+    both halves here would mean two notifications per late action; the split is
+    clean because an approaching deadline and an abandoned action are different
+    events with different audiences.
     """
     created = 0
     today = datetime.utcnow().date()
@@ -585,31 +1213,25 @@ async def check_compliance_action_deadlines(db: AsyncSession) -> int:
             continue
 
         days_remaining = (due - today).days
-        # Trigger within 7 days, and if overdue (cap at 30 days overdue like the other checks)
-        if days_remaining > 7 or days_remaining < -30:
+        # Upcoming only — anything already due belongs to the relance ladder.
+        if days_remaining > 7 or days_remaining < 0:
             continue
 
-        if days_remaining < 0:
-            severity = "critical"
-            title = f"Action item OVERDUE: {item.title[:50]}"
-            message = f"Action item '{item.title}' is overdue by {abs(days_remaining)} days."
-        elif days_remaining == 0:
+        if days_remaining == 0:
             severity = "high"
             title = f"Action item due TODAY: {item.title[:50]}"
             message = f"Action item '{item.title}' is due today."
+            key = "notifications.action_item_due_today"
         else:
             severity = "medium"
             title = f"Action item due in {days_remaining} days: {item.title[:50]}"
             message = f"Action item '{item.title}' needs to be completed within {days_remaining} day(s)."
+            key = "notifications.action_item_due"
 
         recipients: dict[str, User] = {}
-        if item.owner_id:
-            owner_result = await db.execute(
-                select(User).where(User.id == item.owner_id, User.is_active == True)  # noqa: E712
-            )
-            owner = owner_result.scalar_one_or_none()
-            if owner:
-                recipients[owner.id] = owner
+        owner = await get_owner_in_tenant(db, item.owner_id, item.tenant_id)
+        if owner:
+            recipients[owner.id] = owner
         for user in await get_recipients_for_tenant(db, item.tenant_id):
             recipients[user.id] = user
 
@@ -625,6 +1247,9 @@ async def check_compliance_action_deadlines(db: AsyncSession) -> int:
                     entity_type="action_item",
                     link=f"/compliance/{item.assessment_id}" if item.assessment_id else "/compliance",
                     severity=severity,
+                    title_key=f"{key}.title",
+                    message_key=f"{key}.message",
+                    params={"title": item.title, "due": item.due_date, "days": days_remaining},
                 )
                 created += 1
 
@@ -652,25 +1277,24 @@ async def check_asset_eol(db: AsyncSession) -> int:
 
         if days_remaining < 0:
             severity = "critical"
+            key = "notifications.asset_eol_passed"
             title = f"Asset past end-of-life: {asset.name[:50]}"
             message = f"Asset '{asset.name}' reached end-of-life {abs(days_remaining)} days ago and should be retired or replaced."
         elif days_remaining <= 30:
             severity = "high"
+            key = "notifications.asset_eol_soon"
             title = f"Asset end-of-life in {days_remaining} days: {asset.name[:50]}"
             message = f"Asset '{asset.name}' reaches end-of-life in {days_remaining} days. Plan replacement/retirement."
         else:
             severity = "medium"
+            key = "notifications.asset_eol_approaching"
             title = f"Asset end-of-life approaching: {asset.name[:50]}"
             message = f"Asset '{asset.name}' reaches end-of-life in {days_remaining} days ({asset.end_of_life_at.date().isoformat()})."
 
         recipients: dict[str, User] = {}
-        if asset.owner_id:
-            owner_result = await db.execute(
-                select(User).where(User.id == asset.owner_id, User.is_active == True)  # noqa: E712
-            )
-            owner = owner_result.scalar_one_or_none()
-            if owner:
-                recipients[owner.id] = owner
+        owner = await get_owner_in_tenant(db, asset.owner_id, asset.tenant_id)
+        if owner:
+            recipients[owner.id] = owner
         for user in await get_recipients_for_tenant(db, asset.tenant_id):
             recipients[user.id] = user
 
@@ -686,6 +1310,10 @@ async def check_asset_eol(db: AsyncSession) -> int:
                     entity_type="asset",
                     link=f"/assets?highlight={asset.id}",
                     severity=severity,
+                    title_key=f"{key}.title",
+                    message_key=f"{key}.message",
+                    params={"asset": asset.name, "days": abs(days_remaining),
+                            "eol": asset.end_of_life_at.date().isoformat()},
                 )
                 created += 1
 
@@ -727,12 +1355,18 @@ async def check_threat_profile_reviews(db: AsyncSession) -> int:
         # checks do — a permanent alert is one nobody reads.
         if days < -30:
             continue
+        # `when` builds the English sentence; `key` carries the same three
+        # situations to the client, which renders them with t(). Interpolating
+        # a translated fragment into a translated sentence is what we avoid.
         if days < 0:
             severity, when = "high", f"was due {abs(days)} day(s) ago"
+            key = "notifications.threat_review_overdue"
         elif days == 0:
             severity, when = "high", "is due today"
+            key = "notifications.threat_review_today"
         else:
             severity, when = "medium", f"is due in {days} day(s)"
+            key = "notifications.threat_review_due"
 
         for user in await get_recipients_for_tenant(db, threat.tenant_id):
             if await notification_exists(
@@ -752,6 +1386,10 @@ async def check_threat_profile_reviews(db: AsyncSession) -> int:
                 entity_type="threat",
                 link=f"/threats?highlight={threat.id}",
                 severity=severity,
+                title_key=f"{key}.title",
+                message_key=f"{key}.message",
+                params={"threat": threat.name, "days": abs(days),
+                        "due": str(threat.next_review_due)},
             )
             created += 1
 
@@ -786,29 +1424,29 @@ async def check_asset_review_deadlines(db: AsyncSession) -> int:
 
         if days_remaining < 0:
             severity = "critical"
+            key = "notifications.asset_review_overdue"
             title = f"Asset review OVERDUE: {asset.name[:50]}"
             message = f"Asset '{asset.name}' review is overdue by {abs(days_remaining)} days."
         elif days_remaining == 0:
             severity = "high"
+            key = "notifications.asset_review_today"
             title = f"Asset review due TODAY: {asset.name[:50]}"
             message = f"Asset '{asset.name}' needs to be reviewed today."
         elif days_remaining <= 7:
             severity = "medium"
+            key = "notifications.asset_review_due"
             title = f"Asset review due in {days_remaining} days"
             message = f"Asset '{asset.name}' needs review within {days_remaining} days."
         else:
             severity = "info"
+            key = "notifications.asset_review_upcoming"
             title = f"Upcoming asset review in {days_remaining} days"
             message = f"Asset '{asset.name}' scheduled for review in {days_remaining} days."
 
         recipients: dict[str, User] = {}
-        if asset.owner_id:
-            owner_result = await db.execute(
-                select(User).where(User.id == asset.owner_id, User.is_active == True)  # noqa: E712
-            )
-            owner = owner_result.scalar_one_or_none()
-            if owner:
-                recipients[owner.id] = owner
+        owner = await get_owner_in_tenant(db, asset.owner_id, asset.tenant_id)
+        if owner:
+            recipients[owner.id] = owner
         for user in await get_recipients_for_tenant(db, asset.tenant_id):
             recipients[user.id] = user
 
@@ -824,6 +1462,10 @@ async def check_asset_review_deadlines(db: AsyncSession) -> int:
                     entity_type="asset",
                     link=f"/assets?highlight={asset.id}",
                     severity=severity,
+                    title_key=f"{key}.title",
+                    message_key=f"{key}.message",
+                    params={"asset": asset.name, "days": abs(days_remaining),
+                            "due": asset.next_review_date},
                 )
                 created += 1
 
@@ -850,8 +1492,20 @@ async def check_unverified_controls(db: AsyncSession) -> int:
 
     controls = (await db.execute(
         select(AppliedControl).where(
-            AppliedControl.status.in_(("active", "in_progress")),
-            AppliedControl.validation_status != "validated",
+            # ControlStatus is planned/in_progress/implemented/not_applicable/
+            # deprecated — there is no "active" member, so the old filter
+            # matched nothing on that half AND left out "implemented", i.e.
+            # exactly the population this check exists to surface: a control
+            # in service that no referent has signed off. The whole check was
+            # dead for implemented controls. Same tuple as
+            # applied_controls.IN_SERVICE_STATUSES, kept literal so the
+            # notification job does not import an endpoint module.
+            AppliedControl.status.in_(("in_progress", "implemented")),
+            # `!= 'validated'` alone is false for NULL in SQL, so the controls
+            # that have never been through validation at all — exactly the
+            # population this check exists to surface — were being excluded.
+            or_(AppliedControl.validation_status.is_(None),
+                AppliedControl.validation_status != "validated"),
             AppliedControl.created_at <= grace,
         )
     )).scalars().all()
@@ -864,9 +1518,7 @@ async def check_unverified_controls(db: AsyncSession) -> int:
 
         recipients = {u.id: u for u in await get_recipients_for_tenant(db, control.tenant_id)}
         if control.owner_id and control.owner_id not in recipients:
-            owner = (await db.execute(
-                select(User).where(User.id == control.owner_id, User.is_active == True)  # noqa: E712
-            )).scalar_one_or_none()
+            owner = await get_owner_in_tenant(db, control.owner_id, control.tenant_id)
             if owner:
                 recipients[owner.id] = owner
 
@@ -891,6 +1543,12 @@ async def check_unverified_controls(db: AsyncSession) -> int:
                 entity_type="applied_control",
                 link=f"/applied-controls?highlight={control.id}",
                 severity="high" if rejected else "medium",
+                title_key=("notifications.control_rejected_in_service.title" if rejected
+                           else "notifications.control_unverified.title"),
+                message_key=("notifications.control_rejected_in_service.message" if rejected
+                             else "notifications.control_unverified.message"),
+                params={"control": control.name, "ref": label,
+                        "state": state.replace("_", " ")},
             )
             created += 1
 
@@ -936,10 +1594,13 @@ async def check_control_evaluations_due(db: AsyncSession) -> int:
             continue
         if days < 0:
             severity, when = "high", f"was due {abs(days)} day(s) ago"
+            key = "notifications.control_evaluation_overdue"
         elif days == 0:
             severity, when = "high", "is due today"
+            key = "notifications.control_evaluation_today"
         else:
             severity, when = "medium", f"is due in {days} day(s)"
+            key = "notifications.control_evaluation_due"
 
         control = (await db.execute(
             select(AppliedControl).where(AppliedControl.id == ev.applied_control_id)
@@ -951,9 +1612,7 @@ async def check_control_evaluations_due(db: AsyncSession) -> int:
 
         recipients = {u.id: u for u in await get_recipients_for_tenant(db, ev.tenant_id)}
         if control.owner_id and control.owner_id not in recipients:
-            owner = (await db.execute(
-                select(User).where(User.id == control.owner_id, User.is_active == True)  # noqa: E712
-            )).scalar_one_or_none()
+            owner = await get_owner_in_tenant(db, control.owner_id, ev.tenant_id)
             if owner:
                 recipients[owner.id] = owner
 
@@ -977,6 +1636,11 @@ async def check_control_evaluations_due(db: AsyncSession) -> int:
                 entity_type="applied_control",
                 link=f"/applied-controls?highlight={control.id}",
                 severity=severity,
+                title_key=f"{key}.title",
+                message_key=f"{key}.message",
+                params={"control": control.name, "ref": label, "days": abs(days),
+                        "due": due.isoformat(),
+                        "last_result": (ev.performance_level or "not recorded")},
             )
             created += 1
 
@@ -1019,9 +1683,7 @@ async def check_scenario_priority_alerts(db: AsyncSession) -> int:
 
             recipients = {u.id: u for u in await get_recipients_for_tenant(db, tenant.id)}
             if sc.owner_id and sc.owner_id not in recipients:
-                owner = (await db.execute(
-                    select(User).where(User.id == sc.owner_id, User.is_active == True)  # noqa: E712
-                )).scalar_one_or_none()
+                owner = await get_owner_in_tenant(db, sc.owner_id, tenant.id)
                 if owner:
                     recipients[owner.id] = owner
 
@@ -1045,6 +1707,11 @@ async def check_scenario_priority_alerts(db: AsyncSession) -> int:
                     entity_type="risk_scenario",
                     link=f"/risk-scenarios?highlight={sc.id}",
                     severity="high",
+                    title_key="notifications.scenario_priority_threshold.title",
+                    message_key="notifications.scenario_priority_threshold.message",
+                    params={"scenario": sc.name, "ref": label,
+                            "score": sc.priority_score,
+                            "threshold": criteria["alert_threshold"]},
                 )
                 created += 1
 
@@ -1088,29 +1755,29 @@ async def check_scenario_review_deadlines(db: AsyncSession) -> int:
 
         if days_remaining < 0:
             severity = "critical"
+            key = "notifications.scenario_review_overdue"
             title = f"Scenario review OVERDUE: {scenario.name[:50]}"
             message = f"Risk scenario '{scenario.name}' review is overdue by {abs(days_remaining)} days."
         elif days_remaining == 0:
             severity = "high"
+            key = "notifications.scenario_review_today"
             title = f"Scenario review due TODAY: {scenario.name[:50]}"
             message = f"Risk scenario '{scenario.name}' needs to be reviewed today."
         elif days_remaining <= 7:
             severity = "medium"
+            key = "notifications.scenario_review_due"
             title = f"Scenario review due in {days_remaining} days"
             message = f"Risk scenario '{scenario.name}' needs review within {days_remaining} days."
         else:
             severity = "info"
+            key = "notifications.scenario_review_upcoming"
             title = f"Upcoming scenario review in {days_remaining} days"
             message = f"Risk scenario '{scenario.name}' scheduled for review in {days_remaining} days."
 
         recipients: dict[str, User] = {}
-        if scenario.owner_id:
-            owner_result = await db.execute(
-                select(User).where(User.id == scenario.owner_id, User.is_active == True)  # noqa: E712
-            )
-            owner = owner_result.scalar_one_or_none()
-            if owner:
-                recipients[owner.id] = owner
+        owner = await get_owner_in_tenant(db, scenario.owner_id, scenario.tenant_id)
+        if owner:
+            recipients[owner.id] = owner
         for user in await get_recipients_for_tenant(db, scenario.tenant_id):
             recipients[user.id] = user
 
@@ -1126,6 +1793,10 @@ async def check_scenario_review_deadlines(db: AsyncSession) -> int:
                     entity_type="risk_scenario",
                     link=f"/risk-scenarios?highlight={scenario.id}",
                     severity=severity,
+                    title_key=f"{key}.title",
+                    message_key=f"{key}.message",
+                    params={"scenario": scenario.name, "days": abs(days_remaining),
+                            "due": scenario.next_review_date},
                 )
                 created += 1
 
@@ -1156,25 +1827,24 @@ async def check_control_expiration(db: AsyncSession) -> int:
 
         if days_remaining < 0:
             severity = "critical"
+            key = "notifications.control_expired"
             title = f"Control EXPIRED: {control.name[:50]}"
             message = f"Applied control '{control.name}' expired {abs(days_remaining)} days ago and needs renewal."
         elif days_remaining == 0:
             severity = "high"
+            key = "notifications.control_expires_today"
             title = f"Control expires TODAY: {control.name[:50]}"
             message = f"Applied control '{control.name}' expires today."
         else:
             severity = "medium"
+            key = "notifications.control_expiring"
             title = f"Control expiring in {days_remaining} days: {control.name[:50]}"
             message = f"Applied control '{control.name}' expires in {days_remaining} days. Plan renewal."
 
         recipients: dict[str, User] = {}
-        if control.owner_id:
-            owner_result = await db.execute(
-                select(User).where(User.id == control.owner_id, User.is_active == True)  # noqa: E712
-            )
-            owner = owner_result.scalar_one_or_none()
-            if owner:
-                recipients[owner.id] = owner
+        owner = await get_owner_in_tenant(db, control.owner_id, control.tenant_id)
+        if owner:
+            recipients[owner.id] = owner
         for user in await get_recipients_for_tenant(db, control.tenant_id):
             recipients[user.id] = user
 
@@ -1190,6 +1860,10 @@ async def check_control_expiration(db: AsyncSession) -> int:
                     entity_type="applied_control",
                     link=f"/applied-controls?highlight={control.id}",
                     severity=severity,
+                    title_key=f"{key}.title",
+                    message_key=f"{key}.message",
+                    params={"control": control.name, "days": abs(days_remaining),
+                            "expiration": control.expiration},
                 )
                 created += 1
 
@@ -1261,6 +1935,9 @@ async def check_new_device_login(
         entity_type="user",
         link="/settings?tab=security",
         severity="high",
+        title_key="notifications.new_device_login.title",
+        message_key="notifications.new_device_login.message",
+        params={"device": label, "ip": ip_address or ""},
     )
 
     # Alert the tenant's CISO/admin recipients too (excluding the user themselves).
@@ -1280,6 +1957,10 @@ async def check_new_device_login(
             entity_type="user",
             link="/activity-log",
             severity="medium",
+            title_key="notifications.new_device_login_admin.title",
+            message_key="notifications.new_device_login_admin.message",
+            params={"user": user.full_name, "email": user.email,
+                    "device": label, "ip": ip_address or ""},
         )
 
     return True
@@ -1306,6 +1987,9 @@ async def check_finding_deadlines(db: AsyncSession) -> int:
             AuditFinding.due_date.isnot(None),
             AuditFinding.due_date != "",
             AuditFinding.status.in_([FindingStatus.OPEN, FindingStatus.IN_REMEDIATION]),
+            # Objectif 8: a soft-deleted engagement stays in the register but
+            # must stop generating alerts about work nobody is doing any more.
+            Audit.deleted_at.is_(None),
         )
     )
 
@@ -1316,36 +2000,45 @@ async def check_finding_deadlines(db: AsyncSession) -> int:
             continue
 
         days_remaining = (due - today).days
-        # Trigger within 7 days, and if overdue (cap at 30 days overdue like the other checks)
-        if days_remaining > 7 or days_remaining < -30:
+        if days_remaining > 7:
             continue
 
+        # The 30-day overdue cap is gone: an open finding 40 days late is the
+        # one that matters most for "jusqu'à leur clôture effective". Past the
+        # first month the reminder simply slows from every 3 days to every 14,
+        # which keeps it visible without becoming wallpaper.
         if days_remaining < 0:
             severity = "critical"
+            overdue = abs(days_remaining)
             title = f"Recommendation OVERDUE: {finding.title[:50]}"
-            message = f"The recommendation '{finding.title}' from audit '{audit.title}' is overdue by {abs(days_remaining)} days."
+            message = f"The recommendation '{finding.title}' from audit '{audit.title}' is overdue by {overdue} days."
+            key = "notifications.finding_overdue"
+            dedup_days = 3 if overdue <= 30 else 14
         elif days_remaining == 0:
             severity = "high"
             title = f"Recommendation due TODAY: {finding.title[:50]}"
             message = f"The recommendation '{finding.title}' from audit '{audit.title}' is due today."
+            key = "notifications.finding_due_today"
+            dedup_days = 3
         else:
             severity = "medium"
             title = f"Recommendation due in {days_remaining} days: {finding.title[:50]}"
             message = f"The recommendation '{finding.title}' from audit '{audit.title}' needs to be addressed within {days_remaining} day(s)."
+            key = "notifications.finding_due"
+            dedup_days = 3
+
+        params = {"finding": finding.title, "audit": audit.title,
+                  "due": finding.due_date, "days": abs(days_remaining)}
 
         recipients: dict[str, User] = {}
-        if finding.remediation_owner_id:
-            owner_result = await db.execute(
-                select(User).where(User.id == finding.remediation_owner_id, User.is_active == True)  # noqa: E712
-            )
-            owner = owner_result.scalar_one_or_none()
-            if owner:
-                recipients[owner.id] = owner
+        owner = await get_owner_in_tenant(db, finding.remediation_owner_id, audit.tenant_id)
+        if owner:
+            recipients[owner.id] = owner
         for user in await get_recipients_for_tenant(db, audit.tenant_id):
             recipients[user.id] = user
 
         for user in recipients.values():
-            if not await notification_exists(db, user.id, NotificationType.AUDIT_FINDING_DEADLINE, finding.id, within_days=3):
+            if not await notification_exists(db, user.id, NotificationType.AUDIT_FINDING_DEADLINE, finding.id, within_days=dedup_days):
                 await create_notification(
                     db,
                     user=user,
@@ -1356,14 +2049,450 @@ async def check_finding_deadlines(db: AsyncSession) -> int:
                     entity_type="audit_finding",
                     link=f"/audits?highlight={audit.id}",
                     severity=severity,
+                    title_key=f"{key}.title",
+                    message_key=f"{key}.message",
+                    params=params,
                 )
                 created += 1
 
     return created
 
 
+async def check_action_item_overdue(db: AsyncSession, outbox: list | None = None) -> int:
+    """STB objectif 3 — « relances automatiques » on corrective/preventive actions.
+
+    The existing check_compliance_action_deadlines announces an action once it
+    is within 7 days of its due date and then, while overdue, re-announces it
+    every 3 days for 30 days before falling silent for good. That is a
+    reminder, not a relance: it is loudest while the action is merely late and
+    mute once it has been abandoned.
+
+    This is the relance proper. It handles the overdue side only (the upcoming
+    side stays with check_compliance_action_deadlines, unchanged), fires on the
+    RELANCE_RUNGS ladder — J+0, J+3, J+7, J+14, J+30 then monthly, for ever —
+    widens the audience from RELANCE_ESCALATE_FROM onwards, and sends the
+    e-mail leg so the relance reaches the responsible person outside the app.
+
+    Idempotent: a rung already delivered to a given user for a given action is
+    never re-sent, so running this twice an hour or once a week produces the
+    same notifications.
+    """
+    created = 0
+    today = datetime.utcnow().date()
+
+    items = (await db.execute(
+        select(ActionItem).where(
+            ActionItem.due_date.isnot(None),
+            ActionItem.due_date != "",
+            ActionItem.status.notin_([ActionItemStatus.COMPLETED, ActionItemStatus.CANCELLED]),
+        )
+    )).scalars().all()
+
+    for item in items:
+        try:
+            due = datetime.fromisoformat(item.due_date).date()
+        except (ValueError, TypeError):
+            continue
+
+        days_overdue = (today - due).days
+        rung = relance_rung(days_overdue)
+        if rung is None:
+            continue  # not due yet — check_compliance_action_deadlines owns that half
+
+        owner = await get_owner_in_tenant(db, item.owner_id, item.tenant_id)
+        owner_name = owner.full_name if owner else "—"
+        # How many rungs have already gone by, quoted in the escalation message
+        # so the recipient can see this is not the first attempt.
+        reminders = len([r for r in RELANCE_RUNGS if r <= days_overdue]) or 1
+        link = f"/compliance/{item.assessment_id}" if item.assessment_id else "/compliance"
+        params = {
+            "title": item.title,
+            "due": item.due_date,
+            "days": days_overdue,
+            "stage": f"J+{rung}",
+            "owner": owner_name,
+            "reminders": reminders,
+        }
+        severity = "critical" if days_overdue >= RELANCE_ESCALATE_FROM else "high"
+
+        # The owner first — they are the person the requirement means.
+        targets: list[tuple[User, bool]] = []
+        if owner:
+            targets.append((owner, False))
+        # An unowned overdue action has nobody to relaunch, so it escalates
+        # immediately rather than disappearing.
+        escalate = rung >= RELANCE_ESCALATE_FROM or owner is None
+        if escalate:
+            for user in await get_users_with_roles(db, item.tenant_id, ESCALATION_ROLES):
+                if owner and user.id == owner.id:
+                    continue
+                targets.append((user, True))
+
+        for user, is_escalation in targets:
+            if await stage_already_sent(
+                db, user.id, NotificationType.COMPLIANCE_ACTION_OVERDUE, item.id, rung
+            ):
+                continue
+            key = ("notifications.action_item_relance_escalation" if is_escalation
+                   else "notifications.action_item_relance")
+            if is_escalation:
+                title = f"Escalation: action '{item.title[:50]}' is {days_overdue} day(s) overdue"
+                message = (
+                    f"Action '{item.title}' (owner: {owner_name}) was due on {item.due_date} "
+                    f"and has not moved after {reminders} reminder(s). It is escalated to you "
+                    f"as the responsible authority."
+                )
+            else:
+                title = f"Reminder J+{rung}: action '{item.title[:50]}' is {days_overdue} day(s) overdue"
+                message = (
+                    f"The corrective/preventive action '{item.title}' was due on {item.due_date} "
+                    f"and is not closed. Update its progress or record why it cannot be closed."
+                )
+            await create_notification(
+                db,
+                user=user,
+                notif_type=NotificationType.COMPLIANCE_ACTION_OVERDUE,
+                title=title,
+                message=message,
+                entity_id=item.id,
+                entity_type="action_item",
+                link=link,
+                severity=severity,
+                title_key=f"{key}.title",
+                message_key=f"{key}.message",
+                params=params,
+                extra_data={"relance_rung": rung, "escalation": is_escalation,
+                            "action_type": item.action_type},
+                outbox=outbox,
+                email=True,
+            )
+            created += 1
+
+    return created
+
+
+async def check_audit_schedule(db: AsyncSession, outbox: list | None = None) -> int:
+    """STB objectif 4 — « notification automatique des parties prenantes ».
+
+    Nothing told anybody that a planned audit was approaching: the date sat in
+    audits.planned_start and was only seen by whoever opened the screen. This
+    announces each planned engagement at J-30, J-7 and J-0 to the lead auditor,
+    to every auditor assigned to it, and to the tenant's stakeholders, then
+    keeps chasing on the relance ladder while a planned audit has failed to
+    start.
+
+    Only PLANNING audits are considered — an engagement already in fieldwork
+    does not need to be told it is about to begin — and soft-deleted ones are
+    excluded (audits.deleted_at, objectif 8).
+    """
+    from app.models.auditor_assignment import AuditorAssignment
+
+    created = 0
+    today = datetime.utcnow().date()
+
+    audits = (await db.execute(
+        select(Audit).where(
+            Audit.planned_start.isnot(None),
+            Audit.planned_start != "",
+            Audit.status == AuditStatus.PLANNING,
+            Audit.deleted_at.is_(None),
+        )
+    )).scalars().all()
+
+    for audit in audits:
+        try:
+            start = datetime.fromisoformat(audit.planned_start).date()
+        except (ValueError, TypeError):
+            continue
+
+        days_until = (start - today).days
+        if days_until > 30:
+            continue
+
+        # One stage marker per rung so each rung fires exactly once per user.
+        if days_until >= 8:
+            stage, key, severity = "j30", "notifications.audit_schedule", "info"
+        elif days_until >= 1:
+            stage, key, severity = "j7", "notifications.audit_schedule", "medium"
+        elif days_until == 0:
+            stage, key, severity = "j0", "notifications.audit_starting_today", "high"
+        else:
+            rung = relance_rung(-days_until)
+            if rung is None:
+                continue
+            stage, key, severity = f"late{rung}", "notifications.audit_start_overdue", "high"
+
+        days_label = abs(days_until)
+        params = {"audit": audit.title, "start": audit.planned_start, "days": days_label}
+        if key == "notifications.audit_schedule":
+            title = f"Audit '{audit.title[:50]}' starts in {days_until} day(s)"
+            message = (f"Audit '{audit.title}' is planned to start on {audit.planned_start}. "
+                       f"Confirm the scope, the auditors and the availability of the audited teams.")
+        elif key == "notifications.audit_starting_today":
+            title = f"Audit '{audit.title[:50]}' starts today"
+            message = f"Audit '{audit.title}' is planned to start today ({audit.planned_start})."
+        else:
+            title = f"Audit '{audit.title[:50]}' has not started ({days_label} day(s) late)"
+            message = (f"Audit '{audit.title}' was planned to start on {audit.planned_start} and is "
+                       f"still in planning. Re-plan it or start the fieldwork.")
+
+        # Lead auditor, then the auditors actually affected to the engagement,
+        # then the stakeholders. AuditorAssignment.audit_id is the objectif 4
+        # column; rows that predate it carry NULL and are assessment-scoped, so
+        # they are correctly ignored here.
+        recipients: dict[str, User] = {}
+        lead = await get_owner_in_tenant(db, audit.lead_auditor_id, audit.tenant_id)
+        if lead:
+            recipients[lead.id] = lead
+        assigned_ids = [row for (row,) in (await db.execute(
+            select(AuditorAssignment.auditor_id).where(
+                AuditorAssignment.audit_id == audit.id,
+                AuditorAssignment.tenant_id == audit.tenant_id,
+                AuditorAssignment.is_active == True,  # noqa: E712
+            )
+        )).all()]
+        for auditor_id in assigned_ids:
+            auditor = await get_owner_in_tenant(db, auditor_id, audit.tenant_id)
+            if auditor:
+                recipients[auditor.id] = auditor
+        for user in await get_recipients_for_tenant(db, audit.tenant_id):
+            recipients.setdefault(user.id, user)
+
+        for user in recipients.values():
+            if await stage_already_sent(
+                db, user.id, NotificationType.AUDIT_DUE, audit.id, stage, marker_key="schedule_stage"
+            ):
+                continue
+            await create_notification(
+                db,
+                user=user,
+                notif_type=NotificationType.AUDIT_DUE,
+                title=title,
+                message=message,
+                entity_id=audit.id,
+                entity_type="audit",
+                link=f"/audits?highlight={audit.id}",
+                severity=severity,
+                title_key=f"{key}.title",
+                message_key=f"{key}.message",
+                params=params,
+                extra_data={"schedule_stage": stage, "campaign_id": audit.campaign_id},
+                outbox=outbox,
+                # Mail only the rungs that actually demand an action outside the
+                # app: a J-30 heads-up does not warrant an e-mail to everybody.
+                email=stage not in ("j30",),
+            )
+            created += 1
+
+    return created
+
+
+async def check_finding_assigned(db: AsyncSession, outbox: list | None = None) -> int:
+    """Safety net for « affectation à un responsable » on audit findings.
+
+    audits.py notifies the owner when a finding is created or re-assigned
+    through the API. Nothing covers a finding whose owner was set by any other
+    path — the CSV/bulk import, a data fix, or simply an assignment made before
+    that notification existed — and on the live database those are the only
+    assignments there are. This sweeps them up once each.
+
+    notified_about() matches across the types the endpoint and this file use for
+    the same entity, so a finding assigned through the API in the last 90 days
+    is NOT notified twice.
+    """
+    created = 0
+
+    rows = (await db.execute(
+        select(AuditFinding, Audit)
+        .join(Audit, Audit.id == AuditFinding.audit_id)
+        .where(
+            AuditFinding.remediation_owner_id.isnot(None),
+            AuditFinding.status.in_([FindingStatus.OPEN, FindingStatus.IN_REMEDIATION]),
+            Audit.deleted_at.is_(None),
+        )
+    )).all()
+
+    for finding, audit in rows:
+        owner = await get_owner_in_tenant(db, finding.remediation_owner_id, audit.tenant_id)
+        if not owner:
+            continue
+        # within_days=None — "has this person EVER been told about this
+        # finding". With the 90-day window this check used to have, an open
+        # finding with an owner was re-announced (and re-mailed) as "a finding
+        # was assigned to you" every quarter, for ever: the notification this
+        # very function writes was the only thing holding the window open, so
+        # as soon as it aged out the sweep fired again. An assignment happens
+        # once.
+        if await notified_about(
+            db, owner.id, finding.id,
+            types=(NotificationType.AUDIT_FINDING_NEW, NotificationType.SYSTEM,
+                   NotificationType.AUDIT_FINDING_DEADLINE),
+            within_days=None,
+        ):
+            continue
+
+        await create_notification(
+            db,
+            user=owner,
+            notif_type=NotificationType.AUDIT_FINDING_NEW,
+            title="A finding was assigned to you",
+            message=f"'{finding.title}' was raised in the audit '{audit.title}'.",
+            entity_id=finding.id,
+            entity_type="audit_finding",
+            link=f"/audits?highlight={audit.id}",
+            severity="high",
+            # Same key and params as audits.py's assignment notification, so the
+            # client needs one translation for both paths.
+            title_key="notifications.audit_finding_assigned.title",
+            message_key="notifications.audit_finding_assigned.message",
+            params={"finding": finding.title, "audit": audit.title},
+            extra_data={"audit_id": audit.id, "assigned_owner_id": owner.id},
+            outbox=outbox,
+            email=True,
+        )
+        created += 1
+
+    return created
+
+
+async def check_recommendation_due(db: AsyncSession, outbox: list | None = None) -> int:
+    """STB objectif 7 — recommendations chased « jusqu'à leur clôture effective ».
+
+    AuditRecommendation is the tracked object (a finding can carry several), so
+    its own due date needs its own alert: J-14 / J-7 / J-0, then the relance
+    ladder while it stays open, with the same escalation as the action-plan
+    relance. Like the finding check next door it never gives up after 30 days
+    overdue — an unclosed recommendation is precisely what the tender asks to
+    be able to prove was followed up.
+
+    The audit_recommendations table is only created by create_all() at the next
+    restart, so its absence is checked for rather than caught: an exception here
+    would put the session in a rollback-required state and spam the log with the
+    full SELECT on every tick until the process is restarted.
+    """
+    from app.models.audit_recommendation import AuditRecommendation
+
+    created = 0
+    today = datetime.utcnow().date()
+
+    if not await table_exists(db, AuditRecommendation.__tablename__):
+        return 0
+
+    rows = (await db.execute(
+        select(AuditRecommendation, Audit)
+        .join(Audit, Audit.id == AuditRecommendation.audit_id)
+        .where(
+            AuditRecommendation.due_date.isnot(None),
+            AuditRecommendation.due_date != "",
+            AuditRecommendation.status.notin_(["closed", "rejected"]),
+            Audit.deleted_at.is_(None),
+        )
+    )).all()
+
+    for rec, audit in rows:
+        try:
+            due = datetime.fromisoformat(rec.due_date).date()
+        except (ValueError, TypeError):
+            continue
+
+        days_remaining = (due - today).days
+        if days_remaining > 14:
+            continue
+
+        if days_remaining >= 8:
+            stage, key, severity = "d14", "notifications.recommendation_due", "info"
+        elif days_remaining >= 1:
+            stage, key, severity = "d7", "notifications.recommendation_due", "medium"
+        elif days_remaining == 0:
+            stage, key, severity = "d0", "notifications.recommendation_due_today", "high"
+        else:
+            rung = relance_rung(-days_remaining)
+            if rung is None:
+                continue
+            stage, key, severity = f"late{rung}", "notifications.recommendation_overdue", "critical"
+
+        ref = rec.ref_code or (rec.title[:30] if rec.title else "—")
+        days_label = abs(days_remaining)
+        params = {
+            "ref": ref, "title": rec.title, "audit": audit.title,
+            "due": rec.due_date, "days": days_label, "progress": rec.progress or 0,
+        }
+        if key == "notifications.recommendation_due":
+            title = f"Recommendation {ref} is due in {days_remaining} day(s)"
+            message = (f"Recommendation '{rec.title}' from audit '{audit.title}' is due on "
+                       f"{rec.due_date} and is {rec.progress or 0}% complete. Track it through "
+                       f"to effective closure.")
+        elif key == "notifications.recommendation_due_today":
+            title = f"Recommendation {ref} is due today"
+            message = (f"Recommendation '{rec.title}' from audit '{audit.title}' is due today "
+                       f"({rec.due_date}) and is {rec.progress or 0}% complete.")
+        else:
+            title = f"Recommendation {ref} is {days_label} day(s) overdue"
+            message = (f"Recommendation '{rec.title}' from audit '{audit.title}' was due on "
+                       f"{rec.due_date} and is still only {rec.progress or 0}% complete. "
+                       f"It remains open until effective closure.")
+
+        recipients: dict[str, User] = {}
+        owner = await get_owner_in_tenant(db, rec.owner_id, rec.tenant_id)
+        if owner:
+            recipients[owner.id] = owner
+        # Escalate once the recommendation is genuinely late, or immediately if
+        # nobody owns it — an unowned recommendation cannot be chased.
+        if days_remaining < 0 or owner is None:
+            overdue_days = max(0, -days_remaining)
+            if overdue_days >= RELANCE_ESCALATE_FROM or owner is None:
+                for user in await get_users_with_roles(db, rec.tenant_id, ESCALATION_ROLES):
+                    recipients.setdefault(user.id, user)
+
+        for user in recipients.values():
+            if await stage_already_sent(
+                db, user.id, NotificationType.AUDIT_FINDING_DEADLINE, rec.id, stage,
+                marker_key="recommendation_stage",
+            ):
+                continue
+            await create_notification(
+                db,
+                user=user,
+                notif_type=NotificationType.AUDIT_FINDING_DEADLINE,
+                title=title,
+                message=message,
+                entity_id=rec.id,
+                entity_type="audit_recommendation",
+                link=f"/audits?highlight={audit.id}",
+                severity=severity,
+                title_key=f"{key}.title",
+                message_key=f"{key}.message",
+                params=params,
+                extra_data={"recommendation_stage": stage, "audit_id": audit.id,
+                            "finding_id": rec.finding_id},
+                outbox=outbox,
+                email=days_remaining <= 0,  # mail from the due date onwards
+            )
+            created += 1
+
+    return created
+
+
 async def run_all_checks(db: AsyncSession) -> dict:
-    """Run all notification checks and return a summary."""
+    """Run all notification checks and return a summary.
+
+    Idempotent by construction: every check dedups on what is already in the
+    notifications table, so calling this hourly, daily or twice in a row
+    produces the same rows.
+
+    Each check is isolated: it runs in its own try/except AND commits its own
+    notifications. That matters now that a scheduler drives this rather than a
+    human pressing a button — a single failing statement puts the SQLAlchemy
+    session in a rollback-required state, so with one shared commit at the end
+    one broken check discarded the work of every check that had already
+    succeeded, and the sweep then raised out of the loop. Committing per check
+    also means a failure loses only that check's rows, and the matching e-mails
+    are dropped from the outbox so nothing is ever mailed about a notification
+    that did not persist.
+
+    E-mails are queued during the checks and flushed AFTER the commits, so the
+    SMTP round-trips never happen while SQLite's single write lock is held.
+    """
     results = {
         "vendor_contracts": 0,
         "risk_reviews": 0,
@@ -1373,88 +2502,208 @@ async def run_all_checks(db: AsyncSession) -> dict:
         "action_plan_deadlines": 0,
         "compliance_action_deadlines": 0,
         "asset_eol": 0,
+        "threat_profile_review_due": 0,
+        "scenario_priority_alert": 0,
+        "control_evaluation_due": 0,
+        "control_unverified": 0,
         "control_expiration": 0,
         "treatment_overdue": 0,
         "treatment_budget_overrun": 0,
         "asset_review_deadlines": 0,
         "scenario_review_deadlines": 0,
         "finding_deadlines": 0,
+        # STB: relances + notification automatique des parties prenantes.
+        "action_item_relances": 0,
+        "audit_schedule": 0,
+        "finding_assigned": 0,
+        "recommendation_due": 0,
     }
+    # Queued e-mails for this run; drained after the commits below.
+    outbox: list[dict] = []
 
-    try:
-        results["vendor_contracts"] = await check_vendor_contract_expiry(db)
-    except Exception as e:
-        print(f"Vendor contract check failed: {e}")
+    async def _run(key: str, label: str, check, pass_outbox: bool = False) -> None:
+        """Run one check, commit it, and never let it take the sweep down."""
+        mark = len(outbox)
+        try:
+            results[key] = await (check(db, outbox) if pass_outbox else check(db))
+            await db.commit()
+        except Exception as exc:  # noqa: BLE001 — one broken check must not stop the rest
+            try:
+                await db.rollback()
+            except Exception:  # noqa: BLE001
+                pass
+            # The notifications this check created are gone; their e-mails must
+            # go with them.
+            del outbox[mark:]
+            results[key] = 0
+            logger.error("%s failed: %s", label, exc)
 
-    try:
-        results["risk_reviews"] = await check_risk_review_deadlines(db)
-    except Exception as e:
-        print(f"Risk review check failed: {e}")
+    await _run("vendor_contracts", "Vendor contract check", check_vendor_contract_expiry)
+    await _run("risk_reviews", "Risk review check", check_risk_review_deadlines)
+    await _run("risk_appetite", "Risk appetite check", check_risk_appetite_breaches)
+    await _run("ciso_contracts", "CISO contracts check", check_pending_ciso_contracts)
+    await _run("compliance_gaps", "Compliance gaps check", check_compliance_gaps)
+    await _run("action_plan_deadlines", "Action plan deadline check", check_action_plan_deadlines)
+    await _run("compliance_action_deadlines", "Compliance action deadline check",
+               check_compliance_action_deadlines)
+    # These five used to share one try block, so a failure in any of them
+    # skipped the rest and was reported as "Asset EOL check failed".
+    await _run("asset_eol", "Asset EOL check", check_asset_eol)
+    await _run("threat_profile_review_due", "Threat profile review check", check_threat_profile_reviews)
+    await _run("scenario_priority_alert", "Scenario priority alert check", check_scenario_priority_alerts)
+    await _run("control_evaluation_due", "Control evaluation check", check_control_evaluations_due)
+    await _run("control_unverified", "Unverified control check", check_unverified_controls)
+    await _run("control_expiration", "Control expiration check", check_control_expiration)
+    await _run("treatment_overdue", "Treatment overdue check", check_treatment_overdue)
+    await _run("treatment_budget_overrun", "Treatment budget overrun check", check_treatment_budget_overrun)
+    await _run("asset_review_deadlines", "Asset review deadline check", check_asset_review_deadlines)
+    await _run("scenario_review_deadlines", "Scenario review deadline check", check_scenario_review_deadlines)
+    await _run("finding_deadlines", "Finding deadline check", check_finding_deadlines)
 
-    try:
-        results["risk_appetite"] = await check_risk_appetite_breaches(db)
-    except Exception as e:
-        print(f"Risk appetite check failed: {e}")
+    # ── STB additions ────────────────────────────────────────────────────────
+    await _run("action_item_relances", "Action item relance check", check_action_item_overdue, True)
+    await _run("audit_schedule", "Audit schedule check", check_audit_schedule, True)
+    await _run("finding_assigned", "Finding assignment check", check_finding_assigned, True)
+    # check_recommendation_due reads a table that create_all() only builds at
+    # the next restart; it probes for it rather than catching the error, and it
+    # is committed like every other check.
+    await _run("recommendation_due", "Recommendation deadline check", check_recommendation_due, True)
 
-    try:
-        results["ciso_contracts"] = await check_pending_ciso_contracts(db)
-    except Exception as e:
-        print(f"CISO contracts check failed: {e}")
-
-    try:
-        results["compliance_gaps"] = await check_compliance_gaps(db)
-    except Exception as e:
-        print(f"Compliance gaps check failed: {e}")
-
-    try:
-        results["action_plan_deadlines"] = await check_action_plan_deadlines(db)
-    except Exception as e:
-        print(f"Action plan deadline check failed: {e}")
-
-    try:
-        results["compliance_action_deadlines"] = await check_compliance_action_deadlines(db)
-    except Exception as e:
-        print(f"Compliance action deadline check failed: {e}")
-
-    try:
-        results["asset_eol"] = await check_asset_eol(db)
-        results["threat_profile_review_due"] = await check_threat_profile_reviews(db)
-        results["scenario_priority_alert"] = await check_scenario_priority_alerts(db)
-        results["control_evaluation_due"] = await check_control_evaluations_due(db)
-        results["control_unverified"] = await check_unverified_controls(db)
-    except Exception as e:
-        print(f"Asset EOL check failed: {e}")
-
-    try:
-        results["control_expiration"] = await check_control_expiration(db)
-    except Exception as e:
-        print(f"Control expiration check failed: {e}")
-
-    try:
-        results["treatment_overdue"] = await check_treatment_overdue(db)
-    except Exception as e:
-        print(f"Treatment overdue check failed: {e}")
-
-    try:
-        results["treatment_budget_overrun"] = await check_treatment_budget_overrun(db)
-    except Exception as e:
-        print(f"Treatment budget overrun check failed: {e}")
-
-    try:
-        results["asset_review_deadlines"] = await check_asset_review_deadlines(db)
-    except Exception as e:
-        print(f"Asset review deadline check failed: {e}")
-
-    try:
-        results["scenario_review_deadlines"] = await check_scenario_review_deadlines(db)
-    except Exception as e:
-        print(f"Scenario review deadline check failed: {e}")
-
-    try:
-        results["finding_deadlines"] = await check_finding_deadlines(db)
-    except Exception as e:
-        print(f"Finding deadline check failed: {e}")
-
-    await db.commit()
     results["total"] = sum(results.values())
+
+    # After the commits: SMTP is slow and fallible, and the in-app
+    # notifications must already be durable when we start mailing about them.
+    try:
+        results["emails_sent"] = await flush_email_outbox(db, outbox)
+    except Exception as e:  # noqa: BLE001 — the relay must never break the run
+        results["emails_sent"] = 0
+        logger.error("Notification email flush failed: %s", e)
+
     return results
+
+
+# ── Automatic driver ─────────────────────────────────────────────────────────
+# STB objectif 3: « relances automatiques (déclenchement sans intervention
+# humaine) ». Until now run_all_checks had exactly one caller — the "Check
+# deadlines" button on the notification bell — so every relance in the platform
+# depended on somebody remembering to press it.
+#
+# In-process asyncio loop, the same shape as report_scheduler /
+# vuln_scanner_scheduler / audit_recurrence_scheduler, because Celery is not
+# running here (no worker, no beat, no Redis) and a requirement must not depend
+# on a queue that nobody starts.
+NOTIFICATION_POLL_SECONDS = 6 * 3600  # four sweeps a day is ample for day-grained deadlines
+
+# Cross-process mutual exclusion for the sweep. Production runs 2 uvicorn
+# workers on one box (CLAUDE.md), so an in-memory singleton would be no gate at
+# all, and there is no scheduler-state table and no Redis to hang a proper
+# claim on. An advisory flock on a lock file is a real cross-worker lock on
+# that topology: the OS releases it if a worker is killed, and a worker that
+# cannot take it simply skips its tick — run_all_checks is idempotent, so the
+# skipped work is picked up by whoever holds the lock.
+#
+# The honest limitation: flock is per-host, so it would not gate a second box.
+# A Redis lock or a claim row is the right fix the day the platform is scaled
+# horizontally; until then this closes the window that the randomised start
+# offset alone left open. Two workers whose offsets happen to land within a few
+# seconds of each other stay in lockstep for ever (both then sleep exactly
+# NOTIFICATION_POLL_SECONDS), so "unlikely once" was in fact "unlikely, but
+# permanent when it happens" — hence the per-iteration jitter below as well.
+NOTIFICATION_LOCK_PATH = os.getenv(
+    "NOTIFICATION_SWEEP_LOCK",
+    os.path.join(tempfile.gettempdir(), "grceye_notification_sweep.lock"),
+)
+
+
+@contextlib.contextmanager
+def _sweep_lock():
+    """Yield True if this process won the sweep lock, False if a sibling holds it.
+
+    Best effort: on a platform without fcntl, or if the lock file cannot be
+    opened, the sweep proceeds unguarded rather than never running at all — the
+    dedup in every check is still the correctness guarantee, the lock only
+    narrows the race.
+    """
+    handle = None
+    try:
+        import fcntl
+    except ImportError:  # pragma: no cover — non-POSIX
+        yield True
+        return
+    try:
+        handle = open(NOTIFICATION_LOCK_PATH, "a+")
+    except OSError as exc:
+        logger.warning("Notification sweep lock unavailable (%s); running unguarded", exc)
+        yield True
+        return
+    try:
+        try:
+            # Non-blocking: a tick we cannot take is a tick we skip, not one we
+            # queue behind a sweep that may run for minutes.
+            fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except OSError:
+            yield False
+            return
+        try:
+            yield True
+        finally:
+            fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+    finally:
+        if handle is not None:
+            handle.close()
+
+
+async def start_notification_scheduler() -> None:
+    """Run run_all_checks on a loop. Registered from app.main's lifespan.
+
+    Disabled with ENABLE_NOTIFICATION_SCHEDULER=0, the same env-flag convention
+    as the other schedulers — but read through _env_flag, so the flag works from
+    backend/.env.local and not only from a PM2 ecosystem variable. It is also
+    re-read on every tick: switching the sweep OFF then takes effect at the next
+    iteration without a pm2 restart. Switching it back on still needs one, like
+    every sibling scheduler.
+
+    Concurrency: both uvicorn workers start this loop; _sweep_lock keeps only
+    one of them sweeping at a time, and the per-iteration jitter stops the two
+    from settling into lockstep. run_all_checks is idempotent on top of that,
+    so the worst case is a wasted set of dedup queries.
+    """
+    import random
+
+    # warning, not info: the root logger runs at WARNING with no handlers, so an
+    # info line is discarded and a scheduler that is silently off looks exactly
+    # like one that is quietly working.
+    if _env_flag("ENABLE_NOTIFICATION_SCHEDULER") == "0":
+        logger.warning("Notification scheduler DISABLED via ENABLE_NOTIFICATION_SCHEDULER=0")
+        return
+
+    from app.core.database import AsyncSessionLocal
+
+    # Let the app boot, then desynchronise this worker from its sibling.
+    await asyncio.sleep(90 + random.uniform(0, 600))
+    logger.info("Notification scheduler started (poll every %ss)", NOTIFICATION_POLL_SECONDS)
+
+    while True:
+        try:
+            if _env_flag("ENABLE_NOTIFICATION_SCHEDULER") == "0":
+                logger.warning("Notification sweep skipped — ENABLE_NOTIFICATION_SCHEDULER=0")
+                await asyncio.sleep(NOTIFICATION_POLL_SECONDS)
+                continue
+            # Acquiring the lock is a single non-blocking syscall, so it does
+            # not need to leave the event loop; the sweep itself is all awaited
+            # database and SMTP I/O.
+            with _sweep_lock() as won:
+                if won:
+                    async with AsyncSessionLocal() as db:
+                        results = await run_all_checks(db)
+                    if results.get("total"):
+                        logger.info("Notification sweep: %s", results)
+                else:
+                    logger.debug("Notification sweep skipped — sibling worker holds the lock")
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:  # noqa: BLE001 — never let the loop die
+            logger.error("Notification sweep failed: %s", exc)
+        # Re-jitter every iteration: a fixed period would keep two workers that
+        # once collided colliding for the lifetime of the process.
+        await asyncio.sleep(NOTIFICATION_POLL_SECONDS + random.uniform(0, 900))

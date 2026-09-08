@@ -7,13 +7,13 @@ are due (past their next_evaluation_at) — the obsolete/ineffective follow-up l
 from datetime import datetime, timezone
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from pydantic import BaseModel, Field
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
-from app.models.user import User
+from app.models.user import User, UserRole
 from app.models.control_evaluation import (
     ControlEvaluation, derive_performance_level, EVALUATION_METHODS,
     NON_PERFORMANT, REMEDIATION_STATUSES,
@@ -21,12 +21,31 @@ from app.models.control_evaluation import (
 from app.models.audit import Audit
 from app.services import control_registry
 from app.models.applied_control import AppliedControl
-from app.api.v1.dependencies.auth import get_tenant_id
+from app.api.v1.dependencies.auth import get_tenant_id, require_roles
 from app.api.v1.dependencies.features import require_feature
 
 router = APIRouter()
 
 _GATE = require_feature("control_effectiveness")
+
+# require_feature() answers "is this capability in the tenant's plan" — it is a
+# billing gate and it was the only thing standing in front of the writes here,
+# so anyone the plan let in (an auditor, a vendor manager) could score a control
+# or close the follow-up on one that had been declared ineffective. Recording an
+# effectiveness judgement is a write on the control's assurance record, so it
+# takes a role check.
+#
+# The set is the one the product already declares for this page — Layout.tsx
+# gates /control-effectiveness to exactly these roles plus the two read-only
+# profiles (viewer/executive), which get_current_user already blocks from every
+# write. business_owner is included for that reason: the page has no per-role
+# UI gating, so a role the sidebar admits to it must not meet a 403 it cannot
+# interpret. tenant_admin/super_admin auto-pass via require_roles.
+# Reading stays open to everyone the plan admits.
+_WRITE_ROLES = require_roles(
+    UserRole.CISO, UserRole.RISK_MANAGER, UserRole.SECURITY_ANALYST,
+    UserRole.CONTROL_OWNER, UserRole.BUSINESS_OWNER,
+)
 
 
 def _utcnow() -> datetime:
@@ -86,6 +105,7 @@ class EvaluationOut(BaseModel):
 async def create_evaluation(
     body: EvaluationCreate,
     current_user: Annotated[User, Depends(_GATE)],
+    _writer: Annotated[User, Depends(_WRITE_ROLES)],
     tenant_id: Annotated[str, Depends(get_tenant_id)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
@@ -149,15 +169,26 @@ async def create_evaluation(
 
 @router.get("", response_model=list[EvaluationOut])
 async def list_evaluations(
+    response: Response,
     current_user: Annotated[User, Depends(_GATE)],
     tenant_id: Annotated[str, Depends(get_tenant_id)],
     db: Annotated[AsyncSession, Depends(get_db)],
     control_id: str | None = None,
+    limit: int = Query(1000, ge=1, le=5000),
+    offset: int = Query(0, ge=0),
 ):
+    """Bounded, with the total in X-Total-Count — same shape as list_controls.
+
+    Evaluations accumulate for the life of a control (one per re-assessment per
+    control), so this list only grows; returning it whole was fine at five rows
+    and is not at five years of quarterly re-assessments.
+    """
     stmt = select(ControlEvaluation).where(ControlEvaluation.tenant_id == tenant_id)
     if control_id:
         stmt = stmt.where(ControlEvaluation.applied_control_id == control_id)
-    stmt = stmt.order_by(ControlEvaluation.created_at.desc())
+    total = (await db.execute(select(func.count()).select_from(stmt.subquery()))).scalar() or 0
+    response.headers["X-Total-Count"] = str(total)
+    stmt = stmt.order_by(ControlEvaluation.created_at.desc()).offset(offset).limit(limit)
     result = await db.execute(stmt)
     return list(result.scalars().all())
 
@@ -190,6 +221,7 @@ async def update_remediation(
     evaluation_id: str,
     body: RemediationUpdate,
     current_user: Annotated[User, Depends(_GATE)],
+    _writer: Annotated[User, Depends(_WRITE_ROLES)],
     tenant_id: Annotated[str, Depends(get_tenant_id)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
@@ -211,6 +243,16 @@ async def update_remediation(
         # Closing a follow-up with no record of what was done leaves the audit
         # trail asserting a remediation that cannot be evidenced.
         raise HTTPException(422, "Describe what was done before closing the follow-up")
+    if body.remediation_owner_id:
+        # A follow-up owned by somebody outside this organization is a follow-up
+        # with no owner: nothing here can notify them and nobody can chase them.
+        owner = (await db.execute(
+            select(User.id).where(
+                User.id == body.remediation_owner_id, User.tenant_id == tenant_id
+            )
+        )).scalar_one_or_none()
+        if owner is None:
+            raise HTTPException(422, "Remediation owner is not a member of this organization")
 
     before = {
         "remediation_status": evaluation.remediation_status,

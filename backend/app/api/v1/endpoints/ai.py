@@ -67,10 +67,16 @@ async def _get_or_create_quota(db: AsyncSession, user: User) -> AiUsageQuota:
     if quota is None:
         # Auto-provision: 1 M tokens / 10 K requests per month
         from uuid import uuid4
+        from sqlalchemy.exc import IntegrityError
+
+        # Read the identifiers BEFORE the insert: a rollback below expires every object
+        # in this session, and re-reading them off `user` afterwards would be a lazy load
+        # from async code (MissingGreenlet).
+        user_id, tenant_id = user.id, user.tenant_id
         quota = AiUsageQuota(
             id=str(uuid4()),
-            tenant_id=user.tenant_id,
-            user_id=user.id,
+            tenant_id=tenant_id,
+            user_id=user_id,
             feature="all",
             monthly_limit_tokens=1_000_000,
             monthly_limit_requests=10_000,
@@ -80,8 +86,29 @@ async def _get_or_create_quota(db: AsyncSession, user: User) -> AiUsageQuota:
             is_approved=True,
         )
         db.add(quota)
-        await db.commit()
-        await db.refresh(quota)
+        try:
+            await db.commit()
+        except IntegrityError:
+            # AiUsageQuota.user_id is UNIQUE and two uvicorn workers serve the app: the
+            # SPA's first AI calls after login race here on a brand-new account and one
+            # insert loses. Take the row the winner wrote instead of 5xx-ing the AI call
+            # (client.ts sends the whole SPA to /service-down on any >= 500).
+            await db.rollback()
+            # rollback() expires every object loaded through this session, including the
+            # `user` the auth dependency loaded through it; reload it now, because reading
+            # an expired attribute later (current_user.tenant_id in the route) would be a
+            # lazy load from async code.
+            try:
+                await db.refresh(user)
+            except Exception:  # noqa: BLE001 — not this session's instance: nothing to restore
+                logger.debug("user refresh after a quota insert conflict failed", exc_info=True)
+            quota = (await db.execute(
+                select(AiUsageQuota).where(AiUsageQuota.user_id == user_id)
+            )).scalar_one_or_none()
+            if quota is None:
+                raise
+        else:
+            await db.refresh(quota)
 
     # Auto-reset if past reset date
     if quota.reset_date and now > quota.reset_date:
@@ -301,6 +328,47 @@ _CHAT_MAX_TURNS = 30          # conversation window forwarded to the model
 _CHAT_MAX_CHARS = 16_000      # per-turn cap (control characters stripped)
 _SLOT_RESERVE_TOKENS = 1_500  # template text + one-line slots, kept out of the body budget
 
+# Platform-authored sentences returned in an HTTP `detail` (same _L10N/_t pattern as
+# compliance.py). AI *failure* text already comes from ai_locale.failure_message; these are
+# the request-validation refusals, which a francophone/arabophone user reads verbatim in
+# the modal that raised them. The "en" strings are byte-identical to what shipped before.
+_L10N: dict[str, dict[str, str]] = {
+    "en": {
+        "no_user_message": "No user message to answer.",
+        "document_required": "document_text is required.",
+        "controls_required": "At least one control is required.",
+        "no_controls_in_scope": "No controls in scope: select a framework with controls, or supply controls explicitly.",
+        "questionnaire_empty": "questionnaire_responses is empty: answer the questionnaire before running the analysis.",
+        "assessment_not_found": "Assessment not found.",
+        "contract_required": "contract_text is required.",
+    },
+    "fr": {
+        "no_user_message": "Aucun message utilisateur auquel répondre.",
+        "document_required": "Le texte du document est requis.",
+        "controls_required": "Au moins un contrôle est requis.",
+        "no_controls_in_scope": "Aucun contrôle dans le périmètre : sélectionnez un référentiel comportant des contrôles, ou fournissez les contrôles explicitement.",
+        "questionnaire_empty": "Le questionnaire est vide : répondez au questionnaire avant de lancer l'analyse.",
+        "assessment_not_found": "Évaluation introuvable.",
+        "contract_required": "Le texte du contrat est requis.",
+    },
+    "ar": {
+        "no_user_message": "لا توجد رسالة مستخدم للرد عليها.",
+        "document_required": "نص المستند مطلوب.",
+        "controls_required": "مطلوب ضابط واحد على الأقل.",
+        "no_controls_in_scope": "لا توجد ضوابط ضمن النطاق: اختر إطارًا يتضمن ضوابط، أو زوّد الضوابط صراحةً.",
+        "questionnaire_empty": "الاستبيان فارغ: أجب عن الاستبيان قبل تشغيل التحليل.",
+        "assessment_not_found": "التقييم غير موجود.",
+        "contract_required": "نص العقد مطلوب.",
+    },
+}
+
+
+def _t(lang: str, key: str) -> str:
+    """Platform-authored sentence in the resolved UI language (en/fr/ar; English fallback)."""
+    table = _L10N.get(normalize_language(lang) or "en") or _L10N["en"]
+    return table.get(key) or _L10N["en"][key]
+
+
 # num_predict per organisation size for document generation: reasoning tokens
 # count against it and an enterprise document is 15-25 pages, so the default
 # "drafting" budget (16384) is raised for the two larger tiers (cap 32768).
@@ -487,6 +555,38 @@ def _chat_turns(messages: list[ChatMessage]) -> list[dict]:
     while turns and turns[0]["role"] != "user":
         turns.pop(0)
     return turns
+
+
+def _fit_turns(turns: list[dict], max_tokens: int) -> list[dict]:
+    """Drop the OLDEST turns until the conversation fits ``max_tokens``.
+
+    ``_chat_turns`` bounds the window at 30 turns x 16 000 characters — up to ~120 000
+    tokens against the "chat" preset's 16 384-token window. Nothing trimmed that: a long
+    conversation simply overran the context, and a model that honours num_ctx drops the
+    HEAD of the prompt, i.e. the system prompt itself (the GRC persona, the grounding
+    facts and the LANGUAGE block that keeps the answer in French or Arabic). Every other
+    route in this file budgets its bodies; chat now does the same.
+
+    The most recent turns are kept (an answer needs the end of the conversation, not its
+    beginning); the last user turn always survives even when it alone exceeds the budget —
+    refusing it would be worse than letting the provider handle one oversized turn — and
+    the window is re-trimmed to open on a user turn, as ``_chat_turns`` guarantees."""
+    budget = max(1, int(max_tokens))
+    kept: list[dict] = []
+    used = 0
+    for turn in reversed(turns):
+        cost = estimate_tokens(turn["content"]) + 4        # + the per-message framing
+        if kept and used + cost > budget:
+            break
+        kept.append(turn)
+        used += cost
+    kept.reverse()
+    while kept and kept[0]["role"] != "user":
+        kept.pop(0)
+    if not kept:
+        last_user = next((t for t in reversed(turns) if t["role"] == "user"), None)
+        kept = [last_user] if last_user is not None else []
+    return kept
 
 
 async def _lookup_control(db: AsyncSession, tenant_id: str | None, short_name: str, control_identifier: str):
@@ -1144,7 +1244,7 @@ async def chat(
     ai_quota.check_quota_or_raise(current_user.id, estimated)
     turns = _chat_turns(request.messages)
     if not turns:
-        raise HTTPException(status_code=422, detail="No user message to answer.")
+        raise HTTPException(status_code=422, detail=_t(header_lang, "no_user_message"))
     last_user = next((t["content"] for t in reversed(turns) if t["role"] == "user"), "")
     lang = normalize_language(request.language) or guess_language(last_user) or header_lang
     tenant_id = current_user.tenant_id
@@ -1158,6 +1258,7 @@ async def chat(
                             detail=ai_provider.failure_message("bad_config", lang))
     d = ai_prompts.task_defaults("assistant_chat")
     decode = ai_provider.decoding(d["preset"], temperature=d["temperature"])
+    turns = _fit_turns(turns, _body_budget(system_prompt, decode))
     await _preflight_or_424(cfg, lang)
     return _sse_response(
         _quota_only_sse_generator(
@@ -1344,19 +1445,34 @@ async def generate_policy_content(
 
 @router.get("/models")
 async def list_models(current_user: Annotated[User, Depends(get_current_user)]):
-    """Return available Ollama models by querying the local Ollama instance."""
-    base_url = settings.OLLAMA_BASE_URL.rstrip("/")
+    """Return the models the CONFIGURED provider offers, plus the deployment default.
+
+    Was hard-wired to Ollama's /api/tags and reported `provider: "ollama"` unconditionally,
+    so a deployment that sets AI_PROVIDER=openai (the bring-your-own-AI path this platform
+    supports, and the on-prem edition's data-residency option) got a wrong provider name, a
+    default model no endpoint would answer to, and no model list at all. Response shape is
+    unchanged. Never sends the API key anywhere but the configured endpoint, and never
+    returns the endpoint URL.
+    """
+    cfg = ai_provider.env_ai_config()
+    kwargs: dict = {"follow_redirects": False}
+    headers = ai_provider.auth_headers(cfg)
+    if headers:
+        kwargs["headers"] = headers
     try:
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            resp = await client.get(f"{base_url}/api/tags")
-            if resp.status_code == 200:
-                data = resp.json()
-                model_names = [m["name"] for m in data.get("models", [])]
-                return {"models": model_names, "default": DEFAULT_MODEL, "provider": "ollama"}
-    except Exception:
-        pass
-    # Fallback: return the configured model
-    return {"models": [DEFAULT_MODEL], "default": DEFAULT_MODEL, "provider": "ollama"}
+        async with httpx.AsyncClient(timeout=10.0, verify=cfg.verify) as client:
+            resp = await client.get(ai_provider.models_url(cfg), **kwargs)
+        if resp.status_code == 200:
+            data = resp.json()
+            rows = (data.get("data") if cfg.provider == "openai" else data.get("models")) or []
+            key = "id" if cfg.provider == "openai" else "name"
+            names = [str(m[key]) for m in rows if isinstance(m, dict) and m.get(key)]
+            if names:
+                return {"models": names, "default": cfg.model, "provider": cfg.provider}
+    except Exception:  # noqa: BLE001 — str(exc) embeds the URL; the fallback below is honest
+        logger.info("ai.models: model list unavailable (provider=%s)", cfg.provider, exc_info=True)
+    # Fallback: the configured model is the only one we can promise.
+    return {"models": [cfg.model], "default": cfg.model, "provider": cfg.provider}
 
 
 @router.post("/analyze-risk")
@@ -1459,7 +1575,7 @@ async def analyze_evidence(
 
     document_text = (request.document_text or "").strip()
     if not document_text:
-        raise HTTPException(status_code=422, detail="document_text is required.")
+        raise HTTPException(status_code=422, detail=_t(lang, "document_required"))
 
     specs = []
     seen_ids: set[str] = set()
@@ -1476,7 +1592,7 @@ async def analyze_evidence(
             "description": c.get("description") or "",
         }))
     if not specs:
-        raise HTTPException(status_code=422, detail="At least one control is required.")
+        raise HTTPException(status_code=422, detail=_t(lang, "controls_required"))
 
     fw, _ctrl, _reqs = await _lookup_control(db, tenant_id, request.framework_short_name, "")
     short_name = ai_provider.clean_field(fw.short_name if fw is not None else request.framework_short_name, 50) or _NOT_STATED
@@ -1489,7 +1605,11 @@ async def analyze_evidence(
     else:
         framework_label = short_name
 
-    cfg = ai_provider.env_ai_config()   # the config assess_controls_over_document actually uses (see below)
+    # The tenant's bring-your-own endpoint when it has one (the assessor holds no DB
+    # session, so it cannot resolve the row itself and used to fall back to the deployment
+    # default — sending the uploaded document to the bundled model). Same object as before
+    # for every tenant without a BYO configuration.
+    cfg = await ai_provider.load_ai_config(db, tenant_id)
     await _preflight_or_424(cfg, lang)
 
     run_res = await assess_controls_over_document(
@@ -1502,6 +1622,7 @@ async def analyze_evidence(
         tenant_id=tenant_id,
         model=_requested_model(request.model),
         allow_partial=True,
+        cfg=cfg,
     )
     if not run_res.ok:
         logger.warning("analyze-evidence failed (tenant=%s): %s", tenant_id, run_res.failure_detail())
@@ -1579,8 +1700,7 @@ async def generate_audit_plan(
             for c in (request.controls or [])
         ]
     if not rows:
-        raise HTTPException(status_code=422,
-                            detail="No controls in scope: select a framework with controls, or supply controls explicitly.")
+        raise HTTPException(status_code=422, detail=_t(lang, "no_controls_in_scope"))
 
     rendered = ["- [%s] %s%s" % (cid, title, (" (category: %s)" % cat) if cat else "") for cid, title, cat in rows]
     control_lines, included = _capped_lines(rendered, min(budget, 6000))
@@ -1662,8 +1782,7 @@ async def analyze_vendor(
 
     responses = _vendor_bounded_responses(request.questionnaire_responses)
     if not responses:
-        raise HTTPException(status_code=422,
-                            detail="questionnaire_responses is empty: answer the questionnaire before running the analysis.")
+        raise HTTPException(status_code=422, detail=_t(lang, "questionnaire_empty"))
     counts = _vendor_answer_counts(responses)
     extra_warnings: list[str] = []
     if len(request.questionnaire_responses) > len(responses):
@@ -1794,7 +1913,7 @@ async def stream_remediation_plan(
             )
         )).scalar_one_or_none()
         if assessment is None:
-            raise HTTPException(status_code=404, detail="Assessment not found.")
+            raise HTTPException(status_code=404, detail=_t(lang, "assessment_not_found"))
 
         fw = (await db.execute(
             sa_select(Framework).where(Framework.id == assessment.framework_id)
@@ -2008,19 +2127,26 @@ async def ai_access_check(
 
 @router.get("/health")
 async def ai_health(current_user: Annotated[User, Depends(get_current_user)]):
-    """Check if Ollama is reachable. Authenticated; does not leak the
-    internal Ollama URL (was an information disclosure pre-fix)."""
-    base_url = settings.OLLAMA_BASE_URL.rstrip("/")
+    """Check that the CONFIGURED AI provider is reachable (see list_models: this probed
+    Ollama regardless of AI_PROVIDER, so a healthy OpenAI-dialect deployment reported
+    itself down). Authenticated; does not leak the endpoint URL or the API key (that was
+    an information disclosure pre-fix). The `status` string keeps its historical
+    "ollama_unreachable" value — clients may match on it."""
+    cfg = ai_provider.env_ai_config()
+    kwargs: dict = {"follow_redirects": False}
+    headers = ai_provider.auth_headers(cfg)
+    if headers:
+        kwargs["headers"] = headers
     reachable = False
     try:
-        async with httpx.AsyncClient(timeout=5.0) as client:
-            resp = await client.get(f"{base_url}/api/tags")
-            reachable = resp.status_code == 200
-    except Exception:
-        pass
+        async with httpx.AsyncClient(timeout=5.0, verify=cfg.verify) as client:
+            resp = await client.get(ai_provider.models_url(cfg), **kwargs)
+        reachable = resp.status_code == 200
+    except Exception:  # noqa: BLE001 — "not reachable" IS the answer here, never a 5xx
+        logger.debug("ai.health: provider probe failed (provider=%s)", cfg.provider, exc_info=True)
     return {
         "status": "ok" if reachable else "ollama_unreachable",
-        "provider": "ollama",
+        "provider": cfg.provider,
         "reachable": reachable,
     }
 
@@ -2079,7 +2205,7 @@ async def stream_contract_analysis(
 
     contract_text = (request.contract_text or "").strip()
     if not contract_text:
-        raise HTTPException(status_code=422, detail="contract_text is required.")
+        raise HTTPException(status_code=422, detail=_t(lang, "contract_required"))
     vendor_name = ai_provider.clean_field(request.vendor_name, 200) or "Vendor"
 
     await _preflight_or_424(cfg, lang)

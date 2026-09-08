@@ -4,6 +4,7 @@ Enrollment issues a TOTP secret + otpauth URI; verification confirms the
 device. ``pyotp`` is imported lazily so a missing dependency degrades only
 MFA rather than breaking app startup.
 """
+import logging
 from datetime import datetime, timezone
 from typing import Annotated
 
@@ -15,11 +16,42 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_db
 from app.models.user import User
 from app.models.mfa_device import MfaDevice
+from app.models.activity_log import ActivityLog
+from app.services.activity_chain import chain_and_add
 from app.api.v1.dependencies.auth import get_current_user
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 ISSUER = "GRCeye"
+
+
+async def _log_mfa_event(db: AsyncSession, user: User, action: str) -> None:
+    """Record a change to a user's second factor in the hash-chained audit trail.
+
+    Enabling or (especially) disabling MFA is a security-relevant act with no
+    other durable trace: mfa_disable deletes the row outright, and the generic
+    ActivityLogMiddleware only sees {POST, /api/v1/mfa/disable} and derives the
+    meaningless action "create" from it. The verbs follow the ones already in
+    the log for entitlement events ("delegation_granted", "custom_role_created").
+
+    Best-effort and written AFTER the caller commits — chain_and_add commits, so
+    logging first would publish a change that is still pending.
+    """
+    try:
+        await chain_and_add(db, ActivityLog(
+            tenant_id=user.tenant_id,
+            user_id=user.id,
+            user_email=user.email,
+            action=action,
+            entity_type="user",
+            entity_id=user.id,
+            entity_name=f"{user.first_name} {user.last_name}".strip(),
+            details={"subject_user_id": user.id, "source": "self_service"},
+            origin="api",
+        ))
+    except Exception:  # noqa: BLE001 — the MFA change is already committed
+        logger.warning("%s audit entry not recorded for user %s", action, user.id)
 
 
 def _pyotp():
@@ -70,6 +102,11 @@ async def mfa_enroll(
     pyotp = _pyotp()
     secret = pyotp.random_base32()
     device = await _device_for(current_user.id, db)
+    # Re-enrolling over a confirmed device clears `confirmed`, and login() only
+    # challenges on a confirmed device — so this call, on its own, turns the
+    # account's second factor OFF until the new secret is verified. That is a
+    # security event and needs the same trace as an explicit disable.
+    was_confirmed = bool(device is not None and device.confirmed)
     if device is None:
         device = MfaDevice(user_id=current_user.id, secret=secret, confirmed=False)
         db.add(device)
@@ -77,6 +114,8 @@ async def mfa_enroll(
         device.secret = secret
         device.confirmed = False
     await db.commit()
+    if was_confirmed:
+        await _log_mfa_event(db, current_user, "mfa_reset")
     uri = pyotp.totp.TOTP(secret).provisioning_uri(name=current_user.email, issuer_name=ISSUER)
     return EnrollResponse(secret=secret, otpauth_uri=uri)
 
@@ -94,9 +133,12 @@ async def mfa_verify(
         raise HTTPException(status_code=404, detail="No MFA enrollment in progress. Enroll first.")
     if not pyotp.totp.TOTP(device.secret).verify(body.code.strip(), valid_window=1):
         raise HTTPException(status_code=400, detail="Invalid or expired code.")
+    newly_enabled = not device.confirmed
     device.confirmed = True
     device.last_used_at = datetime.now(timezone.utc).replace(tzinfo=None)
     await db.commit()
+    if newly_enabled:
+        await _log_mfa_event(db, current_user, "mfa_enabled")
     return StatusResponse(enabled=True, confirmed=True)
 
 
@@ -107,6 +149,10 @@ async def mfa_disable(
 ):
     device = await _device_for(current_user.id, db)
     if device is not None:
+        was_confirmed = bool(device.confirmed)
         await db.delete(device)
         await db.commit()
+        # The device row is gone; this entry is the only surviving record that
+        # the account ever had a second factor and that it was turned off.
+        await _log_mfa_event(db, current_user, "mfa_disabled" if was_confirmed else "mfa_enrollment_cancelled")
     return None

@@ -2,6 +2,8 @@
 No authentication required. Shows tenant's compliance posture externally.
 Controlled by tenant settings (which frameworks/certs to show publicly).
 """
+from datetime import datetime
+
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy import select, func
@@ -14,8 +16,25 @@ from app.models.user import User, UserRole
 from app.models.compliance import ComplianceAssessment
 from app.models.policy import Policy, PolicyStatus
 from app.models.vendor import Vendor
+from app.services.ai_locale import get_request_language
 
 router = APIRouter()
+
+# The public page answers anonymous visitors, so a single message covers both
+# "no such organization" and "trust center switched off": telling the two apart
+# would let anyone walk the slug space and enumerate this platform's customers.
+_NOT_PUBLIC: dict[str, str] = {
+    "en": "No public trust center is available for this organization.",
+    "fr": "Aucun centre de confiance public n'est disponible pour cette organisation.",
+    "ar": "لا يوجد مركز ثقة عام متاح لهذه المؤسسة.",
+}
+
+# The two authenticated routes raise this when the token's tenant has no row.
+_TENANT_NOT_FOUND: dict[str, str] = {
+    "en": "Tenant not found",
+    "fr": "Organisation introuvable",
+    "ar": "المؤسسة غير موجودة",
+}
 
 
 # ── Schemas ──────────────────────────────────────────────────────────────
@@ -48,12 +67,13 @@ async def get_trust_center_config(
     db: AsyncSession = Depends(get_db),
     _: User = Depends(get_current_user),
     tenant_id: str = Depends(get_tenant_id),
+    lang: str = Depends(get_request_language),
 ):
     """Get current trust center configuration."""
     r = await db.execute(select(Tenant).where(Tenant.id == tenant_id))
     tenant = r.scalar_one_or_none()
     if not tenant:
-        raise HTTPException(404, "Tenant not found")
+        raise HTTPException(404, _TENANT_NOT_FOUND.get(lang) or _TENANT_NOT_FOUND["en"])
     tc = (tenant.settings or {}).get("trust_center", {})
     return TrustCenterConfig(**tc) if tc else TrustCenterConfig()
 
@@ -64,13 +84,18 @@ async def update_trust_center_config(
     db: AsyncSession = Depends(get_db),
     _: User = Depends(require_roles(UserRole.CISO)),
     tenant_id: str = Depends(get_tenant_id),
+    lang: str = Depends(get_request_language),
 ):
     """Update trust center configuration."""
     r = await db.execute(select(Tenant).where(Tenant.id == tenant_id))
     tenant = r.scalar_one_or_none()
     if not tenant:
-        raise HTTPException(404, "Tenant not found")
-    settings = tenant.settings or {}
+        raise HTTPException(404, _TENANT_NOT_FOUND.get(lang) or _TENANT_NOT_FOUND["en"])
+    # dict(...) — Tenant.settings is a plain JSON column with no mutation
+    # tracking, so mutating the dict in place leaves SQLAlchemy seeing no change
+    # and the UPDATE is never emitted. Every save after the first was silently
+    # discarded on any tenant that already had a non-empty settings blob.
+    settings = dict(tenant.settings or {})
     settings["trust_center"] = body.model_dump()
     tenant.settings = settings
     await db.commit()
@@ -83,16 +108,18 @@ async def update_trust_center_config(
 async def get_public_trust_center(
     tenant_slug: str,
     db: AsyncSession = Depends(get_db),
+    lang: str = Depends(get_request_language),
 ):
     """Public trust center page — no authentication required."""
     r = await db.execute(select(Tenant).where(Tenant.slug == tenant_slug))
     tenant = r.scalar_one_or_none()
+    not_public = _NOT_PUBLIC.get(lang) or _NOT_PUBLIC["en"]
     if not tenant:
-        raise HTTPException(404, "Organization not found")
+        raise HTTPException(404, not_public)
 
     tc = (tenant.settings or {}).get("trust_center", {})
     if not tc.get("enabled", False):
-        raise HTTPException(404, "Trust center not enabled for this organization")
+        raise HTTPException(404, not_public)
 
     result = TrustCenterPublic(
         org_name=tenant.name,
@@ -106,6 +133,11 @@ async def get_public_trust_center(
         last_updated=None,
     )
 
+    # Anything published below also dates the page: last_updated is the most recent
+    # change among exactly the records shown, and stays null when nothing is shown.
+    # It was declared in the response and never filled by anything.
+    shown_updates: list = []
+
     # Frameworks & compliance scores
     if tc.get("show_frameworks", True):
         assessments = list((await db.execute(
@@ -118,6 +150,7 @@ async def get_public_trust_center(
                     "status": a.status.value if hasattr(a.status, "value") else str(a.status),
                     "score": round(a.compliance_score, 1) if a.compliance_score else None,
                 })
+                shown_updates.append(a.updated_at)
 
     # Published policies (names only)
     if tc.get("show_policies", True):
@@ -131,8 +164,14 @@ async def get_public_trust_center(
             result.policies.append({
                 "title": p.title,
                 "category": p.category,
-                "last_reviewed": p.next_review_date,
+                # "last_reviewed" used to carry next_review_date — a date in the FUTURE
+                # published under a "last reviewed" label. The key stays (nothing may be
+                # removed from a response) but now carries the only "as of" fact on the
+                # record; the review due date travels under its own name.
+                "last_reviewed": p.effective_date,
+                "next_review": p.next_review_date,
             })
+            shown_updates.append(p.updated_at)
 
     # Certifications (from frameworks with high scores)
     if tc.get("show_certifications", True):
@@ -157,5 +196,9 @@ async def get_public_trust_center(
             "subprocessor_count": len(vendors),
             "countries": countries,
         })
+
+    dated = [d for d in shown_updates if isinstance(d, datetime)]
+    if dated:
+        result.last_updated = max(dated).date().isoformat()
 
     return result

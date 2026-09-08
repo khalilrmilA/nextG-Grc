@@ -36,16 +36,27 @@ from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
-from app.models.user import User
+from app.models.user import User, UserRole
 from app.models.risk import Risk, RiskTreatment, RiskTreatmentOption
 from app.models.risk_scenario import RiskScenario, ScenarioTreatment
 from app.models.risk_treatment_version import RiskTreatmentVersion
-from app.api.v1.dependencies.auth import get_tenant_id
+from app.api.v1.dependencies.auth import get_tenant_id, require_roles
 from app.api.v1.dependencies.features import require_feature
+from app.services import perimeter
+from app.services.authz import get_effective_roles
+from app.services.ai_locale import get_request_language
 
 router = APIRouter()
 
 _GATE = require_feature("risk_treatment_plans")
+
+# require_feature answers "is this in the tenant's plan" and nothing else — it is
+# a billing gate and confers no authority. On its own it let any authenticated
+# user (an auditor, a vendor manager) create, rewrite or supersede a treatment
+# plan, including its cost figures, while the risk the plan hangs off is
+# restricted to the risk roles by risks.py's update_risk. Writes now carry that
+# same role gate; reads are left tenant-wide, as they are on the risk register.
+_WRITE_ROLES = require_roles(UserRole.CISO, UserRole.RISK_MANAGER, UserRole.BUSINESS_OWNER)
 
 # Fields snapshotted into RiskTreatmentVersion whenever a plan is superseded —
 # mirrors risk_scenarios' _SNAPSHOT_FIELDS pattern (scenario_versions.py).
@@ -195,6 +206,21 @@ async def _risk_in_tenant(risk_id: str, tenant_id: str, db: AsyncSession) -> Ris
     return risk
 
 
+async def _assert_may_plan(user: User, risk: Risk, db: AsyncSession, lang: str = "en") -> None:
+    """A perimeter-scoped role plans treatment only for the risks it owns.
+
+    The requirement has the propriétaire métier validating risks *and their
+    treatment plans* "sur son périmètre métier" — the same rule risks.py applies
+    to update_risk and validate-target. A no-op for CISO / risk manager /
+    administrators, who are organisation-wide by definition.
+
+    ``lang`` is threaded through because this 403 is rendered verbatim by the
+    SPA; it defaults to "en" so an un-resolved caller keeps the old wording.
+    """
+    perimeter.assert_in_perimeter(
+        user, risk, await get_effective_roles(user, db), what="risk", lang=lang)
+
+
 async def _assert_scenarios_in_tenant(scenario_ids: list[str] | None, tenant_id: str, db: AsyncSession) -> None:
     """Tenant-scoped IDOR check for `linked_scenario_ids`.
 
@@ -297,8 +323,12 @@ def _derive_treatment_priority(risk: Risk, complexity: str | None = None) -> str
 async def upsert_treatment(
     body: TreatmentIn,
     current_user: Annotated[User, Depends(_GATE)],
+    _roles: Annotated[User, Depends(_WRITE_ROLES)],
     tenant_id: Annotated[str, Depends(get_tenant_id)],
     db: Annotated[AsyncSession, Depends(get_db)],
+    # Perimeter refusals are rendered verbatim by the SPA — answer in the
+    # caller's language (see _assert_may_plan).
+    lang: Annotated[str, Depends(get_request_language)] = "en",
 ):
     """Create or replace the treatment plan for a risk (one per risk).
 
@@ -308,6 +338,7 @@ async def upsert_treatment(
     commit message.
     """
     risk = await _risk_in_tenant(body.risk_id, tenant_id, db)
+    await _assert_may_plan(current_user, risk, db, lang)
     _require_justification(body.treatment_option, body.acceptance_justification)
     _validate_complexity(getattr(body, "complexity", None))
     await _assert_scenarios_in_tenant(body.linked_scenario_ids, tenant_id, db)
@@ -439,8 +470,12 @@ async def patch_treatment(
     treatment_id: str,
     body: TreatmentPatch,
     current_user: Annotated[User, Depends(_GATE)],
+    _roles: Annotated[User, Depends(_WRITE_ROLES)],
     tenant_id: Annotated[str, Depends(get_tenant_id)],
     db: Annotated[AsyncSession, Depends(get_db)],
+    # Perimeter refusals are rendered verbatim by the SPA — answer in the
+    # caller's language (see _assert_may_plan).
+    lang: Annotated[str, Depends(get_request_language)] = "en",
 ):
     treatment = (await db.execute(
         select(RiskTreatment)
@@ -449,6 +484,10 @@ async def patch_treatment(
     )).scalar_one_or_none()
     if treatment is None:
         raise HTTPException(status_code=404, detail="Treatment not found")
+    # Loaded before anything is mutated so the perimeter rule is applied to the
+    # state the edit starts from; re-used below to re-derive the priority.
+    risk = await _risk_in_tenant(treatment.risk_id, tenant_id, db)
+    await _assert_may_plan(current_user, risk, db, lang)
     updates = body.model_dump(exclude_none=True)
     _validate_complexity(updates.get("complexity"))
     if "delay_justification" in updates and updates["delay_justification"] != treatment.delay_justification:
@@ -462,7 +501,6 @@ async def patch_treatment(
         setattr(treatment, k, v)
     # Re-derive priority from the linked risk on every update — its severity may
     # have changed since the treatment plan was created.
-    risk = await _risk_in_tenant(treatment.risk_id, tenant_id, db)
     treatment.priority = _derive_treatment_priority(risk, treatment.complexity)
     await db.commit()
     await db.refresh(treatment)
@@ -474,8 +512,12 @@ async def supersede_treatment(
     risk_id: str,
     body: SupersedeIn,
     current_user: Annotated[User, Depends(_GATE)],
+    _roles: Annotated[User, Depends(_WRITE_ROLES)],
     tenant_id: Annotated[str, Depends(get_tenant_id)],
     db: Annotated[AsyncSession, Depends(get_db)],
+    # Perimeter refusals are rendered verbatim by the SPA — answer in the
+    # caller's language (see _assert_may_plan).
+    lang: Annotated[str, Depends(get_request_language)] = "en",
 ):
     """Submit a meaningfully new treatment plan for a risk that already has one.
 
@@ -490,6 +532,7 @@ async def supersede_treatment(
     if not (body.change_summary and body.change_summary.strip()):
         raise HTTPException(status_code=422, detail="A change_summary is required to supersede a treatment plan.")
     risk = await _risk_in_tenant(risk_id, tenant_id, db)
+    await _assert_may_plan(current_user, risk, db, lang)
     treatment = (await db.execute(
         select(RiskTreatment).where(RiskTreatment.risk_id == risk_id)
     )).scalar_one_or_none()

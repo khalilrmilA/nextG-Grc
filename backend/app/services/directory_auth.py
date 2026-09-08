@@ -460,8 +460,17 @@ def authenticate(username: str, password: str, cfg: dict) -> DirectoryUser:
 
     groups_attr = cfg.get("attr_groups") or _DEFAULTS["attr_groups"]
     attrs = [cfg["attr_email"], cfg["attr_firstname"], cfg["attr_lastname"], groups_attr]
-    search_conn.search(cfg.get("user_search_base", ""), user_filter, attributes=attrs)
-    entries = list(search_conn.entries)
+    # This class contracts to raise DirectoryAuthError for "any directory lookup
+    # / bind failure", but the search itself was unguarded: an empty or invalid
+    # user_search_base (nothing requires one — ldap_enabled() only checks
+    # `enabled` and `server_uri`) escaped as a raw ldap3 exception, which
+    # POST /sso/ldap/login does not catch and turns into a 500.
+    try:
+        search_conn.search(cfg.get("user_search_base", ""), user_filter, attributes=attrs)
+        entries = list(search_conn.entries)
+    except Exception as exc:  # noqa: BLE001 — a bad base/filter is a config fault, not a crash
+        search_conn.unbind()
+        raise DirectoryAuthError(f"Directory search failed: {exc}")
     if not entries:
         search_conn.unbind()
         raise DirectoryAuthError("User not found in directory.")

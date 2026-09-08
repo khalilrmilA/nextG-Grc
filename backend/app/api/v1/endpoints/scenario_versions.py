@@ -13,13 +13,20 @@ from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
-from app.models.user import User
+from app.models.user import User, UserRole
 from app.models.risk_scenario import RiskScenario
 from app.models.scenario_version import RiskScenarioVersion
-from app.api.v1.dependencies.auth import get_current_user, get_tenant_id
+from app.api.v1.dependencies.auth import get_current_user, get_tenant_id, require_roles
 from app.api.v1.dependencies.features import require_feature
 
 router = APIRouter()
+
+# Writing a version into a scenario's timeline is a change to the scenario's
+# record, so it takes the same roles that may edit the scenario itself
+# (risk_scenarios.py). require_feature is the plan check and grants no
+# authority — on its own it let any authenticated user append to the history.
+# Reading the timeline stays open to the tenant, as the scenario list is.
+_WRITE_ROLES = require_roles(UserRole.RISK_MANAGER, UserRole.CISO)
 
 # Fields captured in each snapshot (pulled defensively — missing → None).
 _SNAPSHOT_FIELDS = [
@@ -84,6 +91,7 @@ async def create_snapshot(
     scenario_id: str,
     body: SnapshotIn,
     current_user: Annotated[User, Depends(require_feature("scenario_versioning"))],
+    _roles: Annotated[User, Depends(_WRITE_ROLES)],
     tenant_id: Annotated[str, Depends(get_tenant_id)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ):

@@ -92,7 +92,9 @@ async def self_test(
             PASS if recent else PENDING,
             f"{len(snaps)} snapshot(s)" + ("" if recent else " — enable the hourly cron"))
     except Exception as exc:  # noqa: BLE001
-        add("P-04", "Platform", "Automated database backups", PENDING, f"{exc}")
+        # Type only, like every other handler here: the raw message carries the
+        # server-side backups path.
+        add("P-04", "Platform", "Automated database backups", PENDING, f"{type(exc).__name__}")
 
     # ── Access & security ────────────────────────────────────
     from app.models.mfa_device import MfaDevice
@@ -103,7 +105,18 @@ async def self_test(
 
     add("A-01", "Access", "Role-based access control", PASS,
         f"authenticated as role '{getattr(current_user.role, 'value', current_user.role)}', tenant-scoped")
-    add("A-02", "Access", "Multi-factor authentication (TOTP)", PASS, "MFA enrolment available in Settings")
+    try:
+        enrolled = (await db.execute(
+            select(func.count()).select_from(MfaDevice)
+            .join(User, User.id == MfaDevice.user_id)
+            .where(User.tenant_id == tenant_id, MfaDevice.confirmed.is_(True))
+        )).scalar() or 0
+        add("A-02", "Access", "Multi-factor authentication (TOTP)",
+            PASS if enrolled else PENDING,
+            f"{enrolled} account(s) with a confirmed TOTP device" if enrolled
+            else "enrolment live in Settings; no account has completed TOTP enrolment yet")
+    except Exception as exc:  # noqa: BLE001
+        add("A-02", "Access", "Multi-factor authentication (TOTP)", PENDING, f"{type(exc).__name__}")
     ldap = bool(getattr(settings, "LDAP_SERVER", "") or getattr(settings, "LDAP_HOST", ""))
     add("A-03", "Access", "AD/LDAP single sign-on", PASS if ldap else PENDING,
         "LDAP configured" if ldap else "endpoint live; configure LDAP for your directory", elim=True)
@@ -161,8 +174,32 @@ async def self_test(
             f"engine available={st.get('ocr_available')}, langs={st.get('languages')}")
     except Exception as exc:  # noqa: BLE001
         add("C-01", "Capabilities", "OCR document capture (FR/EN)", PENDING, f"{type(exc).__name__}")
-    add("C-02", "Capabilities", "AI runs on a local model (data residency)", PASS,
-        "Ollama endpoint configured; no external AI calls")
+    # Data residency is a hard requirement for a bank, so it is read off the
+    # configuration actually in force rather than asserted. Two ways data can
+    # leave: a non-local AI_BASE_URL, and an Ollama "-cloud" model tag, which is
+    # relayed by the local daemon to Ollama's hosted service (the deployment
+    # default today is gpt-oss:120b-cloud).
+    try:
+        from urllib.parse import urlparse
+        from app.services import ai_provider
+
+        cfg = ai_provider.env_ai_config()
+        parsed = urlparse(cfg.base_url or "")
+        host = (parsed.hostname or "").lower()
+        endpoint_local = host in ("localhost", "127.0.0.1", "::1", "host.docker.internal", "ollama")
+        model = (cfg.model or "").lower()
+        model_relayed = model.endswith("-cloud") or model.endswith(":cloud")
+        on_prem = endpoint_local and not model_relayed
+        reason = "" if on_prem else (
+            " — model is relayed to the vendor's hosted service"
+            if model_relayed else " — endpoint is not local"
+        )
+        add("C-02", "Capabilities", "AI runs on a local model (data residency)",
+            PASS if on_prem else PENDING,
+            f"provider={cfg.provider}, endpoint={host or 'unset'}, model={cfg.model}{reason}")
+    except Exception as exc:  # noqa: BLE001
+        add("C-02", "Capabilities", "AI runs on a local model (data residency)",
+            PENDING, f"{type(exc).__name__}")
     add("C-03", "Capabilities", "Trilingual UI (EN / FR / AR + RTL)", PASS,
         "en/fr/ar locale bundles with RTL")
 

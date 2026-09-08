@@ -7,18 +7,27 @@ RFP module 11:
   level (read/edit/validate) (gated ``document_repository``).
 - M11.3: a real per-user/per-role ACL (``GovernanceDocumentAccess``) layered on
   top of the document-level access_level, for documents that need finer-grained
-  permissions than one tenant-wide flag.
+  permissions than one tenant-wide flag. It governs reads as well as writes: a
+  document that carries explicit grants is visible only to its owner, an
+  elevated role, or a grantee. A document with no grants is unaffected.
 
 RFP module 14:
 - M14.6: steering committee ("comité de pilotage") tracking (``GovernanceCommittee``)
   — distinct from RACI, which records responsibilities, not governance bodies
   (gated ``raci_governance``).
+
+STB tender, objectif 6 (« mise à jour mensuelle »):
+- GET /trend returns one governance point per calendar month, read from the
+  daily ``trend_snapshots`` history and degrading to an intake-volume proxy
+  while that history is still empty.
 """
+from datetime import datetime
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from sqlalchemy import select, delete
+from sqlalchemy.exc import OperationalError, ProgrammingError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
@@ -28,9 +37,17 @@ from app.models.governance import (
     GovernanceDocumentAccess, GovernanceCommittee,
 )
 from app.models.notification import NotificationType
-from app.api.v1.dependencies.auth import get_current_user, get_tenant_id
+from app.models.policy import Policy
+from app.models.trend_snapshot import METRIC_GOVERNANCE, month_buckets
+from app.api.v1.dependencies.auth import (
+    get_current_user, get_tenant_id, require_roles, require_roles_strict,
+)
 from app.api.v1.dependencies.features import require_feature
 from app.services.notification_generator import create_notification, notification_exists
+from app.models.activity_log import ActivityLog
+from app.services.activity_chain import chain_and_add
+from app.services.file_integrity import sha256_bytes
+from app.services.trend_snapshot_scheduler import snapshot_series, unavailable_series
 
 router = APIRouter()
 
@@ -40,6 +57,58 @@ _VALID_ACCESS = {"read", "edit", "validate"}
 # require_roles() convention used elsewhere: tenant_admin/super_admin always have
 # full access; CISO is the elevated governance role for this module).
 _DOCUMENT_ELEVATED_ROLES = {UserRole.SUPER_ADMIN, UserRole.TENANT_ADMIN, UserRole.CISO}
+
+# require_feature() answers one question — "is this capability in the tenant's
+# plan" — and it was the only thing standing in front of every mutation in this
+# file. A billing gate is not an access check: any role the plan admitted (an
+# auditor, a vendor manager, a control owner) could rewrite or delete the RACI
+# matrix that says who answers for what, the groups it assigns work to, and the
+# steering committees that oversee it — the accountability record they are
+# themselves measured against. These are the roles the product already treats as
+# the governance owners (Layout.tsx gates /governance to exactly this set);
+# tenant_admin and super_admin auto-pass via require_roles(), and viewer /
+# executive are blocked from every write in get_current_user.
+#
+# Document read/write is NOT gated on this: those routes carry a real
+# per-document owner + ACL check of their own (see _can_write_document), and
+# forcing a role on top would break a grant made to somebody outside this set.
+_GOVERNANCE_WRITERS = require_roles(
+    UserRole.CISO, UserRole.COMPLIANCE_MANAGER, UserRole.POLICY_MANAGER,
+)
+
+
+async def _assert_tenant_users(db: AsyncSession, tenant_id: str, user_ids) -> None:
+    """Refuse user ids that are not members of this organization.
+
+    RACI lines, group rosters and committee memberships hold bare id strings with
+    no foreign key, so an id from another tenant is stored happily and then
+    resolves to nobody for everyone who reads the matrix afterwards.
+    """
+    wanted = {u for u in (user_ids or []) if u}
+    if not wanted:
+        return
+    found = {r[0] for r in (await db.execute(
+        select(User.id).where(User.id.in_(wanted), User.tenant_id == tenant_id)
+    )).all()}
+    missing = wanted - found
+    if missing:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Unknown user(s) for this organization: {sorted(missing)}",
+        )
+
+
+async def _assert_tenant_group(db: AsyncSession, tenant_id: str, group_id: str | None) -> None:
+    """Same, for the governance group a RACI line can be assigned to."""
+    if not group_id:
+        return
+    found = (await db.execute(
+        select(GovernanceGroup.id).where(
+            GovernanceGroup.id == group_id, GovernanceGroup.tenant_id == tenant_id
+        )
+    )).scalar_one_or_none()
+    if found is None:
+        raise HTTPException(status_code=422, detail="Unknown group for this organization")
 
 
 # ---------------------------------------------------------------------------
@@ -122,6 +191,7 @@ async def preview_role(
 async def create_raci(
     body: RaciIn,
     current_user: Annotated[User, Depends(require_feature("raci_governance"))],
+    _writer: Annotated[User, Depends(_GOVERNANCE_WRITERS)],
     tenant_id: Annotated[str, Depends(get_tenant_id)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
@@ -130,6 +200,8 @@ async def create_raci(
         raise HTTPException(status_code=422, detail="raci must be one of R, A, C, I")
     if body.responsible_type not in ("role", "user", "group"):
         raise HTTPException(status_code=422, detail="responsible_type must be 'role', 'user', or 'group'")
+    await _assert_tenant_users(db, tenant_id, [body.user_id])
+    await _assert_tenant_group(db, tenant_id, body.group_id)
     row = RaciAssignment(
         tenant_id=tenant_id, activity=body.activity, responsible_type=body.responsible_type,
         role=body.role, user_id=body.user_id, group_id=body.group_id, raci=raci, module=body.module,
@@ -146,6 +218,7 @@ async def update_raci(
     raci_id: str,
     body: RaciUpdate,
     current_user: Annotated[User, Depends(require_feature("raci_governance"))],
+    _writer: Annotated[User, Depends(_GOVERNANCE_WRITERS)],
     tenant_id: Annotated[str, Depends(get_tenant_id)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
@@ -163,6 +236,8 @@ async def update_raci(
         body.raci = raci
     if body.responsible_type is not None and body.responsible_type not in ("role", "user", "group"):
         raise HTTPException(status_code=422, detail="responsible_type must be 'role', 'user', or 'group'")
+    await _assert_tenant_users(db, tenant_id, [body.user_id])
+    await _assert_tenant_group(db, tenant_id, body.group_id)
 
     old_user_id = row.user_id
     new_responsible_type = body.responsible_type if body.responsible_type is not None else row.responsible_type
@@ -225,6 +300,7 @@ async def update_raci(
 async def delete_raci(
     raci_id: str,
     current_user: Annotated[User, Depends(require_feature("raci_governance"))],
+    _writer: Annotated[User, Depends(_GOVERNANCE_WRITERS)],
     tenant_id: Annotated[str, Depends(get_tenant_id)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
@@ -276,9 +352,11 @@ async def list_groups(
 async def create_group(
     body: GroupIn,
     current_user: Annotated[User, Depends(require_feature("raci_governance"))],
+    _writer: Annotated[User, Depends(_GOVERNANCE_WRITERS)],
     tenant_id: Annotated[str, Depends(get_tenant_id)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
+    await _assert_tenant_users(db, tenant_id, body.member_ids)
     group = GovernanceGroup(
         tenant_id=tenant_id, name=body.name, description=body.description, member_ids=body.member_ids,
     )
@@ -293,6 +371,7 @@ async def update_group(
     group_id: str,
     body: GroupUpdate,
     current_user: Annotated[User, Depends(require_feature("raci_governance"))],
+    _writer: Annotated[User, Depends(_GOVERNANCE_WRITERS)],
     tenant_id: Annotated[str, Depends(get_tenant_id)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
@@ -302,6 +381,7 @@ async def update_group(
     group = result.scalar_one_or_none()
     if group is None:
         raise HTTPException(status_code=404, detail="Group not found")
+    await _assert_tenant_users(db, tenant_id, body.member_ids)
     for f in ["name", "description", "member_ids"]:
         v = getattr(body, f, None)
         if v is not None:
@@ -315,6 +395,7 @@ async def update_group(
 async def delete_group(
     group_id: str,
     current_user: Annotated[User, Depends(require_feature("raci_governance"))],
+    _writer: Annotated[User, Depends(_GOVERNANCE_WRITERS)],
     tenant_id: Annotated[str, Depends(get_tenant_id)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
@@ -324,6 +405,24 @@ async def delete_group(
     group = result.scalar_one_or_none()
     if group is None:
         raise HTTPException(status_code=404, detail="Group not found")
+    # RaciAssignment.group_id carries no foreign key, so deleting a group used to
+    # leave every RACI line that named it pointing at nothing — the matrix went on
+    # displaying an accountable party that no longer existed, which is worse than
+    # showing none. Refuse instead of silently emptying the assignment; the same
+    # reasoning delete_document applies to its dependent rows.
+    referencing = (await db.execute(
+        select(RaciAssignment).where(
+            RaciAssignment.tenant_id == tenant_id,
+            RaciAssignment.group_id == group_id,
+        )
+    )).scalars().all()
+    if referencing:
+        activities = sorted({r.activity for r in referencing})[:5]
+        raise HTTPException(
+            status_code=409,
+            detail=(f"This group is still assigned in {len(referencing)} RACI line(s) "
+                    f"({', '.join(activities)}). Reassign or remove them first."),
+        )
     await db.delete(group)
     await db.commit()
     return None
@@ -391,6 +490,42 @@ def _is_document_owner_or_elevated(doc: GovernanceDocument, current_user: User) 
     return is_owner or is_elevated
 
 
+def _passes_document_grants(doc: GovernanceDocument, grants, current_user: User) -> bool:
+    """Whether ``current_user`` may READ ``doc``, given that document's ACL rows.
+
+    "view" was accepted by POST /documents/{id}/access, validated, stored — and
+    then read by nothing: only _DOC_WRITE_PERMISSIONS was ever consulted, and
+    reads were open to the whole tenant regardless. So an owner who restricted a
+    minutes document to three named people got a document three named people
+    could edit and everyone could read, with no indication the grant had no
+    effect. Any grant (view, edit or validate) admits its holder.
+
+    Precedence mirrors _can_write_document exactly: owner and elevated roles
+    always pass; when the document carries explicit grants they govern; with no
+    grants at all nothing changes and the document stays readable tenant-wide,
+    as every existing document is today.
+    """
+    if _is_document_owner_or_elevated(doc, current_user):
+        return True
+    if not grants:
+        return True
+    return any(
+        (g.user_id and g.user_id == current_user.id)
+        or (g.role and g.role == current_user.role)
+        for g in grants
+    )
+
+
+async def _assert_can_read_document(
+    db: AsyncSession, doc: GovernanceDocument, current_user: User, tenant_id: str
+) -> GovernanceDocument:
+    if not _passes_document_grants(doc, await _document_acl_rows(db, doc.id, tenant_id), current_user):
+        # 404, not 403: a restricted document's existence is itself part of what
+        # the grant list withholds.
+        raise HTTPException(status_code=404, detail="Document not found")
+    return doc
+
+
 async def _can_write_document(db: AsyncSession, doc: GovernanceDocument, current_user: User, tenant_id: str) -> bool:
     """True if ``current_user`` may modify ``doc`` (M11.3 — per-document ACL).
 
@@ -445,17 +580,43 @@ async def list_documents(
         query = query.where(GovernanceDocument.typology == typology)
     if module:
         query = query.where(GovernanceDocument.module == module)
-    result = await db.execute(query)
-    return list(result.scalars().all())
+    rows = list((await db.execute(query)).scalars().all())
+    if not rows:
+        return rows
+    # One query for every grant on the page, indexed by document — not one query
+    # per document.
+    grants = (await db.execute(
+        select(GovernanceDocumentAccess).where(
+            GovernanceDocumentAccess.tenant_id == tenant_id,
+            GovernanceDocumentAccess.document_id.in_([d.id for d in rows]),
+        )
+    )).scalars().all()
+    by_doc: dict[str, list[GovernanceDocumentAccess]] = {}
+    for g in grants:
+        by_doc.setdefault(g.document_id, []).append(g)
+    return [d for d in rows if _passes_document_grants(d, by_doc.get(d.id), current_user)]
 
 
 @router.post("/documents", response_model=DocumentOut, status_code=201)
 async def create_document(
     body: DocumentIn,
     current_user: Annotated[User, Depends(require_feature("document_repository"))],
+    _writer: Annotated[User, Depends(_GOVERNANCE_WRITERS)],
     tenant_id: Annotated[str, Depends(get_tenant_id)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
+    """Add a document to the governance repository.
+
+    Creation is the one document route the per-document ACL cannot govern — there
+    is no document yet, and therefore no owner and no grant to defer to — so it
+    was reachable by every role the plan admitted, an external `auditor`
+    included. An audit firm writing into the audited organisation's own
+    référentiel documentaire is the independence problem a bank tender exists to
+    check for, so creation is gated on the governance writers, exactly like the
+    RACI matrix and the committees. Reads, edits and deletes keep their ACL
+    precedence untouched (see _can_write_document): a grant made to somebody
+    outside this set still works.
+    """
     if body.access_level not in _VALID_ACCESS:
         raise HTTPException(status_code=422, detail="access_level must be read, edit, or validate")
     doc = GovernanceDocument(
@@ -476,7 +637,8 @@ async def get_document(
     tenant_id: Annotated[str, Depends(get_tenant_id)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
-    return await _get_doc(db, doc_id, tenant_id)
+    doc = await _get_doc(db, doc_id, tenant_id)
+    return await _assert_can_read_document(db, doc, current_user, tenant_id)
 
 
 @router.put("/documents/{doc_id}", response_model=DocumentOut)
@@ -529,7 +691,10 @@ async def list_document_versions(
     tenant_id: Annotated[str, Depends(get_tenant_id)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
-    await _get_doc(db, doc_id, tenant_id)  # tenant ownership check
+    doc = await _get_doc(db, doc_id, tenant_id)  # tenant ownership check
+    # Old versions carry the same content as the document itself, so the same
+    # grant list has to govern them or the ACL is trivially bypassed.
+    await _assert_can_read_document(db, doc, current_user, tenant_id)
     result = await db.execute(
         select(GovernanceDocumentVersion)
         .where(GovernanceDocumentVersion.document_id == doc_id)
@@ -555,6 +720,42 @@ async def delete_document(
             status_code=403,
             detail="Only the document's owner or a CISO/tenant admin can delete this document",
         )
+    # GovernanceDocument has no deleted_at to soft-delete into, so an issued
+    # document and every version behind it leave the database for good. Record
+    # what existed in the tamper-evident chain before it goes: the metadata in
+    # full, and each version by number, author and a sha256 of its text rather
+    # than the text itself — a document repository's history can run to
+    # megabytes, and the chain is not a content store.
+    versions = list((await db.execute(
+        select(GovernanceDocumentVersion)
+        .where(GovernanceDocumentVersion.document_id == doc.id)
+        .order_by(GovernanceDocumentVersion.version_number)
+    )).scalars().all())
+    try:
+        await chain_and_add(db, ActivityLog(
+            tenant_id=tenant_id, user_id=current_user.id, user_email=current_user.email,
+            action="delete", entity_type="governance_document", entity_id=doc.id,
+            entity_name=doc.title,
+            details={"deleted": {
+                "title": doc.title, "typology": doc.typology, "module": doc.module,
+                "entity": doc.entity, "access_level": doc.access_level,
+                "current_version": doc.current_version,
+                "created_by_id": doc.created_by_id,
+                "content_sha256": sha256_bytes((doc.content or "").encode("utf-8")),
+                "content_length": len(doc.content or ""),
+            }, "versions": [
+                {"version_number": v.version_number, "authored_by_id": v.authored_by_id,
+                 "change_summary": v.change_summary,
+                 "content_sha256": sha256_bytes((v.content or "").encode("utf-8")),
+                 "content_length": len(v.content or "")}
+                for v in versions
+            ]},
+            origin="api",
+        ))
+    except Exception:
+        # Log-and-continue: a chain failure must not leave the delete half-done.
+        pass
+
     # Remove dependent rows in the same transaction: the FKs carry no ON DELETE
     # cascade, so on FK-enforcing databases (PostgreSQL/Oracle/MSSQL) leaving them
     # would raise an IntegrityError, and on SQLite they would linger as orphans.
@@ -722,11 +923,13 @@ async def list_committees(
 async def create_committee(
     body: CommitteeIn,
     current_user: Annotated[User, Depends(require_feature("raci_governance"))],
+    _writer: Annotated[User, Depends(_GOVERNANCE_WRITERS)],
     tenant_id: Annotated[str, Depends(get_tenant_id)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
     if body.cadence not in _VALID_CADENCE:
         raise HTTPException(status_code=422, detail="cadence must be monthly, quarterly, annual, or ad_hoc")
+    await _assert_tenant_users(db, tenant_id, body.member_ids)
     committee = GovernanceCommittee(
         tenant_id=tenant_id, name=body.name, description=body.description, cadence=body.cadence,
         member_ids=body.member_ids, linked_policy_ids=body.linked_policy_ids,
@@ -744,6 +947,7 @@ async def update_committee(
     committee_id: str,
     body: CommitteeUpdate,
     current_user: Annotated[User, Depends(require_feature("raci_governance"))],
+    _writer: Annotated[User, Depends(_GOVERNANCE_WRITERS)],
     tenant_id: Annotated[str, Depends(get_tenant_id)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
@@ -755,6 +959,7 @@ async def update_committee(
         raise HTTPException(status_code=404, detail="Committee not found")
     if body.cadence is not None and body.cadence not in _VALID_CADENCE:
         raise HTTPException(status_code=422, detail="cadence must be monthly, quarterly, annual, or ad_hoc")
+    await _assert_tenant_users(db, tenant_id, body.member_ids)
     for f in ["name", "description", "cadence", "member_ids", "linked_policy_ids", "linked_document_ids", "next_meeting_date"]:
         v = getattr(body, f, None)
         if v is not None:
@@ -768,6 +973,7 @@ async def update_committee(
 async def delete_committee(
     committee_id: str,
     current_user: Annotated[User, Depends(require_feature("raci_governance"))],
+    _writer: Annotated[User, Depends(_GOVERNANCE_WRITERS)],
     tenant_id: Annotated[str, Depends(get_tenant_id)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
@@ -780,3 +986,145 @@ async def delete_committee(
     await db.delete(committee)
     await db.commit()
     return None
+
+
+# ---------------------------------------------------------------------------
+# Historical series (STB tender objectif 6 — « mise à jour mensuelle »)
+# ---------------------------------------------------------------------------
+@router.get("/trend")
+async def get_governance_trend(
+    db: Annotated[AsyncSession, Depends(get_db)],
+    # Billing half + access half, mirroring how endpoints/dashboards.py gates
+    # GET /dashboards/governance. This series is that dashboard's history, so
+    # it carries the same pair: a looser gate here would be a way around the
+    # restriction on the live tile. Objectif 6's clause is an exclusion
+    # (« réservé aux fonctions de direction »), hence require_roles_strict —
+    # deliberately excluding the tenant owner, which is the point of the clause.
+    #
+    # The plan gate is ``custom_dashboards`` rather than this module's usual
+    # ``raci_governance`` because what is being sold here is the dashboard
+    # history, not the RACI matrix; both are Elite, so no tenant's entitlement
+    # changes either way.
+    _plan: Annotated[User, Depends(require_feature("custom_dashboards"))],
+    _role: Annotated[User, Depends(require_roles_strict(UserRole.EXECUTIVE, UserRole.CISO))],
+    tenant_id: Annotated[str, Depends(get_tenant_id)],
+    months: int = Query(6, ge=1, le=24),
+):
+    """Monthly governance series — the « mise à jour mensuelle » of objectif 6.
+
+    One point per calendar month, each being the governance posture as of the
+    last daily snapshot written on or before that month's end
+    (app.services.trend_snapshot_scheduler). The breakdown mirrors
+    GET /dashboards/governance — policies by status, attestations by status,
+    committees — plus the document-repository counts, so the history and the
+    live dashboard are reading the same things rather than two similar-looking
+    but differently-defined numbers.
+
+    Fallback (``source: "intake_volume"``) while no snapshot exists yet: how
+    many policies and repository documents were *created* per month. That is a
+    different measurement from "how many existed", and it is labelled as such
+    instead of being passed off as the series proper.
+    """
+    buckets = month_buckets(months)
+
+    series = await snapshot_series(db, tenant_id, METRIC_GOVERNANCE, buckets)
+    if series is not None:
+        return {
+            "metric": METRIC_GOVERNANCE,
+            "months": months,
+            "series": series,
+            "source": "trend_snapshot_daily",
+            "note": (
+                "Governance artefacts (policies + repository documents) and their "
+                "status as of the latest daily snapshot on or before each month's end."
+            ),
+        }
+
+    # --- Fallback: intake volume from created_at -----------------------------
+    # Bucketed in Python rather than with func.strftime('%Y-%m', ...): strftime
+    # is SQLite-only and this application also targets PostgreSQL, Oracle and
+    # SQL Server (app/core/database.py).
+    #
+    # Both source tables already exist on this installation, but the query is
+    # still guarded: governance_documents is one of the tables create_all()
+    # builds at startup, and a 5xx here would not surface as an error — the SPA
+    # hard-redirects to /service-down on any 5xx, ejecting the user out of the
+    # application entirely. Same degrade-don't-500 rule the snapshot read
+    # follows, and the same one frameworks.py/compliance.py apply.
+    window_start = datetime(buckets[0][0], buckets[0][1], 1)
+    per_month: dict[str, dict[str, int]] = {}
+
+    def _bucket(rows, key_name: str) -> None:
+        for (created_at,) in rows:
+            if not created_at:
+                continue
+            key = f"{created_at.year:04d}-{created_at.month:02d}"
+            bucket = per_month.setdefault(key, {})
+            bucket[key_name] = bucket.get(key_name, 0) + 1
+
+    try:
+        _bucket((await db.execute(
+            select(Policy.created_at).where(
+                Policy.tenant_id == tenant_id,
+                Policy.created_at.isnot(None),
+                Policy.created_at >= window_start,
+            )
+        )).all(), "policies_created")
+        _bucket((await db.execute(
+            select(GovernanceDocument.created_at).where(
+                GovernanceDocument.tenant_id == tenant_id,
+                GovernanceDocument.created_at.isnot(None),
+                GovernanceDocument.created_at >= window_start,
+            )
+        )).all(), "documents_created")
+    except (OperationalError, ProgrammingError):
+        # Degrade, but do NOT answer with zeros. Emptying per_month here made
+        # every month read "0 policies, 0 documents created" — a fabricated
+        # figure presented as a measurement, when what actually happened is that
+        # the question could not be answered. Every total goes out as null and
+        # the source says so.
+        await db.rollback()
+        return {
+            "metric": METRIC_GOVERNANCE,
+            "months": months,
+            "series": unavailable_series(buckets),
+            "source": "unavailable",
+            "note": (
+                "Governance history could not be read: the underlying tables are "
+                "not available on this database yet (a backend restart creates "
+                "them). No figures are shown rather than zeros."
+            ),
+        }
+
+    fallback_series = []
+    for (yy, mm) in buckets:
+        key = f"{yy:04d}-{mm:02d}"
+        counts = per_month.get(key, {})
+        fallback_series.append({
+            "month": datetime(yy, mm, 1).strftime("%b"),
+            "period": key,
+            "as_of": None,
+            "total": sum(counts.values()),
+            "counts": {
+                "policies_created": counts.get("policies_created", 0),
+                "documents_created": counts.get("documents_created", 0),
+            },
+        })
+    return {
+        "metric": METRIC_GOVERNANCE,
+        "months": months,
+        "series": fallback_series,
+        "source": "intake_volume",
+        # Wording is deliberately "no snapshot is available" and not "none has
+        # been recorded yet": snapshot_series() returns None both when the
+        # history is genuinely empty AND when it could not be read (table not
+        # created until the next restart, or a transient SQLite lock under the
+        # 2 workers). Only the first of those is a fact about the register; the
+        # second is a fact about this request. Stating the first when the second
+        # happened is the same fabricated-figure problem as plotting a 0.
+        "note": (
+            "No point-in-time snapshot is available for this period — showing "
+            "governance artefacts created per month, not how many were in force "
+            "on that date."
+        ),
+    }

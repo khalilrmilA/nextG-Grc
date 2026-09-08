@@ -42,13 +42,41 @@ _RATE_LIMIT = 20
 _RATE_WINDOW = 600  # 10 minutes in seconds
 
 
-async def _check_rate_limit(ip: str) -> None:
+# ── Visitor-facing refusals ───────────────────────────────────────────────────
+# The AI failures on this route already answer in the visitor's language via
+# ai_provider.failure_message(); these three were the only sentences left in
+# English, and this is the widget on the public site of a francophone market.
+# Same shape as ai_locale.FAILURE_MESSAGES (kind -> lang -> text) and resolved
+# with the same normalize_language; kept here because those are AI-failure kinds
+# and these are not.
+_REFUSALS: dict[str, dict[str, str]] = {
+    "rate_limited": {
+        "en": "Too many requests. Please wait a few minutes before sending more messages.",
+        "fr": "Trop de messages. Veuillez patienter quelques minutes avant d'en envoyer d'autres.",
+        "ar": "عدد الرسائل كبير جدًا. يرجى الانتظار بضع دقائق قبل إرسال المزيد.",
+    },
+    "too_long": {
+        "en": "Conversation too long. Please start a new chat.",
+        "fr": "Conversation trop longue. Veuillez démarrer une nouvelle discussion.",
+        "ar": "المحادثة طويلة جدًا. يرجى بدء محادثة جديدة.",
+    },
+    "empty": {
+        "en": "No message to answer.",
+        "fr": "Aucun message auquel répondre.",
+        "ar": "لا توجد رسالة للرد عليها.",
+    },
+}
+
+
+def _refusal(kind: str, lang: str) -> str:
+    table = _REFUSALS[kind]
+    return table.get(normalize_language(lang) or "en") or table["en"]
+
+
+async def _check_rate_limit(ip: str, lang: str) -> None:
     hits = await shared_state.incr(f"ratelimit:public_chat:{ip}", 1, _RATE_WINDOW)
     if hits > _RATE_LIMIT:
-        raise HTTPException(
-            status_code=429,
-            detail="Too many requests. Please wait a few minutes before sending more messages.",
-        )
+        raise HTTPException(status_code=429, detail=_refusal("rate_limited", lang))
 
 
 # ── Schema ─────────────────────────────────────────────────────────────────────
@@ -120,17 +148,22 @@ async def public_support_chat(
     refusal rules (source code / credentials / API keys / internal architecture /
     off-topic), not by a keyword blocklist. Rate-limited to 20 req/10 min per IP.
     """
+    # Language for the refusals below: the visitor's own message is not available
+    # yet (and is empty in the 422 case), so this is the body field then the
+    # header — the same first two signals resolve_language uses.
+    err_lang = normalize_language(body.language) or header_lang
+
     # Rate limit by client IP
     client_ip = request.client.host if request.client else "unknown"
-    await _check_rate_limit(client_ip)
+    await _check_rate_limit(client_ip, err_lang)
 
     # Validate message count (max 40 messages to prevent abuse)
     if len(body.messages) > _MAX_INCOMING_MESSAGES:
-        raise HTTPException(status_code=400, detail="Conversation too long. Please start a new chat.")
+        raise HTTPException(status_code=400, detail=_refusal("too_long", err_lang))
 
     turns = _support_chat_turns(body.messages)
     if not turns:
-        raise HTTPException(status_code=422, detail="No message to answer.")
+        raise HTTPException(status_code=422, detail=_refusal("empty", err_lang))
 
     last_user = next((t["content"] for t in reversed(turns) if t["role"] == "user"), "")
     lang = normalize_language(body.language) or guess_language(last_user) or header_lang

@@ -1,4 +1,5 @@
 """Email sending service using aiosmtplib + Jinja2 templates."""
+import html
 import logging
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
@@ -13,6 +14,17 @@ logger = logging.getLogger(__name__)
 
 TEMPLATES_DIR = Path(__file__).parent.parent / "templates" / "email"
 _jinja_env = Environment(loader=FileSystemLoader(str(TEMPLATES_DIR)), autoescape=True)
+
+
+def _header_safe(value: str) -> str:
+    """Fold a header value onto one line.
+
+    A subject carrying a newline — a risk or policy title pasted out of a
+    document — makes Python's email library refuse the whole message as an
+    embedded-header attempt, and the except below turns that refusal into an
+    e-mail that is silently never sent while the in-app notification lands.
+    """
+    return " ".join(str(value or "").replace("\r", "\n").split("\n")).strip()
 
 
 async def send_email(
@@ -42,7 +54,7 @@ async def send_email(
         )
 
         msg = MIMEMultipart("alternative")
-        msg["Subject"] = subject
+        msg["Subject"] = _header_safe(subject)
         msg["From"] = settings.EMAIL_FROM
         msg["To"] = to_email
         if reply_to:
@@ -83,6 +95,13 @@ async def send_report_email(
 
     Returns True on success, False on failure (logs the error). Falls back to a
     [DEV EMAIL] log line when SMTP is not configured — never raises.
+
+    ``body_text`` is PLAIN text and is escaped before it is placed in the HTML
+    part. The covering text names the report, and a report name is an audit
+    title a tenant user typed — unlike :func:`send_email`, which renders through
+    an autoescaping Jinja environment, this function builds its markup by hand,
+    so an engagement titled ``<img src=x onerror=…>`` used to reach an external
+    recipient's mail client as live markup.
     """
     if not settings.SMTP_HOST:
         logger.warning("SMTP host not configured — report email not sent to %s", to_email)
@@ -93,13 +112,13 @@ async def send_report_email(
         from email.mime.application import MIMEApplication
 
         msg = MIMEMultipart("mixed")
-        msg["Subject"] = subject
+        msg["Subject"] = _header_safe(subject)
         msg["From"] = settings.EMAIL_FROM
         msg["To"] = to_email
-        msg.attach(MIMEText(f"<p>{body_text}</p>", "html"))
+        msg.attach(MIMEText(f"<p>{html.escape(str(body_text or ''))}</p>", "html"))
 
         part = MIMEApplication(pdf_bytes, _subtype="pdf")
-        part.add_header("Content-Disposition", "attachment", filename=filename)
+        part.add_header("Content-Disposition", "attachment", filename=_header_safe(filename))
         msg.attach(part)
 
         smtp_kwargs: dict = {
@@ -124,12 +143,27 @@ async def send_report_email(
 
 # ── Typed helpers for each notification type ─────────────────────────────────
 
-async def send_notification_email(*, to_email: str, subject: str, body: str, action_url: str | None = None) -> bool:
-    """Generic notification email — used by the async notification workers."""
+# The subject and body of a notification e-mail arrive already localised —
+# notification_generator.flush_email_outbox renders them through render_i18n in
+# the tenant's language. The call-to-action label was the one user-facing
+# string this service still wrote itself, so a French or Arabic e-mail carried
+# an English button. Same key/lang/fallback convention as the endpoints' own
+# _msg tables (vendors.py, regulatory.py, contract_collab.py).
+_OPEN_LABEL = {"en": "Open", "fr": "Ouvrir", "ar": "فتح"}
+
+
+async def send_notification_email(
+    *, to_email: str, subject: str, body: str, action_url: str | None = None, lang: str = "en"
+) -> bool:
+    """Generic notification email — used by the async notification workers.
+
+    ``lang`` defaults to "en", so a caller that does not pass one keeps exactly
+    the wording it had.
+    """
     context: dict = {"title": subject, "message": body}
     if action_url:
         context["action_url"] = action_url
-        context["action_label"] = "Open"
+        context["action_label"] = _OPEN_LABEL.get(lang, _OPEN_LABEL["en"])
     return await send_email(to_email=to_email, subject=subject, context=context)
 
 async def send_risk_alert(*, to_email: str, risk_title: str, severity: str, org: str, risk_url: str) -> bool:

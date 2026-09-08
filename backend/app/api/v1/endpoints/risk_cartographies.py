@@ -1,4 +1,5 @@
 """Risk Cartography — CISO-owned, independently-configured risk maps."""
+import asyncio
 from datetime import datetime, timezone
 from io import BytesIO
 
@@ -118,6 +119,26 @@ def _zone_color(score: float, risk_levels: list[dict]) -> str:
     return "#f3f4f6"
 
 
+def _in_scope(risk: Risk, definition: dict | None) -> bool:
+    """Whether a risk falls inside a cartography's scope filter.
+
+    Shared by the detail view and the list's per-card count, so the two cannot
+    disagree about which risks a cartography actually contains.
+    """
+    scope = (definition or {}).get("scope", {}) or {}
+    scope_type = scope.get("type", "all")
+    value = (scope.get("value") or "").strip().lower()
+    if not value:
+        return True
+    if scope_type == "control":
+        return any(str(c).lower() == value for c in (risk.linked_controls or []))
+    if scope_type == "category":
+        return (risk.risk_category or "").lower() == value
+    if scope_type == "tag":
+        return any(str(tag).lower() == value for tag in (risk.tags or []))
+    return True
+
+
 async def _resolve_risks(
     cartography: RiskCartography,
     db: AsyncSession,
@@ -132,30 +153,7 @@ async def _resolve_risks(
         )
     )
     all_risks = result.scalars().all()
-
-    # Apply scope filter from definition
-    defn = cartography.definition or {}
-    scope = defn.get("scope", {}) or {}
-    scope_type = scope.get("type", "all")
-    scope_value = (scope.get("value") or "").strip().lower()
-
-    if scope_type == "control" and scope_value:
-        risks = [
-            r for r in all_risks
-            if any(str(c).lower() == scope_value for c in (r.linked_controls or []))
-        ]
-    elif scope_type == "category" and scope_value:
-        risks = [
-            r for r in all_risks
-            if (r.risk_category or "").lower() == scope_value
-        ]
-    elif scope_type == "tag" and scope_value:
-        risks = [
-            r for r in all_risks
-            if any(str(tag).lower() == scope_value for tag in (r.tags or []))
-        ]
-    else:
-        risks = list(all_risks)
+    risks = [r for r in all_risks if _in_scope(r, cartography.definition)]
 
     overrides: dict = cartography.risk_positions or {}
     out = []
@@ -196,15 +194,17 @@ async def list_cartographies(
         .order_by(RiskCartography.created_at.desc())
     )).scalars().all()
 
-    # Count risks with coordinates for each cartography
-    risks_result = await db.execute(
+    # Risks with coordinates, fetched once; each card then counts what its own
+    # scope keeps. The count used to ignore the scope filter entirely, so a
+    # cartography scoped to one category or tag advertised the whole register on
+    # the list and a different number the moment it was opened.
+    plottable = list((await db.execute(
         select(Risk).where(
             Risk.tenant_id == tenant_id,
             Risk.likelihood.is_not(None),
             Risk.impact.is_not(None),
         )
-    )
-    risk_count = len(risks_result.scalars().all())
+    )).scalars().all())
 
     items = []
     for c in rows:
@@ -217,7 +217,7 @@ async def list_cartographies(
             definition=defn,
             grid_rows=defn.get("grid_rows", 5),
             grid_cols=defn.get("grid_cols", 5),
-            risk_count=risk_count,
+            risk_count=sum(1 for r in plottable if _in_scope(r, defn)),
             created_at=c.created_at,
             updated_at=c.updated_at,
         ))
@@ -575,7 +575,6 @@ def _build_cartography_pdf(
             Paragraph(r.severity or "—", st["RCBody"]),
             Paragraph("✏" if r.is_overridden else "—", st["RCBody"]),
         ])
-    risk_table_w = landscape(A4)[0] - 1.2 * inch - legend_table._width - 0.3 * inch  # type: ignore[attr-defined]
     risk_list_table = Table(
         risk_list_data,
         colWidths=[None, 0.7 * inch, 0.7 * inch, 0.5 * inch, 0.7 * inch, 0.6 * inch],
@@ -619,7 +618,11 @@ async def export_cartography_pdf(
     tenant_name = tenant.name if tenant else "Organisation"
 
     risks = await _resolve_risks(c, db, tenant_id)
-    pdf_buf = _build_cartography_pdf(c, risks, tenant_name)
+    # ReportLab is blocking CPU work — building it inline would stall every other
+    # request this worker is serving until the document is finished. The three
+    # attributes the builder reads off `c` are already loaded, so the thread
+    # never touches the session.
+    pdf_buf = await asyncio.to_thread(_build_cartography_pdf, c, risks, tenant_name)
 
     safe_name = "".join(ch if ch.isalnum() or ch in " _-" else "_" for ch in c.name)
     filename = f"cartography_{safe_name}_{datetime.now(timezone.utc).strftime('%Y%m%d')}.pdf"

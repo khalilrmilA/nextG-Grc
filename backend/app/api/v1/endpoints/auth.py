@@ -14,7 +14,6 @@ from app.core.security import (
     create_mfa_challenge_token,
     create_refresh_token,
     decode_token,
-    hash_password,
     hash_password_async,
     revoke_jti,
     verify_password,
@@ -28,7 +27,7 @@ from app.models.subscription import Subscription, SubscriptionTier, Subscription
 from app.models.password_reset import PasswordResetToken
 from app.core.config import settings
 from app.core.password_policy import validate_password, PasswordPolicyError
-from app.api.v1.dependencies import get_current_user
+from app.api.v1.dependencies import get_current_user, require_roles
 from datetime import datetime, timedelta, timezone
 import secrets
 
@@ -397,6 +396,11 @@ async def mfa_login(request: Request, body: MfaLoginRequest, db: AsyncSession = 
         raise HTTPException(status.HTTP_501_NOT_IMPLEMENTED, "MFA support is not installed on this server.")
     if not pyotp.totp.TOTP(device.secret).verify(body.code.strip(), valid_window=1):
         logger.info("login.mfa_fail email_hash=%s", email_hash)
+        # A wrong second factor is a failed authentication attempt and belongs in
+        # the login journal like any other. Without this, LoginEvent recorded
+        # nothing at all for second-factor brute force: the password step had
+        # already succeeded, so the only trace was an application log line.
+        await _journal_login(request, user.email, False, "mfa_bad_code", user)
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid MFA code")
     device.last_used_at = datetime.now(timezone.utc).replace(tzinfo=None)
     await revoke_jti(payload.get("jti"))  # single-use: this challenge can't be redeemed twice
@@ -643,6 +647,21 @@ async def get_profile(
     )
 
 
+# Despite the "/me" in their paths, both routes below rewrite TENANT-WIDE state
+# (Tenant.primary_framework_id / selected_framework_ids) for everyone in the
+# organisation. The identical mutation through PATCH /tenants/current has always
+# required CISO, while these were open to any authenticated user — an auditor or
+# a vendor manager could silently re-scope the whole compliance programme. Gated
+# to the roles the UI already exposes framework management to (the frontend's own
+# ROUTE_ROLES["/framework"]); require_roles auto-passes tenant_admin/super_admin,
+# and viewer/executive are write-blocked upstream in get_current_user.
+_FRAMEWORK_ADMIN_ROLES = (
+    UserRole.CISO,
+    UserRole.COMPLIANCE_MANAGER,
+    UserRole.POLICY_MANAGER,
+)
+
+
 class UpdateFrameworkRequest(BaseModel):
     primary_framework_id: str
 
@@ -655,13 +674,19 @@ class UpdateSelectedFrameworksRequest(BaseModel):
 @router.patch("/me/framework", response_model=UserProfileResponse)
 async def update_primary_framework(
     body: UpdateFrameworkRequest,
-    current_user: Annotated[User, Depends(get_current_user)],
+    current_user: Annotated[User, Depends(require_roles(*_FRAMEWORK_ADMIN_ROLES))],
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
     """Update the workspace primary framework for the current tenant."""
     from app.models.framework import Framework
-    # Verify the framework exists
-    fw_result = await db.execute(select(Framework).where(Framework.id == body.primary_framework_id))
+    # Verify the framework exists AND is visible to this tenant. The same rule
+    # frameworks.py applies everywhere: built-ins are shared, a custom framework
+    # belongs to one tenant. Checking existence alone let a tenant pin another
+    # organisation's private framework as its own primary.
+    fw_result = await db.execute(select(Framework).where(
+        Framework.id == body.primary_framework_id,
+        (Framework.is_builtin == True) | (Framework.tenant_id == current_user.tenant_id),  # noqa: E712
+    ))
     fw = fw_result.scalar_one_or_none()
     if not fw:
         raise HTTPException(status_code=404, detail="Framework not found")
@@ -697,6 +722,11 @@ async def update_primary_framework(
     assessment = a_result.scalar_one_or_none()
 
     accessible_modules = await get_accessible_modules(current_user.tenant_id, db)
+    # `roles` was left at its [] default here, so this response contradicted
+    # GET /auth/me for the same account — the SPA re-reads the profile from
+    # whichever call it made last. Same computation as /auth/me.
+    from app.services.authz import get_effective_roles
+    effective_roles = sorted(await get_effective_roles(current_user, db))
 
     return UserProfileResponse(
         id=current_user.id,
@@ -704,6 +734,7 @@ async def update_primary_framework(
         first_name=current_user.first_name,
         last_name=current_user.last_name,
         role=current_user.role,
+        roles=effective_roles,
         tenant_id=current_user.tenant_id,
         tenant_name=tenant.name,
         primary_framework_id=tenant.primary_framework_id,
@@ -717,10 +748,26 @@ async def update_primary_framework(
 @router.patch("/me/frameworks", response_model=UserProfileResponse)
 async def update_selected_frameworks(
     body: UpdateSelectedFrameworksRequest,
-    current_user: Annotated[User, Depends(get_current_user)],
+    current_user: Annotated[User, Depends(require_roles(*_FRAMEWORK_ADMIN_ROLES))],
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
     """Update the primary framework and full list of selected frameworks."""
+    # This route wrote the submitted ids straight through with no validation at
+    # all — unknown ids, and other tenants' private frameworks, both landed in
+    # the tenant's scope. Same visibility rule as /me/framework above.
+    from app.models.framework import Framework
+    requested = [
+        fid for fid in ([body.primary_framework_id] + list(body.selected_framework_ids)) if fid
+    ]
+    if requested:
+        visible = set((await db.execute(select(Framework.id).where(
+            Framework.id.in_(requested),
+            (Framework.is_builtin == True) | (Framework.tenant_id == current_user.tenant_id),  # noqa: E712
+        ))).scalars().all())
+        unknown = [fid for fid in dict.fromkeys(requested) if fid not in visible]
+        if unknown:
+            raise HTTPException(status_code=404, detail=f"Framework not found: {unknown[0]}")
+
     tenant_result = await db.execute(select(Tenant).where(Tenant.id == current_user.tenant_id))
     tenant = tenant_result.scalar_one_or_none()
     if not tenant:
@@ -754,6 +801,11 @@ async def update_selected_frameworks(
             primary_assessment_id = a.id
 
     accessible_modules = await get_accessible_modules(current_user.tenant_id, db)
+    # `roles` was left at its [] default here, so this response contradicted
+    # GET /auth/me for the same account — the SPA re-reads the profile from
+    # whichever call it made last. Same computation as /auth/me.
+    from app.services.authz import get_effective_roles
+    effective_roles = sorted(await get_effective_roles(current_user, db))
 
     return UserProfileResponse(
         id=current_user.id,
@@ -761,6 +813,7 @@ async def update_selected_frameworks(
         first_name=current_user.first_name,
         last_name=current_user.last_name,
         role=current_user.role,
+        roles=effective_roles,
         tenant_id=current_user.tenant_id,
         tenant_name=tenant.name,
         primary_framework_id=tenant.primary_framework_id,
@@ -789,6 +842,28 @@ async def refresh_token(request: Request, body: RefreshRequest, db: AsyncSession
         raise HTTPException(status_code=401, detail="User not found or inactive")
 
     token_data = {"sub": user.id, "tenant_id": user.tenant_id, "role": user.role}
+
+    # Carry the session id through the rotation. It used to be dropped here, so
+    # the first refresh (the SPA does one every 30 minutes) produced a token with
+    # no `sid` and get_current_user's revocation check silently stopped applying
+    # to it — "Revoke" in Active Sessions appeared to work and did nothing after
+    # that. A token that never carried a sid refreshes exactly as before.
+    sid = payload.get("sid")
+    if sid:
+        try:
+            from app.models.user_session import UserSession
+            sess = (await db.execute(
+                select(UserSession).where(UserSession.id == sid)
+            )).scalar_one_or_none()
+            if sess is not None and sess.revoked_at is not None:
+                # A revoked session must not be able to mint fresh credentials.
+                raise HTTPException(status_code=401, detail="Session revoked. Please sign in again.")
+        except HTTPException:
+            raise
+        except Exception:  # noqa: BLE001 — same fail-open rule as get_current_user
+            logger.warning("refresh: session check failed")
+        token_data["sid"] = sid
+
     return TokenResponse(
         access_token=create_access_token(token_data),
         refresh_token=create_refresh_token(token_data),
@@ -907,18 +982,51 @@ async def reset_password(request: Request, body: ResetPasswordRequest, db: Async
     user.failed_login_count = 0
     user.locked_until = None
     token.used_at = _utcnow()
+
+    # This is the account-recovery path, so every session opened with the old
+    # password has to stop working: otherwise whoever prompted the reset stays
+    # signed in on their own device after the owner has recovered the account.
+    # Safe to revoke all of them — the user is not signed in here, they are
+    # about to log in fresh. get_current_user rejects a revoked session's tokens.
+    from app.models.user_session import UserSession
+    open_sessions = (await db.execute(select(UserSession).where(
+        UserSession.user_id == user.id, UserSession.revoked_at.is_(None),
+    ))).scalars().all()
+    for sess in open_sessions:
+        sess.revoked_at = _utcnow()
+
     await db.commit()
-    logger.info("reset-password: password changed for user via token")
+    logger.info(
+        "reset-password: password changed via token; %d session(s) revoked", len(open_sessions),
+    )
     return None
 
 
 @router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
-async def logout(body: RefreshRequest):
-    """Revoke the supplied refresh token (best-effort)."""
+async def logout(body: RefreshRequest, db: AsyncSession = Depends(get_db)):
+    """Revoke the supplied refresh token AND close its session (best-effort)."""
     try:
         payload = await decode_token(body.refresh_token)
-        await revoke_jti(payload.get("jti"))
     except HTTPException:
         # Already invalid — nothing to revoke. Still return 204.
-        pass
+        return None
+    await revoke_jti(payload.get("jti"))
+
+    # Close the session the token belongs to. Revoking only the refresh jti left
+    # the still-valid access token working until it expired, and left the row in
+    # "Active Sessions" forever — on this database 186 of 187 session rows have
+    # never been revoked, one account showing 111 "active" sessions. Marking the
+    # session revoked is what makes get_current_user reject the access token too.
+    sid, user_id = payload.get("sid"), payload.get("sub")
+    if sid and user_id:
+        try:
+            from app.models.user_session import UserSession
+            sess = (await db.execute(select(UserSession).where(
+                UserSession.id == sid, UserSession.user_id == user_id,
+            ))).scalar_one_or_none()
+            if sess is not None and sess.revoked_at is None:
+                sess.revoked_at = _utcnow()
+                await db.commit()
+        except Exception:  # noqa: BLE001 — logout must never fail on the caller
+            logger.warning("logout: session close failed")
     return None

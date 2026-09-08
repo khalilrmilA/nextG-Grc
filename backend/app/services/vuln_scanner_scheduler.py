@@ -38,7 +38,9 @@ logger = logging.getLogger(__name__)
 POLL_SECONDS = 3600  # hourly poll — interval_hours is the finer-grained cadence
 
 
-async def _alert_sync_failure(db, conn, reason: str) -> None:
+async def _alert_sync_failure(
+    db, *, tenant_id: str, connector_id: str, name: str, tool: str, reason: str
+) -> None:
     """Raise an alert when an automated import fails.
 
     A scheduled sync that silently stops is worse than no sync: the
@@ -49,6 +51,11 @@ async def _alert_sync_failure(db, conn, reason: str) -> None:
 
     Best-effort — alerting must never break the sync loop that is already
     handling a failure.
+
+    Takes the connector's fields rather than the ORM object: the caller may have
+    rolled the session back before getting here, which expires every loaded
+    instance, and re-reading an expired attribute from an AsyncSession outside a
+    greenlet raises instead of alerting.
     """
     try:
         from app.models.notification import NotificationType
@@ -57,25 +64,36 @@ async def _alert_sync_failure(db, conn, reason: str) -> None:
         )
 
         detail = (reason or "unknown error").strip()[:300]
-        for user in await get_recipients_for_tenant(db, conn.tenant_id):
+        for user in await get_recipients_for_tenant(db, tenant_id):
             await create_notification(
                 db,
                 user=user,
                 notif_type=NotificationType.SYSTEM,
-                title=f"Vulnerability scan import failed: {conn.name}",
+                title=f"Vulnerability scan import failed: {name}",
                 message=(
-                    f"The scheduled import from {conn.tool} connector '{conn.name}' did not "
+                    f"The scheduled import from {tool} connector '{name}' did not "
                     f"complete: {detail}. The vulnerability register has not been refreshed "
                     f"from this tool — check the connector and re-run the sync."
                 ),
-                entity_id=conn.id,
+                entity_id=connector_id,
                 entity_type="scanner_connector",
                 link="/vulnerabilities",
                 severity="high",
+                # The stored strings stay the fallback and the e-mail body; the
+                # client renders the key triple in the reader's language (same
+                # shape as audits.py's _notify). The connector name, the tool and
+                # the tool's own error text are data, so they stay as they are.
+                title_key="notifications.scan_import_failed.title",
+                message_key="notifications.scan_import_failed.message",
+                params={"name": name, "tool": tool, "detail": detail},
             )
         await db.commit()
-    except Exception:  # noqa: BLE001
-        logger.warning("could not raise a sync-failure alert for connector %s", conn.id)
+    except Exception as exc:  # noqa: BLE001
+        # With the reason: an alert that cannot be raised is the second silent
+        # failure in a row, and "could not raise" alone says nothing about why.
+        logger.warning(
+            "could not raise a sync-failure alert for connector %s: %s", connector_id, exc
+        )
 
 
 async def _due_connectors(db: AsyncSession) -> list[ScannerConnector]:
@@ -104,11 +122,15 @@ async def run_due_syncs(db: AsyncSession) -> dict:
     """Sync every scanner connector whose schedule is due, claiming each
     connector atomically so a concurrent worker's tick can't double-sync it."""
     due = await _due_connectors(db)
+    # The queue is plain values, not ORM instances: a failure below rolls the
+    # session back, which expires every loaded instance, and reading an expired
+    # attribute from an AsyncSession outside a greenlet raises — so one broken
+    # connector would take out every connector queued behind it.
+    queue = [(conn.id, conn.last_sync_at) for conn in due]
 
     synced = 0
     failed = 0
-    for conn in due:
-        prev_last_sync = conn.last_sync_at
+    for conn_id, prev_last_sync in queue:
         claim_stamp = datetime.utcnow()
         # Optimistic claim: only the runner whose UPDATE still matches the old
         # last_sync_at wins; everyone else gets rowcount 0 and skips this tick.
@@ -116,25 +138,47 @@ async def run_due_syncs(db: AsyncSession) -> dict:
         # completion time once the pull finishes.
         claim = await db.execute(
             update(ScannerConnector)
-            .where(ScannerConnector.id == conn.id, ScannerConnector.last_sync_at == prev_last_sync)
+            .where(ScannerConnector.id == conn_id, ScannerConnector.last_sync_at == prev_last_sync)
             .values(last_sync_at=claim_stamp)
         )
         await db.commit()
         if claim.rowcount != 1:
             continue
 
+        conn = await db.get(ScannerConnector, conn_id)
+        if conn is None:   # deleted between the listing and the claim
+            continue
         await db.refresh(conn)
+        # Identity read out before the sync: the failure path below rolls the
+        # session back, which expires the instance, and the alert still has to
+        # be able to say which connector broke.
+        ident = {
+            "tenant_id": conn.tenant_id, "connector_id": conn.id,
+            "name": conn.name, "tool": conn.tool,
+        }
         try:
             journal = await sync_connector(db, conn, created_by_id=None)
             if journal.status == SCAN_STATUS_FAILED:
                 failed += 1
-                await _alert_sync_failure(db, conn, journal.error or "the scan tool reported a failure")
+                await _alert_sync_failure(
+                    db, reason=journal.error or "the scan tool reported a failure", **ident
+                )
             else:
                 synced += 1
         except Exception as exc:  # noqa: BLE001 — sync_connector shouldn't raise, but never kill the loop
-            logger.error("Vuln scanner scheduler: sync failed for connector %s (%s): %s", conn.id, conn.name, exc)
+            logger.exception(
+                "Vuln scanner scheduler: sync failed for connector %s (%s): %s",
+                ident["connector_id"], ident["name"], exc,
+            )
             failed += 1
-            await _alert_sync_failure(db, conn, str(exc))
+            # Rollback first. sync_connector only journals the failures it
+            # catches itself; anything escaping it (an ingest error, a locked
+            # database) leaves this session mid-transaction, and every later
+            # statement on it raises — which silently swallowed the alert AND
+            # aborted the claim UPDATE for every remaining due connector, tick
+            # after tick.
+            await db.rollback()
+            await _alert_sync_failure(db, reason=str(exc), **ident)
 
     return {
         "due": len(due), "synced": synced, "failed": failed,
@@ -165,5 +209,5 @@ async def start_vuln_scanner_scheduler() -> None:
         except asyncio.CancelledError:
             raise
         except Exception as exc:  # noqa: BLE001 — never let the loop die
-            logger.error("Vuln scanner scheduler tick failed: %s", exc)
+            logger.exception("Vuln scanner scheduler tick failed: %s", exc)
         await asyncio.sleep(POLL_SECONDS)

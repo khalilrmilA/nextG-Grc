@@ -12,17 +12,24 @@ import re
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Annotated
 
 from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, Query, UploadFile, status
 from pydantic import BaseModel
 from sqlalchemy import func, or_, select, update as sa_update
+from sqlalchemy.exc import OperationalError, ProgrammingError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.v1.dependencies.auth import get_current_user, get_tenant_id, require_roles
 from app.api.v1.dependencies.pagination import PaginationParams
 from app.core.config import settings
 from app.core.database import AsyncSessionLocal, get_db
-from app.core.security_utils import verify_file_signature, assert_safe_upload_name
+from app.core.security_utils import (
+    assert_assets_in_tenant,
+    assert_safe_upload_name,
+    assert_user_in_tenant,
+    verify_file_signature,
+)
 from app.services import file_integrity
 from app.models.compliance import (
     AssessmentStatus,
@@ -38,8 +45,13 @@ from app.models.framework import ControlRequirement, Framework, FrameworkControl
 from app.models.mandatory_document import MandatoryDocument
 from app.models.tenant import Tenant
 from app.models.action_item import ActionItem, ActionItemPriority, ActionItemStatus
+from app.models.action_item_attachment import ActionItemAttachment
+from app.models.activity_log import ActivityLog
+from app.models.compliance_scale import ComplianceScale
+from app.models.org_unit import BusinessProcess, OrgEntity
 from app.models.user import User, UserRole
 from app.services import ai_chunking, ai_prompts, ai_provider
+from app.services.activity_chain import chain_and_add
 from app.services.ai_locale import get_request_language, normalize_language
 from app.services.ai_structured import ai_structured, coerce_shape, extract_json, validate_against
 
@@ -53,10 +65,48 @@ class AssessmentCreate(BaseModel):
     name: str
     description: str | None = None
     scope_description: str | None = None
+    # STB objectif 2 — « le niveau de conformité DES PROCESSUS, DÉPARTEMENTS OU
+    # SYSTÈMES ». Omitting all four keeps the historical organisation-wide
+    # behaviour ("tenant"), which is what every pre-existing assessment is.
+    scope_type: str = "tenant"
+    org_entity_id: str | None = None
+    business_process_id: str | None = None
+    in_scope_assets: list[str] | None = None
+    # « Grille d'évaluation personnalisable » — null keeps the legacy ControlStatus
+    # enum and the legacy score formula.
+    scale_id: str | None = None
+
+
+class AssessmentUpdate(BaseModel):
+    """PATCH body. Every field is optional; an omitted field is left untouched.
+
+    This endpoint did not exist, which is half the reason a tenant was locked to
+    one live assessment per framework forever: nothing could rename one, re-scope
+    it, or move it to ARCHIVED (no writer of AssessmentStatus.ARCHIVED existed
+    anywhere in the backend).
+    """
+    name: str | None = None
+    description: str | None = None
+    scope_description: str | None = None
+    scope_type: str | None = None
+    org_entity_id: str | None = None
+    business_process_id: str | None = None
+    in_scope_assets: list[str] | None = None
+    scale_id: str | None = None
+    status: AssessmentStatus | None = None
+    lead_assessor_id: str | None = None
+    assessment_start: str | None = None
+    assessment_end: str | None = None
+    next_review_date: str | None = None
 
 
 class ControlAssessmentUpdate(BaseModel):
     status: ControlStatus | None = None
+    # A level key of the assessment's ComplianceScale. Takes precedence over
+    # `status`, which keeps carrying the nearest legacy enum value so every
+    # existing query, export and dashboard keeps working untouched.
+    status_key: str | None = None
+    owner_id: str | None = None
     notes: str | None = None
     implementation_notes: str | None = None
     not_applicable_justification: str | None = None
@@ -108,9 +158,16 @@ class ControlAssessmentResponse(BaseModel):
     control_category: str | None = None
     control_description: str | None = None
     status: ControlStatus
+    status_key: str | None = None
     notes: str | None = None
     implementation_notes: str | None = None
     not_applicable_justification: str | None = None
+    # True when the control sits on "not applicable" with no justification on
+    # record — an auditor always asks why a requirement was excluded, so the UI
+    # has to be able to flag it.
+    requires_justification: bool = False
+    owner_id: str | None = None
+    owner_name: str | None = None
     ai_confidence: float | None = None
     cross_framework_coverage: list[dict] = []
     is_mandatory: bool = False
@@ -147,6 +204,18 @@ class AssessmentDetailResponse(BaseModel):
     status: str
     compliance_score: float | None = None
     scope_description: str | None = None
+    # Perimeter (STB objectif 2). scope_type is "tenant" on every legacy row.
+    scope_type: str = "tenant"
+    org_entity_id: str | None = None
+    org_entity_name: str | None = None
+    business_process_id: str | None = None
+    business_process_name: str | None = None
+    in_scope_assets: list[str] = []
+    # The customisable grid, resolved so the UI can render the tenant's own
+    # level labels/colours instead of the hard-coded English enum.
+    scale_id: str | None = None
+    scale_name: str | None = None
+    scale_levels: list[dict] = []
     created_at: datetime
     updated_at: datetime
     uploaded_documents: list[UploadedDocumentResponse] = []
@@ -166,6 +235,12 @@ class AssessmentListItem(BaseModel):
     status: str
     compliance_score: float | None = None
     document_count: int = 0
+    scope_type: str = "tenant"
+    org_entity_id: str | None = None
+    org_entity_name: str | None = None
+    business_process_id: str | None = None
+    business_process_name: str | None = None
+    scale_id: str | None = None
     created_at: datetime
 
     model_config = {"from_attributes": True}
@@ -261,6 +336,13 @@ _L10N: dict[str, dict[str, str]] = {
         "clause_partial": "AI clause detection could not process {n} of {total} part(s) of this document; results may be incomplete.",
         "locate_failed": ("AI analysis could not search every part of the uploaded documents for evidence (a "
                           "retrieval step failed); the previous results were kept. Retry the analysis."),
+        "gap_manual": "Manual evaluation: \"{title}\" ({control_id}) was assessed as not compliant.",
+        "closed_by_action": ("Requirement closed on {date}: the action \"{title}\" that remediated it was "
+                             "completed."),
+        "reopened_by_action": ("Requirement re-opened on {date}: the action \"{title}\" that remediated it was "
+                               "re-opened."),
+        "plan_orphaned": ("The non-conformity this action addressed was closed by the analysis of {date}; the "
+                          "action was cancelled rather than deleted so its history remains."),
     },
     "fr": {
         "no_text": ("Aucun texte n'a pu être extrait des documents téléversés. Les PDF scannés nécessitent une OCR "
@@ -287,6 +369,11 @@ _L10N: dict[str, dict[str, str]] = {
         "locate_failed": ("L'analyse IA n'a pas pu rechercher des preuves dans toutes les parties des documents "
                           "téléversés (une étape de recherche a échoué) ; les résultats précédents ont été conservés. "
                           "Relancez l'analyse."),
+        "gap_manual": "Évaluation manuelle : « {title} » ({control_id}) a été jugée non conforme.",
+        "closed_by_action": ("Exigence clôturée le {date} : l'action « {title} » qui la corrigeait a été terminée."),
+        "reopened_by_action": ("Exigence rouverte le {date} : l'action « {title} » qui la corrigeait a été rouverte."),
+        "plan_orphaned": ("La non-conformité traitée par cette action a été levée par l'analyse du {date} ; "
+                          "l'action a été annulée plutôt que supprimée afin de conserver son historique."),
     },
     "ar": {
         "no_text": ("تعذر استخراج أي نص من المستندات المرفوعة. تحتاج ملفات PDF الممسوحة ضوئيًا إلى التعرف الضوئي على "
@@ -310,6 +397,11 @@ _L10N: dict[str, dict[str, str]] = {
         "clause_partial": "تعذر على اكتشاف البنود بالذكاء الاصطناعي معالجة {n} من أصل {total} جزءًا من هذا المستند؛ قد تكون النتائج غير مكتملة.",
         "locate_failed": ("تعذر على تحليل الذكاء الاصطناعي البحث عن الأدلة في جميع أجزاء المستندات المرفوعة (فشلت "
                           "خطوة استرجاع)؛ تم الاحتفاظ بالنتائج السابقة. أعد تشغيل التحليل."),
+        "gap_manual": "تقييم يدوي: تم اعتبار \"{title}\" ({control_id}) غير مطابق.",
+        "closed_by_action": "تم إغلاق المتطلب في {date}: اكتمل الإجراء \"{title}\" الذي عالجه.",
+        "reopened_by_action": "أُعيد فتح المتطلب في {date}: أُعيد فتح الإجراء \"{title}\" الذي عالجه.",
+        "plan_orphaned": ("تمت معالجة عدم المطابقة التي يعالجها هذا الإجراء في تحليل {date}؛ تم إلغاء الإجراء بدلاً "
+                          "من حذفه للحفاظ على سجله."),
     },
 }
 
@@ -561,6 +653,531 @@ def _gap_priority(severity: str, is_blocker: bool) -> int:
     if severity == "medium":
         return 50
     return 30
+
+
+# ─── STB objectif 2/3: perimeter, customisable grid, gap → action-plan loop ───
+# Three things this module never had, and the tender is built on all three:
+#
+#   * a PERIMETER — « évaluer le niveau de conformité DES PROCESSUS, DÉPARTEMENTS
+#     OU SYSTÈMES » — instead of one implicit organisation-wide run per framework;
+#   * a CUSTOMISABLE GRID (ComplianceScale) driving both the status vocabulary and
+#     the score, instead of a hard-coded enum and a hard-coded formula;
+#   * WRITERS for ComplianceGap.is_resolved. There were none anywhere in the
+#     backend, so all 625 production gaps were permanently open, nothing a user
+#     did could ever close one, and the compliance score was frozen the moment the
+#     AI had run.
+#
+# Everything below degrades to the exact previous behaviour when the new columns
+# are null — which is what all 51 live assessments are.
+
+SCOPE_TYPES = ("tenant", "org_entity", "business_process", "assets")
+
+#: The two legacy statuses that have always produced a ComplianceGap in the AI
+#: path; used when the assessment is graded on the enum rather than on a scale.
+_LEGACY_GAP_STATUSES = (ControlStatus.NOT_IMPLEMENTED, ControlStatus.PARTIALLY_IMPLEMENTED)
+
+#: ``file_integrity.entity_type`` is a free string. A dedicated value keeps
+#: action-plan attachments out of the evidence integrity report while giving them
+#: the same version history, checksum and recovery path as evidence.
+_ACTION_ATTACHMENT = "action_item_attachment"
+
+#: « actions correctives OU PRÉVENTIVES » — the distinction objectif 3 is built on.
+ACTION_TYPES = ("corrective", "preventive")
+#: A preventive action is typically recurring ("revue trimestrielle des habilitations").
+ACTION_RECURRENCES = ("monthly", "quarterly", "semiannual", "annual")
+
+
+# ── Perimeter ────────────────────────────────────────────────────────────────
+
+async def _validate_scope(
+    db: AsyncSession,
+    tenant_id: str,
+    scope_type: str,
+    org_entity_id: str | None,
+    business_process_id: str | None,
+    in_scope_assets: list[str] | None,
+) -> None:
+    """Reject a perimeter that does not exist or belongs to another tenant.
+
+    Both id columns are plain foreign keys on a SQLite database with foreign-key
+    enforcement off, so without this an assessment could be pointed at another
+    bank's department and read its name back out of the detail response.
+    """
+    if scope_type not in SCOPE_TYPES:
+        raise HTTPException(status_code=422, detail=f"scope_type must be one of {list(SCOPE_TYPES)}")
+
+    if org_entity_id:
+        entity = (await db.execute(
+            select(OrgEntity).where(OrgEntity.id == org_entity_id, OrgEntity.tenant_id == tenant_id)
+        )).scalar_one_or_none()
+        if entity is None:
+            raise HTTPException(status_code=422, detail="org_entity_id does not exist in this tenant")
+    if business_process_id:
+        proc = (await db.execute(
+            select(BusinessProcess).where(
+                BusinessProcess.id == business_process_id,
+                BusinessProcess.tenant_id == tenant_id,
+            )
+        )).scalar_one_or_none()
+        if proc is None:
+            raise HTTPException(status_code=422, detail="business_process_id does not exist in this tenant")
+    if in_scope_assets:
+        await assert_assets_in_tenant(db, in_scope_assets, tenant_id, field_name="in_scope_assets")
+
+    # The perimeter must actually carry the thing it claims to scope, otherwise
+    # « conformité de la DSI » would be stored indistinguishably from an
+    # organisation-wide run and the coverage endpoints below would report nothing.
+    if scope_type == "org_entity" and not org_entity_id:
+        raise HTTPException(status_code=422, detail="org_entity_id is required when scope_type is 'org_entity'")
+    if scope_type == "business_process" and not business_process_id:
+        raise HTTPException(
+            status_code=422, detail="business_process_id is required when scope_type is 'business_process'")
+    if scope_type == "assets" and not in_scope_assets:
+        raise HTTPException(
+            status_code=422, detail="in_scope_assets must name at least one asset when scope_type is 'assets'")
+
+
+def _normalize_scope(
+    scope_type: str,
+    org_entity_id: str | None,
+    business_process_id: str | None,
+) -> tuple[str | None, str | None]:
+    """Drop the perimeter ids that do not belong to the declared ``scope_type``.
+
+    ``scope_type`` names WHICH of the three nouns an assessment covers and the
+    matching id column carries it, so an id left over from another scope is not
+    merely untidy: ``coverage/by-entity`` groups on ``org_entity_id`` alone, so an
+    organisation-wide assessment that still carried a stale ``org_entity_id``
+    would be reported as that department's conformity — « la DSI est à 62% »
+    computed from a group-wide run. Refusing the extra id would break a caller
+    that simply sends its whole form back; clearing it cannot.
+    """
+    return (
+        org_entity_id if scope_type == "org_entity" else None,
+        business_process_id if scope_type == "business_process" else None,
+    )
+
+
+def _scope_key(assessment_or_body) -> tuple:
+    """The identity of a perimeter, used as the de-duplication key.
+
+    The create handler used to de-duplicate on (tenant, framework) alone and hand
+    back the existing row, so a bank could never run "ISO 27001 sur la DSI"
+    alongside "ISO 27001 sur la filière monétique" — one live assessment per
+    framework, forever. Widening the key to the perimeter is what unlocks that,
+    while an organisation-wide re-create still returns the existing row exactly
+    as before.
+
+    For a SYSTEMS perimeter the set of assets IS the perimeter: without it in the
+    key, "ISO 27001 sur le SI monétique" and "ISO 27001 sur le core banking"
+    collapse into one row and « ou systèmes » is no more expressible than it was
+    before the column existed. It is deliberately absent from the key for every
+    other scope_type, where in_scope_assets is a free-form scope note rather than
+    the perimeter's identity.
+    """
+    scope_type = getattr(assessment_or_body, "scope_type", None) or "tenant"
+    assets: frozenset | None = None
+    if scope_type == "assets":
+        assets = frozenset(str(a) for a in (getattr(assessment_or_body, "in_scope_assets", None) or []))
+    return (
+        getattr(assessment_or_body, "framework_id", None),
+        scope_type,
+        getattr(assessment_or_body, "org_entity_id", None),
+        getattr(assessment_or_body, "business_process_id", None),
+        assets,
+    )
+
+
+async def _scope_names(db: AsyncSession, assessments: list, tenant_id: str) -> tuple[dict, dict]:
+    """(org entity id -> name, business process id -> name) for a set of assessments,
+    in two queries rather than two per row.
+
+    Tenant-filtered even though the ids were validated on the way in: these names
+    are echoed straight back in the API response, and a row that predates the
+    validation (or was written by another path) must not turn this into a way to
+    read another bank's org chart one id at a time.
+    """
+    entity_ids = {a.org_entity_id for a in assessments if getattr(a, "org_entity_id", None)}
+    process_ids = {a.business_process_id for a in assessments if getattr(a, "business_process_id", None)}
+    entities: dict[str, str] = {}
+    processes: dict[str, str] = {}
+    if entity_ids:
+        entities = {
+            e.id: e.name for e in (await db.execute(
+                select(OrgEntity).where(OrgEntity.id.in_(entity_ids), OrgEntity.tenant_id == tenant_id)
+            )).scalars().all()
+        }
+    if process_ids:
+        processes = {
+            p.id: p.name for p in (await db.execute(
+                select(BusinessProcess).where(
+                    BusinessProcess.id.in_(process_ids), BusinessProcess.tenant_id == tenant_id
+                )
+            )).scalars().all()
+        }
+    return entities, processes
+
+
+# ── Customisable grid (« grille d'évaluation personnalisable ») ──────────────
+
+def _scale_levels(scale: ComplianceScale | None) -> list[dict]:
+    """The level dicts of a scale, defensively filtered — ``levels`` is free JSON."""
+    if scale is None:
+        return []
+    return [lv for lv in (scale.levels or []) if isinstance(lv, dict) and lv.get("key")]
+
+
+async def _load_scale(db: AsyncSession, assessment: ComplianceAssessment) -> ComplianceScale | None:
+    """The grid an assessment is graded on, or None for the legacy enum.
+
+    Queried ONLY when scale_id is set. compliance_scales is a brand-new table and
+    every existing assessment has a null scale_id, so the legacy path never
+    touches it — which also means this file keeps working on a server whose
+    create_all() has not run yet.
+    """
+    if not getattr(assessment, "scale_id", None):
+        return None
+    try:
+        return (await db.execute(
+            select(ComplianceScale).where(ComplianceScale.id == assessment.scale_id)
+        )).scalar_one_or_none()
+    except (OperationalError, ProgrammingError):
+        # compliance_scales is created by create_all() at the next restart. An
+        # assessment that already names a scale must fall back to the legacy enum
+        # rather than 500 the whole screen — client.ts hard-redirects the SPA to
+        # /service-down on any 5xx. Same tolerance frameworks.py gives its own new
+        # tables.
+        logger.debug("compliance.scale.unavailable assessment=%s", getattr(assessment, "id", None))
+        return None
+
+
+async def _resolve_scale(db: AsyncSession, tenant_id: str, scale_id: str) -> ComplianceScale:
+    """Validate a scale a caller is attaching: built-in rows are shared and
+    read-only, exactly like built-in frameworks and risk matrices; a tenant may
+    also own its own."""
+    try:
+        scale = (await db.execute(
+            select(ComplianceScale).where(
+                ComplianceScale.id == scale_id,
+                (ComplianceScale.is_builtin == True) | (ComplianceScale.tenant_id == tenant_id),  # noqa: E712
+            )
+        )).scalar_one_or_none()
+    except (OperationalError, ProgrammingError):
+        # The grid table itself is absent. That is an operator step (restart, then
+        # seed the built-in scale), not a malformed request, and saying so is the
+        # difference between a 5xx that bounces the SPA to /service-down and a
+        # message somebody can act on.
+        raise HTTPException(
+            status_code=424,
+            detail="Evaluation grids are not available until the server has been restarted "
+                   "once (compliance_scales is created at startup).",
+        )
+    if scale is None:
+        raise HTTPException(status_code=422, detail="scale_id does not exist or is not available to this tenant")
+    if not _scale_levels(scale):
+        raise HTTPException(status_code=422, detail="scale_id points at a scale that defines no levels")
+    return scale
+
+
+def _level_by_key(scale: ComplianceScale | None, key: str | None) -> dict | None:
+    if not key:
+        return None
+    for level in _scale_levels(scale):
+        if level.get("key") == key:
+            return level
+    return None
+
+
+def _level_for_status(scale: ComplianceScale | None, status: ControlStatus | None) -> dict | None:
+    """The level whose ``legacy_status`` matches an enum value — the bridge that
+    lets a row written before a scale was attached still score under it."""
+    if status is None:
+        return None
+    wanted = getattr(status, "value", status)
+    for level in _scale_levels(scale):
+        if level.get("legacy_status") == wanted:
+            return level
+    return None
+
+
+def _level_for_ca(scale: ComplianceScale | None, ca: ControlAssessment) -> dict | None:
+    """Where a control assessment sits on the grid: its own status_key when it has
+    one, else the level matching its legacy enum."""
+    return _level_by_key(scale, getattr(ca, "status_key", None)) or _level_for_status(scale, ca.status)
+
+
+def _status_key_for(scale: ComplianceScale | None, status: ControlStatus | None) -> str | None:
+    level = _level_for_status(scale, status)
+    return level.get("key") if level else None
+
+
+def _compute_score(cas: list, scale: ComplianceScale | None, total: int | None = None) -> float:
+    """The assessment's compliance percentage.
+
+    With a scale: the mean of the levels' weights, levels whose weight is null
+    (« non applicable ») dropped from the denominator — so a five-level maturity
+    grid scores correctly without this formula changing at all.
+
+    Without one: the historical ``(implemented + 0.5 × partial) / scoreable``,
+    kept byte-for-byte so all 51 live assessments keep the score they show today.
+    ``total`` exists because the AI path divides by the framework's control count
+    while the manual path divides by the number of assessed rows.
+
+    The two branches must agree on WHAT IS IN THE DENOMINATOR, or attaching a grid
+    silently rewrites every score. Only « non applicable » is ever dropped: a row
+    the grid has no level for (NOT_STARTED / IN_PROGRESS — the shipped grid defines
+    a level for neither) scores zero and STAYS in the denominator, exactly as the
+    legacy formula counts it, and an assessment with 10 conforme and 90 unassessed
+    requirements therefore reads 10%, not 100%. Likewise ``total`` applies to both
+    branches, so the AI path keeps dividing by the framework's control count and
+    controls it never scored at all are not quietly excused.
+    """
+    if scale is not None and _scale_levels(scale):
+        weights: list[float] = []
+        dropped = 0  # « non applicable » — out of the denominator, like NOT_APPLICABLE
+        for ca in cas:
+            level = _level_for_ca(scale, ca)
+            if level is None:
+                if ca.status == ControlStatus.NOT_APPLICABLE:
+                    dropped += 1
+                else:
+                    weights.append(0.0)
+                continue
+            raw = level.get("weight")
+            if raw is None:
+                dropped += 1
+                continue
+            try:
+                weights.append(float(raw))
+            except (TypeError, ValueError):
+                weights.append(0.0)
+        denominator = len(weights) if total is None else max(len(weights), total - dropped)
+        return round(sum(weights) / denominator * 100, 1) if denominator > 0 else 0.0
+
+    implemented = sum(1 for c in cas if c.status == ControlStatus.IMPLEMENTED)
+    partial = sum(1 for c in cas if c.status == ControlStatus.PARTIALLY_IMPLEMENTED)
+    not_applicable = sum(1 for c in cas if c.status == ControlStatus.NOT_APPLICABLE)
+    denominator = (len(cas) if total is None else total) - not_applicable
+    return round((implemented + partial * 0.5) / denominator * 100, 1) if denominator > 0 else 0.0
+
+
+def _is_scoreable(ca: ControlAssessment, scale: ComplianceScale | None) -> bool:
+    """Does this row count towards the percentage at all?
+
+    With a grid, a level whose weight is null (« non applicable ») does not; without
+    one, ControlStatus.NOT_APPLICABLE does not — the two have always been the same
+    rule, only expressed differently.
+    """
+    level = _level_for_ca(scale, ca)
+    if level is not None:
+        return level.get("weight") is not None
+    return ca.status != ControlStatus.NOT_APPLICABLE
+
+
+def _rescore(assessment: ComplianceAssessment, cas: list, scale: ComplianceScale | None) -> None:
+    """Recompute the assessment's score, leaving it untouched when nothing is
+    scoreable. An assessment whose every requirement is « non applicable » has no
+    percentage, and writing 0 there would read as total failure rather than as
+    "not applicable" — which is exactly what the previous code avoided with its
+    ``if scoreable > 0`` guard."""
+    if any(_is_scoreable(ca, scale) for ca in cas):
+        assessment.compliance_score = _compute_score(cas, scale)
+
+
+def _is_gap_level(
+    scale: ComplianceScale | None, status: ControlStatus | None, status_key: str | None = None,
+) -> bool:
+    """Does the level this control sits on open a non-conformité?
+
+    With a scale it is the level's own ``counts_as_gap`` flag — the hook the
+    tender's « génération automatique de plans d'action pour les non-conformités »
+    hangs on. Without one it is the two legacy statuses the AI path has always
+    treated as gaps.
+    """
+    level = _level_by_key(scale, status_key) or _level_for_status(scale, status)
+    if level is not None:
+        return bool(level.get("counts_as_gap"))
+    return status in _LEGACY_GAP_STATUSES
+
+
+def _closure_level_key(scale: ComplianceScale | None) -> str | None:
+    """The « conforme » level of a grid: the heaviest level that is not a gap."""
+    candidates = [
+        lv for lv in _scale_levels(scale)
+        if not lv.get("counts_as_gap") and lv.get("weight") is not None
+    ]
+    if not candidates:
+        return None
+    return max(candidates, key=lambda lv: float(lv.get("weight") or 0)).get("key")
+
+
+def _regression_level_key(scale: ComplianceScale | None) -> str | None:
+    """The « partiellement conforme » level: the heaviest level that IS a gap —
+    where a requirement lands when a closed action is re-opened."""
+    candidates = [lv for lv in _scale_levels(scale) if lv.get("counts_as_gap")]
+    if not candidates:
+        return None
+    return max(candidates, key=lambda lv: float(lv.get("weight") or 0)).get("key")
+
+
+def _manual_gap_severity(ctrl_status: ControlStatus, has_must: bool) -> str:
+    """Severity of a gap opened by a HUMAN evaluation, where there is no AI verdict
+    to read a rubric off. Mirrors the no-verdict branch of ``_gap_severity`` so an
+    auditor's « non conforme » is graded exactly like the model's."""
+    if ctrl_status == ControlStatus.NOT_IMPLEMENTED:
+        return "high" if has_must else "medium"
+    return "medium" if has_must else "low"
+
+
+async def _sync_gap_for_control(
+    db: AsyncSession,
+    assessment: ComplianceAssessment,
+    ca: ControlAssessment,
+    control: FrameworkControl,
+    lang: str,
+    scale: ComplianceScale | None,
+) -> tuple[str | None, bool]:
+    """Open, keep or RESOLVE the ComplianceGap mirroring a control's level.
+
+    This is the ``ComplianceGap.is_resolved`` writer the platform never had.
+    Before it, marking a control « conforme » by hand left its gap open forever
+    and re-running the whole AI analysis was the only thing that could clear one
+    — which is also why 625 of 625 production gaps are unresolved.
+
+    Returns ``(gap_id, resolved_now)``; writes into the caller's session and lets
+    the caller commit.
+    """
+    existing = list((await db.execute(
+        select(ComplianceGap).where(
+            ComplianceGap.assessment_id == assessment.id,
+            ComplianceGap.control_id == ca.control_id,
+        )
+    )).scalars().all())
+
+    if _is_gap_level(scale, ca.status, getattr(ca, "status_key", None)):
+        open_gap = next((g for g in existing if not g.is_resolved), None)
+        if open_gap is not None:
+            return open_gap.id, False
+        if existing:
+            # A control that regresses re-opens the SAME gap, so its action plan,
+            # owner, dates and history survive instead of restarting from an empty
+            # row every time somebody flips the status back and forth.
+            existing[0].is_resolved = False
+            return existing[0].id, False
+
+        req_levels = (await db.execute(
+            select(ControlRequirement.requirement_level).where(ControlRequirement.control_id == ca.control_id)
+        )).scalars().all()
+        has_must = "must" in [str(r) for r in req_levels]
+        identifier = control.control_id or ca.control_id
+        severity = _manual_gap_severity(ca.status, has_must)
+        # "Not evidenced" is a gap to evidence; only a verdict that the control is
+        # genuinely absent blocks certification — same rule as the AI path.
+        is_blocker = ca.status == ControlStatus.NOT_IMPLEMENTED and has_must
+        gap = ComplianceGap(
+            assessment_id=assessment.id,
+            control_id=ca.control_id,
+            gap_description=_t(lang, "gap_manual", title=control.title, control_id=identifier),
+            severity=severity,
+            remediation_steps=_t(lang, "remediation_default", title=control.title, control_id=identifier),
+            is_certification_blocker=is_blocker,
+            remediation_priority=_gap_priority(severity, is_blocker),
+        )
+        db.add(gap)
+        await db.flush()
+        return gap.id, False
+
+    # The control is on a non-gap level: the non-conformité is closed.
+    resolved_now = False
+    for gap in existing:
+        if not gap.is_resolved:
+            gap.is_resolved = True
+            resolved_now = True
+    return (existing[0].id if existing else None), resolved_now
+
+
+async def sync_action_items(
+    db: AsyncSession, tenant_id: str, assessment_id: str | None = None,
+) -> int:
+    """Create the missing ActionItem for every OPEN ComplianceGap of the tenant.
+
+    « Génération automatique de plans d'action pour les non-conformités ». This
+    used to live inline in ``list_action_plan``, which meant the plan only came
+    into existence when somebody happened to open the action-plan screen — never
+    at the moment an auditor recorded the non-conformity. Extracted so both the
+    evaluation path and the end of an AI analysis can call it.
+
+    Resolved gaps are skipped: without that filter, closing a gap would simply
+    grow a fresh action item for it on the next page load.
+
+    Writes into the CALLER's session and lets the caller commit — an isolated
+    session cannot write while the caller holds SQLite's single write lock.
+    Returns how many items were created.
+    """
+    assessment_ids = (await db.execute(
+        select(ComplianceAssessment.id).where(ComplianceAssessment.tenant_id == tenant_id)
+    )).scalars().all()
+    if assessment_id is not None:
+        assessment_ids = [a for a in assessment_ids if a == assessment_id]
+    if not assessment_ids:
+        return 0
+
+    open_gaps = list((await db.execute(
+        select(ComplianceGap).where(
+            ComplianceGap.assessment_id.in_(assessment_ids),
+            ComplianceGap.is_resolved == False,  # noqa: E712
+        )
+    )).scalars().all())
+    if not open_gaps:
+        return 0
+
+    covered_gap_ids: set[str] = set((await db.execute(
+        select(ActionItem.gap_id).where(
+            ActionItem.tenant_id == tenant_id,
+            ActionItem.gap_id.isnot(None),
+        )
+    )).scalars().all())
+
+    orphan_gaps = [g for g in open_gaps if g.id not in covered_gap_ids]
+    if not orphan_gaps:
+        return 0
+
+    ctrl_map: dict = {}
+    orphan_ctrl_ids = {g.control_id for g in orphan_gaps if g.control_id}
+    if orphan_ctrl_ids:
+        ctrl_map = {
+            c.id: c for c in (await db.execute(
+                select(FrameworkControl).where(FrameworkControl.id.in_(orphan_ctrl_ids))
+            )).scalars().all()
+        }
+
+    priority_map = {
+        90: ActionItemPriority.CRITICAL, 60: ActionItemPriority.HIGH,
+        50: ActionItemPriority.MEDIUM,   30: ActionItemPriority.LOW,
+    }
+    created = 0
+    for gap in orphan_gaps:
+        ctrl = ctrl_map.get(gap.control_id or "")
+        title = f"Remediate: {ctrl.title}" if ctrl else (gap.gap_description or "")[:120]
+        item = ActionItem(
+            tenant_id=tenant_id,
+            assessment_id=gap.assessment_id,
+            gap_id=gap.id,
+            title=title,
+            description=gap.gap_description,
+            priority=priority_map.get(gap.remediation_priority or 30, ActionItemPriority.MEDIUM),
+            status=ActionItemStatus.OPEN,
+            ai_generated=True,
+            action_type="corrective",
+        )
+        db.add(item)
+        await db.flush()
+        # Keep the back-reference in step so the traceability matrix and the gap
+        # card can both find the action without a scan.
+        if not gap.action_item_id:
+            gap.action_item_id = item.id
+        created += 1
+    return created
 
 
 async def _mark_analysis_failed(db: AsyncSession, assessment: ComplianceAssessment, detail: str) -> None:
@@ -884,6 +1501,20 @@ async def _build_assessment_detail(
     )
     cas = ca_result.scalars().all()
 
+    # The customisable grid this assessment is graded on (null on every legacy
+    # row, in which case nothing below queries compliance_scales at all), plus the
+    # perimeter labels and the control owners, each in one bulk query.
+    scale = await _load_scale(db, assessment)
+    entity_names, process_names = await _scope_names(db, [assessment], assessment.tenant_id)
+    owner_ids = {ca.owner_id for ca in cas if ca.owner_id}
+    owners: dict[str, User] = {}
+    if owner_ids:
+        owners = {
+            u.id: u for u in (await db.execute(
+                select(User).where(User.id.in_(owner_ids), User.tenant_id == assessment.tenant_id)
+            )).scalars().all()
+        }
+
     ctrl_result = await db.execute(
         select(FrameworkControl).where(FrameworkControl.framework_id == assessment.framework_id)
     )
@@ -910,9 +1541,19 @@ async def _build_assessment_detail(
             control_category=(controls_map[ca.control_id].category if ca.control_id in controls_map else None),
             control_description=(controls_map[ca.control_id].description if ca.control_id in controls_map else None),
             status=ca.status,
+            status_key=ca.status_key or _status_key_for(scale, ca.status),
             notes=ca.notes,
             implementation_notes=ca.implementation_notes,
             not_applicable_justification=ca.not_applicable_justification,
+            requires_justification=(
+                ca.status == ControlStatus.NOT_APPLICABLE
+                and not (ca.not_applicable_justification or "").strip()
+            ),
+            owner_id=ca.owner_id,
+            owner_name=(
+                f"{owners[ca.owner_id].first_name} {owners[ca.owner_id].last_name}".strip()
+                if ca.owner_id in owners else None
+            ),
             ai_confidence=ca.ai_confidence,
             cross_framework_coverage=(
                 controls_map[ca.control_id].mapped_controls
@@ -960,6 +1601,15 @@ async def _build_assessment_detail(
         status=assessment.status,
         compliance_score=assessment.compliance_score,
         scope_description=assessment.scope_description,
+        scope_type=assessment.scope_type or "tenant",
+        org_entity_id=assessment.org_entity_id,
+        org_entity_name=entity_names.get(assessment.org_entity_id or ""),
+        business_process_id=assessment.business_process_id,
+        business_process_name=process_names.get(assessment.business_process_id or ""),
+        in_scope_assets=list(assessment.in_scope_assets or []),
+        scale_id=assessment.scale_id,
+        scale_name=scale.name if scale else None,
+        scale_levels=_scale_levels(scale),
         created_at=assessment.created_at,
         updated_at=assessment.updated_at,
         uploaded_documents=[
@@ -988,8 +1638,14 @@ async def create_assessment(
     current_user: User = Depends(require_roles(UserRole.CISO)),
     tenant_id: str = Depends(get_tenant_id),
 ) -> AssessmentDetailResponse:
-    """Create a new compliance assessment. If an active assessment already exists for
-    this framework, the existing one is returned instead of creating a duplicate."""
+    """Create a compliance assessment on a PERIMETER — the whole organisation, a
+    département (org entity), a processus, or a set of systèmes (assets).
+
+    An assessment that duplicates an existing LIVE one on the SAME perimeter still
+    returns that one rather than creating a second: the de-duplication key is just
+    no longer (tenant, framework) alone, which is what used to lock a tenant to a
+    single live assessment per framework forever.
+    """
     fw_result = await db.execute(
         select(Framework).where(
             Framework.id == body.framework_id,
@@ -999,16 +1655,49 @@ async def create_assessment(
     if not fw_result.scalar_one_or_none():
         raise HTTPException(status_code=404, detail="Framework not found")
 
-    # Return the existing active assessment rather than creating a duplicate.
-    # Priority: in_progress > under_review > draft (most recent of each).
+    scope_type = body.scope_type or "tenant"
+    in_scope_assets = list(body.in_scope_assets or [])
+    # Keep only the id the declared scope_type actually names — see _normalize_scope:
+    # a stale org_entity_id on an organisation-wide run would be counted by
+    # coverage/by-entity as that department's own conformity.
+    org_entity_id, business_process_id = _normalize_scope(
+        scope_type, body.org_entity_id, body.business_process_id,
+    )
+    await _validate_scope(
+        db, tenant_id, scope_type, org_entity_id, business_process_id, in_scope_assets,
+    )
+    if body.scale_id:
+        await _resolve_scale(db, tenant_id, body.scale_id)
+
+    # Return the existing active assessment ON THIS PERIMETER rather than creating
+    # a duplicate. Priority: in_progress > under_review > draft (most recent of each).
+    perimeter_filter = [
+        ComplianceAssessment.tenant_id == tenant_id,
+        ComplianceAssessment.framework_id == body.framework_id,
+        ComplianceAssessment.status != AssessmentStatus.ARCHIVED,
+    ]
+    if scope_type == "tenant":
+        # A null scope_type is a pre-perimeter row and means "tenant"; matching it
+        # explicitly keeps re-creating an organisation-wide assessment behaving
+        # exactly as it did before this column existed.
+        perimeter_filter.append(
+            or_(ComplianceAssessment.scope_type == "tenant", ComplianceAssessment.scope_type.is_(None))
+        )
+    else:
+        perimeter_filter.append(ComplianceAssessment.scope_type == scope_type)
+    perimeter_filter.append(
+        ComplianceAssessment.org_entity_id == org_entity_id if org_entity_id
+        else ComplianceAssessment.org_entity_id.is_(None)
+    )
+    perimeter_filter.append(
+        ComplianceAssessment.business_process_id == business_process_id if business_process_id
+        else ComplianceAssessment.business_process_id.is_(None)
+    )
+
     from sqlalchemy import case as sa_case
     existing_result = await db.execute(
         select(ComplianceAssessment)
-        .where(
-            ComplianceAssessment.tenant_id == tenant_id,
-            ComplianceAssessment.framework_id == body.framework_id,
-            ComplianceAssessment.status != AssessmentStatus.ARCHIVED,
-        )
+        .where(*perimeter_filter)
         .order_by(
             sa_case(
                 (ComplianceAssessment.status == AssessmentStatus.IN_PROGRESS, 0),
@@ -1018,9 +1707,24 @@ async def create_assessment(
             ),
             ComplianceAssessment.updated_at.desc(),
         )
-        .limit(1)
     )
-    existing = existing_result.scalar_one_or_none()
+    if scope_type == "assets":
+        # For a SYSTEMS perimeter the asset SET is the perimeter, and it lives in a
+        # JSON column no SQL predicate above can compare portably. Without this
+        # every asset-scoped assessment of a framework collapsed onto the first
+        # one — "ISO 27001 sur le core banking" handed back when the caller asked
+        # for "ISO 27001 sur le SI monétique" — so « ou systèmes » was no more
+        # expressible than before the column existed.
+        wanted_assets = frozenset(str(a) for a in in_scope_assets)
+        existing = next(
+            (
+                row for row in existing_result.scalars().all()
+                if frozenset(str(a) for a in (row.in_scope_assets or [])) == wanted_assets
+            ),
+            None,
+        )
+    else:
+        existing = existing_result.scalars().first()
     if existing:
         return await _build_assessment_detail(db, existing)
 
@@ -1032,7 +1736,11 @@ async def create_assessment(
         scope_description=body.scope_description,
         status=AssessmentStatus.DRAFT,
         lead_assessor_id=current_user.id,
-        in_scope_assets=[],
+        scope_type=scope_type,
+        org_entity_id=org_entity_id,
+        business_process_id=business_process_id,
+        scale_id=body.scale_id,
+        in_scope_assets=in_scope_assets,
     )
     db.add(assessment)
     await db.commit()
@@ -1043,6 +1751,11 @@ async def create_assessment(
 @router.get("/assessments")
 async def list_assessments(
     pagination: PaginationParams = Depends(),
+    include_archived: bool = Query(
+        False,
+        description="Include assessments moved to ARCHIVED. Archived rows are a "
+                    "historical record of a past perimeter, not part of the live picture.",
+    ),
     db: AsyncSession = Depends(get_db),
     _: User = Depends(require_roles(UserRole.CISO)),
     tenant_id: str = Depends(get_tenant_id),
@@ -1064,6 +1777,11 @@ async def list_assessments(
     base_filter = [ComplianceAssessment.tenant_id == tenant_id]
     if selected_fw_ids:
         base_filter.append(ComplianceAssessment.framework_id.in_(selected_fw_ids))
+    if not include_archived:
+        # Nothing wrote ARCHIVED before PATCH /assessments/{id} existed, so this
+        # filter changes nothing for existing data — it only stops a deliberately
+        # archived perimeter from coming back as the live one.
+        base_filter.append(ComplianceAssessment.status != AssessmentStatus.ARCHIVED)
 
     # Fetch all matching assessments, then keep only the best one per framework.
     # Best = highest status priority (in_progress > under_review > completed > draft),
@@ -1084,12 +1802,20 @@ async def list_assessments(
     )
     all_assessments = all_result.scalars().all()
 
-    # Deduplicate: keep only the first (best) assessment per framework
-    seen_fw: set[str] = set()
+    # Deduplicate per (framework, PERIMETER) — not per framework. Collapsing on the
+    # framework alone hid every scoped assessment behind the organisation-wide one,
+    # so "la DSI est à 62% d'ISO 27001" could never appear next to the group score.
+    seen_scope: set[tuple] = set()
     deduped: list[ComplianceAssessment] = []
     for a in all_assessments:
-        if a.framework_id not in seen_fw:
-            seen_fw.add(a.framework_id)
+        # Archived rows dedupe among THEMSELVES, never against the live one. An
+        # archived perimeter always loses the status ordering above, so folding it
+        # into the same bucket made include_archived=true a no-op: the flag let the
+        # row through the filter and the collapse then dropped it again, leaving a
+        # retired assessment unreachable from every screen in the product.
+        key = _scope_key(a) + (a.status == AssessmentStatus.ARCHIVED,)
+        if key not in seen_scope:
+            seen_scope.add(key)
             deduped.append(a)
 
     total = len(deduped)
@@ -1110,6 +1836,8 @@ async def list_assessments(
         )
         doc_counts = {row[0]: row[1] for row in count_result.all()}
 
+    entity_names, process_names = await _scope_names(db, list(assessments), tenant_id)
+
     items = [
         AssessmentListItem(
             id=a.id,
@@ -1120,6 +1848,12 @@ async def list_assessments(
             status=a.status,
             compliance_score=a.compliance_score,
             document_count=doc_counts.get(a.id, 0),
+            scope_type=a.scope_type or "tenant",
+            org_entity_id=a.org_entity_id,
+            org_entity_name=entity_names.get(a.org_entity_id or ""),
+            business_process_id=a.business_process_id,
+            business_process_name=process_names.get(a.business_process_id or ""),
+            scale_id=a.scale_id,
             created_at=a.created_at,
         )
         for a in assessments
@@ -1155,6 +1889,130 @@ async def get_assessment(
     return await _build_assessment_detail(db, assessment)
 
 
+@router.patch("/assessments/{assessment_id}")
+async def update_assessment(
+    assessment_id: str,
+    body: AssessmentUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_roles(UserRole.CISO)),
+    tenant_id: str = Depends(get_tenant_id),
+) -> AssessmentDetailResponse:
+    """Rename, re-scope, re-grade or ARCHIVE an assessment.
+
+    This route did not exist. Together with the perimeter-aware de-duplication in
+    ``create_assessment`` it is what unlocks « évaluer le niveau de conformité des
+    processus, départements ou systèmes »: a tenant used to be stuck with exactly
+    one live assessment per framework, unable to rename it, move it to another
+    perimeter, or retire it — nothing anywhere in the backend wrote
+    ``AssessmentStatus.ARCHIVED``.
+
+    An omitted field is left untouched; an explicit ``null`` clears it (Pydantic's
+    ``model_fields_set`` is what tells the two apart).
+    """
+    assessment = (await db.execute(
+        select(ComplianceAssessment).where(
+            ComplianceAssessment.id == assessment_id,
+            ComplianceAssessment.tenant_id == tenant_id,
+        )
+    )).scalar_one_or_none()
+    if not assessment:
+        raise HTTPException(status_code=404, detail="Assessment not found")
+
+    given = body.model_fields_set
+
+    # Validate the perimeter as it will be AFTER the patch, not as it was sent:
+    # moving scope_type to "org_entity" while org_entity_id stays where it is has
+    # to be judged against the effective pair.
+    scope_type = body.scope_type if body.scope_type else (assessment.scope_type or "tenant")
+    org_entity_id = body.org_entity_id if "org_entity_id" in given else assessment.org_entity_id
+    business_process_id = (
+        body.business_process_id if "business_process_id" in given else assessment.business_process_id
+    )
+    in_scope_assets = (
+        list(body.in_scope_assets or []) if "in_scope_assets" in given
+        else list(assessment.in_scope_assets or [])
+    )
+    # Re-scoping must also DROP the id the new scope_type no longer names. Without
+    # this, moving an assessment back to "tenant" left its org_entity_id behind and
+    # coverage/by-entity went on reporting an organisation-wide run as that
+    # department's own conformity — a wrong number, not a missing one.
+    org_entity_id, business_process_id = _normalize_scope(
+        scope_type, org_entity_id, business_process_id,
+    )
+    await _validate_scope(db, tenant_id, scope_type, org_entity_id, business_process_id, in_scope_assets)
+
+    if "scale_id" in given and body.scale_id:
+        await _resolve_scale(db, tenant_id, body.scale_id)
+    if "lead_assessor_id" in given:
+        await assert_user_in_tenant(db, body.lead_assessor_id, tenant_id, field_name="lead_assessor_id")
+
+    previous_status = assessment.status
+
+    if body.name is not None:
+        assessment.name = body.name
+    if "description" in given:
+        assessment.description = body.description
+    if "scope_description" in given:
+        assessment.scope_description = body.scope_description
+    assessment.scope_type = scope_type
+    assessment.org_entity_id = org_entity_id
+    assessment.business_process_id = business_process_id
+    if "in_scope_assets" in given:
+        assessment.in_scope_assets = in_scope_assets
+    if "scale_id" in given:
+        assessment.scale_id = body.scale_id
+    if "lead_assessor_id" in given:
+        assessment.lead_assessor_id = body.lead_assessor_id
+    for field in ("assessment_start", "assessment_end", "next_review_date"):
+        if field in given:
+            setattr(assessment, field, getattr(body, field))
+
+    if body.status is not None and body.status != assessment.status:
+        if body.status != AssessmentStatus.ARCHIVED and assessment.ai_analysis_status == "running":
+            raise HTTPException(
+                status_code=409,
+                detail="An AI analysis is running on this assessment; wait for it to finish.",
+            )
+        assessment.status = body.status
+
+    # The score is a function of the grid, so changing the grid must re-score
+    # immediately rather than leaving a number computed under the old one on screen.
+    if "scale_id" in given:
+        scale = await _load_scale(db, assessment)
+        all_cas = list((await db.execute(
+            select(ControlAssessment).where(ControlAssessment.assessment_id == assessment.id)
+        )).scalars().all())
+        _rescore(assessment, all_cas, scale)
+
+    # Commit here rather than relying on get_db()'s teardown: that runs after
+    # ActivityLogMiddleware, which opens its own connection for the audit
+    # entry and would wait on the write lock this session still holds.
+    await db.commit()
+
+    # Retiring or reviving a compliance record is a governance act the generic
+    # "PATCH happened" middleware entry cannot describe, so it gets its own
+    # chained entry naming both ends of the transition.
+    if body.status is not None and body.status != previous_status and AssessmentStatus.ARCHIVED in (
+        body.status, previous_status,
+    ):
+        await chain_and_add(db, ActivityLog(
+            tenant_id=tenant_id, user_id=current_user.id, user_email=current_user.email,
+            action="archive" if body.status == AssessmentStatus.ARCHIVED else "update",
+            entity_type="compliance_assessment", entity_id=assessment.id, entity_name=assessment.name,
+            details={
+                "from_status": getattr(previous_status, "value", previous_status),
+                "to_status": getattr(assessment.status, "value", assessment.status),
+                "scope_type": assessment.scope_type,
+            },
+        ))
+
+    # Base.updated_at is a server-side `onupdate`, so SQLAlchemy expires it after an
+    # UPDATE and reloads it on access — which, in async, is a MissingGreenlet rather
+    # than a lazy query. Refresh explicitly before the detail response reads it.
+    await db.refresh(assessment)
+    return await _build_assessment_detail(db, assessment)
+
+
 @router.delete("/assessments/{assessment_id}", status_code=204)
 async def delete_assessment(
     assessment_id: str,
@@ -1182,6 +2040,272 @@ async def delete_assessment(
     # ActivityLogMiddleware, which opens its own connection for the audit
     # entry and would wait on the write lock this session still holds.
     await db.commit()
+
+
+# ─── Coverage by perimeter (STB objectif 2) ───────────────────────────────────
+# « Permet d'évaluer le niveau de conformité DES PROCESSUS, DÉPARTEMENTS OU
+# SYSTÈMES ». Storing the perimeter is only half of it — the answer the bank
+# actually asks for is "la DSI est à 62% de conformité ISO 27001", and that needs
+# a read-model that rolls the assessments of a perimeter up into one number.
+
+
+class ScopeCoverageItem(BaseModel):
+    id: str
+    name: str
+    parent_id: str | None = None
+    assessment_count: int = 0
+    frameworks: list[str] = []
+    controls_total: int = 0
+    controls_scoreable: int = 0
+    open_gaps: int = 0
+    compliance_score: float | None = None
+    # Org entities only: this node plus every descendant, so "la conformité de la
+    # DSI" includes the departments under it rather than only what was assessed on
+    # the parent node itself.
+    rolled_up_score: float | None = None
+    rolled_up_assessment_count: int = 0
+
+    model_config = {"from_attributes": True}
+
+
+class ScopeCoverageResponse(BaseModel):
+    scope_type: str
+    items: list[ScopeCoverageItem]
+    # Assessments that carry no perimeter at all (every pre-existing row). Reported
+    # rather than hidden, so a reader can tell "0% coverage" from "not scoped yet".
+    unscoped_assessment_count: int = 0
+
+
+async def _assessment_counts(db: AsyncSession, assessment_ids: list[str]) -> tuple[dict, dict]:
+    """(control counts per assessment, open-gap count per assessment) in two queries."""
+    counts: dict[str, dict] = {aid: {"total": 0, "not_applicable": 0} for aid in assessment_ids}
+    gaps: dict[str, int] = {aid: 0 for aid in assessment_ids}
+    if not assessment_ids:
+        return counts, gaps
+
+    rows = (await db.execute(
+        select(ControlAssessment.assessment_id, ControlAssessment.status, func.count())
+        .where(ControlAssessment.assessment_id.in_(assessment_ids))
+        .group_by(ControlAssessment.assessment_id, ControlAssessment.status)
+    )).all()
+    for assessment_id, ctrl_status, n in rows:
+        bucket = counts.get(assessment_id)
+        if bucket is None:
+            continue
+        bucket["total"] += n
+        if getattr(ctrl_status, "value", ctrl_status) == ControlStatus.NOT_APPLICABLE.value:
+            bucket["not_applicable"] += n
+
+    gap_rows = (await db.execute(
+        select(ComplianceGap.assessment_id, func.count())
+        .where(
+            ComplianceGap.assessment_id.in_(assessment_ids),
+            ComplianceGap.is_resolved == False,  # noqa: E712
+        )
+        .group_by(ComplianceGap.assessment_id)
+    )).all()
+    for assessment_id, n in gap_rows:
+        if assessment_id in gaps:
+            gaps[assessment_id] = n
+    return counts, gaps
+
+
+def _aggregate_coverage(assessments: list, counts: dict, gaps: dict, fw_map: dict) -> dict:
+    """Roll a set of assessments up into one coverage row.
+
+    Each assessment's OWN ``compliance_score`` is used and weighted by how many
+    controls it actually scores, rather than re-deriving a number here: that is
+    what lets a perimeter graded on a custom ComplianceScale aggregate correctly
+    next to one still graded on the legacy enum.
+    """
+    numerator = 0.0
+    weight_total = 0
+    controls_total = 0
+    open_gaps = 0
+    frameworks: list[str] = []
+    for a in assessments:
+        bucket = counts.get(a.id) or {"total": 0, "not_applicable": 0}
+        scoreable = max(0, bucket["total"] - bucket["not_applicable"])
+        controls_total += bucket["total"]
+        open_gaps += gaps.get(a.id, 0)
+        fw = fw_map.get(a.framework_id)
+        label = (fw.short_name or fw.name) if fw else None
+        if label and label not in frameworks:
+            frameworks.append(label)
+        if a.compliance_score is None:
+            continue
+        weight = scoreable or 1
+        numerator += float(a.compliance_score) * weight
+        weight_total += weight
+    return {
+        "assessment_count": len(assessments),
+        "frameworks": frameworks,
+        "controls_total": controls_total,
+        "controls_scoreable": weight_total,
+        "open_gaps": open_gaps,
+        "compliance_score": round(numerator / weight_total, 1) if weight_total else None,
+    }
+
+
+async def _coverage_assessments(
+    db: AsyncSession, tenant_id: str, framework_id: str | None,
+) -> tuple[list, dict, dict, dict]:
+    """Live (non-archived) assessments of the tenant plus their aggregates."""
+    filters = [
+        ComplianceAssessment.tenant_id == tenant_id,
+        ComplianceAssessment.status != AssessmentStatus.ARCHIVED,
+    ]
+    if framework_id:
+        filters.append(ComplianceAssessment.framework_id == framework_id)
+    assessments = list((await db.execute(
+        select(ComplianceAssessment).where(*filters)
+    )).scalars().all())
+    counts, gaps = await _assessment_counts(db, [a.id for a in assessments])
+    fw_map: dict = {}
+    fw_ids = {a.framework_id for a in assessments if a.framework_id}
+    if fw_ids:
+        fw_map = {
+            f.id: f for f in (await db.execute(
+                select(Framework).where(Framework.id.in_(fw_ids))
+            )).scalars().all()
+        }
+    return assessments, counts, gaps, fw_map
+
+
+@router.get("/coverage/by-entity", response_model=ScopeCoverageResponse)
+async def coverage_by_entity(
+    framework_id: str | None = Query(None, description="Restrict to one framework"),
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_roles(UserRole.CISO)),
+    tenant_id: str = Depends(get_tenant_id),
+) -> ScopeCoverageResponse:
+    """Conformity per DÉPARTEMENT (org entity), with a roll-up over its subtree."""
+    entities = list((await db.execute(
+        select(OrgEntity).where(OrgEntity.tenant_id == tenant_id)
+    )).scalars().all())
+    assessments, counts, gaps, fw_map = await _coverage_assessments(db, tenant_id, framework_id)
+
+    by_entity: dict[str, list] = {}
+    unscoped = 0
+    for a in assessments:
+        if a.org_entity_id:
+            by_entity.setdefault(a.org_entity_id, []).append(a)
+        else:
+            unscoped += 1
+
+    children: dict[str, list[str]] = {}
+    for entity in entities:
+        if entity.parent_id:
+            children.setdefault(entity.parent_id, []).append(entity.id)
+
+    def subtree(root_id: str) -> list[str]:
+        """Every entity id at or below `root_id` (cycle-safe: org_entities.parent_id
+        is a free-form self reference, and a cycle would otherwise hang the worker)."""
+        seen: set[str] = set()
+        stack = [root_id]
+        while stack:
+            current = stack.pop()
+            if current in seen:
+                continue
+            seen.add(current)
+            stack.extend(children.get(current, []))
+        return list(seen)
+
+    items: list[ScopeCoverageItem] = []
+    for entity in entities:
+        own = by_entity.get(entity.id, [])
+        agg = _aggregate_coverage(own, counts, gaps, fw_map)
+        rolled_assessments = [a for eid in subtree(entity.id) for a in by_entity.get(eid, [])]
+        rolled = _aggregate_coverage(rolled_assessments, counts, gaps, fw_map)
+        items.append(ScopeCoverageItem(
+            id=entity.id, name=entity.name, parent_id=entity.parent_id,
+            rolled_up_score=rolled["compliance_score"],
+            rolled_up_assessment_count=rolled["assessment_count"],
+            **agg,
+        ))
+    items.sort(key=lambda i: i.name.lower())
+    return ScopeCoverageResponse(scope_type="org_entity", items=items, unscoped_assessment_count=unscoped)
+
+
+@router.get("/coverage/by-process", response_model=ScopeCoverageResponse)
+async def coverage_by_process(
+    framework_id: str | None = Query(None, description="Restrict to one framework"),
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_roles(UserRole.CISO)),
+    tenant_id: str = Depends(get_tenant_id),
+) -> ScopeCoverageResponse:
+    """Conformity per PROCESSUS métier."""
+    processes = list((await db.execute(
+        select(BusinessProcess).where(BusinessProcess.tenant_id == tenant_id)
+    )).scalars().all())
+    assessments, counts, gaps, fw_map = await _coverage_assessments(db, tenant_id, framework_id)
+
+    by_process: dict[str, list] = {}
+    unscoped = 0
+    for a in assessments:
+        if a.business_process_id:
+            by_process.setdefault(a.business_process_id, []).append(a)
+        else:
+            unscoped += 1
+
+    items = [
+        ScopeCoverageItem(
+            id=process.id, name=process.name, parent_id=process.entity_id,
+            **_aggregate_coverage(by_process.get(process.id, []), counts, gaps, fw_map),
+        )
+        for process in processes
+    ]
+    items.sort(key=lambda i: i.name.lower())
+    return ScopeCoverageResponse(scope_type="business_process", items=items, unscoped_assessment_count=unscoped)
+
+
+@router.get("/coverage/by-asset", response_model=ScopeCoverageResponse)
+async def coverage_by_asset(
+    framework_id: str | None = Query(None, description="Restrict to one framework"),
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_roles(UserRole.CISO)),
+    tenant_id: str = Depends(get_tenant_id),
+) -> ScopeCoverageResponse:
+    """Conformity per SYSTÈME (asset).
+
+    ``in_scope_assets`` has existed on the model since the beginning and nothing
+    ever wrote or read it; assessments can now be scoped to a set of systems, and
+    this is the read side of that.
+    """
+    from app.models.asset import Asset
+
+    assessments, counts, gaps, fw_map = await _coverage_assessments(db, tenant_id, framework_id)
+
+    by_asset: dict[str, list] = {}
+    unscoped = 0
+    for a in assessments:
+        asset_ids = [str(x) for x in (a.in_scope_assets or []) if x]
+        if not asset_ids:
+            unscoped += 1
+            continue
+        for asset_id in asset_ids:
+            by_asset.setdefault(asset_id, []).append(a)
+
+    names: dict[str, str] = {}
+    if by_asset:
+        names = {
+            asset.id: asset.name for asset in (await db.execute(
+                select(Asset).where(Asset.id.in_(list(by_asset)), Asset.tenant_id == tenant_id)
+            )).scalars().all()
+        }
+
+    items = [
+        ScopeCoverageItem(
+            id=asset_id,
+            # An id with no row behind it is an asset deleted after it was scoped;
+            # showing the id beats dropping the perimeter silently.
+            name=names.get(asset_id, asset_id),
+            **_aggregate_coverage(rows, counts, gaps, fw_map),
+        )
+        for asset_id, rows in by_asset.items()
+    ]
+    items.sort(key=lambda i: i.name.lower())
+    return ScopeCoverageResponse(scope_type="assets", items=items, unscoped_assessment_count=unscoped)
 
 
 @router.post("/assessments/{assessment_id}/documents", status_code=status.HTTP_201_CREATED)
@@ -1379,6 +2503,9 @@ async def _run_analysis_background(assessment_id: str, tenant_id: str, user_id: 
                 select(Framework).where(Framework.id == assessment.framework_id)
             )).scalar_one_or_none()
             tenant = (await db.execute(select(Tenant).where(Tenant.id == tenant_id))).scalar_one_or_none()
+            # The grid this assessment is graded on (null on every legacy assessment,
+            # in which case nothing below behaves any differently than it did).
+            scale = await _load_scale(db, assessment)
 
             docs_result = await db.execute(
                 select(UploadedDocument).where(UploadedDocument.assessment_id == assessment_id)
@@ -1425,6 +2552,13 @@ async def _run_analysis_background(assessment_id: str, tenant_id: str, user_id: 
                 context=_analysis_context(tenant, assessment, framework),
                 user_id=user_id,
                 tenant_id=tenant_id,
+                # The tenant's own AI configuration — provider, model, endpoint.
+                # Without an explicit cfg, resolve_call_config falls back to
+                # env_ai_config(): a tenant that pinned its analysis to a
+                # sovereign endpoint (data residency) silently had its documents
+                # sent to the deployment default instead. Same one-line fix ai.py
+                # made in analyze_evidence.
+                cfg=await ai_provider.load_ai_config(db, tenant_id),
                 allow_partial=True,
             )
             if not res.ok:
@@ -1511,13 +2645,25 @@ async def _run_analysis_background(assessment_id: str, tenant_id: str, user_id: 
             )).scalars().all()
             gaps_to_replace = [g for g in old_gaps if g.control_id not in missing_control_ids]
             gaps_to_replace_ids = [g.id for g in gaps_to_replace]
-            # Remove stale ActionItems linked to these gaps so auto-sync recreates them
+            # The action plan has to SURVIVE a re-analysis. This block used to hard-delete
+            # every ActionItem hanging off a replaced gap, so re-running the analysis — the
+            # single operation a CISO repeats most — silently destroyed the owners, start
+            # and due dates, notes and completion history of the whole plan, with no
+            # warning and no undo. Items are kept and indexed by the CONTROL they were
+            # raised for; the persistence loop below re-points them at the gap this run
+            # produces for that same control.
+            items_by_control: dict[str, list[ActionItem]] = {}
             if gaps_to_replace_ids:
-                stale_items = (await db.execute(
+                control_of_gap = {g.id: (g.control_id or "") for g in gaps_to_replace}
+                surviving_items = (await db.execute(
                     select(ActionItem).where(ActionItem.gap_id.in_(gaps_to_replace_ids))
                 )).scalars().all()
-                for si in stale_items:
-                    await db.delete(si)
+                for item in surviving_items:
+                    items_by_control.setdefault(control_of_gap.get(item.gap_id or "", ""), []).append(item)
+                    # Detach before the gap row goes away; the re-link (or the orphan
+                    # pass) further down sets the reference again.
+                    item.gap_id = None
+                await db.flush()
             for gap in gaps_to_replace:
                 await db.delete(gap)
             await db.flush()
@@ -1531,6 +2677,9 @@ async def _run_analysis_background(assessment_id: str, tenant_id: str, user_id: 
             # prior result, since that is the case a reader most needs to be warned about.
             newly_not_started_keys: set[str] = set()
             preserved_keys: set[str] = set()
+            # control id -> the gap this run raised for it, used to re-point the
+            # surviving action items once every gap has an id.
+            new_gaps_by_control: dict[str, ComplianceGap] = {}
             for key, rows in by_key.items():
                 v = run.verdicts.get(key)
                 for control in rows:
@@ -1548,6 +2697,7 @@ async def _run_analysis_background(assessment_id: str, tenant_id: str, user_id: 
                             assessment_id=assessment_id,
                             control_id=control.id,
                             status=ControlStatus.NOT_STARTED,
+                            status_key=_status_key_for(scale, ControlStatus.NOT_STARTED),
                             ai_confidence=None,
                             implementation_notes=_t(lang, "not_analysed"),
                         ))
@@ -1557,6 +2707,9 @@ async def _run_analysis_background(assessment_id: str, tenant_id: str, user_id: 
                         assessment_id=assessment_id,
                         control_id=control.id,
                         status=ctrl_status,
+                        # The verdict is mapped onto the assessment's own grid when it has
+                        # one, so a tenant scale scores an AI run exactly like a manual one.
+                        status_key=_status_key_for(scale, ctrl_status),
                         ai_confidence=round(max(0.0, min(1.0, float(v.confidence))), 3),
                         implementation_notes=_implementation_notes(v, lang) or None,
                         not_applicable_justification=(
@@ -1565,7 +2718,10 @@ async def _run_analysis_background(assessment_id: str, tenant_id: str, user_id: 
                         ),
                     ))
 
-                    if ctrl_status in (ControlStatus.NOT_IMPLEMENTED, ControlStatus.PARTIALLY_IMPLEMENTED):
+                    # Which levels open a non-conformité is the grid's decision when the
+                    # assessment has one (« counts_as_gap »), and the two legacy statuses
+                    # otherwise — identical behaviour for every existing assessment.
+                    if _is_gap_level(scale, ctrl_status, _status_key_for(scale, ctrl_status)):
                         identifier = control.control_id or key
                         gap_desc = " ".join((v.gap_description or "").split()) or _t(
                             lang, "gap_default", title=control.title, control_id=identifier)
@@ -1578,7 +2734,7 @@ async def _run_analysis_background(assessment_id: str, tenant_id: str, user_id: 
                         severity = _gap_severity(v, ctrl_status, has_must)
                         remediation = (v.remediation or "").strip() or _t(
                             lang, "remediation_default", title=control.title, control_id=identifier)
-                        db.add(ComplianceGap(
+                        new_gap = ComplianceGap(
                             assessment_id=assessment_id,
                             control_id=control.id,
                             gap_description=gap_desc,
@@ -1586,22 +2742,48 @@ async def _run_analysis_background(assessment_id: str, tenant_id: str, user_id: 
                             remediation_steps=remediation,
                             is_certification_blocker=is_blocker,
                             remediation_priority=_gap_priority(severity, is_blocker),
-                        ))
+                        )
+                        db.add(new_gap)
+                        new_gaps_by_control[control.id] = new_gap
 
+            await db.flush()
+
+            # ── Re-attach the action plan that survived the deletion above ───────────
+            # A gap re-raised for the same control is the same non-conformity: its
+            # actions keep their owner, dates, notes and completion state instead of
+            # being recreated empty. Actions whose control came back compliant are
+            # CANCELLED with a dated, localised note — never deleted, so "where did my
+            # action go" has an answer and a finished one keeps its history.
+            run_date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+            for control_id, items in items_by_control.items():
+                replacement = new_gaps_by_control.get(control_id)
+                for item in items:
+                    if replacement is not None:
+                        item.gap_id = replacement.id
+                        if not replacement.action_item_id:
+                            replacement.action_item_id = item.id
+                    elif item.status in (ActionItemStatus.OPEN, ActionItemStatus.IN_PROGRESS):
+                        item.status = ActionItemStatus.CANCELLED
+                        item.notes = (
+                            (item.notes + "\n") if item.notes else ""
+                        ) + _t(lang, "plan_orphaned", date=run_date)
+            await db.flush()
+
+            # « Génération automatique de plans d'action » — every gap this run opened
+            # gets its action item now, instead of only when somebody opens the
+            # action-plan screen.
+            await sync_action_items(db, tenant_id, assessment_id=assessment_id)
             await db.flush()
 
             # Score from the final persisted state, so controls preserved above (untouched by this
             # run) still count under their real status instead of dropping out of the calculation —
             # matching how update_control_assessment recomputes the score after a manual edit.
-            all_cas = (await db.execute(
+            all_cas = list((await db.execute(
                 select(ControlAssessment).where(ControlAssessment.assessment_id == assessment_id)
-            )).scalars().all()
-            implemented = sum(1 for c in all_cas if c.status == ControlStatus.IMPLEMENTED)
-            partial = sum(1 for c in all_cas if c.status == ControlStatus.PARTIALLY_IMPLEMENTED)
-            not_applicable = sum(1 for c in all_cas if c.status == ControlStatus.NOT_APPLICABLE)
-            total = len(controls)
-            scoreable = total - not_applicable
-            score = round((implemented + partial * 0.5) / scoreable * 100, 1) if scoreable > 0 else 0.0
+            )).scalars().all())
+            # Denominator stays the framework's control count, as before; the formula
+            # itself comes from the assessment's grid when it has one.
+            score = _compute_score(all_cas, scale, total=len(controls))
 
             warning: str | None = None
             if run.missing_ids or run.failures:
@@ -1727,10 +2909,19 @@ async def update_control_assessment(
     control_assessment_id: str,
     body: ControlAssessmentUpdate,
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(require_roles(UserRole.CISO)),
+    current_user: User = Depends(require_roles(UserRole.CISO)),
     tenant_id: str = Depends(get_tenant_id),
+    lang: str = Depends(get_request_language),
 ) -> ControlAssessmentResponse:
-    """Manually override a control assessment status."""
+    """Record a human evaluation of one requirement.
+
+    This is the auditor's normal path, and until now it was a dead end: it moved
+    the status and nothing else. Marking a control « non conforme » generated no
+    ComplianceGap and therefore no action plan, and marking one « conforme » left
+    the gap the AI had opened permanently unresolved (625 of 625 in production).
+    Both directions are wired up here — non-conformity in, closure out — and the
+    score is recomputed through the assessment's grid.
+    """
     result = await db.execute(
         select(ControlAssessment, ComplianceAssessment, FrameworkControl)
         .join(ComplianceAssessment, ControlAssessment.assessment_id == ComplianceAssessment.id)
@@ -1745,6 +2936,34 @@ async def update_control_assessment(
         raise HTTPException(status_code=404, detail="Control assessment not found")
 
     ca, assessment, control = row
+    scale = await _load_scale(db, assessment)
+
+    # A grid level takes precedence over the legacy enum: `status_key` names a
+    # level of the assessment's own ComplianceScale, and `status` keeps carrying
+    # the nearest enum value so every existing query, export, report and dashboard
+    # keeps working untouched.
+    if body.status_key is not None:
+        level = _level_by_key(scale, body.status_key)
+        if level is None:
+            raise HTTPException(
+                status_code=422,
+                detail=f"status_key '{body.status_key}' is not a level of this assessment's scale",
+            )
+        legacy_value = level.get("legacy_status")
+        mapped: ControlStatus | None = None
+        if legacy_value:
+            try:
+                mapped = ControlStatus(legacy_value)
+            except ValueError:
+                mapped = None
+        if mapped == ControlStatus.NOT_APPLICABLE and control.is_mandatory:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Control '{control.control_id}' is mandatory and cannot be marked as Not Applicable."
+            )
+        ca.status_key = body.status_key
+        if mapped is not None:
+            ca.status = mapped
 
     if body.status is not None:
         # Block N/A on mandatory controls
@@ -1754,31 +2973,74 @@ async def update_control_assessment(
                 detail=f"Control '{control.control_id}' is mandatory and cannot be marked as Not Applicable."
             )
         ca.status = body.status
+        # Keep the grid key in step when the caller still speaks the legacy enum.
+        if scale is not None:
+            ca.status_key = _status_key_for(scale, body.status) or ca.status_key
+
     if body.notes is not None:
         ca.notes = body.notes
     if body.implementation_notes is not None:
         ca.implementation_notes = body.implementation_notes
+    if body.owner_id is not None:
+        # « le niveau de conformité des DÉPARTEMENTS » needs a real owner on the
+        # requirement, not a name appended to the notes.
+        await assert_user_in_tenant(db, body.owner_id or None, tenant_id, field_name="owner_id")
+        ca.owner_id = body.owner_id or None
     if body.not_applicable_justification is not None:
-        ca.not_applicable_justification = body.not_applicable_justification
+        justification = (body.not_applicable_justification or "").strip()
+        # An auditor always asks why a requirement was excluded, so an explicitly
+        # BLANK justification on a N/A verdict is refused. Its ABSENCE is still
+        # accepted: today's status dropdown sends `status` on its own and refusing
+        # that would break the only way N/A can be set at all. The response carries
+        # `requires_justification` so the UI can prompt (see needs_integration).
+        if not justification and ca.status == ControlStatus.NOT_APPLICABLE:
+            raise HTTPException(
+                status_code=422,
+                detail="not_applicable_justification cannot be empty on a Not Applicable control.",
+            )
+        ca.not_applicable_justification = justification or None
+
+    # Only a change of LEVEL may open or close a non-conformité. A PATCH that just
+    # edits the notes must not quietly raise a gap (and an action item with it) for
+    # a control that happens to sit on a gap level without one.
+    gap_id: str | None = None
+    gap_resolved = False
+    if body.status is not None or body.status_key is not None:
+        gap_id, gap_resolved = await _sync_gap_for_control(db, assessment, ca, control, lang, scale)
 
     await db.flush()
+
+    # Recompute BEFORE the commit. The score used to be assigned AFTER it and left
+    # to get_db()'s teardown — which runs after ActivityLogMiddleware has already
+    # opened a second connection, exactly the write-lock wait every other handler
+    # in this file commits early to avoid.
+    all_cas = list((await db.execute(
+        select(ControlAssessment).where(ControlAssessment.assessment_id == assessment.id)
+    )).scalars().all())
+    _rescore(assessment, all_cas, scale)
+
     # Commit here rather than relying on get_db()'s teardown: that runs after
     # ActivityLogMiddleware, which opens its own connection for the audit
     # entry and would wait on the write lock this session still holds.
     await db.commit()
 
-    # Recalculate compliance score
-    all_cas = (await db.execute(
-        select(ControlAssessment).where(ControlAssessment.assessment_id == assessment.id)
-    )).scalars().all()
-    imp = sum(1 for c in all_cas if c.status == ControlStatus.IMPLEMENTED)
-    par = sum(1 for c in all_cas if c.status == ControlStatus.PARTIALLY_IMPLEMENTED)
-    na = sum(1 for c in all_cas if c.status == ControlStatus.NOT_APPLICABLE)
-    scoreable = len(all_cas) - na
-    if scoreable > 0:
-        assessment.compliance_score = round((imp + par * 0.5) / scoreable * 100, 1)
+    # « Génération automatique de plans d'action pour les non-conformités »: the
+    # plan appears the moment the non-conformity is recorded, not when somebody
+    # next opens the action-plan screen.
+    if gap_id and not gap_resolved:
+        if await sync_action_items(db, tenant_id, assessment_id=assessment.id):
+            await db.commit()
 
-    return ControlAssessmentResponse(
+    owner_name = None
+    if ca.owner_id:
+        owner = (await db.execute(select(User).where(User.id == ca.owner_id))).scalar_one_or_none()
+        if owner:
+            owner_name = f"{owner.first_name} {owner.last_name}".strip()
+
+    # Build the response BEFORE the chained entry: chain_and_add rolls the session
+    # back when it loses the seq race, and a rollback expires every loaded object —
+    # reading `ca` afterwards would be a MissingGreenlet, not a lazy query.
+    response = ControlAssessmentResponse(
         id=ca.id,
         assessment_id=ca.assessment_id,
         control_id=ca.control_id,
@@ -1787,13 +3049,37 @@ async def update_control_assessment(
         control_category=control.category,
         control_description=control.description,
         status=ca.status,
+        status_key=ca.status_key or _status_key_for(scale, ca.status),
         notes=ca.notes,
         implementation_notes=ca.implementation_notes,
         not_applicable_justification=ca.not_applicable_justification,
+        requires_justification=(
+            ca.status == ControlStatus.NOT_APPLICABLE
+            and not (ca.not_applicable_justification or "").strip()
+        ),
+        owner_id=ca.owner_id,
+        owner_name=owner_name,
         ai_confidence=ca.ai_confidence,
         cross_framework_coverage=control.mapped_controls or [],
         is_mandatory=control.is_mandatory,
     )
+
+    if gap_resolved:
+        # Closing a requirement is a governance act; the middleware's generic
+        # "PATCH happened" entry cannot say which non-conformity was cleared.
+        await chain_and_add(db, ActivityLog(
+            tenant_id=tenant_id, user_id=current_user.id, user_email=current_user.email,
+            action="resolve", entity_type="compliance_gap", entity_id=gap_id,
+            entity_name=response.control_identifier,
+            details={
+                "assessment_id": response.assessment_id,
+                "control_id": response.control_identifier,
+                "status": getattr(response.status, "value", response.status),
+                "status_key": response.status_key,
+            },
+        ))
+
+    return response
 
 
 # ─── Document Checklist ────────────────────────────────────────────────────────
@@ -1976,14 +3262,28 @@ class RecommendationRequest(BaseModel):
     start_date: str | None = None
     due_date: str | None = None
     notes: str | None = None
+    # « actions correctives OU préventives » — the nature of the action, which the
+    # requirement is built on and which could not be stated anywhere before.
+    action_type: str = "corrective"
+    recurrence: str | None = None
 
 
 class BulkRecommendationRequest(BaseModel):
-    gap_ids: list[str]
+    """Body of the bulk accept/reject.
+
+    ``gap_ids`` used to be REQUIRED while the only caller in the product
+    (GapReportTab's "accept all critical" button) sends ``{action, filter}`` — so
+    that button answered 422 on every click and silently swallowed it. Both shapes
+    are accepted now, and one of the two must be present.
+    """
+    gap_ids: list[str] | None = None
     action: str  # "accept" | "reject"
+    #: "critical" | "high" | "medium" | "low" | "blockers" | "all" | "pending"
+    filter: str | None = None
     owner_id: str | None = None
     start_date: str | None = None
     due_date: str | None = None
+    action_type: str = "corrective"
 
 
 @router.post("/assessments/{assessment_id}/gaps/{gap_id}/recommendation")
@@ -2017,14 +3317,31 @@ async def act_on_gap_recommendation(
 
     gap, _ = row
 
+    if body.action_type not in ACTION_TYPES:
+        raise HTTPException(status_code=422, detail=f"action_type must be one of {list(ACTION_TYPES)}")
+    if body.recurrence is not None and body.recurrence not in ACTION_RECURRENCES:
+        raise HTTPException(status_code=422, detail=f"recurrence must be one of {list(ACTION_RECURRENCES)}")
+
     # Verify owner_id (if any) is in this tenant before assigning the action item.
-    from app.core.security_utils import assert_user_in_tenant as _assert_user
-    await _assert_user(db, body.owner_id, tenant_id, field_name="owner_id")
+    await assert_user_in_tenant(db, body.owner_id, tenant_id, field_name="owner_id")
 
     gap.recommendation_status = body.action + "ed"  # "accepted" | "rejected"
 
     action_item_id = None
     if body.action == "accept":
+        # The auto-sync in list_action_plan may already have raised an item for this
+        # gap. Accepting used to add a SECOND one, so the same non-conformity showed
+        # up twice on the board and closing one of them proved nothing. Plan the
+        # existing item instead: an "accept" carrying an owner and dates is exactly
+        # the planning act the requirement asks for.
+        existing_item = (await db.execute(
+            select(ActionItem).where(
+                ActionItem.tenant_id == tenant_id,
+                ActionItem.gap_id == gap_id,
+                ActionItem.status != ActionItemStatus.CANCELLED,
+            ).order_by(ActionItem.created_at)
+        )).scalars().first()
+
         ctrl_result = await db.execute(
             select(FrameworkControl).where(FrameworkControl.id == gap.control_id)
         )
@@ -2035,21 +3352,36 @@ async def act_on_gap_recommendation(
                         50: ActionItemPriority.MEDIUM, 30: ActionItemPriority.LOW}
         priority = priority_map.get(gap.remediation_priority, ActionItemPriority.MEDIUM)
 
-        action_item = ActionItem(
-            tenant_id=tenant_id,
-            assessment_id=assessment_id,
-            gap_id=gap_id,
-            title=f"Remediate: {ctrl_title}",
-            description=gap.gap_description,
-            owner_id=body.owner_id or current_user.id,  # tenant-checked above
-            start_date=body.start_date,
-            due_date=body.due_date,
-            priority=priority,
-            status=ActionItemStatus.OPEN,
-            ai_generated=True,
-            notes=body.notes,
-        )
-        db.add(action_item)
+        if existing_item is not None:
+            action_item = existing_item
+            action_item.owner_id = body.owner_id or action_item.owner_id or current_user.id
+            if body.start_date is not None:
+                action_item.start_date = body.start_date
+            if body.due_date is not None:
+                action_item.due_date = body.due_date
+            if body.notes is not None:
+                action_item.notes = body.notes
+            action_item.action_type = body.action_type
+            if body.recurrence is not None:
+                action_item.recurrence = body.recurrence
+        else:
+            action_item = ActionItem(
+                tenant_id=tenant_id,
+                assessment_id=assessment_id,
+                gap_id=gap_id,
+                title=f"Remediate: {ctrl_title}",
+                description=gap.gap_description,
+                owner_id=body.owner_id or current_user.id,  # tenant-checked above
+                start_date=body.start_date,
+                due_date=body.due_date,
+                priority=priority,
+                status=ActionItemStatus.OPEN,
+                ai_generated=True,
+                notes=body.notes,
+                action_type=body.action_type,
+                recurrence=body.recurrence,
+            )
+            db.add(action_item)
         await db.flush()
         gap.action_item_id = action_item.id
         action_item_id = action_item.id
@@ -2074,23 +3406,59 @@ async def bulk_act_on_gaps(
     current_user: User = Depends(require_roles(UserRole.CISO)),
     tenant_id: str = Depends(get_tenant_id),
 ) -> dict:
-    """Accept or reject multiple gap recommendations at once."""
+    """Accept or reject several gap recommendations at once.
+
+    Selection is either an explicit ``gap_ids`` list or a ``filter`` — the shape
+    the "accept all critical" button has always sent and which this endpoint used
+    to reject with a 422 nobody saw, because the caller swallows the error.
+    """
     if body.action not in ("accept", "reject"):
         raise HTTPException(status_code=422, detail="action must be 'accept' or 'reject'")
+    if not body.gap_ids and not body.filter:
+        raise HTTPException(status_code=422, detail="give either gap_ids or filter")
+    if body.action_type not in ACTION_TYPES:
+        raise HTTPException(status_code=422, detail=f"action_type must be one of {list(ACTION_TYPES)}")
 
-    from app.core.security_utils import assert_user_in_tenant as _assert_user
-    await _assert_user(db, body.owner_id, tenant_id, field_name="owner_id")
+    await assert_user_in_tenant(db, body.owner_id, tenant_id, field_name="owner_id")
+
+    gap_filter = [
+        ComplianceAssessment.id == assessment_id,
+        ComplianceAssessment.tenant_id == tenant_id,
+        # A resolved non-conformity must never grow a fresh action item.
+        ComplianceGap.is_resolved == False,  # noqa: E712
+    ]
+    if body.gap_ids:
+        gap_filter.append(ComplianceGap.id.in_(body.gap_ids))
+    else:
+        selector = (body.filter or "").lower()
+        if selector in ("critical", "high", "medium", "low"):
+            gap_filter.append(ComplianceGap.severity == selector)
+        elif selector == "blockers":
+            gap_filter.append(ComplianceGap.is_certification_blocker == True)  # noqa: E712
+        elif selector not in ("all", "pending", ""):
+            raise HTTPException(status_code=422, detail=f"unknown filter '{body.filter}'")
+        # A filter means "everything still awaiting a decision", which is what the
+        # caller's own optimistic update assumes.
+        gap_filter.append(ComplianceGap.recommendation_status == "pending")
 
     result = await db.execute(
         select(ComplianceGap, ComplianceAssessment)
         .join(ComplianceAssessment, ComplianceGap.assessment_id == ComplianceAssessment.id)
-        .where(
-            ComplianceGap.id.in_(body.gap_ids),
-            ComplianceAssessment.id == assessment_id,
-            ComplianceAssessment.tenant_id == tenant_id,
-        )
+        .where(*gap_filter)
     )
     rows = result.all()
+
+    # One query for the items that already exist, instead of one per gap.
+    existing_by_gap: dict[str, ActionItem] = {}
+    if rows:
+        for item in (await db.execute(
+            select(ActionItem).where(
+                ActionItem.tenant_id == tenant_id,
+                ActionItem.gap_id.in_([g.id for g, _ in rows]),
+                ActionItem.status != ActionItemStatus.CANCELLED,
+            ).order_by(ActionItem.created_at)
+        )).scalars().all():
+            existing_by_gap.setdefault(item.gap_id, item)
 
     processed = 0
     for gap, _ in rows:
@@ -2104,20 +3472,32 @@ async def bulk_act_on_gaps(
             priority_map = {90: ActionItemPriority.CRITICAL, 60: ActionItemPriority.HIGH,
                             50: ActionItemPriority.MEDIUM, 30: ActionItemPriority.LOW}
             priority = priority_map.get(gap.remediation_priority, ActionItemPriority.MEDIUM)
-            action_item = ActionItem(
-                tenant_id=tenant_id,
-                assessment_id=assessment_id,
-                gap_id=gap.id,
-                title=f"Remediate: {ctrl_title}",
-                description=gap.gap_description,
-                owner_id=body.owner_id or current_user.id,  # tenant-checked above
-                start_date=body.start_date,
-                due_date=body.due_date,
-                priority=priority,
-                status=ActionItemStatus.OPEN,
-                ai_generated=True,
-            )
-            db.add(action_item)
+            action_item = existing_by_gap.get(gap.id)
+            if action_item is not None:
+                # Plan the item the auto-sync already raised rather than adding a
+                # second one for the same non-conformity.
+                action_item.owner_id = body.owner_id or action_item.owner_id or current_user.id
+                if body.start_date is not None:
+                    action_item.start_date = body.start_date
+                if body.due_date is not None:
+                    action_item.due_date = body.due_date
+                action_item.action_type = body.action_type
+            else:
+                action_item = ActionItem(
+                    tenant_id=tenant_id,
+                    assessment_id=assessment_id,
+                    gap_id=gap.id,
+                    title=f"Remediate: {ctrl_title}",
+                    description=gap.gap_description,
+                    owner_id=body.owner_id or current_user.id,  # tenant-checked above
+                    start_date=body.start_date,
+                    due_date=body.due_date,
+                    priority=priority,
+                    status=ActionItemStatus.OPEN,
+                    ai_generated=True,
+                    action_type=body.action_type,
+                )
+                db.add(action_item)
             await db.flush()
             gap.action_item_id = action_item.id
         processed += 1
@@ -2471,10 +3851,23 @@ async def list_control_evidence(
     tenant_id: str = Depends(get_tenant_id),
 ):
     """List all evidence files for a control assessment."""
-    result = await db.execute(
-        select(Evidence).where(Evidence.control_assessment_id == control_assessment_id)
+    # Evidence.tenant_id was never in this WHERE, so a control_assessment_id from
+    # ANOTHER tenant listed that tenant's evidence rows — file names, sizes and
+    # ids, which is all the /evidence/{id}/download route then needs. Every other
+    # evidence route in this file filters on it.
+    stmt = (
+        select(Evidence)
+        .where(
+            Evidence.control_assessment_id == control_assessment_id,
+            Evidence.tenant_id == tenant_id,
+        )
         .order_by(Evidence.created_at)
     )
+    # Same rule the auditor portal and the action-plan attachments apply: a file
+    # hidden from auditors must not be listed to one.
+    if current_user.role == UserRole.AUDITOR:
+        stmt = stmt.where(Evidence.is_visible_to_auditor == True)  # noqa: E712
+    result = await db.execute(stmt)
     items = result.scalars().all()
     return [EvidenceResponse(
         id=e.id,
@@ -2492,10 +3885,15 @@ async def list_control_evidence(
 async def toggle_evidence_visibility(
     evidence_id: str,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_roles(UserRole.CISO)),
     tenant_id: str = Depends(get_tenant_id),
 ):
-    """Toggle whether an evidence file is visible to auditors."""
+    """Toggle whether an evidence file is visible to auditors.
+
+    Gated like the upload it mirrors (POST .../evidence is CISO): with only
+    get_current_user, the auditor a file was deliberately hidden from could
+    simply un-hide it, which made the flag advisory rather than a control.
+    """
     result = await db.execute(
         select(Evidence).where(Evidence.id == evidence_id, Evidence.tenant_id == tenant_id)
     )
@@ -2521,10 +3919,16 @@ async def toggle_evidence_visibility(
 async def delete_evidence(
     evidence_id: str,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_roles(UserRole.CISO)),
     tenant_id: str = Depends(get_tenant_id),
 ):
-    """Delete an evidence file."""
+    """Delete an evidence file.
+
+    Only the roles that may upload evidence may remove it. Unauthenticated-role
+    parity matters here: with get_current_user any account of the tenant — a
+    viewer, or the external auditor being audited — could erase the record an
+    audit conclusion rests on.
+    """
     result = await db.execute(
         select(Evidence).where(Evidence.id == evidence_id, Evidence.tenant_id == tenant_id)
     )
@@ -2566,6 +3970,11 @@ async def download_evidence(
     )
     evidence = result.scalar_one_or_none()
     if not evidence or not evidence.file_path:
+        raise HTTPException(status_code=404, detail="File not found")
+    # Deliberately the same 404 as "no such file": a piece of evidence hidden
+    # from auditors must not be reachable by guessing its id either — the rule
+    # the action-plan attachment download already applies.
+    if current_user.role == UserRole.AUDITOR and evidence.is_visible_to_auditor is False:
         raise HTTPException(status_code=404, detail="File not found")
     full = _Path(settings.UPLOADS_DIR) / evidence.file_path
     if not full.exists():
@@ -2611,6 +4020,12 @@ async def download_uploaded_document(
     doc = result.scalar_one_or_none()
     if not doc or not doc.file_path:
         raise HTTPException(status_code=404, detail="Document not found")
+    # Same rule as the evidence download — and for the same reason it needed the
+    # integrity guard below: a share-link upload points an Evidence row and this
+    # UploadedDocument at the SAME bytes, so without this an auditor could fetch
+    # a hidden evidence file through the document route instead.
+    if current_user.role == UserRole.AUDITOR and doc.is_visible_to_auditor is False:
+        raise HTTPException(status_code=404, detail="Document not found")
     full = _Path2(settings.UPLOADS_DIR) / doc.file_path
     if not full.exists():
         raise HTTPException(status_code=404, detail="File not found on disk")
@@ -2633,10 +4048,15 @@ async def download_uploaded_document(
 async def toggle_document_visibility(
     doc_id: str,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_roles(UserRole.CISO)),
     tenant_id: str = Depends(get_tenant_id),
 ):
-    """Toggle whether a checklist document is visible to auditors."""
+    """Toggle whether a checklist document is visible to auditors.
+
+    Gated like the upload (POST /assessments/{id}/documents is CISO) and like the
+    evidence toggle beside it — an auditor must not be able to reveal a document
+    that was hidden from them.
+    """
     result = await db.execute(
         select(UploadedDocument).where(
             UploadedDocument.id == doc_id,
@@ -2747,10 +4167,14 @@ async def get_document_log(
 async def delete_uploaded_document(
     doc_id: str,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_roles(UserRole.CISO)),
     tenant_id: str = Depends(get_tenant_id),
 ):
-    """Delete a checklist document."""
+    """Delete a checklist document.
+
+    Same gate as the upload: removing the document an AI analysis and its gaps
+    were derived from is not something every account of the tenant may do.
+    """
     result = await db.execute(
         select(UploadedDocument).where(
             UploadedDocument.id == doc_id,
@@ -2806,10 +4230,16 @@ async def create_share_link(
     ca_id: str,
     body: ShareLinkCreate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_roles(UserRole.CISO)),
     tenant_id: str = Depends(get_tenant_id),
 ):
-    """Create a shareable upload link for a control assessment."""
+    """Create a shareable upload link for a control assessment.
+
+    The token this mints is an UNAUTHENTICATED ingress into the tenant's evidence
+    store (/public/evidence-upload/{token}). Handing that power to every account
+    of the tenant — including the external auditor's — was strictly wider than
+    the CISO gate on the authenticated upload it bypasses.
+    """
     ca = (await db.execute(
         select(ControlAssessment).join(
             ComplianceAssessment, ControlAssessment.assessment_id == ComplianceAssessment.id
@@ -2854,10 +4284,14 @@ async def create_share_link(
 async def list_share_links(
     ca_id: str,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_roles(UserRole.CISO)),
     tenant_id: str = Depends(get_tenant_id),
 ):
-    """List all share links for a control assessment."""
+    """List all share links for a control assessment.
+
+    The response contains the raw token, so reading this list IS holding the
+    credential — same gate as creating one.
+    """
     rows = (await db.execute(
         select(EvidenceUploadToken).where(
             EvidenceUploadToken.control_assessment_id == ca_id,
@@ -2906,6 +4340,15 @@ class ActionPlanItem(BaseModel):
     control_title: str | None
     gap_severity: str | None
     is_certification_blocker: bool
+    # True once the non-conformity behind this action is closed — the "Exigence
+    # clôturée" state the closure loop writes back into the compliance record.
+    gap_resolved: bool = False
+    # « actions correctives ou préventives » + the recurrence a preventive action
+    # normally carries ("revue trimestrielle des habilitations").
+    action_type: str = "corrective"
+    recurrence: str | None = None
+    # Set when the action came from an audit finding rather than a compliance gap.
+    finding_id: str | None = None
     # owner
     owner_id: str | None
     owner_name: str | None
@@ -2914,11 +4357,205 @@ class ActionPlanItem(BaseModel):
 
 class ActionPlanUpdateBody(BaseModel):
     status: str | None = None          # open / in_progress / completed / cancelled
+    title: str | None = None
+    description: str | None = None
     start_date: str | None = None
     due_date: str | None = None
     owner_id: str | None = None
     notes: str | None = None
     priority: str | None = None
+    action_type: str | None = None
+    recurrence: str | None = None
+
+
+class ActionPlanCreateBody(BaseModel):
+    """Body of POST /action-plan.
+
+    « Permet de PLANIFIER les actions correctives ou préventives »: until now an
+    action could only come into existence as the by-product of an AI-detected gap,
+    so a préventive action — the half of the requirement with no gap behind it at
+    all — could not be planned anywhere in the product.
+    """
+    title: str
+    description: str | None = None
+    assessment_id: str | None = None
+    gap_id: str | None = None
+    owner_id: str | None = None
+    start_date: str | None = None
+    due_date: str | None = None
+    priority: str = "medium"
+    status: str = "open"
+    action_type: str = "corrective"
+    recurrence: str | None = None
+    notes: str | None = None
+
+
+class ActionItemAttachmentResponse(BaseModel):
+    id: str
+    action_item_id: str
+    name: str
+    description: str | None = None
+    file_name: str | None = None
+    file_size_bytes: int | None = None
+    content_type: str | None = None
+    uploaded_by_id: str | None = None
+    is_visible_to_auditor: bool = True
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+def _validate_action_fields(action_type: str | None, recurrence: str | None, priority: str | None,
+                            item_status: str | None) -> None:
+    """Shared validation for the three action-plan write paths."""
+    if action_type is not None and action_type not in ACTION_TYPES:
+        raise HTTPException(status_code=422, detail=f"action_type must be one of {list(ACTION_TYPES)}")
+    if recurrence not in (None, "") and recurrence not in ACTION_RECURRENCES:
+        raise HTTPException(status_code=422, detail=f"recurrence must be one of {list(ACTION_RECURRENCES)}")
+    if priority is not None:
+        try:
+            ActionItemPriority(priority)
+        except ValueError:
+            raise HTTPException(status_code=422, detail=f"Invalid priority: {priority}")
+    if item_status is not None:
+        try:
+            ActionItemStatus(item_status)
+        except ValueError:
+            raise HTTPException(status_code=422, detail=f"Invalid status: {item_status}")
+
+
+def _status_pair_for_key(
+    scale: ComplianceScale | None, key: str | None, fallback: ControlStatus,
+) -> tuple[ControlStatus, str | None]:
+    """(legacy enum, grid key) for a level key, falling back to the legacy enum when
+    the assessment is not graded on a grid at all."""
+    level = _level_by_key(scale, key)
+    if level is None:
+        return fallback, _status_key_for(scale, fallback)
+    legacy = level.get("legacy_status")
+    try:
+        return (ControlStatus(legacy) if legacy else fallback), level.get("key")
+    except ValueError:
+        return fallback, level.get("key")
+
+
+async def _assert_may_move_action(db: AsyncSession, current_user: User, item: ActionItem) -> None:
+    """Who may edit — and therefore CLOSE — one action.
+
+    POST and DELETE on this resource are require_roles(CISO); PATCH was left on
+    get_current_user alone, which was harmless while the plan was a detached
+    to-do list. Completing an action now resolves the non-conformité and promotes
+    the requirement to the grid's compliant level (see ``_apply_action_closure``),
+    so any account of the tenant — an auditor, a vendor manager — could move the
+    bank's conformity number. The tender still wants « le responsable clôture son
+    action », so the OWNER keeps the right to move their own: owner-or-CISO, not
+    CISO alone.
+
+    Effective roles rather than the scalar column, so a CISO granted through a
+    Group is honoured and one carved out via excluded_roles is not — the rule
+    require_roles applies everywhere else.
+    """
+    if getattr(current_user, "role", None) in (UserRole.TENANT_ADMIN, UserRole.SUPER_ADMIN):
+        return
+    if item.owner_id and item.owner_id == current_user.id:
+        return
+    from app.services.authz import get_effective_roles
+    if UserRole.CISO.value in await get_effective_roles(current_user, db):
+        return
+    raise HTTPException(
+        status_code=403,
+        detail="Only the action's owner or a CISO can update this action.",
+    )
+
+
+async def _apply_action_closure(
+    db: AsyncSession, item: ActionItem, previous_status, lang: str, tenant_id: str,
+) -> tuple[bool, bool]:
+    """Write an action's completion back into the compliance record.
+
+    « Visant à ATTEINDRE la conformité » — the closure loop. The action plan was a
+    detached to-do list: ticking an action done moved no gap, no score and no KPI,
+    and the only thing in the whole platform that could clear a ComplianceGap was
+    re-running the AI analysis, which deleted the plan. Completing the LAST
+    outstanding action on a non-conformity now resolves it and promotes the
+    requirement to the grid's compliant level; re-opening that action reverses
+    both. Nothing happens automatically — a user explicitly moved the action.
+
+    Returns ``(gap_resolved, gap_reopened)``. Writes into the caller's session.
+    """
+    if not item.gap_id:
+        return False, False
+    gap = (await db.execute(
+        select(ComplianceGap).where(ComplianceGap.id == item.gap_id)
+    )).scalar_one_or_none()
+    if gap is None:
+        return False, False
+    assessment = (await db.execute(
+        select(ComplianceAssessment).where(
+            ComplianceAssessment.id == gap.assessment_id,
+            ComplianceAssessment.tenant_id == tenant_id,
+        )
+    )).scalar_one_or_none()
+    if assessment is None:
+        return False, False
+
+    scale = await _load_scale(db, assessment)
+    ca = (await db.execute(
+        select(ControlAssessment).where(
+            ControlAssessment.assessment_id == gap.assessment_id,
+            ControlAssessment.control_id == gap.control_id,
+        )
+    )).scalar_one_or_none()
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+
+    def _append_note(text: str) -> None:
+        if ca is None:
+            return
+        ca.implementation_notes = f"{ca.implementation_notes}\n{text}" if ca.implementation_notes else text
+
+    resolved = reopened = False
+
+    # Only a TRANSITION into "completed" closes anything. Firing on the status as
+    # it stands would mean that editing the notes of an action finished months ago
+    # silently re-resolves its non-conformity and re-marks the requirement
+    # conforme — including one a human had deliberately re-opened since.
+    if previous_status != ActionItemStatus.COMPLETED and item.status == ActionItemStatus.COMPLETED:
+        outstanding = [
+            sibling for sibling in (await db.execute(
+                select(ActionItem).where(ActionItem.gap_id == gap.id)
+            )).scalars().all()
+            if sibling.status not in (ActionItemStatus.COMPLETED, ActionItemStatus.CANCELLED)
+        ]
+        # A non-conformity with two remediation actions is closed by the second
+        # one, not the first.
+        if not outstanding and not gap.is_resolved:
+            gap.is_resolved = True
+            resolved = True
+            if ca is not None and _is_gap_level(scale, ca.status, ca.status_key):
+                ca.status, ca.status_key = _status_pair_for_key(
+                    scale, _closure_level_key(scale), ControlStatus.IMPLEMENTED)
+                _append_note(_t(lang, "closed_by_action", date=today, title=item.title))
+    elif previous_status == ActionItemStatus.COMPLETED and item.status in (
+        ActionItemStatus.OPEN, ActionItemStatus.IN_PROGRESS,
+    ):
+        if gap.is_resolved:
+            gap.is_resolved = False
+            reopened = True
+            if ca is not None and not _is_gap_level(scale, ca.status, ca.status_key):
+                # Back to « partiellement conforme » rather than to whatever the
+                # level was before closure: that earlier value is recorded nowhere,
+                # and claiming full non-conformity would be as wrong as leaving the
+                # requirement marked compliant.
+                ca.status, ca.status_key = _status_pair_for_key(
+                    scale, _regression_level_key(scale), ControlStatus.PARTIALLY_IMPLEMENTED)
+                _append_note(_t(lang, "reopened_by_action", date=today, title=item.title))
+
+    if resolved or reopened:
+        all_cas = list((await db.execute(
+            select(ControlAssessment).where(ControlAssessment.assessment_id == assessment.id)
+        )).scalars().all())
+        _rescore(assessment, all_cas, scale)
+    return resolved, reopened
 
 
 @router.get("/action-plan", response_model=list[ActionPlanItem])
@@ -2927,71 +4564,40 @@ async def list_action_plan(
     _: User = Depends(get_current_user),
     tenant_id: str = Depends(get_tenant_id),
     assessment_id: str | None = None,
+    # Annotated rather than `= Query(...)`: update_action_plan_item and
+    # create_action_plan_item call this function DIRECTLY to build their single-item
+    # response, and a bare `Query()` default would arrive as the sentinel object
+    # instead of None — which the validation below would then reject with a 422.
+    action_type: Annotated[
+        str | None, Query(description="Filter on the nature of the action: corrective | preventive")
+    ] = None,
+    item_status: Annotated[
+        str | None, Query(alias="status", description="Filter on open | in_progress | completed | cancelled")
+    ] = None,
 ):
     """Return action items for the tenant (or a single assessment if assessment_id given).
 
-    Auto-creates ActionItem rows for any ComplianceGap that doesn't have one yet,
-    so every gap is immediately visible without a manual 'accept' step.
+    Auto-creates ActionItem rows for any OPEN ComplianceGap that doesn't have one
+    yet, so every non-conformity is immediately visible without a manual 'accept'
+    step. The generation itself now lives in ``sync_action_items`` so the same
+    thing happens the moment a control is evaluated and at the end of an AI
+    analysis, rather than only when somebody opens this screen.
     """
-    # ── Auto-sync: create ActionItems for gaps that don't have one yet ──────────
-    tenant_assessments = (await db.execute(
-        select(ComplianceAssessment.id).where(ComplianceAssessment.tenant_id == tenant_id)
-    )).scalars().all()
+    if await sync_action_items(db, tenant_id):
+        # sync_action_items writes into this session and leaves the commit to us —
+        # an isolated session cannot write while this one holds SQLite's write lock.
+        await db.commit()
 
-    if tenant_assessments:
-        gap_filter = ComplianceGap.assessment_id.in_(tenant_assessments)
-        all_gaps = (await db.execute(
-            select(ComplianceGap).where(gap_filter)
-        )).scalars().all()
-
-        # Which gap_ids already have an ActionItem?
-        covered_gap_ids: set[str] = set(
-            (await db.execute(
-                select(ActionItem.gap_id).where(
-                    ActionItem.tenant_id == tenant_id,
-                    ActionItem.gap_id.isnot(None),
-                )
-            )).scalars().all()
-        )
-
-        priority_map = {
-            90: ActionItemPriority.CRITICAL, 60: ActionItemPriority.HIGH,
-            50: ActionItemPriority.MEDIUM,   30: ActionItemPriority.LOW,
-        }
-
-        # Bulk-fetch controls for the orphaned gaps in one query
-        orphan_gaps = [g for g in all_gaps if g.id not in covered_gap_ids]
-        if orphan_gaps:
-            orphan_ctrl_ids = {g.control_id for g in orphan_gaps if g.control_id}
-            ctrl_map: dict = {}
-            if orphan_ctrl_ids:
-                ctrl_map = {
-                    c.id: c for c in (await db.execute(
-                        select(FrameworkControl).where(FrameworkControl.id.in_(orphan_ctrl_ids))
-                    )).scalars().all()
-                }
-            for gap in orphan_gaps:
-                ctrl = ctrl_map.get(gap.control_id or "")
-                title = (
-                    f"Remediate: {ctrl.title}" if ctrl
-                    else (gap.gap_description or "")[:120]
-                )
-                db.add(ActionItem(
-                    tenant_id=tenant_id,
-                    assessment_id=gap.assessment_id,
-                    gap_id=gap.id,
-                    title=title,
-                    description=gap.gap_description,
-                    priority=priority_map.get(gap.remediation_priority or 30, ActionItemPriority.MEDIUM),
-                    status=ActionItemStatus.OPEN,
-                    ai_generated=True,
-                ))
-            await db.commit()
+    _validate_action_fields(action_type, None, None, item_status)
 
     # ── Fetch all items (including newly created ones) ───────────────────────────
     item_filter = [ActionItem.tenant_id == tenant_id]
     if assessment_id:
         item_filter.append(ActionItem.assessment_id == assessment_id)
+    if action_type:
+        item_filter.append(ActionItem.action_type == action_type)
+    if item_status:
+        item_filter.append(ActionItem.status == ActionItemStatus(item_status))
     rows = (await db.execute(
         select(ActionItem)
         .where(*item_filter)
@@ -3070,6 +4676,10 @@ async def list_action_plan(
             control_title=fc.title if fc else None,
             gap_severity=g.severity if g else None,
             is_certification_blocker=g.is_certification_blocker if g else False,
+            gap_resolved=bool(g.is_resolved) if g else False,
+            action_type=r.action_type or "corrective",
+            recurrence=r.recurrence,
+            finding_id=r.finding_id,
             owner_id=r.owner_id,
             owner_name=f"{own.first_name} {own.last_name}".strip() if own else None,
         ))
@@ -3083,8 +4693,14 @@ async def update_action_plan_item(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
     tenant_id: str = Depends(get_tenant_id),
+    lang: str = Depends(get_request_language),
 ):
-    """Update status, due date, owner, notes or priority of an action item."""
+    """Plan and track one action: owner, dates, priority, nature — and its closure.
+
+    Completing an action linked to a non-conformity now writes back into the
+    compliance record (see ``_apply_action_closure``): before this, ticking an
+    action done moved no gap, no score and no KPI anywhere in the platform.
+    """
     item = (await db.execute(
         select(ActionItem).where(
             ActionItem.id == item_id,
@@ -3093,30 +4709,47 @@ async def update_action_plan_item(
     )).scalar_one_or_none()
     if not item:
         raise HTTPException(404, "Action item not found")
+    await _assert_may_move_action(db, current_user, item)
 
+    _validate_action_fields(body.action_type, body.recurrence, body.priority, body.status)
+
+    previous_status = item.status
     if body.status is not None:
-        try:
-            item.status = ActionItemStatus(body.status)
-        except ValueError:
-            raise HTTPException(422, f"Invalid status: {body.status}")
+        item.status = ActionItemStatus(body.status)
     if body.priority is not None:
-        try:
-            item.priority = ActionItemPriority(body.priority)
-        except ValueError:
-            raise HTTPException(422, f"Invalid priority: {body.priority}")
+        item.priority = ActionItemPriority(body.priority)
+    if body.title is not None:
+        item.title = body.title
+    if body.description is not None:
+        item.description = body.description
     if body.start_date is not None:
         item.start_date = body.start_date or None
     if body.due_date is not None:
         item.due_date = body.due_date or None
     if body.notes is not None:
         item.notes = body.notes
+    if body.action_type is not None:
+        item.action_type = body.action_type
+    if body.recurrence is not None:
+        item.recurrence = body.recurrence or None
     if body.owner_id is not None:
-        from app.core.security_utils import assert_user_in_tenant as _assert_user
-        await _assert_user(db, body.owner_id or None, tenant_id, field_name="owner_id")
+        await assert_user_in_tenant(db, body.owner_id or None, tenant_id, field_name="owner_id")
         item.owner_id = body.owner_id or None
+
+    resolved, reopened = await _apply_action_closure(db, item, previous_status, lang, tenant_id)
 
     await db.commit()
     await db.refresh(item)
+
+    if resolved or reopened:
+        # The compliance state moved without anyone editing the assessment, so the
+        # trail has to say which action moved it.
+        await chain_and_add(db, ActivityLog(
+            tenant_id=tenant_id, user_id=current_user.id, user_email=current_user.email,
+            action="resolve" if resolved else "reopen",
+            entity_type="compliance_gap", entity_id=item.gap_id, entity_name=item.title,
+            details={"action_item_id": item.id, "assessment_id": item.assessment_id},
+        ))
 
     # Re-use list endpoint logic for single item response
     items = await list_action_plan(db=db, _=current_user, tenant_id=tenant_id)
@@ -3126,14 +4759,402 @@ async def update_action_plan_item(
     raise HTTPException(500, "Failed to return updated item")
 
 
+@router.post("/action-plan", response_model=ActionPlanItem, status_code=status.HTTP_201_CREATED)
+async def create_action_plan_item(
+    body: ActionPlanCreateBody,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_roles(UserRole.CISO)),
+    tenant_id: str = Depends(get_tenant_id),
+):
+    """Plan a corrective or PREVENTIVE action by hand.
+
+    « Permet de planifier les actions correctives OU PRÉVENTIVES ». Every action in
+    the platform used to be a by-product of an AI-detected gap, so anything that
+    was not one — a preventive control, an action raised in a steering committee,
+    a commitment made to a regulator — could not be planned at all.
+    """
+    _validate_action_fields(body.action_type, body.recurrence, body.priority, body.status)
+    if not (body.title or "").strip():
+        raise HTTPException(status_code=422, detail="title is required")
+
+    await assert_user_in_tenant(db, body.owner_id, tenant_id, field_name="owner_id")
+
+    assessment_id = body.assessment_id
+    gap: ComplianceGap | None = None
+    if body.gap_id:
+        row = (await db.execute(
+            select(ComplianceGap, ComplianceAssessment)
+            .join(ComplianceAssessment, ComplianceGap.assessment_id == ComplianceAssessment.id)
+            .where(
+                ComplianceGap.id == body.gap_id,
+                ComplianceAssessment.tenant_id == tenant_id,
+            )
+        )).first()
+        if row is None:
+            raise HTTPException(status_code=404, detail="Gap not found")
+        gap, gap_assessment = row
+        # The gap decides the assessment: an action cannot address a non-conformity
+        # of one assessment while being filed under another.
+        assessment_id = gap_assessment.id
+    elif assessment_id:
+        owning = (await db.execute(
+            select(ComplianceAssessment).where(
+                ComplianceAssessment.id == assessment_id,
+                ComplianceAssessment.tenant_id == tenant_id,
+            )
+        )).scalar_one_or_none()
+        if owning is None:
+            raise HTTPException(status_code=404, detail="Assessment not found")
+
+    item = ActionItem(
+        tenant_id=tenant_id,
+        assessment_id=assessment_id,
+        gap_id=gap.id if gap else None,
+        title=body.title.strip(),
+        description=body.description,
+        owner_id=body.owner_id or current_user.id,  # tenant-checked above
+        start_date=body.start_date or None,
+        due_date=body.due_date or None,
+        priority=ActionItemPriority(body.priority),
+        status=ActionItemStatus(body.status),
+        # Not AI-generated: this one was planned by a human, and the board shows
+        # the difference.
+        ai_generated=False,
+        notes=body.notes,
+        action_type=body.action_type,
+        recurrence=body.recurrence or None,
+    )
+    db.add(item)
+    await db.flush()
+    if gap is not None and not gap.action_item_id:
+        gap.action_item_id = item.id
+    # Commit here rather than relying on get_db()'s teardown: that runs after
+    # ActivityLogMiddleware, which opens its own connection for the audit
+    # entry and would wait on the write lock this session still holds.
+    await db.commit()
+
+    items = await list_action_plan(db=db, _=current_user, tenant_id=tenant_id)
+    for candidate in items:
+        if candidate.id == item.id:
+            return candidate
+    raise HTTPException(500, "Failed to return the created item")
+
+
+@router.delete("/action-plan/{item_id}", status_code=204)
+async def delete_action_plan_item(
+    item_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_roles(UserRole.CISO)),
+    tenant_id: str = Depends(get_tenant_id),
+):
+    """Remove an action from the plan.
+
+    An action raised automatically for a still-open gap comes straight back on the
+    next sync — that is the point of « génération automatique ». Cancel it instead
+    (PATCH status=cancelled) when the intent is "we are not doing this".
+    """
+    item = (await db.execute(
+        select(ActionItem).where(ActionItem.id == item_id, ActionItem.tenant_id == tenant_id)
+    )).scalar_one_or_none()
+    if not item:
+        raise HTTPException(404, "Action item not found")
+
+    # Detach the gap's back-reference before the row goes away, otherwise the gap
+    # card and the traceability matrix keep pointing at a deleted action.
+    if item.gap_id:
+        gap = (await db.execute(
+            select(ComplianceGap).where(ComplianceGap.id == item.gap_id)
+        )).scalar_one_or_none()
+        if gap is not None and gap.action_item_id == item.id:
+            gap.action_item_id = None
+
+    # Proof attached to the action is retired, never unlinked: the bytes stay on
+    # disk and remain retrievable through the file-version endpoints, exactly like
+    # deleted evidence.
+    attachments = await _attachment_rows(db, select(ActionItemAttachment).where(
+        ActionItemAttachment.action_item_id == item.id,
+        ActionItemAttachment.tenant_id == tenant_id,
+    ))
+    for attachment in attachments:
+        await file_integrity.retire_versions(
+            db, entity_type=_ACTION_ATTACHMENT, entity_id=attachment.id,
+            note=f"Action item deleted by {current_user.email}",
+        )
+        await db.delete(attachment)
+
+    await db.delete(item)
+    await db.commit()
+
+
+# ── Action-plan attachments (« pièces justificatives ») ───────────────────────
+# Objectif 3 lists « pièces justificatives » beside owner and dates as part of
+# what an action carries. Evidence could be attached to a control assessment but
+# never to an action, so the proof that a corrective action was actually carried
+# out had nowhere to live. Storage mirrors Evidence exactly, which is what lets
+# services/file_integrity.py version and checksum it and services/file_retention.py
+# purge superseded copies without a line of new plumbing.
+
+#: Same set control evidence accepts, plus screenshots — the most common proof
+#: that an action was performed (a console showing MFA enforced, a ticket closed).
+_ATTACHMENT_MIME_CHECKS = (
+    ("pdf", "application/pdf"),
+    ("spreadsheetml", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"),
+    ("ms-excel", "application/vnd.ms-excel"),
+    ("png", "image/png"),
+    ("jpeg", "image/jpeg"),
+)
+_ATTACHMENT_SUFFIXES = (".pdf", ".docx", ".xlsx", ".xls", ".txt", ".png", ".jpg", ".jpeg")
+
+
+async def _load_action_item(db: AsyncSession, item_id: str, tenant_id: str) -> ActionItem:
+    item = (await db.execute(
+        select(ActionItem).where(ActionItem.id == item_id, ActionItem.tenant_id == tenant_id)
+    )).scalar_one_or_none()
+    if not item:
+        raise HTTPException(404, "Action item not found")
+    return item
+
+
+async def _attachment_rows(db: AsyncSession, stmt) -> list[ActionItemAttachment]:
+    """Attachment rows, tolerating a database where action_item_attachments does
+    not exist yet.
+
+    The table is new and create_all() only runs at the next restart, so until then
+    every query against it raises — including the one delete_action_plan_item
+    makes, which turned a route that worked before this feature into a 500. A
+    missing table means there is no proof attached, which is exactly true.
+    """
+    try:
+        return list((await db.execute(stmt)).scalars().all())
+    except (OperationalError, ProgrammingError):
+        logger.debug("compliance.action_attachments.unavailable")
+        return []
+
+
+@router.post(
+    "/action-plan/{item_id}/attachments",
+    response_model=ActionItemAttachmentResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def upload_action_attachment(
+    item_id: str,
+    file: UploadFile = File(...),
+    description: str | None = Form(default=None),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_roles(UserRole.CISO)),
+    tenant_id: str = Depends(get_tenant_id),
+) -> ActionItemAttachmentResponse:
+    """Attach proof that an action was carried out."""
+    # Reject filenames whose extension must never reach the uploads volume —
+    # see security_utils.DANGEROUS_UPLOAD_EXTENSIONS (it checks EVERY suffix).
+    assert_safe_upload_name(file.filename, field_name="file")
+    item = await _load_action_item(db, item_id, tenant_id)
+
+    content_type = file.content_type or ""
+    name_lower = (file.filename or "").lower()
+    declared = content_type.lower()
+    is_allowed = (
+        any(token in declared for token in ("pdf", "docx", "word", "spreadsheetml", "ms-excel", "text/plain"))
+        or declared.startswith("image/png")
+        or declared.startswith("image/jpeg")
+        or name_lower.endswith(_ATTACHMENT_SUFFIXES)
+    )
+    if not is_allowed:
+        raise HTTPException(
+            status_code=422,
+            detail="Only PDF, DOCX, XLSX, XLS, TXT, PNG and JPEG files are supported",
+        )
+
+    file_bytes = await file.read()
+    max_bytes = settings.MAX_UPLOAD_SIZE_MB * 1024 * 1024
+    if len(file_bytes) > max_bytes:
+        raise HTTPException(status_code=413, detail=f"File too large (max {settings.MAX_UPLOAD_SIZE_MB}MB)")
+
+    # Magic-byte check for every type we can actually verify: a declared PDF whose
+    # bytes are something else must not be filed as proof of remediation.
+    for token, mime in _ATTACHMENT_MIME_CHECKS:
+        if token in declared and not verify_file_signature(file_bytes, mime):
+            raise HTTPException(415, f"File contents do not match the declared {mime} type.")
+
+    safe_name = _sanitize_filename(file.filename or "attachment.bin")
+    rel_path = f"{tenant_id}/action-plan/{uuid.uuid4().hex}_{safe_name}"
+    full_path = Path(settings.UPLOADS_DIR) / rel_path
+    full_path.parent.mkdir(parents=True, exist_ok=True)
+    full_path.write_bytes(file_bytes)
+
+    attachment = ActionItemAttachment(
+        tenant_id=tenant_id,
+        action_item_id=item.id,
+        name=file.filename or safe_name,
+        description=description,
+        file_name=file.filename or safe_name,
+        file_path=rel_path,
+        file_size_bytes=len(file_bytes),
+        file_sha256=file_integrity.sha256_bytes(file_bytes),
+        content_type=content_type,
+        uploaded_by_id=current_user.id,
+        is_visible_to_auditor=True,
+    )
+    db.add(attachment)
+    try:
+        await db.flush()
+    except (OperationalError, ProgrammingError):
+        # Same missing-table story as _attachment_rows, but a write cannot degrade
+        # to "there is no proof": name the operator step instead of 500ing.
+        await db.rollback()
+        raise HTTPException(
+            status_code=424,
+            detail="Action-plan attachments are not available until the server has been "
+                   "restarted once (action_item_attachments is created at startup).",
+        )
+    await file_integrity.record_version(
+        db, tenant_id=tenant_id, entity_type=_ACTION_ATTACHMENT,
+        entity_id=attachment.id, parent_type="action_item", parent_id=item.id,
+        file_path=rel_path, file_name=attachment.file_name,
+        file_sha256=attachment.file_sha256, file_size_bytes=len(file_bytes),
+        content_type=content_type, uploaded_by_id=current_user.id,
+    )
+    # Commit here rather than relying on get_db()'s teardown: that runs after
+    # ActivityLogMiddleware, which opens its own connection for the audit
+    # entry and would wait on the write lock this session still holds.
+    await db.commit()
+    # created_at is a server default, so it is only populated once the row is read
+    # back; in async that has to be an explicit refresh, never an attribute access.
+    await db.refresh(attachment)
+    return ActionItemAttachmentResponse.model_validate(attachment)
+
+
+@router.get("/action-plan/{item_id}/attachments", response_model=list[ActionItemAttachmentResponse])
+async def list_action_attachments(
+    item_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    tenant_id: str = Depends(get_tenant_id),
+) -> list[ActionItemAttachmentResponse]:
+    """Proof attached to one action."""
+    await _load_action_item(db, item_id, tenant_id)
+    stmt = (
+        select(ActionItemAttachment)
+        .where(
+            ActionItemAttachment.action_item_id == item_id,
+            ActionItemAttachment.tenant_id == tenant_id,
+        )
+        .order_by(ActionItemAttachment.created_at.desc())
+    )
+    # is_visible_to_auditor was written on every upload and read nowhere, so an
+    # auditor — including an external firm's account (users.is_external) — was
+    # handed every proof file whatever the flag said. The auditor portal has
+    # always honoured it on evidence and on checklist documents; proof that a
+    # corrective action was carried out is no different.
+    if current_user.role == UserRole.AUDITOR:
+        stmt = stmt.where(ActionItemAttachment.is_visible_to_auditor == True)  # noqa: E712
+    rows = await _attachment_rows(db, stmt)
+    return [ActionItemAttachmentResponse.model_validate(row) for row in rows]
+
+
+@router.patch(
+    "/action-plan/attachments/{attachment_id}/visibility",
+    response_model=ActionItemAttachmentResponse,
+)
+async def toggle_action_attachment_visibility(
+    attachment_id: str,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_roles(UserRole.CISO)),
+    tenant_id: str = Depends(get_tenant_id),
+) -> ActionItemAttachmentResponse:
+    """Hide a piece of proof from auditors, or show it again.
+
+    Evidence and checklist documents both have this switch. Action-plan proof did
+    not, so its is_visible_to_auditor flag had no writer at all and stayed True on
+    every row — which is what made the filter above unusable rather than merely
+    unused.
+    """
+    rows = await _attachment_rows(db, select(ActionItemAttachment).where(
+        ActionItemAttachment.id == attachment_id,
+        ActionItemAttachment.tenant_id == tenant_id,
+    ))
+    if not rows:
+        raise HTTPException(404, "Attachment not found")
+    attachment = rows[0]
+    attachment.is_visible_to_auditor = not bool(attachment.is_visible_to_auditor)
+    await db.commit()
+    await db.refresh(attachment)
+    return ActionItemAttachmentResponse.model_validate(attachment)
+
+
+@router.get("/action-plan/attachments/{attachment_id}/download")
+async def download_action_attachment(
+    attachment_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    tenant_id: str = Depends(get_tenant_id),
+    acknowledge_integrity_failure: bool = Query(
+        False,
+        description="CISO override: serve a file whose checksum no longer matches, "
+                    "so a damaged or altered file can still be investigated.",
+    ),
+):
+    """Download a piece of proof, refusing bytes that no longer match their checksum."""
+    from fastapi.responses import FileResponse
+    from pathlib import Path as _Path
+
+    rows = await _attachment_rows(db, select(ActionItemAttachment).where(
+        ActionItemAttachment.id == attachment_id,
+        ActionItemAttachment.tenant_id == tenant_id,
+    ))
+    attachment = rows[0] if rows else None
+    if not attachment or not attachment.file_path:
+        raise HTTPException(status_code=404, detail="File not found")
+    # Same rule as the listing, and deliberately the same 404: a hidden piece of
+    # proof must not be reachable by guessing its id either.
+    if current_user.role == UserRole.AUDITOR and not attachment.is_visible_to_auditor:
+        raise HTTPException(status_code=404, detail="File not found")
+    full = _Path(settings.UPLOADS_DIR) / attachment.file_path
+    if not full.exists():
+        raise HTTPException(status_code=404, detail="File not found on disk")
+
+    status_, actual = await asyncio.to_thread(
+        file_integrity.verify_file, full, attachment.file_sha256
+    )
+    return await _integrity_response(
+        FileResponse, full, attachment.file_name or "attachment", attachment.content_type,
+        attachment.file_sha256, status_, actual, acknowledge_integrity_failure,
+        current_user, tenant_id, label=f"action attachment {attachment.id}", db=db,
+    )
+
+
+@router.delete("/action-plan/attachments/{attachment_id}", status_code=204)
+async def delete_action_attachment(
+    attachment_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_roles(UserRole.CISO)),
+    tenant_id: str = Depends(get_tenant_id),
+):
+    """Detach a piece of proof. The bytes are retired, not destroyed."""
+    rows = await _attachment_rows(db, select(ActionItemAttachment).where(
+        ActionItemAttachment.id == attachment_id,
+        ActionItemAttachment.tenant_id == tenant_id,
+    ))
+    attachment = rows[0] if rows else None
+    if not attachment:
+        raise HTTPException(404, "Attachment not found")
+    if attachment.file_path:
+        await file_integrity.retire_versions(
+            db, entity_type=_ACTION_ATTACHMENT, entity_id=attachment.id,
+            note=f"Attachment deleted by {current_user.email}",
+        )
+    await db.delete(attachment)
+    await db.commit()
+
+
 @router.delete("/share-links/{link_id}", status_code=204)
 async def revoke_share_link(
     link_id: str,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_roles(UserRole.CISO)),
     tenant_id: str = Depends(get_tenant_id),
 ):
-    """Revoke (delete) a share link."""
+    """Revoke (delete) a share link. Same gate as minting one."""
     tok = (await db.execute(
         select(EvidenceUploadToken).where(
             EvidenceUploadToken.id == link_id,
@@ -3469,11 +5490,24 @@ async def download_file_version(
         raise HTTPException(status_code=404, detail="File version not found")
 
     # The auditor portal hides evidence flagged is_visible_to_auditor=False;
-    # fetching the same bytes by version id must not be a way around that.
-    if row.entity_type == file_integrity.EVIDENCE and current_user.role == UserRole.AUDITOR:
-        owner = (await db.execute(
-            select(Evidence).where(Evidence.id == row.entity_id)
-        )).scalar_one_or_none()
+    # fetching the same bytes by version id must not be a way around that. The
+    # same is true of action-plan proof, which now carries the same flag and is
+    # recorded as a stored file version like everything else — without this an
+    # auditor could read a hidden attachment through
+    # GET /files/action_item/{id}/versions + this download.
+    if current_user.role == UserRole.AUDITOR and row.entity_type in (
+        file_integrity.EVIDENCE, _ACTION_ATTACHMENT,
+    ):
+        if row.entity_type == file_integrity.EVIDENCE:
+            owner = (await db.execute(
+                select(Evidence).where(Evidence.id == row.entity_id)
+            )).scalar_one_or_none()
+        else:
+            attachments = await _attachment_rows(db, select(ActionItemAttachment).where(
+                ActionItemAttachment.id == row.entity_id,
+                ActionItemAttachment.tenant_id == tenant_id,
+            ))
+            owner = attachments[0] if attachments else None
         if owner is not None and not owner.is_visible_to_auditor:
             raise HTTPException(status_code=404, detail="File version not found")
 

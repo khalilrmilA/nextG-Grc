@@ -10,6 +10,11 @@ Elite Pack (RFP module 3):
   tied to the risk scenarios the vulnerability feeds (GET/PUT /{id}/risk-scenarios)
   so an impact evaluation is traceable to the scenarios it informs, and every
   scored value is snapshotted with the scenario set it was judged against.
+
+STB tender, objectif 2 (« tendances historiques »):
+- GET /trend returns a monthly series of point-in-time vulnerability counts,
+  read from the daily ``trend_snapshots`` history and degrading to an
+  intake-volume proxy while that history is still empty.
 """
 from datetime import datetime, timezone
 from typing import Annotated
@@ -17,11 +22,14 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from pydantic import BaseModel, field_validator, model_validator
 from sqlalchemy import String, cast, select, func
+from sqlalchemy.exc import OperationalError, ProgrammingError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.core.security_utils import assert_assets_in_tenant
-from app.api.v1.dependencies.auth import get_current_user, get_tenant_id, require_roles
+from app.api.v1.dependencies.auth import (
+    get_current_user, get_tenant_id, require_roles, require_roles_strict,
+)
 from app.api.v1.dependencies.features import require_feature
 from app.models.user import User, UserRole
 from app.models.asset import Asset
@@ -35,8 +43,10 @@ from app.models.vulnerability import (
 from app.models.vulnerability_impact_history import VulnerabilityImpactHistory
 from app.models.risk_scenario import RiskScenario
 from app.models.activity_log import ActivityLog
+from app.models.trend_snapshot import METRIC_VULNERABILITIES, month_buckets
 from app.services.activity_chain import chain_and_add
 from app.services.risk_scoring import resolve_matrix
+from app.services.trend_snapshot_scheduler import snapshot_series, unavailable_series
 
 router = APIRouter()
 
@@ -140,6 +150,18 @@ class VulnOut(BaseModel):
     impact_score: float | None; impact_override: float | None; impact_justification: str | None
     created_at: datetime; updated_at: datetime
     model_config = {"from_attributes": True}
+
+    @field_validator(
+        "affected_assets", "affected_systems", "fixed_by_controls", "references", "tags",
+        mode="before",
+    )
+    @classmethod
+    def _none_to_list(cls, v):
+        # A row whose JSON list column is NULL — one written before a column
+        # existed, or by a script that bypassed the ORM default — used to fail
+        # validation for the *whole* response, taking the entire register down
+        # with a 500. Same guard IncidentOut and ThreatOut already carry.
+        return v if isinstance(v, list) else ([] if v is None else v)
 
 
 class VulnStats(BaseModel):
@@ -271,6 +293,135 @@ async def get_stats(db: AsyncSession = Depends(get_db), _: User = Depends(get_cu
         if v.cvss_score: cvss_scores.append(v.cvss_score)
     return VulnStats(total=len(vulns), by_severity=by_sev, avg_cvss=round(sum(cvss_scores)/len(cvss_scores), 1) if cvss_scores else None, **status_counts)
 
+@router.get("/trend")
+async def get_vuln_trend(
+    # Declared BEFORE GET /{vid}: FastAPI matches in declaration order, so a
+    # /trend route added after the path-parameter route would be swallowed by
+    # it and answer "Vulnerability not found".
+    db: Annotated[AsyncSession, Depends(get_db)],
+    # Billing half + access half, exactly as endpoints/dashboards.py composes
+    # them for GET /dashboards/vulnerabilities. This series IS that dashboard's
+    # history, so it carries the same two gates: a looser gate here would be a
+    # way around the restriction on the live tile. Objectif 2 phrases the
+    # access clause as an exclusion (« limité aux analystes sécurité »), hence
+    # require_roles_strict — no tenant_admin/super_admin auto-pass. CISO is
+    # listed alongside SECURITY_ANALYST for the same reason as in dashboards.py:
+    # no account on this installation holds security_analyst, so that role
+    # alone would lock out every real user of the screen.
+    _plan: Annotated[User, Depends(require_feature("custom_dashboards"))],
+    _role: Annotated[User, Depends(require_roles_strict(UserRole.SECURITY_ANALYST, UserRole.CISO))],
+    tenant_id: Annotated[str, Depends(get_tenant_id)],
+    months: int = Query(6, ge=1, le=24),
+):
+    """« Tendances historiques » for the vulnerability dashboard (objectif 2).
+
+    Preferred source is ``trend_snapshots`` — one point-in-time row per tenant
+    per UTC day written by app.services.trend_snapshot_scheduler — read back as
+    the last snapshot on or before each month's end. That is a real balance:
+    how many vulnerabilities stood open, by severity, on that date.
+
+    Careful with the word "open" when labelling this on screen: ``counts.open``
+    here is *unresolved* — everything except mitigated/accepted/closed/false
+    positive, so it includes pending_validation, validated and in_remediation —
+    while the ``open`` tile on GET /stats counts only the literal
+    ``status == "open"``. On this database the demo tenant's six vulnerabilities
+    are all ``pending_validation``, so the same register reads 6 here and 0 on
+    the tile. Both are defensible; putting them side by side under the same word
+    is not, so label the series "unresolved" (« non résolues ») or drive it from
+    ``counts.by_status``, which carries every bucket unaggregated.
+
+    Fallback (``source: "intake_volume"``) when no snapshot exists yet — a
+    fresh deploy, or the window before the scheduler's first run. It buckets
+    ``created_at`` by month, which counts what was *discovered* in each month
+    and says nothing about what was fixed. It is a real signal and it is
+    labelled as the different thing it is; ``source`` is how a caller tells
+    them apart, and the two payloads deliberately do not pretend to carry the
+    same breakdowns (an intake bucket cannot know a past status).
+    """
+    buckets = month_buckets(months)
+
+    series = await snapshot_series(db, tenant_id, METRIC_VULNERABILITIES, buckets)
+    if series is not None:
+        return {
+            "metric": METRIC_VULNERABILITIES,
+            "months": months,
+            "series": series,
+            "source": "trend_snapshot_daily",
+            "note": (
+                "Point-in-time vulnerability counts as of the latest daily "
+                "snapshot on or before each month's end."
+            ),
+        }
+
+    # --- Fallback: intake volume from created_at -----------------------------
+    # Bucketed in Python rather than with func.strftime('%Y-%m', ...): strftime
+    # is SQLite-only and this application also targets PostgreSQL, Oracle and
+    # SQL Server (see app/core/database.py). The window is bounded to the
+    # requested months, so this reads at most a few hundred rows.
+    window_start = datetime(buckets[0][0], buckets[0][1], 1)
+    try:
+        rows = (await db.execute(
+            select(Vulnerability.created_at, Vulnerability.severity).where(
+                Vulnerability.tenant_id == tenant_id,
+                Vulnerability.created_at.isnot(None),
+                Vulnerability.created_at >= window_start,
+            )
+        )).all()
+    except (OperationalError, ProgrammingError):
+        # Degrade rather than 5xx, and degrade to "unknown" rather than to a
+        # month-by-month row of zeros: a chart that says "0 new vulnerabilities
+        # in six months" because the query failed is a fabricated finding, and
+        # on this product it would be a flattering one.
+        await db.rollback()
+        return {
+            "metric": METRIC_VULNERABILITIES,
+            "months": months,
+            "series": unavailable_series(buckets),
+            "source": "unavailable",
+            "note": (
+                "Vulnerability history could not be read on this database. "
+                "No figures are shown rather than zeros."
+            ),
+        }
+    per_month: dict[str, dict[str, int]] = {}
+    for created_at, severity in rows:
+        if not created_at:
+            continue
+        key = f"{created_at.year:04d}-{created_at.month:02d}"
+        sev = severity.value if hasattr(severity, "value") else str(severity)
+        bucket = per_month.setdefault(key, {})
+        bucket[sev] = bucket.get(sev, 0) + 1
+
+    fallback_series = []
+    for (yy, mm) in buckets:
+        key = f"{yy:04d}-{mm:02d}"
+        by_severity = per_month.get(key, {})
+        fallback_series.append({
+            "month": datetime(yy, mm, 1).strftime("%b"),
+            "period": key,
+            "as_of": None,
+            "total": sum(by_severity.values()),
+            "counts": {"by_severity": by_severity},
+        })
+    return {
+        "metric": METRIC_VULNERABILITIES,
+        "months": months,
+        "series": fallback_series,
+        "source": "intake_volume",
+        # Wording is deliberately "no snapshot is available" and not "none has
+        # been recorded yet": snapshot_series() returns None both when the
+        # history is genuinely empty AND when it could not be read (table not
+        # created until the next restart, or a transient SQLite lock under the
+        # 2 workers). Only the first of those is a fact about the register; the
+        # second is a fact about this request. Stating the first when the second
+        # happened is the same fabricated-figure problem as plotting a 0.
+        "note": (
+            "No point-in-time snapshot is available for this period — showing "
+            "newly recorded vulnerabilities per month (discovery volume), not the "
+            "open balance."
+        ),
+    }
+
 @router.post("", response_model=VulnOut, status_code=201)
 async def create_vuln(body: VulnCreate, db: AsyncSession = Depends(get_db), _: User = Depends(get_current_user), tenant_id: str = Depends(get_tenant_id)):
     # Each affected-asset id must resolve to a real Asset owned by this tenant
@@ -379,6 +530,11 @@ async def score_impact(
     body: ImpactRequest,
     db: Annotated[AsyncSession, Depends(get_db)],
     current_user: Annotated[User, Depends(require_feature("vuln_impact_scoring"))],
+    # require_feature is the plan gate, not an access-control gate: on its own it
+    # let anyone in an entitled tenant override a finding's impact — including
+    # roles that cannot even PATCH the vulnerability. Same security-referent set
+    # as the mutations above (admins auto-pass inside require_roles).
+    _role: Annotated[User, Depends(require_roles(UserRole.CISO, UserRole.RISK_MANAGER))],
     tenant_id: Annotated[str, Depends(get_tenant_id)],
 ):
     """Recompute or override the composite impact score (Elite Pack).
@@ -540,8 +696,43 @@ async def set_vuln_scenarios(
     return await _scenario_link_view(db, tenant_id, v)
 
 @router.delete("/{vid}", status_code=204)
-async def delete_vuln(vid: str, db: AsyncSession = Depends(get_db), _: User = Depends(get_current_user), tenant_id: str = Depends(get_tenant_id)):
+async def delete_vuln(
+    vid: str,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    # Was a bare get_current_user: every authenticated tenant user — including
+    # roles that cannot PATCH a vulnerability — could permanently delete a
+    # security finding. Deleting is at least as sensitive as editing, so it
+    # takes the same gate as PATCH /{vid}.
+    current_user: Annotated[User, Depends(require_roles(UserRole.CISO, UserRole.RISK_MANAGER))],
+    tenant_id: Annotated[str, Depends(get_tenant_id)],
+):
     r = await db.execute(select(Vulnerability).where(Vulnerability.id == vid, Vulnerability.tenant_id == tenant_id))
     v = r.scalar_one_or_none()
     if not v: raise HTTPException(404, "Vulnerability not found")
+    # The row is about to be gone for good and there is no soft-delete column on
+    # this model, so the final state goes into the tamper-evident chain first —
+    # otherwise the trail keeps only "someone DELETEd this id", not what the
+    # finding said. Best-effort, exactly as in update_vuln above.
+    try:
+        await chain_and_add(db, ActivityLog(
+            tenant_id=tenant_id,
+            user_id=current_user.id,
+            user_email=current_user.email,
+            action="delete",
+            entity_type="vulnerability",
+            entity_id=v.id,
+            entity_name=v.title,
+            details={"deleted": {
+                "ref_id": v.ref_id, "title": v.title,
+                "severity": v.severity if isinstance(v.severity, str) else v.severity.value,
+                "status": v.status if isinstance(v.status, str) else v.status.value,
+                "cvss_score": v.cvss_score, "source": v.source,
+                "affected_assets": list(v.affected_assets or []),
+                "affected_systems": list(v.affected_systems or []),
+                "impact_score": v.impact_score,
+            }},
+            origin="api",
+        ))
+    except Exception:
+        pass
     await db.delete(v); await db.commit()

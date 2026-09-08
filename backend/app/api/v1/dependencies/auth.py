@@ -40,9 +40,15 @@ async def get_current_user(
     """Extract and validate the current user from JWT token."""
     payload = await decode_token(credentials.credentials)
 
-    # mfa_challenge tokens prove "password verified, MFA still owed" — they must
-    # never work as an access token, only at POST /auth/mfa-login.
-    if payload.get("type") == "mfa_challenge":
+    # Only an access token authenticates a request. This was a denylist of one
+    # ("mfa_challenge"), which left the REFRESH token — 7-day lifetime, handed to
+    # every client, and only ever meant for the POST /auth/refresh body — working
+    # as a bearer on every route in the application. create_mfa_challenge_token's
+    # docstring in core/security.py already asserts this allowlist behaviour, and
+    # support.py applies the same rule on its WebSocket. mfa_challenge tokens
+    # prove "password verified, MFA still owed" and stay redeemable only at
+    # POST /auth/mfa-login.
+    if payload.get("type") != "access":
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid token type",
@@ -130,6 +136,69 @@ def require_roles(*roles: UserRole):
     return _require_roles
 
 
+def require_roles_strict(*roles: UserRole, allow_admin: bool = False):
+    """Like ``require_roles`` but WITHOUT the super_admin/tenant_admin auto-pass.
+
+    ``require_roles`` returns early for SUPER_ADMIN and TENANT_ADMIN, so a route
+    listing ``(CISO,)`` is really "CISO **or** either admin". That is the right
+    default for the rest of the application — an admin locked out of a screen
+    they own is a support call — but it makes an *exclusion* impossible to
+    express, and the STB tender states several: « réservé aux fonctions de
+    direction », « uniquement aux profils exécutifs », « limité aux analystes
+    sécurité ». A clause that says *only X* is simply false while the tenant
+    owner can also read the screen. This variant is the one to reach for on
+    those routes, and only those: everywhere else keep ``require_roles``, whose
+    semantics the whole application already depends on and which is deliberately
+    left untouched.
+
+    ``allow_admin=True`` restores the auto-pass, for the case where the clause
+    reserves a screen to a function *and* the tenant owner is one of them.
+
+    Recovery when this locks somebody out (measured against the live database,
+    both paths verified end-to-end): a tenant_admin cannot grant themselves the
+    role — ``PATCH /users/{id}`` refuses a self-edit, and TENANT_ADMIN is not in
+    ASSIGNABLE_ROLES, so a roles edit would *demote* the account rather than add
+    to it. The two working routes back in are (a) create a second account holding
+    the role (``POST /users``, the CompanyAdmin screen), or (b) an
+    AccessDelegation of that role to the admin — get_effective_roles resolves
+    live delegations, so a delegated ``ciso`` passes this gate and expires on its
+    own. Both leave a record; widening the gate does not, which is why neither
+    ``allow_admin=True`` nor an extra role in the tuple is the answer to a
+    support call.
+
+    Effective roles are resolved exactly as in ``require_roles`` — personal
+    roles ∪ custom roles ∪ group roles ∪ live delegations, minus
+    ``excluded_roles`` (app/services/authz.py) — and the 403 body is identical,
+    so a client cannot tell the two gates apart and needs no new handling.
+
+    Sharp edge worth knowing before putting this on a route: ``get_effective_roles``
+    seeds its set from ``user.roles`` and falls back to the scalar ``user.role``
+    only when that JSON list is empty. So an account whose ``roles`` JSON
+    disagrees with its ``role`` column is judged on the JSON — on this database
+    there is a super_admin carrying ``roles=["viewer"]`` who passes every
+    ``require_roles`` gate by auto-pass and is denied by every strict one. That
+    is the intended reading (the carve-out is deliberate), but it will look like
+    a bug to whoever hits it.
+    """
+    async def _require_roles_strict(
+        current_user: User = Depends(get_current_user),
+        db: AsyncSession = Depends(get_db),
+    ) -> User:
+        # The one line that separates this from require_roles: the admin
+        # early-return happens only when the caller opted into it.
+        if allow_admin and current_user.role in (UserRole.SUPER_ADMIN, UserRole.TENANT_ADMIN):
+            return current_user
+        from app.services.authz import get_effective_roles
+        effective = await get_effective_roles(current_user, db)
+        if not effective.intersection(r.value for r in roles):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Insufficient permissions. Required roles: {[r.value for r in roles]}",
+            )
+        return current_user
+    return _require_roles_strict
+
+
 async def get_tenant_id(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
@@ -155,6 +224,10 @@ async def get_current_user_optional(
         return None
     try:
         payload = await decode_token(credentials.credentials)
+        # Same allowlist as get_current_user: a refresh or mfa_challenge token
+        # must not identify a caller on a public route either.
+        if payload.get("type") != "access":
+            return None
         user_id: str | None = payload.get("sub")
         if not user_id:
             return None

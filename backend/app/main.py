@@ -22,6 +22,8 @@ from app.services.archiving_engine import start_archiving_scheduler
 from app.services.file_retention import start_file_retention_scheduler
 from app.services.risk_snapshot_scheduler import start_risk_snapshot_scheduler
 from app.services.license_phone_home import start_license_phone_home
+from app.services.notification_generator import start_notification_scheduler
+from app.services.trend_snapshot_scheduler import start_trend_snapshot_scheduler
 from app.core.activity_middleware import ActivityLogMiddleware
 from app.core.license_middleware import LicenseEnforcementMiddleware
 from app.core.security_middleware import SecurityHeadersMiddleware
@@ -69,6 +71,17 @@ async def lifespan(application: FastAPI):
     _file_retention_task = asyncio.create_task(start_file_retention_scheduler())
     _risk_snapshot_task = asyncio.create_task(start_risk_snapshot_scheduler())
     _license_phone_home_task = asyncio.create_task(start_license_phone_home())
+    # Notification sweep 24h poll — the « relances automatiques » of the STB
+    # requirement. run_all_checks previously had exactly ONE caller: the refresh
+    # icon in the notification bell, so nothing was ever automatic. Claims its
+    # run in the database rather than in memory, because 2 uvicorn workers would
+    # otherwise both fire it. Kill switch: ENABLE_NOTIFICATION_SCHEDULER=0.
+    _notification_task = asyncio.create_task(start_notification_scheduler())
+    # Trend snapshots (vulnérabilités, menaces, gouvernance) — the tender asks for
+    # « tendances historiques » on three modules and the product had a time series
+    # for risk only. Same claim-in-the-database design as the risk snapshotter, so
+    # the 2 uvicorn workers cannot both write the same day's row.
+    _trend_snapshot_task = asyncio.create_task(start_trend_snapshot_scheduler())
 
     yield
 
@@ -81,7 +94,12 @@ async def lifespan(application: FastAPI):
     _archiving_task.cancel()
     _risk_snapshot_task.cancel()
     _license_phone_home_task.cancel()
-    for _task in (_scheduler_task, _report_task, _cve_task, _vuln_scanner_task, _audit_recurrence_task, _archiving_task, _risk_snapshot_task, _license_phone_home_task):
+    # _file_retention_task was started but never cancelled here — it kept the loop
+    # alive through shutdown and the task was garbage-collected mid-await.
+    _file_retention_task.cancel()
+    _notification_task.cancel()
+    _trend_snapshot_task.cancel()
+    for _task in (_scheduler_task, _report_task, _cve_task, _vuln_scanner_task, _audit_recurrence_task, _archiving_task, _risk_snapshot_task, _license_phone_home_task, _file_retention_task, _notification_task, _trend_snapshot_task):
         try:
             await _task
         except asyncio.CancelledError:

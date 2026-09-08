@@ -64,24 +64,38 @@ async def apply_kev_flags(db: AsyncSession, items: list[dict]) -> int:
     return flagged
 
 
+def watch_key(item: dict) -> tuple[str, str]:
+    """The (source, ref) pair a feed item is stored under.
+
+    Exposed so a caller can ask "did *this* run file that item?" without
+    re-deriving the truncations and drifting out of step with the unique
+    (tenant, source, ref) index that makes ingestion idempotent.
+    """
+    return ((item.get("source") or "feed")[:60], stable_ref(item)[:80])
+
+
 async def ingest_for_tenant(db: AsyncSession, tenant_id: str, items: list[dict]) -> dict:
     """Store feed items as watch entries for one tenant. Caller commits.
 
-    Returns {"created": n, "skipped": n, "by_kind": {...}}.
+    Returns {"created": n, "skipped": n, "by_kind": {...}, "created_refs": {...}}.
+
+    ``created_refs`` holds the watch_key() of every row this call actually
+    inserted. Because the unique index admits exactly one of the two uvicorn
+    workers per (tenant, source, ref), it is a cross-worker claim: a caller that
+    only acts on ``created_refs`` acts once, not once per worker.
     """
-    summary: dict = {"created": 0, "skipped": 0, "by_kind": {}}
+    summary: dict = {"created": 0, "skipped": 0, "by_kind": {}, "created_refs": set()}
     now = datetime.now(timezone.utc).replace(tzinfo=None)
 
     for item in items:
         kind = classify_item(item)
-        ref = stable_ref(item)
-        source = (item.get("source") or "feed")[:60]
+        source, ref = watch_key(item)
 
         watch = ThreatWatchItem(
             tenant_id=tenant_id,
             kind=kind,
             source=source,
-            ref=ref[:80],
+            ref=ref,
             title=(item.get("name") or "")[:500],
             summary=item.get("description") or None,
             url=item.get("url") or None,
@@ -106,6 +120,7 @@ async def ingest_for_tenant(db: AsyncSession, tenant_id: str, items: list[dict])
             summary["skipped"] += 1
             continue
         summary["created"] += 1
+        summary["created_refs"].add((source, ref))
         summary["by_kind"][kind] = summary["by_kind"].get(kind, 0) + 1
 
     return summary

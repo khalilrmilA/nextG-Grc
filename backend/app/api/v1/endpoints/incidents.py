@@ -7,7 +7,7 @@ checked against this tenant's Asset table on create/update — same IDOR-safe
 pattern as vulnerabilities.py's ``affected_assets`` (see
 app/core/security_utils.py's ``assert_assets_in_tenant``).
 """
-from datetime import datetime
+from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, field_validator
 from sqlalchemy import select, func
@@ -17,9 +17,41 @@ from app.core.database import get_db
 from app.core.security_utils import assert_assets_in_tenant
 from app.api.v1.dependencies.auth import get_current_user, get_tenant_id, require_roles
 from app.models.user import User, UserRole
+from app.models.activity_log import ActivityLog
 from app.models.incident import Incident, IncidentSeverity, IncidentStatus, IncidentCategory
+from app.services.activity_chain import chain_and_add
 
 router = APIRouter()
+
+
+def _enum(enum_cls, value: str, field: str):
+    """Coerce a client string onto an enum member — 422, not 500, when it isn't one.
+
+    ``IncidentCategory("ransomware")`` raises ValueError, which reached the client
+    as an unhandled 500 for what is plainly a bad request.
+    """
+    try:
+        return enum_cls(value)
+    except ValueError:
+        raise HTTPException(
+            422,
+            f"Invalid {field} '{value}'. Expected one of: {', '.join(e.value for e in enum_cls)}",
+        )
+
+
+def _parse_ts(value: str | None) -> datetime | None:
+    """Parse one of the ISO timestamp columns, as naive UTC. None when unparseable.
+
+    detected_at / resolved_at are free-form String(30) columns fed straight from
+    the client, so anything in them may not be a timestamp at all.
+    """
+    if not value:
+        return None
+    try:
+        dt = datetime.fromisoformat(str(value).strip().replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    return dt.astimezone(timezone.utc).replace(tzinfo=None) if dt.tzinfo else dt
 
 
 class IncidentCreate(BaseModel):
@@ -66,6 +98,10 @@ class IncidentUpdate(BaseModel):
     post_mortem_url: str | None = None
     breach_notification_required: bool | None = None
     notification_sent_at: str | None = None
+    # Dead column until now: IncidentOut has always returned regulatory_reference
+    # but nothing could set it (all-NULL in production). Accepted here so the
+    # breach-notification reference can actually be recorded.
+    regulatory_reference: str | None = None
     linked_risks: list[str] | None = None
     linked_controls: list[str] | None = None
     linked_vendors: list[str] | None = None
@@ -89,7 +125,8 @@ class IncidentOut(BaseModel):
     model_config = {"from_attributes": True}
 
     @field_validator(
-        "affected_asset_ids", "linked_risks", "linked_controls",
+        "affected_systems", "affected_asset_ids", "data_types_affected",
+        "linked_risks", "linked_controls",
         "linked_vendors", "linked_vulnerabilities", "tags",
         mode="before",
     )
@@ -103,6 +140,15 @@ class IncidentOut(BaseModel):
 
 class IncidentStats(BaseModel):
     total: int; open: int; investigating: int; contained: int; resolved: int; closed: int
+    # IncidentStatus.POST_MORTEM is an accepted status that was counted in no
+    # bucket, so `total` stopped equalling the sum of the statuses as soon as an
+    # incident reached it. Defaulted like `critical` below so a client that does
+    # not know the field is unaffected.
+    post_mortem: int = 0
+    # Count of severity=critical. Additive: the Incidents page has always read
+    # `stats.critical` for its fourth KPI tile, which the API never returned, so
+    # the tile rendered empty.
+    critical: int = 0
     by_severity: dict[str, int]
     by_category: dict[str, int]
     avg_resolution_hours: float | None
@@ -128,8 +174,12 @@ async def get_incident_stats(
     incidents = list((await db.execute(select(Incident).where(Incident.tenant_id == tenant_id))).scalars().all())
     by_sev: dict[str, int] = {}
     by_cat: dict[str, int] = {}
-    status_counts = {"open": 0, "investigating": 0, "contained": 0, "resolved": 0, "closed": 0}
+    status_counts = {"open": 0, "investigating": 0, "contained": 0, "resolved": 0,
+                     "closed": 0, "post_mortem": 0}
     breach_count = 0
+    # Detected -> resolved, in hours. This was hard-coded to None, so the field
+    # was always null for every tenant.
+    resolution_hours: list[float] = []
 
     for i in incidents:
         s = i.severity.value if hasattr(i.severity, "value") else str(i.severity)
@@ -139,10 +189,15 @@ async def get_incident_stats(
         by_cat[c] = by_cat.get(c, 0) + 1
         if st in status_counts: status_counts[st] += 1
         if i.breach_notification_required: breach_count += 1
+        start, end = _parse_ts(i.detected_at), _parse_ts(i.resolved_at)
+        if start and end and end >= start:
+            resolution_hours.append((end - start).total_seconds() / 3600.0)
 
     return IncidentStats(
-        total=len(incidents), by_severity=by_sev, by_category=by_cat,
-        breach_notifications=breach_count, avg_resolution_hours=None,
+        total=len(incidents), critical=by_sev.get("critical", 0),
+        by_severity=by_sev, by_category=by_cat,
+        breach_notifications=breach_count,
+        avg_resolution_hours=round(sum(resolution_hours) / len(resolution_hours), 1) if resolution_hours else None,
         **status_counts,
     )
 
@@ -158,7 +213,8 @@ async def create_incident(
     await assert_assets_in_tenant(db, body.affected_asset_ids, tenant_id, field_name="affected_asset_ids")
     inc = Incident(
         tenant_id=tenant_id, title=body.title, description=body.description,
-        category=IncidentCategory(body.category), severity=IncidentSeverity(body.severity),
+        category=_enum(IncidentCategory, body.category, "category"),
+        severity=_enum(IncidentSeverity, body.severity, "severity"),
         reporter_id=user.id, assigned_to_id=body.assigned_to_id,
         detected_at=body.detected_at or datetime.utcnow().isoformat(),
         affected_systems=body.affected_systems, affected_asset_ids=body.affected_asset_ids,
@@ -189,20 +245,46 @@ async def update_incident(iid: str, body: IncidentUpdate, db: AsyncSession = Dep
               "affected_systems","affected_asset_ids","affected_users_count","data_types_affected","business_impact",
               "financial_impact","root_cause","containment_actions","remediation_actions",
               "lessons_learned","post_mortem_url","breach_notification_required","notification_sent_at",
+              "regulatory_reference",
               "linked_risks","linked_controls","linked_vendors","linked_vulnerabilities","tags"]:
         v = getattr(body, f, None)
         if v is not None: setattr(inc, f, v)
-    if body.severity: inc.severity = IncidentSeverity(body.severity)
-    if body.status: inc.status = IncidentStatus(body.status)
-    if body.category: inc.category = IncidentCategory(body.category)
+    if body.severity: inc.severity = _enum(IncidentSeverity, body.severity, "severity")
+    if body.status: inc.status = _enum(IncidentStatus, body.status, "status")
+    if body.category: inc.category = _enum(IncidentCategory, body.category, "category")
     await db.commit(); await db.refresh(inc)
     return IncidentOut.model_validate(inc)
 
 @router.delete("/{iid}", status_code=204)
-async def delete_incident(iid: str, db: AsyncSession = Depends(get_db), _: User = Depends(require_roles(UserRole.SECURITY_ANALYST, UserRole.CISO)), tenant_id: str = Depends(get_tenant_id)):
+async def delete_incident(iid: str, db: AsyncSession = Depends(get_db), user: User = Depends(require_roles(UserRole.SECURITY_ANALYST, UserRole.CISO)), tenant_id: str = Depends(get_tenant_id)):
     r = await db.execute(select(Incident).where(Incident.id == iid, Incident.tenant_id == tenant_id))
     inc = r.scalar_one_or_none()
     if not inc: raise HTTPException(404, "Incident not found")
+    # An incident is a record of fact — it can carry a regulatory breach
+    # notification — and this row is about to be gone for good. The generic
+    # request log would keep only "someone DELETEd this id", so the final state
+    # goes into the tamper-evident chain first, the same way threats.py records
+    # a deletion before it happens. Best-effort: an audit failure must not
+    # leave the caller unable to delete.
+    try:
+        await chain_and_add(db, ActivityLog(
+            tenant_id=tenant_id, user_id=user.id, user_email=user.email,
+            action="delete", entity_type="incident", entity_id=inc.id,
+            entity_name=inc.title,
+            details={"deleted": {
+                "title": inc.title,
+                "category": inc.category.value if hasattr(inc.category, "value") else inc.category,
+                "severity": inc.severity.value if hasattr(inc.severity, "value") else inc.severity,
+                "status": inc.status.value if hasattr(inc.status, "value") else inc.status,
+                "detected_at": inc.detected_at, "resolved_at": inc.resolved_at,
+                "breach_notification_required": inc.breach_notification_required,
+                "notification_sent_at": inc.notification_sent_at,
+                "financial_impact": inc.financial_impact,
+            }},
+            origin="api",
+        ))
+    except Exception:
+        pass
     await db.delete(inc); await db.commit()
 
 

@@ -6,17 +6,20 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
-from app.api.v1.dependencies.auth import get_current_user, get_tenant_id, require_roles
+from app.api.v1.dependencies.auth import get_current_user, get_tenant_id
 from app.models.user import User, UserRole
 from app.models.subscription import (
     Subscription,
     SubscriptionTier,
-    SubscriptionStatus,
     TIER_LIMITS,
     togglable_features,
 )
 
 router = APIRouter()
+
+# The only two values Subscription.billing_cycle is ever meant to hold (see the
+# model's own comment and the frontend's Subscription type).
+_BILLING_CYCLES = {"monthly", "annual"}
 
 
 # ── Schemas ──────────────────────────────────────────────────────────────
@@ -75,10 +78,19 @@ async def update_subscription(
     if body.tier:
         if current_user.role != UserRole.SUPER_ADMIN:
             raise HTTPException(403, "Only platform admins can change subscription tier")
-        sub.tier = SubscriptionTier(body.tier)
+        try:
+            sub.tier = SubscriptionTier(body.tier)
+        except ValueError:
+            # SubscriptionTier._missing_ returns None for anything unknown, so the
+            # bare constructor raised ValueError and the request 500'd.
+            raise HTTPException(422, f"Invalid tier: {body.tier}")
     if body.billing_cycle:
         if current_user.role not in (UserRole.SUPER_ADMIN, UserRole.CISO):
             raise HTTPException(403, "Insufficient permissions")
+        # Free-text before: billing_cycle is a String(20) the UI renders as one of
+        # two values, so anything else was stored and then displayed verbatim.
+        if body.billing_cycle not in _BILLING_CYCLES:
+            raise HTTPException(422, f"Invalid billing_cycle: {body.billing_cycle}")
         sub.billing_cycle = body.billing_cycle
     await db.commit(); await db.refresh(sub)
     out = SubscriptionOut.model_validate(sub)

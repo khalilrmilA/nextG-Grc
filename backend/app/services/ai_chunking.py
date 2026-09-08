@@ -1378,6 +1378,7 @@ async def assess_controls_over_document(
     user_id: str | None = None,
     tenant_id: str | None = None,
     timeout_s: float | None = None,
+    cfg: Any = None,
 ) -> AiResult:
     """Assess ``controls`` against the WHOLE text of ``documents`` in one operation.
 
@@ -1401,6 +1402,13 @@ async def assess_controls_over_document(
     concurrency          parallel model calls (default ``settings.AI_MAX_PARALLEL_CALLS`` = 2).
     model/user_id/tenant_id/timeout_s  forwarded to ``ai_structured`` -> ``ai_complete`` (quota
                          metering, per-call read budget; default ``settings.AI_ANALYSIS_TIMEOUT_S`` = 240).
+    cfg                  an ``ai_provider.AIConfig`` (from ``load_ai_config(db, tenant_id)``) to call the
+                         TENANT's own endpoint. ``None`` (default) keeps the previous behaviour exactly —
+                         the deployment default resolved by ``ai_provider.env_ai_config()``. It has to be
+                         passed explicitly: this function has no database session, so ``tenant_id`` alone
+                         cannot resolve a bring-your-own-AI row, and a customer who configured their own
+                         endpoint for data-residency reasons would otherwise have their document text sent
+                         to the bundled model without knowing.
 
     Returns an ``AiResult``: ``ok`` and ``data = ControlAssessmentRun`` (see its docstring), or
     ``ok=False`` with ``kind="input"`` (no text / no controls / duplicate ids / too large / context
@@ -1499,6 +1507,8 @@ async def assess_controls_over_document(
                                   timeout_s=float(timeout_s or _timeout_s()), user_id=user_id, tenant_id=tenant_id)
     if model:
         common["model"] = model
+    if cfg is not None:
+        common["cfg"] = cfg
     state = {"calls": 0, "attempts": 0, "model": model_name}
     failures: list[str] = []
     summaries: list[str] = []

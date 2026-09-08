@@ -13,17 +13,24 @@ from sqlalchemy import String, and_, cast, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
 
-from app.api.v1.dependencies.auth import get_tenant_id
+from app.api.v1.dependencies.auth import get_tenant_id, require_roles
 from app.api.v1.dependencies.features import require_feature
 from app.core.database import get_db
+from app.core.security_utils import assert_assets_in_tenant
 from app.models.cve_entry import CveAnnotation, CveEntry, RELEVANCE_VALUES
 from app.models.cwe_entry import CweEntry
-from app.models.user import User
+from app.models.user import User, UserRole
 from app.services.nvd_sync import sync_all
 
 router = APIRouter()
 
 _GATE = require_feature("cve_knowledge_base")
+
+# require_feature only says the tenant's plan includes the knowledge base. Pulling
+# from NVD/MITRE is an outbound job that writes the catalog every tenant reads and
+# takes minutes of worker time, so it carries the same role gate the platform's
+# other feed pulls already have (threats.py /fetch-news, regulatory.py /fetch-news).
+_FEED_OPERATOR = require_roles(UserRole.SECURITY_ANALYST, UserRole.CISO)
 
 # A fourth, synthetic relevance filter: everything the tenant has not judged
 # yet. It is the working queue for the triage the requirement describes, and
@@ -237,6 +244,7 @@ async def search_cve(
 @router.post("/sync")
 async def trigger_sync(
     current_user: Annotated[User, Depends(_GATE)],
+    _role: Annotated[User, Depends(_FEED_OPERATOR)],
     db: Annotated[AsyncSession, Depends(get_db)],
     days: int = Query(3, ge=1, le=30),
     refresh_days: int | None = Query(None, ge=1, le=120),
@@ -303,6 +311,10 @@ async def set_annotation(
 ):
     if body.relevance not in RELEVANCE_VALUES:
         raise HTTPException(status_code=422, detail=f"relevance must be one of {RELEVANCE_VALUES}")
+    # The linked assets were stored verbatim, so a typo produced an annotation
+    # pointing at nothing and a forged id pointed it at another tenant's asset.
+    # Same check threats.py already applies to its profile links.
+    await assert_assets_in_tenant(db, body.linked_asset_ids, tenant_id, field_name="linked_asset_ids")
     entry = (await db.execute(select(CveEntry).where(CveEntry.cve_id == cve_id))).scalar_one_or_none()
     if entry is None:
         raise HTTPException(status_code=404, detail="CVE not found in catalog")

@@ -112,34 +112,72 @@ async def run_due_recurrences(db: AsyncSession) -> dict:
     one spawned yet, claiming each atomically so a concurrent worker's tick
     can't double-spawn it."""
     due = await _due_audits(db)
+    # The queue is plain ids, not ORM instances: the failure path below rolls
+    # the session back, which expires every loaded instance, and reading an
+    # expired attribute from an AsyncSession outside a greenlet raises. With two
+    # due audits and the first one failing, `audit.id` on the next iteration was
+    # exactly that read — MissingGreenlet aborted the whole tick, so the audits
+    # queued behind the failure were never even claimed. Same shape as
+    # vuln_scanner_scheduler's queue; `await db.get(...)` below does the reload
+    # inside an awaited call, where the IO is allowed.
+    queue = [audit.id for audit in due]
 
     spawned = 0
-    for audit in due:
+    for audit_id in queue:
         claim_stamp = datetime.utcnow().isoformat()
         # Optimistic claim: only the runner whose UPDATE still matches
         # recurrence_spawned_at IS NULL wins; everyone else gets rowcount 0
         # and skips — the same idea as report_scheduler's next_run_at claim.
         claim = await db.execute(
             update(Audit)
-            .where(Audit.id == audit.id, Audit.recurrence_spawned_at.is_(None))
+            .where(Audit.id == audit_id, Audit.recurrence_spawned_at.is_(None))
             .values(recurrence_spawned_at=claim_stamp)
         )
         await db.commit()
         if claim.rowcount != 1:
             continue
 
-        await db.refresh(audit)
+        audit = await db.get(Audit, audit_id)
+        if audit is None:   # deleted between the listing and the claim
+            continue
+        recurrence = None
         try:
+            await db.refresh(audit)
+            recurrence = audit.recurrence
             successor = await _spawn_next_cycle(db, audit)
             await db.commit()
-            if successor:
-                spawned += 1
-                # Logged only once the successor is durable, and from its own
-                # session. Writing it inside the transaction above would block
-                # on SQLite's single-writer lock (the caller still holds it
-                # after flush), and a failure there could take the audit with
-                # it — a scheduler creating a record is exactly the "batch"
-                # origin STB asks to see, but not at the price of the record.
+        except Exception as exc:  # noqa: BLE001 — never let the loop die
+            await db.rollback()
+            logger.exception("Audit recurrence: failed to spawn next cycle for audit %s: %s", audit_id, exc)
+            # Give the claim back, or a transient failure (a locked database,
+            # say) would retire this campaign's recurrence for good: the flag
+            # says "spawned" while no successor exists, and nothing ever looks
+            # again. Conditioned on our own stamp so a worker that has since
+            # claimed and succeeded is never disturbed.
+            try:
+                await db.execute(
+                    update(Audit)
+                    .where(Audit.id == audit_id, Audit.recurrence_spawned_at == claim_stamp)
+                    .values(recurrence_spawned_at=None)
+                )
+                await db.commit()
+            except Exception:  # noqa: BLE001
+                await db.rollback()
+                logger.warning("Audit recurrence: could not release the claim on audit %s", audit_id)
+            continue
+
+        if successor:
+            spawned += 1
+            # Logged only once the successor is durable, and from its own
+            # session. Writing it inside the transaction above would block
+            # on SQLite's single-writer lock (the caller still holds it
+            # after flush), and a failure there could take the audit with
+            # it — a scheduler creating a record is exactly the "batch"
+            # origin STB asks to see, but not at the price of the record.
+            # Outside the try above for the same reason: the successor is
+            # already committed here, so a failure logging it must not look
+            # like a failed spawn and hand the claim back.
+            try:
                 await log_system_activity(
                     tenant_id=successor.tenant_id,
                     action="create",
@@ -148,17 +186,16 @@ async def run_due_recurrences(db: AsyncSession) -> dict:
                     entity_name=successor.title,
                     details={
                         "reason": "recurrence",
-                        "spawned_from_audit_id": audit.id,
-                        "recurrence": str(audit.recurrence),
+                        "spawned_from_audit_id": audit_id,
+                        "recurrence": str(recurrence),
                     },
                 )
-                logger.info(
-                    "Audit recurrence: spawned next cycle %s (%s -> %s) from closed audit %s (%s)",
-                    successor.id, successor.planned_start, successor.planned_end, audit.id, audit.recurrence,
-                )
-        except Exception as exc:  # noqa: BLE001 — never let the loop die
-            await db.rollback()
-            logger.error("Audit recurrence: failed to spawn next cycle for audit %s: %s", audit.id, exc)
+            except Exception:  # noqa: BLE001 — the successor exists; the trail entry is best-effort
+                logger.warning("Audit recurrence: could not journal the spawn of audit %s", successor.id)
+            logger.info(
+                "Audit recurrence: spawned next cycle %s (%s -> %s) from closed audit %s (%s)",
+                successor.id, successor.planned_start, successor.planned_end, audit_id, recurrence,
+            )
 
     return {"due": len(due), "spawned": spawned, "checked_at": datetime.utcnow().isoformat(timespec="seconds")}
 
@@ -186,5 +223,5 @@ async def start_audit_recurrence_scheduler() -> None:
         except asyncio.CancelledError:
             raise
         except Exception as exc:  # noqa: BLE001 — never let the loop die
-            logger.error("Audit recurrence scheduler tick failed: %s", exc)
+            logger.exception("Audit recurrence scheduler tick failed: %s", exc)
         await asyncio.sleep(POLL_SECONDS)
