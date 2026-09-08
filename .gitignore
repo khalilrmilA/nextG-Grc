@@ -71,3 +71,4 @@ backend/backups/
 # control, where every clone would carry them. .dockerignore already excludes
 # this path from images for the same reason.
 backend/uploads/
+.deploy-backup-*/

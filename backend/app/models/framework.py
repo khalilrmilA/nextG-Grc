@@ -50,6 +50,17 @@ class Framework(Base):
     )
     is_builtin: Mapped[bool] = mapped_column(Boolean, default=True)  # False = custom tenant framework
 
+    # --- STB objectif 1: "classée par source (norme/réglementation)" ---------
+    # Nothing previously recorded whether a framework is a standard, a regulation,
+    # a law or an internal policy — the visible "Type" chip was computed in the
+    # frontend from a 18-entry lookup that matched only 7 of 79 built-ins.
+    # norme | reglementation | loi | politique_interne
+    source_type: Mapped[str | None] = mapped_column(String(30), nullable=True, index=True)
+
+    # Lineage of a tenant fork, so a customised copy can be diffed against the
+    # built-in it was cloned from when that built-in is updated.
+    cloned_from_framework_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+
     # Tenant-specific custom frameworks
     tenant_id: Mapped[str | None] = mapped_column(
         String(36), ForeignKey("tenants.id"), nullable=True, index=True
@@ -90,6 +101,16 @@ class FrameworkControl(Base):
 
     # Mandatory controls cannot be marked as N/A — they must be implemented
     is_mandatory: Mapped[bool] = mapped_column(Boolean, default=False)
+
+    # --- STB objectif 1: "classée par domaine, type" -------------------------
+    # `category` is uncontrolled free text: 157 distinct values on the live
+    # database, with case variants splitting the same domain (organizational
+    # 1819 / ORGANIZATIONAL 56). `domain` is the controlled vocabulary,
+    # backfilled from category by scripts/backfill_control_domain.py; `category`
+    # is left untouched so nothing that reads it today changes behaviour.
+    domain: Mapped[str | None] = mapped_column(String(80), nullable=True, index=True)
+    # exigence | recommandation | mesure — what kind of thing this line is.
+    requirement_type: Mapped[str | None] = mapped_column(String(30), nullable=True)
 
     # Relationships
     framework: Mapped["Framework"] = relationship("Framework", back_populates="controls")

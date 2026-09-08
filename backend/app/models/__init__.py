@@ -15,6 +15,20 @@ from app.models.mandatory_document import MandatoryDocument
 from app.models.action_item import ActionItem, ActionItemStatus, ActionItemPriority
 from app.models.auditor_assignment import AuditorAssignment
 from app.models.audit import Audit, AuditFinding, AuditEvidence
+# --- STB tender (bloc « conformité & audit ») -------------------------------
+# New tables; created by create_all() at startup only because they are imported
+# HERE. A model file that nothing imports is invisible to SQLAlchemy's metadata.
+from app.models.trend_snapshot import TrendSnapshot
+from app.models.audit_campaign import AuditCampaign
+from app.models.audit_grid import AuditGrid, AuditGridItem, AuditGridResponse
+from app.models.audit_collaboration import AuditComment, AuditFindingStatusEvent
+from app.models.audit_recommendation import AuditRecommendation
+from app.models.report_distribution import ReportDistribution
+from app.models.compliance_scale import ComplianceScale
+from app.models.control_applicability import ControlApplicability
+from app.models.control_translation import ControlTranslation
+from app.models.action_item_attachment import ActionItemAttachment
+from app.models.regulatory_feed import RegulatoryFeed, RegulatoryUpdateVersion
 from app.models.policy import Policy, PolicyVersion, PolicyAttestation
 from app.models.vendor import Vendor, VendorAssessment, VendorRisk, VendorContract
 from app.models.contract_collaboration import ContractCollaboration, ContractMessage
@@ -113,4 +127,16 @@ __all__ = [
     "TenantAIConfig",
     "AiAccessRequest", "AiUsageQuota", "ApiToken",
     "DashboardLayout",
+    # STB tender (bloc « conformité & audit »)
+    "TrendSnapshot",
+    "AuditCampaign",
+    "AuditGrid", "AuditGridItem", "AuditGridResponse",
+    "AuditComment", "AuditFindingStatusEvent",
+    "AuditRecommendation",
+    "ReportDistribution",
+    "ComplianceScale",
+    "ControlApplicability",
+    "ControlTranslation",
+    "ActionItemAttachment",
+    "RegulatoryFeed", "RegulatoryUpdateVersion",
 ]

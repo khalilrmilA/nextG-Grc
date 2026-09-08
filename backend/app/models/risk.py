@@ -83,6 +83,18 @@ class Risk(Base):
     # Which risk matrix drives this risk's scoring (null = the tenant's default / builtin 5x5).
     risk_matrix_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
 
+    # --- STB gap 19.d: rattachement organisationnel du risque -----------------
+    # The register could not be filtered by département or by processus, although
+    # Policy has carried both since it was written. Without them "les risques de la
+    # DSI" cannot be answered and the register cannot be handed to a department
+    # head as their own list. Both nullable — an unscoped risk behaves as before.
+    org_entity_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("org_entities.id"), nullable=True, index=True
+    )
+    business_process_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("business_processes.id"), nullable=True, index=True
+    )
+
     severity: Mapped[RiskSeverity | None] = mapped_column(
         SAEnum(RiskSeverity, values_callable=lambda x: [e.value for e in x]), nullable=True
     )

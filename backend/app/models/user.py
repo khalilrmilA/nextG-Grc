@@ -66,6 +66,13 @@ class User(Base):
     # admin carve out an exception for one member without touching the group.
     excluded_roles: Mapped[list] = mapped_column(JSON, nullable=False, default=list, server_default="[]")
 
+    # --- STB objectif 4: "auditeurs internes ou externes" --------------------
+    # The `auditor` role existed but nothing distinguished an employee from a
+    # member of an external firm, which a bank must be able to show its
+    # regulator. Defaults to internal, which is what all 17 existing users are.
+    is_external: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="0")
+    external_org: Mapped[str | None] = mapped_column(String(200), nullable=True)
+
     # Tenant-defined roles held by this user (see models/access_governance.py).
     # Expanded to their built-in roles by get_effective_roles, so custom roles
     # need no change to any require_roles check.

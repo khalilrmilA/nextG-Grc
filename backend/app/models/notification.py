@@ -90,6 +90,15 @@ class Notification(Base):
     )
     title: Mapped[str] = mapped_column(String(255), nullable=False)
     message: Mapped[str] = mapped_column(Text, nullable=False)
+
+    # --- STB: relances et notifications en français et en arabe --------------
+    # A notification cannot store an English sentence for a Tunisian bank. The
+    # key plus its parameters are stored, and the client renders them with t().
+    # `title`/`message` stay populated as the fallback for rows written before
+    # this, for the e-mail leg, and for anything the client cannot resolve.
+    title_key: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    message_key: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    params: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     # Extra data (e.g. link, entity_id, entity_type)
     data: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     read_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

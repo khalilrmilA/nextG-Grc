@@ -65,6 +65,29 @@ class AssetLifecycleState(str, enum.Enum):
     DECOMMISSIONED = "decommissioned" # désaffectation — disposed of
 
 
+class AssetStatus(str, enum.Enum):
+    """The asset's *operational* state right now — « leur statut ».
+
+    Distinct from :class:`AssetLifecycleState`, and deliberately sharing none of
+    its values. The lifecycle answers "where is this asset in its life?"
+    (acquisition -> in_use -> maintenance -> retired -> decommissioned); the
+    status answers "is it delivering its service at this moment?". The two are
+    genuinely independent: a server in the ``maintenance`` phase can still be
+    ``operational`` (rolling patch, no outage) or ``out_of_service`` (on the
+    bench), and a laptop in the ``in_use`` phase can be ``lost``. Answering both
+    questions with one column — which is what the product did before this — hides
+    exactly the situations a bank needs to see.
+
+    Kept to five values on purpose: each one drives a different reaction
+    (nothing / capacity watch / restore / incident containment / declaration).
+    """
+    OPERATIONAL = "operational"        # en service, nominal
+    DEGRADED = "degraded"              # running with impaired capacity/performance
+    OUT_OF_SERVICE = "out_of_service"  # hors service: stopped, in stock, or withdrawn
+    QUARANTINED = "quarantined"        # isolated on purpose (incident containment)
+    LOST = "lost"                      # lost or stolen — whereabouts unknown
+
+
 class AssetCriticality(str, enum.Enum):
     CRITICAL = "critical"
     HIGH = "high"
@@ -134,6 +157,21 @@ class Asset(Base):
     lifecycle_state: Mapped[str | None] = mapped_column(String(20), nullable=True, index=True)
     acquired_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     end_of_life_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+    # Operational status (STB objectif 1, « leur statut »). The tender names the
+    # status AND the lifecycle as two separate indicators; the product answered
+    # both with lifecycle_state, so "is this asset actually serving?" could not
+    # be asked at all. One of AssetStatus, validated at the API boundary, and
+    # nullable so a row that predates the migration reads as "not declared"
+    # rather than as a value nobody chose.
+    #
+    # index=True does NOT create the index on the live table: assets already
+    # exists, so this column arrives by ALTER TABLE (scripts/migrate_add_asset_status.py)
+    # and the script creates ix_assets_status itself — same as asset_class and
+    # lifecycle_state, whose model-level index=True never materialised either.
+    status: Mapped[str | None] = mapped_column(
+        String(20), nullable=True, index=True, default=AssetStatus.OPERATIONAL.value
+    )
 
     # Periodic review scheduling (RFP gap fix): mirrors Risk.next_review_date so
     # assets get the same mandatory-review + reminder mechanism as risks. ISO date

@@ -1,7 +1,8 @@
 """Compliance management models."""
 import enum
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-from sqlalchemy import String, Text, Boolean, ForeignKey, Enum as SAEnum, JSON, Float, Integer
+from datetime import datetime
+from sqlalchemy import String, Text, Boolean, ForeignKey, Enum as SAEnum, JSON, Float, Integer, DateTime
 from app.core.database import Base
 
 
@@ -58,6 +59,27 @@ class ComplianceAssessment(Base):
     scope_description: Mapped[str | None] = mapped_column(Text, nullable=True)
     in_scope_assets: Mapped[list] = mapped_column(JSON, default=list)
 
+    # --- STB objectif 2: "des processus, départements ou systèmes" -----------
+    # Compliance could previously only be evaluated for a (tenant, framework)
+    # pair — none of the three nouns the requirement names was expressible.
+    # scope_type says which one this assessment covers; the matching id column
+    # carries it. 'tenant' preserves today's organisation-wide behaviour and is
+    # what every existing assessment is.
+    scope_type: Mapped[str] = mapped_column(String(20), nullable=False, default="tenant")
+    org_entity_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("org_entities.id"), nullable=True, index=True
+    )
+    business_process_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("business_processes.id"), nullable=True, index=True
+    )
+
+    # The customisable conformity grid this assessment is graded on. Null = the
+    # legacy ControlStatus enum and the hard-coded score formula, so all 51
+    # existing assessments keep the scores they already show.
+    scale_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("compliance_scales.id"), nullable=True
+    )
+
     # Dates
     assessment_start: Mapped[str | None] = mapped_column(String(20), nullable=True)
     assessment_end: Mapped[str | None] = mapped_column(String(20), nullable=True)
@@ -112,6 +134,25 @@ class ControlAssessment(Base):
 
     # AI analysis confidence score (0.0 - 1.0)
     ai_confidence: Mapped[float | None] = mapped_column(Float, nullable=True)
+
+    # --- STB objectif 2: grille personnalisable ------------------------------
+    # When the assessment uses a custom scale, the verdict is a key from that
+    # scale. `status` keeps carrying the nearest legacy enum value so every
+    # existing query, score and export keeps working untouched.
+    status_key: Mapped[str | None] = mapped_column(String(40), nullable=True)
+
+    # --- STB objectif 5: the auditor's own verdict ---------------------------
+    # Kept separate from `status`, which is the owner's self-assessment. The
+    # auditor portal previously smuggled its verdict into
+    # not_applicable_justification as regex-parsed text.
+    auditor_verdict: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    auditor_note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    auditor_verdict_by_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("users.id"), nullable=True
+    )
+    auditor_verdict_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
     # Relationships
     assessment: Mapped["ComplianceAssessment"] = relationship(

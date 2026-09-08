@@ -1,7 +1,8 @@
 """Audit management models."""
 import enum
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-from sqlalchemy import String, Text, Boolean, ForeignKey, Enum as SAEnum, JSON
+from datetime import datetime
+from sqlalchemy import String, Text, Boolean, ForeignKey, Enum as SAEnum, JSON, DateTime
 from app.core.database import Base
 
 
@@ -94,6 +95,51 @@ class Audit(Base):
     # mirroring ReportSchedule.next_run_at's role in report_scheduler.py.
     recurrence_spawned_at: Mapped[str | None] = mapped_column(String(30), nullable=True)
 
+    # --- STB objectif 4: périmètre et campagne -------------------------------
+    # "selon le périmètre défini (processus, entités, systèmes)". Stored as JSON
+    # id lists rather than association tables: an audit's perimeter is read as a
+    # whole every time and never joined against, so three extra tables would buy
+    # nothing. Validated against the tenant's own rows on write.
+    campaign_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("audit_campaigns.id"), nullable=True, index=True
+    )
+    process_ids: Mapped[list] = mapped_column(JSON, default=list)
+    org_entity_ids: Mapped[list] = mapped_column(JSON, default=list)
+    asset_ids: Mapped[list] = mapped_column(JSON, default=list)
+
+    # The customisable grid this engagement is conducted on (objectif 5). Null
+    # keeps today's behaviour: the checklist is the framework's controls.
+    grid_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("audit_grids.id"), nullable=True
+    )
+    # Links the engagement to the compliance assessment it covers, so the
+    # auditor portal can list audits rather than only assessments.
+    assessment_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("compliance_assessments.id"), nullable=True
+    )
+    # The generated audit plan, persisted instead of discarded after display.
+    audit_plan: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    # --- STB objectif 6: validation du rapport avant diffusion ---------------
+    # draft -> submitted -> approved | rejected -> issued. Download and scheduled
+    # delivery are gated on `approved`; that gate is what makes the requirement
+    # real rather than advisory. report_approved_by_id/at already existed.
+    report_status: Mapped[str] = mapped_column(String(20), nullable=False, default="draft")
+    report_submitted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    report_submitted_by_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("users.id"), nullable=True
+    )
+    report_rejected_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    report_issued_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    # --- STB objectif 8: le registre doit survivre ---------------------------
+    # DELETE was an unconditional hard delete; a completed engagement must remain
+    # in the register. Rows with deleted_at set are filtered out of list_audits.
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    deleted_by_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("users.id"), nullable=True
+    )
+
     # Relationships
     tenant: Mapped["Tenant"] = relationship("Tenant", back_populates="audits")
     findings: Mapped[list["AuditFinding"]] = relationship(
@@ -135,6 +181,20 @@ class AuditFinding(Base):
     management_response: Mapped[str | None] = mapped_column(Text, nullable=True)
     remediation_notes: Mapped[str | None] = mapped_column(Text, nullable=True)
 
+    # --- STB objectif 5: "niveau de conformité ou de non-conformité" ---------
+    # Severity says how bad it is; finding_type says what kind of finding it is,
+    # which is what an ISO 27001 audit report is actually structured around.
+    # Defaulted from severity by the endpoint when not given explicitly.
+    finding_type: Mapped[str | None] = mapped_column(String(30), nullable=True)
+
+    # --- STB objectif 7: "jusqu'à leur clôture effective" --------------------
+    closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    closed_by_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("users.id"), nullable=True
+    )
+    closure_note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    closure_evidence_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+
     audit: Mapped["Audit"] = relationship("Audit", back_populates="findings")
 
 
@@ -152,5 +212,20 @@ class AuditEvidence(Base):
     uploaded_by_id: Mapped[str | None] = mapped_column(
         String(36), ForeignKey("users.id"), nullable=True
     )
+
+    # --- STB objectif 5: "Ajout de constats, pièces jointes, preuves" --------
+    # This table held caller-supplied strings and no bytes (0 rows on the live
+    # database). These columns make it a real upload record, matching
+    # compliance.Evidence field for field so services/file_integrity.py and
+    # services/file_retention.py apply unchanged.
+    finding_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("audit_findings.id"), nullable=True, index=True
+    )
+    file_path: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    file_size_bytes: Mapped[int | None] = mapped_column(nullable=True)
+    content_type: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    # NULL means "unrecorded", never "tampered with" — same rule as Evidence.
+    file_sha256: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    record_version: Mapped[int] = mapped_column(default=1)
 
     audit: Mapped["Audit"] = relationship("Audit", back_populates="evidence")

@@ -54,6 +54,26 @@ class ActionItem(Base):
     ai_generated: Mapped[bool] = mapped_column(Boolean, default=True)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
 
+    # --- STB objectif 3: "actions correctives ou préventives" ----------------
+    # The requirement names both. Everything created before this defaults to
+    # 'corrective', which is what the 308 existing rows actually are.
+    action_type: Mapped[str] = mapped_column(String(20), nullable=False, default="corrective")
+
+    # A preventive action is typically recurring ("revue trimestrielle des
+    # habilitations"). The notification scheduler clones a completed recurring
+    # action forward using next_occurrence_at.
+    recurrence: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    next_occurrence_at: Mapped[str | None] = mapped_column(String(20), nullable=True)
+
+    # --- STB objectif 7: recommandations issues des audits -------------------
+    # Lets the same action-plan machinery serve audit findings, so a finding's
+    # status can be rolled up from the progress of its actions rather than being
+    # set by hand ("mise à jour automatique du statut selon les actions
+    # entreprises"). Null for the compliance-sourced actions.
+    finding_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("audit_findings.id"), nullable=True, index=True
+    )
+
     # Relationships
     assessment: Mapped["ComplianceAssessment"] = relationship(
         "ComplianceAssessment", foreign_keys=[assessment_id]

@@ -32,6 +32,14 @@ class AuditorAssignment(Base):
     # Auditor notes visible only to this auditor
     auditor_notes: Mapped[str | None] = mapped_column(String(2000), nullable=True)
 
+    # --- STB objectif 4: "Affectation des auditeurs" -------------------------
+    # An auditor was only ever assignable to a compliance *assessment*, so the
+    # auditor portal had no way to list the engagements the person was actually
+    # given. Null keeps the legacy assessment-scoped assignment working.
+    audit_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("audits.id"), nullable=True, index=True
+    )
+
     # Relationships
     assessment: Mapped["ComplianceAssessment"] = relationship(
         "ComplianceAssessment", foreign_keys=[assessment_id]
