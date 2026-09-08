@@ -34,8 +34,13 @@ const BACKEND = { host: "127.0.0.1", port: 8000 };
 // fallback rewrite (for anything it doesn't recognize) points right back to this
 // gateway, so treating an unrecognized path as "must be marketing" here would bounce
 // the request between the two forever instead of 404ing cleanly.
+// KEEP IN SYNC with MARKETING_PAGE_ROOTS in marketing/middleware.ts. A page that
+// exists in Next but is missing from this set is unreachable in production: the
+// gateway is the load balancer's target, so it decides before Next ever sees the
+// request, and an unlisted path gets served the dashboard SPA shell instead.
 const MARKETING_PAGE_ROOTS = new Set([
   "", "contact", "frameworks", "news", "blog", "faq", "how-it-works", "solutions", "features-landing",
+  "about", "privacy", "terms", "security",
 ]);
 const LOCALES = new Set(["en", "fr", "ar"]);
 
@@ -95,6 +100,13 @@ function serveDashboard(res, urlPath) {
       res.writeHead(200, {
         "content-type": MIME[ext] || "application/octet-stream",
         "x-content-type-options": "nosniff",
+        // Everything served from here is either the private dashboard SPA or an
+        // unrecognized URL falling back to its index.html — never public content.
+        // Without this, any nonexistent URL is a soft 404: it answers 200 with the
+        // SPA shell and the shell's own <title>, so a crawler sees unlimited
+        // distinct URLs that all look like the same page. robots.txt already
+        // disallows the known app routes; this covers the ones no list predicts.
+        "x-robots-tag": "noindex, nofollow",
         "cache-control": isHashedAsset
           ? "public, max-age=31536000, immutable"
           : "no-store, no-cache, must-revalidate, max-age=0",
