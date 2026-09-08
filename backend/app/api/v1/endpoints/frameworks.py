@@ -486,10 +486,15 @@ async def list_frameworks(
     of the four on a guess: it answers only to ``?source_type=unclassified``, the same
     string the facet lists it under, so the bucket is clickable.
     """
-    stmt = select(Framework).where(
-        (Framework.is_builtin == True) |  # noqa: E712
-        (Framework.tenant_id == tenant_id)
-    )
+    # The tenant clause is added only when there IS a tenant: this route is public
+    # for the registration step, and `Framework.tenant_id == None` renders as
+    # `tenant_id IS NULL`, which would publish any non-built-in framework whose
+    # tenant_id was never set to an unauthenticated caller. None exist today; the
+    # guard is so that one created tomorrow is not silently world-readable.
+    visible = (Framework.is_builtin == True)  # noqa: E712
+    if tenant_id:
+        visible = visible | (Framework.tenant_id == tenant_id)
+    stmt = select(Framework).where(visible)
     if source_type:
         stmt = stmt.where(_classification_clause(Framework.source_type, source_type))
     if q:

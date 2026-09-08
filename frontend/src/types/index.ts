@@ -1000,6 +1000,9 @@ export interface ActionItemAttachment {
   file_size_bytes?: number | null;
   content_type?: string | null;
   uploaded_by_id?: string | null;
+  /** false = hidden from the auditor's view. Toggled by a CISO through
+   *  complianceApi.toggleActionAttachmentVisibility. */
+  is_visible_to_auditor?: boolean;
   created_at: string;
 }
 
@@ -1854,4 +1857,65 @@ export interface DashboardExportFailure {
   /** Developer/operator English from the backend. Log it or put it behind a
    *  "details" disclosure — it is not a translated end-user message. */
   message: string;
+}
+
+
+// ── Module trend series (« tendances historiques ») ──────────────────────────
+// GET /vulnerabilities/trend, /threats/trend and /governance/trend all answer
+// this one envelope. Read by VulnerabilitiesPage / ThreatLibraryPage /
+// GovernancePage, which until now each declared their own private copy.
+
+export interface TrendPoint {
+  /** The server's abbreviated month NAME, from strftime("%b") — "Apr", and
+   *  always English whatever the UI language. Do NOT print it as an axis
+   *  label: build the localised label from `period` (VulnerabilitiesPage
+   *  parses /^(\d{4})-(\d{2})$/ off `period` and formats it with Intl) and
+   *  fall back to this only when that parse fails. */
+  month: string;
+  /** The machine-readable year-month, "2026-04" — the field to key a row on
+   *  and to derive the localised axis label from. */
+  period: string;
+  /** The snapshot date this reading actually came from — null when there is none. */
+  as_of: string | null;
+  /** null = no reading for that month. MUST render as a gap; coercing it to 0
+   *  invents a month in which nothing was open. */
+  total: number | null;
+  counts: Record<string, unknown>;
+}
+
+export interface TrendEnvelope {
+  metric: string;
+  months: number;
+  /**
+   * Which question the series answers — it MUST be surfaced, the three are not
+   * interchangeable:
+   *   trend_snapshot_daily — the balance carried, from the daily snapshots.
+   *   intake_volume        — the FALLBACK: what was opened/discovered each
+   *                          month (created_at), which says nothing about what
+   *                          was closed. Label it as intake, never as the trend.
+   *   unavailable          — the history could not be read at all. Say so;
+   *                          drawing zeros here would be a fabricated finding.
+   */
+  source: "trend_snapshot_daily" | "intake_volume" | "unavailable";
+  /** The server's own sentence about which of the three this is. */
+  note: string;
+  series: TrendPoint[];
+}
+
+
+/** One row of « l'archivage des rapports dans l'historique » — mirrors
+ *  ArchivedReportOut in endpoints/reports.py. `report_type` is the stable
+ *  generator key (risk, executive, …), never a localised label. */
+export interface ArchivedReportItem {
+  id: string;
+  report_type: string;
+  version_number: number;
+  file_name: string | null;
+  file_size_bytes: number | null;
+  /** Digest of the bytes as produced; re-checked before the download is served. */
+  sha256: string | null;
+  status: string;
+  note: string | null;
+  generated_by_id: string | null;
+  created_at: string;
 }

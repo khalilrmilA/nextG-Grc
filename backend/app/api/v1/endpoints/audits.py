@@ -10,6 +10,7 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Upload
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from sqlalchemy import select, func
+from sqlalchemy.exc import OperationalError, ProgrammingError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
@@ -414,6 +415,25 @@ def _finding_out(f: AuditFinding) -> FindingOut:
         closure_note=f.closure_note, closure_evidence_id=f.closure_evidence_id,
         created_at=f.created_at, updated_at=f.updated_at,
     )
+
+
+async def _rows_or_empty(db, stmt) -> list:
+    """Rows for a query against one of this module's NEW tables, tolerating a
+    database where that table has not been created yet.
+
+    audit_recommendations, audit_comments, audit_finding_status_events and
+    report_distributions are all created by ``create_all()`` at startup, so on a
+    server whose restart has not happened yet every one of these reads raises.
+    client.ts hard-redirects the SPA to /service-down on ANY 5xx — a missing
+    table would therefore eject the user out of the application instead of
+    showing an empty panel, and "no such table" means exactly "nothing recorded".
+    Same tolerance compliance.py and frameworks.py give their own new tables.
+    """
+    try:
+        return list((await db.execute(stmt)).scalars().all())
+    except (OperationalError, ProgrammingError):
+        logger.debug("audits: query against a table create_all() has not built yet")
+        return []
 
 
 async def _log(db, tenant_id: str, user: User, action: str, *, entity_type: str = "audit",
@@ -821,7 +841,7 @@ async def _load_recommendations(db, tenant_id: str, user: User, *, stmt):
     """Run `stmt`, restrict it to the audits the caller may see, and decorate the
     rows with the derived progress/status plus the audit and owner names the
     dashboard needs (avoids the N+1 the frontend would otherwise do)."""
-    recs = list((await db.execute(stmt)).scalars().all())
+    recs = await _rows_or_empty(db, stmt)
     visible = await _visible_audit_ids(db, user, tenant_id)
     if visible is not None:
         recs = [r for r in recs if r.audit_id in visible]
@@ -1183,6 +1203,31 @@ async def delete_audit(
         "report_status": a.report_status, "report_url": a.report_url,
         "finding_count": fc,
     }
+    # The soft delete keeps the audit ROW; what makes it a record is its constats,
+    # its preuves and its recommandations. snapshot_entity serialises all of them
+    # into an immutable ArchiveRecord first, so « conservation de tous les audits
+    # réalisés » survives even a later cleanup of the children. Called before the
+    # withdrawal write because it commits its own record — nothing of ours may be
+    # pending when it does.
+    try:
+        from app.services.archiving_engine import snapshot_entity
+        archive = await snapshot_entity(
+            db, tenant_id=tenant_id, entity_type="audit", entity_id=a.id,
+            reason=f"Audit withdrawn from the register: {reason}",
+            retention_days=None, archived_by_id=user.id,
+        )
+        snapshot["archive_record_id"] = archive.id
+    except (LookupError, ValueError) as exc:
+        raise HTTPException(422, f"This audit could not be archived before withdrawal: {exc}")
+    except Exception as exc:  # noqa: BLE001
+        # An archiving outage must not block an administrative act: the soft
+        # delete loses nothing on its own. Roll back whatever the failed snapshot
+        # left pending and re-read the row — a rollback expires every loaded
+        # object, and writing to an expired one here would be a MissingGreenlet.
+        logger.warning("Audit %s could not be snapshotted before withdrawal: %s", a.id, exc)
+        await db.rollback()
+        a = await _audit(db, audit_id, tenant_id)
+        snapshot["archive_record_id"] = None
     a.deleted_at = _utcnow()
     a.deleted_by_id = user.id
     await db.commit()
@@ -1677,11 +1722,12 @@ async def list_report_distributions(
 ):
     """« Qui a reçu ce rapport ? » — unanswerable from the activity log alone."""
     a = await _audit_for(db, audit_id, tenant_id, user)
-    rows = (await db.execute(
+    rows = await _rows_or_empty(
+        db,
         select(ReportDistribution)
         .where(ReportDistribution.tenant_id == tenant_id, ReportDistribution.audit_id == a.id)
-        .order_by(ReportDistribution.created_at.desc())
-    )).scalars().all()
+        .order_by(ReportDistribution.created_at.desc()),
+    )
     return [ReportDistributionOut(
         id=d.id, audit_id=d.audit_id, report_kind=d.report_kind, file_name=d.file_name,
         sha256=d.sha256, report_version=d.report_version, channel=d.channel,
@@ -1964,11 +2010,12 @@ async def finding_history(
     clôture » actually requires."""
     await _audit_for(db, audit_id, tenant_id, user)
     await _finding(db, audit_id, fid)
-    rows = (await db.execute(
+    rows = await _rows_or_empty(
+        db,
         select(AuditFindingStatusEvent)
         .where(AuditFindingStatusEvent.finding_id == fid)
-        .order_by(AuditFindingStatusEvent.created_at.asc())
-    )).scalars().all()
+        .order_by(AuditFindingStatusEvent.created_at.asc()),
+    )
     names = {uid: f"{fn} {ln}".strip() for uid, fn, ln in (await db.execute(
         select(User.id, User.first_name, User.last_name)
         .where(User.id.in_([e.actor_id for e in rows if e.actor_id] or [""]))
@@ -2409,7 +2456,7 @@ async def list_audit_comments(
         q = q.where(AuditComment.finding_id == finding_id)
     if not await _has_any_role(db, user, AUDIT_WRITE_ROLES):
         q = q.where(AuditComment.is_internal == False)  # noqa: E712
-    rows = (await db.execute(q.order_by(AuditComment.created_at.asc()))).scalars().all()
+    rows = await _rows_or_empty(db, q.order_by(AuditComment.created_at.asc()))
     names = {uid: f"{fn} {ln}".strip() for uid, fn, ln in (await db.execute(
         select(User.id, User.first_name, User.last_name)
         .where(User.id.in_([c.author_id for c in rows] or [""]))

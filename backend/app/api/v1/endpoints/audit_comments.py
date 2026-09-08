@@ -36,6 +36,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from sqlalchemy import and_, func, or_, select
+from sqlalchemy.exc import OperationalError, ProgrammingError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.v1.dependencies.auth import get_current_user, get_tenant_id
@@ -423,10 +424,18 @@ async def list_comments(
         q = q.where(AuditComment.is_internal == False)      # noqa: E712
         cq = cq.where(AuditComment.is_internal == False)    # noqa: E712
 
-    total = (await db.execute(cq)).scalar() or 0
-    rows = (await db.execute(
-        q.order_by(AuditComment.created_at, AuditComment.id).limit(limit).offset(offset)
-    )).all()
+    try:
+        total = (await db.execute(cq)).scalar() or 0
+        rows = (await db.execute(
+            q.order_by(AuditComment.created_at, AuditComment.id).limit(limit).offset(offset)
+        )).all()
+    except (OperationalError, ProgrammingError):
+        # audit_comments is created by create_all() at startup. Until that restart
+        # the thread panel raises, and client.ts hard-redirects the SPA to
+        # /service-down on any 5xx — opening a constat would eject the user from
+        # the application. An empty thread is what "no such table" means.
+        await db.rollback()
+        return CommentThreadOut(items=[], total=0, viewer_is_audit_team=team)
     return CommentThreadOut(
         items=[_to_out(c, a) for c, a in rows],
         total=total,
@@ -701,22 +710,29 @@ async def pending_for_me(
         reply_alias.c.deleted_at.is_(None),
     ).exists()
 
-    rows = (await db.execute(
-        select(AuditComment, User, Audit, AuditFinding)
-        .outerjoin(User, User.id == AuditComment.author_id)
-        .outerjoin(AuditFinding, AuditFinding.id == AuditComment.finding_id)
-        .outerjoin(Audit, Audit.id == func.coalesce(AuditComment.audit_id, AuditFinding.audit_id))
-        .where(
-            AuditComment.tenant_id == tenant_id,
-            AuditComment.is_internal == False,      # noqa: E712
-            AuditComment.deleted_at.is_(None),
-            AuditComment.author_id != current_user.id,
-            or_(*targets),
-            ~answered,
-        )
-        .order_by(AuditComment.created_at.desc())
-        .limit(limit)
-    )).all()
+    try:
+        rows = (await db.execute(
+            select(AuditComment, User, Audit, AuditFinding)
+            .outerjoin(User, User.id == AuditComment.author_id)
+            .outerjoin(AuditFinding, AuditFinding.id == AuditComment.finding_id)
+            .outerjoin(Audit, Audit.id == func.coalesce(AuditComment.audit_id, AuditFinding.audit_id))
+            .where(
+                AuditComment.tenant_id == tenant_id,
+                AuditComment.is_internal == False,      # noqa: E712
+                AuditComment.deleted_at.is_(None),
+                AuditComment.author_id != current_user.id,
+                or_(*targets),
+                ~answered,
+            )
+            .order_by(AuditComment.created_at.desc())
+            .limit(limit)
+        )).all()
+    except (OperationalError, ProgrammingError):
+        # Same reason as list_comments: nothing pending, not a 5xx. This feed is
+        # polled by the header badge, so a raise here ejects the user out of
+        # whatever screen they are on, not merely off the comments panel.
+        await db.rollback()
+        return []
 
     return [
         PendingThreadOut(

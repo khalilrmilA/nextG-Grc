@@ -9,6 +9,7 @@ current_user yet).
 """
 import asyncio
 import logging
+from datetime import datetime, timezone
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
@@ -24,7 +25,7 @@ from app.core.security import create_access_token, create_mfa_challenge_token, c
 # them: a directory login has to land in exactly the same LoginEvent /
 # UserSession tables, or "journalisation des connexions" is true for one auth
 # path and silently false for the other.
-from app.api.v1.endpoints.auth import _create_session, _journal_login
+from app.api.v1.endpoints.auth import _create_session, _journal_login, _token_claims
 from app.models.user import User, UserRole
 from app.models.mfa_device import MfaDevice
 from app.models.tenant import Tenant
@@ -304,6 +305,19 @@ async def ldap_login(request: Request, body: LdapLoginRequest, db: Annotated[Asy
         await _journal_login(request, dir_user.email, False, "sso_account_disabled", user=user)
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Account disabled.")
 
+    # A time-limited account is refused here for the same reason password login
+    # refuses it (auth.py login()): the directory can still vouch for the person
+    # long after this application stopped granting them access, and issuing
+    # tokens to an account get_current_user 403s on every route only produces a
+    # login that appears to work. The pending role sync above is discarded with
+    # the request — the next successful sign-in redoes it from the directory.
+    if user.expires_at is not None and user.expires_at < datetime.now(timezone.utc).replace(tzinfo=None):
+        await _journal_login(request, dir_user.email, False, "sso_account_expired", user=user)
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Account has expired. Contact your administrator.",
+        )
+
     await db.commit()
 
     # Now that the role change is durable, record it. The directory decided
@@ -352,9 +366,9 @@ async def ldap_login(request: Request, body: LdapLoginRequest, db: Annotated[Asy
     await _journal_login(request, dir_user.email, True, "ok", user=user)
     session = await _create_session(request, user, db)
 
-    token_data = {
-        "sub": user.id, "tenant_id": user.tenant_id, "role": user.role, "sid": session.id,
-    }
+    # _token_claims carries the `email` claim ActivityLogMiddleware prefers, so a
+    # directory login produces the same audit actor as a password login.
+    token_data = {**_token_claims(user), "sid": session.id}
     return TokenResponse(
         access_token=create_access_token(token_data),
         refresh_token=create_refresh_token(token_data),

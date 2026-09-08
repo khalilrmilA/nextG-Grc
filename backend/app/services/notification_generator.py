@@ -222,6 +222,17 @@ async def get_owner_in_tenant(
     return (await db.execute(select(User).where(*conditions))).scalar_one_or_none()
 
 
+def _scoped(stmt, column, tenant_id: str | None):
+    """Narrow a sweep query to one tenant, or leave it platform-wide.
+
+    ``run_all_checks(tenant_id=None)`` keeps the whole-platform sweep the
+    scheduler needs. An HTTP caller passes its own tenant, so one tenant's
+    « Check deadlines » click no longer walks the other ten — and no longer
+    writes notifications, or sends mail, to their users.
+    """
+    return stmt.where(column == tenant_id) if tenant_id else stmt
+
+
 async def notification_exists(
     db: AsyncSession,
     user_id: str,
@@ -697,14 +708,15 @@ async def notified_about(
     return any((n.data or {}).get("entity_id") == entity_id for n in rows)
 
 
-async def check_vendor_contract_expiry(db: AsyncSession) -> int:
+async def check_vendor_contract_expiry(db: AsyncSession, tenant_id: str | None = None) -> int:
     """Check for vendor contracts expiring soon and create notifications."""
     created = 0
     today = datetime.utcnow().date()
 
     # Get all active vendors
     result = await db.execute(
-        select(Vendor).where(Vendor.contract_expiry.isnot(None))
+        _scoped(select(Vendor).where(Vendor.contract_expiry.isnot(None)),
+                Vendor.tenant_id, tenant_id)
     )
     vendors = result.scalars().all()
 
@@ -776,13 +788,14 @@ async def check_vendor_contract_expiry(db: AsyncSession) -> int:
     return created
 
 
-async def check_risk_review_deadlines(db: AsyncSession) -> int:
+async def check_risk_review_deadlines(db: AsyncSession, tenant_id: str | None = None) -> int:
     """Check for risks needing review and create notifications."""
     created = 0
     today = datetime.utcnow().date()
 
     result = await db.execute(
-        select(Risk).where(Risk.next_review_date.isnot(None))
+        _scoped(select(Risk).where(Risk.next_review_date.isnot(None)),
+                Risk.tenant_id, tenant_id)
     )
     risks = result.scalars().all()
 
@@ -844,10 +857,13 @@ async def check_risk_review_deadlines(db: AsyncSession) -> int:
     return created
 
 
-async def check_risk_appetite_breaches(db: AsyncSession) -> int:
+async def check_risk_appetite_breaches(db: AsyncSession, tenant_id: str | None = None) -> int:
     """Alert when a risk's residual/inherent score exceeds its appetite threshold (Elite)."""
     created = 0
-    result = await db.execute(select(Risk).where(Risk.appetite_threshold.isnot(None)))
+    result = await db.execute(
+        _scoped(select(Risk).where(Risk.appetite_threshold.isnot(None)),
+                Risk.tenant_id, tenant_id)
+    )
     for risk in result.scalars().all():
         if not risk.over_appetite:
             continue
@@ -876,7 +892,7 @@ async def check_risk_appetite_breaches(db: AsyncSession) -> int:
     return created
 
 
-async def check_treatment_overdue(db: AsyncSession) -> int:
+async def check_treatment_overdue(db: AsyncSession, tenant_id: str | None = None) -> int:
     """RFP gap fix: alert when a risk treatment plan's due_date has passed and it
     isn't complete yet (progress_percentage < 100). RiskTreatment has no tenant_id
     column of its own, so join through its Risk to scope recipients/links."""
@@ -884,9 +900,12 @@ async def check_treatment_overdue(db: AsyncSession) -> int:
     today = datetime.utcnow().date()
 
     result = await db.execute(
-        select(RiskTreatment, Risk)
-        .join(Risk, Risk.id == RiskTreatment.risk_id)
-        .where(RiskTreatment.due_date.isnot(None))
+        _scoped(
+            select(RiskTreatment, Risk)
+            .join(Risk, Risk.id == RiskTreatment.risk_id)
+            .where(RiskTreatment.due_date.isnot(None)),
+            Risk.tenant_id, tenant_id,
+        )
     )
 
     for treatment, risk in result.all():
@@ -938,18 +957,21 @@ async def check_treatment_overdue(db: AsyncSession) -> int:
     return created
 
 
-async def check_treatment_budget_overrun(db: AsyncSession) -> int:
+async def check_treatment_budget_overrun(db: AsyncSession, tenant_id: str | None = None) -> int:
     """RFP gap fix: alert when a risk treatment plan's actual_cost exceeds its
     estimated_cost. Only fires once actual_cost has actually been recorded — an
     unset actual_cost means spend simply isn't tracked yet, not that it's zero."""
     created = 0
 
     result = await db.execute(
-        select(RiskTreatment, Risk)
-        .join(Risk, Risk.id == RiskTreatment.risk_id)
-        .where(
-            RiskTreatment.actual_cost.isnot(None),
-            RiskTreatment.estimated_cost.isnot(None),
+        _scoped(
+            select(RiskTreatment, Risk)
+            .join(Risk, Risk.id == RiskTreatment.risk_id)
+            .where(
+                RiskTreatment.actual_cost.isnot(None),
+                RiskTreatment.estimated_cost.isnot(None),
+            ),
+            Risk.tenant_id, tenant_id,
         )
     )
 
@@ -995,19 +1017,24 @@ async def check_treatment_budget_overrun(db: AsyncSession) -> int:
     return created
 
 
-async def check_pending_ciso_contracts(db: AsyncSession) -> int:
+async def check_pending_ciso_contracts(db: AsyncSession, tenant_id: str | None = None) -> int:
     """Notify CISO about contracts waiting for their review."""
     created = 0
 
     # Find contracts waiting for CISO review
+    # VendorContract has no tenant_id of its own; the join to Vendor is what
+    # scopes it, exactly as the per-contract vendor lookup below does per row.
     result = await db.execute(
-        select(VendorContract)
-        .join(Vendor, VendorContract.vendor_id == Vendor.id)
-        .where(
-            VendorContract.validation_status.in_([
-                ContractValidationStatus.AI_REVIEWED.value,
-                ContractValidationStatus.PENDING_CISO.value,
-            ])
+        _scoped(
+            select(VendorContract)
+            .join(Vendor, VendorContract.vendor_id == Vendor.id)
+            .where(
+                VendorContract.validation_status.in_([
+                    ContractValidationStatus.AI_REVIEWED.value,
+                    ContractValidationStatus.PENDING_CISO.value,
+                ])
+            ),
+            Vendor.tenant_id, tenant_id,
         )
     )
     contracts = result.scalars().all()
@@ -1051,14 +1078,21 @@ async def check_pending_ciso_contracts(db: AsyncSession) -> int:
     return created
 
 
-async def check_compliance_gaps(db: AsyncSession) -> int:
+async def check_compliance_gaps(db: AsyncSession, tenant_id: str | None = None) -> int:
     """Notify about compliance gaps that need attention."""
+    from app.models.compliance import ComplianceAssessment as _CA
+
     created = 0
 
-    # Find open compliance gaps with high severity
-    result = await db.execute(
-        select(ComplianceGap).where(ComplianceGap.severity.in_(["critical", "high"]))
-    )
+    # Find open compliance gaps with high severity. ComplianceGap has no
+    # tenant_id column — its assessment carries it — so scoping needs the join
+    # the per-gap lookup below already performs one row at a time.
+    stmt = select(ComplianceGap).where(ComplianceGap.severity.in_(["critical", "high"]))
+    if tenant_id:
+        stmt = stmt.join(_CA, _CA.id == ComplianceGap.assessment_id).where(
+            _CA.tenant_id == tenant_id
+        )
+    result = await db.execute(stmt)
     gaps = result.scalars().all()
 
     for gap in gaps:
@@ -1094,17 +1128,20 @@ async def check_compliance_gaps(db: AsyncSession) -> int:
     return created
 
 
-async def check_action_plan_deadlines(db: AsyncSession) -> int:
+async def check_action_plan_deadlines(db: AsyncSession, tenant_id: str | None = None) -> int:
     """Notify CISO when action plan items are within 10 days of deadline and not yet done."""
     created = 0
     today = datetime.utcnow().date()
 
     # Only check active collaborations that have a finalized plan
     result = await db.execute(
-        select(ContractCollaboration).where(
-            ContractCollaboration.status == "active",
-            ContractCollaboration.plan_finalized_at.isnot(None),
-            ContractCollaboration.action_plan.isnot(None),
+        _scoped(
+            select(ContractCollaboration).where(
+                ContractCollaboration.status == "active",
+                ContractCollaboration.plan_finalized_at.isnot(None),
+                ContractCollaboration.action_plan.isnot(None),
+            ),
+            ContractCollaboration.tenant_id, tenant_id,
         )
     )
     collabs = result.scalars().all()
@@ -1185,7 +1222,7 @@ async def check_action_plan_deadlines(db: AsyncSession) -> int:
     return created
 
 
-async def check_compliance_action_deadlines(db: AsyncSession) -> int:
+async def check_compliance_action_deadlines(db: AsyncSession, tenant_id: str | None = None) -> int:
     """Notify the owner + CISO/admins when a compliance ActionItem (remediation task
     created from a gap recommendation) is within 7 days of its due date.
 
@@ -1199,9 +1236,12 @@ async def check_compliance_action_deadlines(db: AsyncSession) -> int:
     today = datetime.utcnow().date()
 
     result = await db.execute(
-        select(ActionItem).where(
-            ActionItem.due_date.isnot(None),
-            ActionItem.status.notin_([ActionItemStatus.COMPLETED, ActionItemStatus.CANCELLED]),
+        _scoped(
+            select(ActionItem).where(
+                ActionItem.due_date.isnot(None),
+                ActionItem.status.notin_([ActionItemStatus.COMPLETED, ActionItemStatus.CANCELLED]),
+            ),
+            ActionItem.tenant_id, tenant_id,
         )
     )
     items = result.scalars().all()
@@ -1256,7 +1296,7 @@ async def check_compliance_action_deadlines(db: AsyncSession) -> int:
     return created
 
 
-async def check_asset_eol(db: AsyncSession) -> int:
+async def check_asset_eol(db: AsyncSession, tenant_id: str | None = None) -> int:
     """Notify the asset owner + CISO/admins about assets reaching end-of-life.
     Mirrors the criteria used by GET /assets/lifecycle/eol-soon (default within_days=90).
     """
@@ -1265,9 +1305,12 @@ async def check_asset_eol(db: AsyncSession) -> int:
     cutoff = now + timedelta(days=90)
 
     result = await db.execute(
-        select(Asset).where(
-            Asset.end_of_life_at.isnot(None),
-            Asset.end_of_life_at <= cutoff,
+        _scoped(
+            select(Asset).where(
+                Asset.end_of_life_at.isnot(None),
+                Asset.end_of_life_at <= cutoff,
+            ),
+            Asset.tenant_id, tenant_id,
         )
     )
     assets = result.scalars().all()
@@ -1320,7 +1363,7 @@ async def check_asset_eol(db: AsyncSession) -> int:
     return created
 
 
-async def check_threat_profile_reviews(db: AsyncSession) -> int:
+async def check_threat_profile_reviews(db: AsyncSession, tenant_id: str | None = None) -> int:
     """Remind security leads when a threat profile is due for its periodic review.
 
     "Le profil de menace doit être révisé périodiquement" only means something if
@@ -1337,11 +1380,14 @@ async def check_threat_profile_reviews(db: AsyncSession) -> int:
     horizon = (today + timedelta(days=14)).isoformat()
 
     threats = (await db.execute(
-        select(Threat).where(
-            Threat.tenant_id.isnot(None),
-            Threat.is_pending == False,  # noqa: E712
-            Threat.next_review_due.isnot(None),
-            Threat.next_review_due <= horizon,
+        _scoped(
+            select(Threat).where(
+                Threat.tenant_id.isnot(None),
+                Threat.is_pending == False,  # noqa: E712
+                Threat.next_review_due.isnot(None),
+                Threat.next_review_due <= horizon,
+            ),
+            Threat.tenant_id, tenant_id,
         )
     )).scalars().all()
 
@@ -1396,7 +1442,7 @@ async def check_threat_profile_reviews(db: AsyncSession) -> int:
     return created
 
 
-async def check_asset_review_deadlines(db: AsyncSession) -> int:
+async def check_asset_review_deadlines(db: AsyncSession, tenant_id: str | None = None) -> int:
     """RFP gap fix: mandatory periodic asset review reminders. Mirrors
     check_risk_review_deadlines's day-window logic exactly (14/7/0 days, capped at
     30 days overdue) applied to Asset.next_review_date instead of Risk.next_review_date."""
@@ -1404,7 +1450,8 @@ async def check_asset_review_deadlines(db: AsyncSession) -> int:
     today = datetime.utcnow().date()
 
     result = await db.execute(
-        select(Asset).where(Asset.next_review_date.isnot(None))
+        _scoped(select(Asset).where(Asset.next_review_date.isnot(None)),
+                Asset.tenant_id, tenant_id)
     )
     assets = result.scalars().all()
 
@@ -1472,7 +1519,7 @@ async def check_asset_review_deadlines(db: AsyncSession) -> int:
     return created
 
 
-async def check_unverified_controls(db: AsyncSession) -> int:
+async def check_unverified_controls(db: AsyncSession, tenant_id: str | None = None) -> int:
     """Alert on controls in service that no security referent has signed off.
 
     "Un systeme d'alerte peut notifier en cas de controle expire **ou non
@@ -1491,7 +1538,7 @@ async def check_unverified_controls(db: AsyncSession) -> int:
     grace = datetime.utcnow() - timedelta(days=30)
 
     controls = (await db.execute(
-        select(AppliedControl).where(
+        _scoped(select(AppliedControl).where(
             # ControlStatus is planned/in_progress/implemented/not_applicable/
             # deprecated — there is no "active" member, so the old filter
             # matched nothing on that half AND left out "implemented", i.e.
@@ -1507,7 +1554,7 @@ async def check_unverified_controls(db: AsyncSession) -> int:
             or_(AppliedControl.validation_status.is_(None),
                 AppliedControl.validation_status != "validated"),
             AppliedControl.created_at <= grace,
-        )
+        ), AppliedControl.tenant_id, tenant_id)
     )).scalars().all()
 
     for control in controls:
@@ -1555,7 +1602,7 @@ async def check_unverified_controls(db: AsyncSession) -> int:
     return created
 
 
-async def check_control_evaluations_due(db: AsyncSession) -> int:
+async def check_control_evaluations_due(db: AsyncSession, tenant_id: str | None = None) -> int:
     """Remind the control owner and the CISO when an effectiveness evaluation is due.
 
     "Des evaluations periodiques, planifiees selon une frequence definie, sont
@@ -1576,10 +1623,13 @@ async def check_control_evaluations_due(db: AsyncSession) -> int:
     # The latest evaluation per control carries the schedule; earlier ones are
     # superseded and must not raise a second reminder.
     rows = (await db.execute(
-        select(ControlEvaluation)
-        .where(ControlEvaluation.next_evaluation_at.isnot(None),
-               ControlEvaluation.next_evaluation_at <= horizon)
-        .order_by(ControlEvaluation.evaluated_at.desc().nullslast())
+        _scoped(
+            select(ControlEvaluation)
+            .where(ControlEvaluation.next_evaluation_at.isnot(None),
+                   ControlEvaluation.next_evaluation_at <= horizon)
+            .order_by(ControlEvaluation.evaluated_at.desc().nullslast()),
+            ControlEvaluation.tenant_id, tenant_id,
+        )
     )).scalars().all()
 
     seen: set[str] = set()
@@ -1647,7 +1697,7 @@ async def check_control_evaluations_due(db: AsyncSession) -> int:
     return created
 
 
-async def check_scenario_priority_alerts(db: AsyncSession) -> int:
+async def check_scenario_priority_alerts(db: AsyncSession, tenant_id: str | None = None) -> int:
     """Notify when a scenario reaches the tenant's configured priority threshold.
 
     "Un seuil d'alerte peut etre defini pour generer des notifications aux
@@ -1664,7 +1714,10 @@ async def check_scenario_priority_alerts(db: AsyncSession) -> int:
     from app.services import scenario_priority
 
     created = 0
-    tenants = (await db.execute(select(Tenant).where(Tenant.is_active == True))).scalars().all()  # noqa: E712
+    tenants = (await db.execute(
+        _scoped(select(Tenant).where(Tenant.is_active == True),  # noqa: E712
+                Tenant.id, tenant_id)
+    )).scalars().all()
     for tenant in tenants:
         criteria = scenario_priority.resolve_criteria(getattr(tenant, "settings", None))
         if criteria.get("alert_threshold") is None:
@@ -1718,7 +1771,7 @@ async def check_scenario_priority_alerts(db: AsyncSession) -> int:
     return created
 
 
-async def check_scenario_review_deadlines(db: AsyncSession) -> int:
+async def check_scenario_review_deadlines(db: AsyncSession, tenant_id: str | None = None) -> int:
     """RFP gap fix: "la revue annuelle des scenarios n'est pas outillee (pas de
     date de prochaine revue ni d'alerte associee — seuls les risques ont
     next_review_date et notifications)." Mirrors check_risk_review_deadlines's
@@ -1735,7 +1788,8 @@ async def check_scenario_review_deadlines(db: AsyncSession) -> int:
     today = datetime.utcnow().date()
 
     result = await db.execute(
-        select(RiskScenario).where(RiskScenario.next_review_date.isnot(None))
+        _scoped(select(RiskScenario).where(RiskScenario.next_review_date.isnot(None)),
+                RiskScenario.tenant_id, tenant_id)
     )
     scenarios = result.scalars().all()
 
@@ -1803,7 +1857,7 @@ async def check_scenario_review_deadlines(db: AsyncSession) -> int:
     return created
 
 
-async def check_control_expiration(db: AsyncSession) -> int:
+async def check_control_expiration(db: AsyncSession, tenant_id: str | None = None) -> int:
     """Notify the control owner + CISO/admins about AppliedControl rows nearing or past
     their expiration date (30-day warning window, matching the vendor/risk check style).
     """
@@ -1811,7 +1865,8 @@ async def check_control_expiration(db: AsyncSession) -> int:
     today = datetime.utcnow().date()
 
     result = await db.execute(
-        select(AppliedControl).where(AppliedControl.expiration.isnot(None))
+        _scoped(select(AppliedControl).where(AppliedControl.expiration.isnot(None)),
+                AppliedControl.tenant_id, tenant_id)
     )
     controls = result.scalars().all()
 
@@ -1966,7 +2021,7 @@ async def check_new_device_login(
     return True
 
 
-async def check_finding_deadlines(db: AsyncSession) -> int:
+async def check_finding_deadlines(db: AsyncSession, tenant_id: str | None = None) -> int:
     """RFP gap fix: "Pas de notification sur les échéances critiques des
     recommandations" — alert on audit finding (recommendation) deadlines
     within 7 days or overdue, for findings that are still OPEN or
@@ -1981,15 +2036,18 @@ async def check_finding_deadlines(db: AsyncSession) -> int:
     today = datetime.utcnow().date()
 
     result = await db.execute(
-        select(AuditFinding, Audit)
-        .join(Audit, Audit.id == AuditFinding.audit_id)
-        .where(
-            AuditFinding.due_date.isnot(None),
-            AuditFinding.due_date != "",
-            AuditFinding.status.in_([FindingStatus.OPEN, FindingStatus.IN_REMEDIATION]),
-            # Objectif 8: a soft-deleted engagement stays in the register but
-            # must stop generating alerts about work nobody is doing any more.
-            Audit.deleted_at.is_(None),
+        _scoped(
+            select(AuditFinding, Audit)
+            .join(Audit, Audit.id == AuditFinding.audit_id)
+            .where(
+                AuditFinding.due_date.isnot(None),
+                AuditFinding.due_date != "",
+                AuditFinding.status.in_([FindingStatus.OPEN, FindingStatus.IN_REMEDIATION]),
+                # Objectif 8: a soft-deleted engagement stays in the register but
+                # must stop generating alerts about work nobody is doing any more.
+                Audit.deleted_at.is_(None),
+            ),
+            Audit.tenant_id, tenant_id,
         )
     )
 
@@ -2058,7 +2116,8 @@ async def check_finding_deadlines(db: AsyncSession) -> int:
     return created
 
 
-async def check_action_item_overdue(db: AsyncSession, outbox: list | None = None) -> int:
+async def check_action_item_overdue(db: AsyncSession, outbox: list | None = None,
+                                   tenant_id: str | None = None) -> int:
     """STB objectif 3 — « relances automatiques » on corrective/preventive actions.
 
     The existing check_compliance_action_deadlines announces an action once it
@@ -2081,10 +2140,13 @@ async def check_action_item_overdue(db: AsyncSession, outbox: list | None = None
     today = datetime.utcnow().date()
 
     items = (await db.execute(
-        select(ActionItem).where(
-            ActionItem.due_date.isnot(None),
-            ActionItem.due_date != "",
-            ActionItem.status.notin_([ActionItemStatus.COMPLETED, ActionItemStatus.CANCELLED]),
+        _scoped(
+            select(ActionItem).where(
+                ActionItem.due_date.isnot(None),
+                ActionItem.due_date != "",
+                ActionItem.status.notin_([ActionItemStatus.COMPLETED, ActionItemStatus.CANCELLED]),
+            ),
+            ActionItem.tenant_id, tenant_id,
         )
     )).scalars().all()
 
@@ -2171,7 +2233,8 @@ async def check_action_item_overdue(db: AsyncSession, outbox: list | None = None
     return created
 
 
-async def check_audit_schedule(db: AsyncSession, outbox: list | None = None) -> int:
+async def check_audit_schedule(db: AsyncSession, outbox: list | None = None,
+                              tenant_id: str | None = None) -> int:
     """STB objectif 4 — « notification automatique des parties prenantes ».
 
     Nothing told anybody that a planned audit was approaching: the date sat in
@@ -2191,11 +2254,14 @@ async def check_audit_schedule(db: AsyncSession, outbox: list | None = None) -> 
     today = datetime.utcnow().date()
 
     audits = (await db.execute(
-        select(Audit).where(
-            Audit.planned_start.isnot(None),
-            Audit.planned_start != "",
-            Audit.status == AuditStatus.PLANNING,
-            Audit.deleted_at.is_(None),
+        _scoped(
+            select(Audit).where(
+                Audit.planned_start.isnot(None),
+                Audit.planned_start != "",
+                Audit.status == AuditStatus.PLANNING,
+                Audit.deleted_at.is_(None),
+            ),
+            Audit.tenant_id, tenant_id,
         )
     )).scalars().all()
 
@@ -2287,7 +2353,8 @@ async def check_audit_schedule(db: AsyncSession, outbox: list | None = None) -> 
     return created
 
 
-async def check_finding_assigned(db: AsyncSession, outbox: list | None = None) -> int:
+async def check_finding_assigned(db: AsyncSession, outbox: list | None = None,
+                                tenant_id: str | None = None) -> int:
     """Safety net for « affectation à un responsable » on audit findings.
 
     audits.py notifies the owner when a finding is created or re-assigned
@@ -2303,12 +2370,15 @@ async def check_finding_assigned(db: AsyncSession, outbox: list | None = None) -
     created = 0
 
     rows = (await db.execute(
-        select(AuditFinding, Audit)
-        .join(Audit, Audit.id == AuditFinding.audit_id)
-        .where(
-            AuditFinding.remediation_owner_id.isnot(None),
-            AuditFinding.status.in_([FindingStatus.OPEN, FindingStatus.IN_REMEDIATION]),
-            Audit.deleted_at.is_(None),
+        _scoped(
+            select(AuditFinding, Audit)
+            .join(Audit, Audit.id == AuditFinding.audit_id)
+            .where(
+                AuditFinding.remediation_owner_id.isnot(None),
+                AuditFinding.status.in_([FindingStatus.OPEN, FindingStatus.IN_REMEDIATION]),
+                Audit.deleted_at.is_(None),
+            ),
+            Audit.tenant_id, tenant_id,
         )
     )).all()
 
@@ -2355,7 +2425,8 @@ async def check_finding_assigned(db: AsyncSession, outbox: list | None = None) -
     return created
 
 
-async def check_recommendation_due(db: AsyncSession, outbox: list | None = None) -> int:
+async def check_recommendation_due(db: AsyncSession, outbox: list | None = None,
+                                  tenant_id: str | None = None) -> int:
     """STB objectif 7 — recommendations chased « jusqu'à leur clôture effective ».
 
     AuditRecommendation is the tracked object (a finding can carry several), so
@@ -2379,13 +2450,16 @@ async def check_recommendation_due(db: AsyncSession, outbox: list | None = None)
         return 0
 
     rows = (await db.execute(
-        select(AuditRecommendation, Audit)
-        .join(Audit, Audit.id == AuditRecommendation.audit_id)
-        .where(
-            AuditRecommendation.due_date.isnot(None),
-            AuditRecommendation.due_date != "",
-            AuditRecommendation.status.notin_(["closed", "rejected"]),
-            Audit.deleted_at.is_(None),
+        _scoped(
+            select(AuditRecommendation, Audit)
+            .join(Audit, Audit.id == AuditRecommendation.audit_id)
+            .where(
+                AuditRecommendation.due_date.isnot(None),
+                AuditRecommendation.due_date != "",
+                AuditRecommendation.status.notin_(["closed", "rejected"]),
+                Audit.deleted_at.is_(None),
+            ),
+            AuditRecommendation.tenant_id, tenant_id,
         )
     )).all()
 
@@ -2473,8 +2547,13 @@ async def check_recommendation_due(db: AsyncSession, outbox: list | None = None)
     return created
 
 
-async def run_all_checks(db: AsyncSession) -> dict:
+async def run_all_checks(db: AsyncSession, tenant_id: str | None = None) -> dict:
     """Run all notification checks and return a summary.
+
+    ``tenant_id=None`` sweeps the whole platform — what the scheduler wants.
+    Passing a tenant restricts every query, and therefore every notification and
+    every e-mail, to that tenant: the « Check deadlines » button used to write
+    rows into the other ten tenants and hand its caller platform-wide counts.
 
     Idempotent by construction: every check dedups on what is already in the
     notifications table, so calling this hourly, daily or twice in a row
@@ -2525,7 +2604,8 @@ async def run_all_checks(db: AsyncSession) -> dict:
         """Run one check, commit it, and never let it take the sweep down."""
         mark = len(outbox)
         try:
-            results[key] = await (check(db, outbox) if pass_outbox else check(db))
+            results[key] = await (check(db, outbox, tenant_id) if pass_outbox
+                                  else check(db, tenant_id))
             await db.commit()
         except Exception as exc:  # noqa: BLE001 — one broken check must not stop the rest
             try:

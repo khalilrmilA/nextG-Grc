@@ -49,10 +49,14 @@ from sqlalchemy.sql import Select
 from sqlalchemy.sql.selectable import Subquery
 
 from app.api.v1.dependencies.auth import get_current_user, get_tenant_id
+# The document read ACL is governance.py's; importing its role set rather than
+# restating it is what keeps the register and the repository in agreement.
+# One-directional — governance.py does not import this module.
+from app.api.v1.endpoints.governance import _DOCUMENT_ELEVATED_ROLES
 from app.core.database import get_db
 from app.models.control_applicability import APPLICABILITY_VALUES, ControlApplicability
 from app.models.framework import Framework, FrameworkControl
-from app.models.governance import GovernanceDocument
+from app.models.governance import GovernanceDocument, GovernanceDocumentAccess
 from app.models.policy import Policy, PolicyStatus
 from app.models.regulatory_update import RegulatoryUpdate, UpdateStatus
 from app.models.tenant import Tenant
@@ -283,14 +287,54 @@ def _branch_policies(tenant_id: str) -> Select:
         # longer binds anyone — the honest applicability for it.
         case((Policy.status == PolicyStatus.RETIRED, literal("not_applicable")),
              else_=literal("applicable")).label("applicability"),
-        cast(Policy.status, String).label("status"),
+        # TEXT, not VARCHAR: `status` is a SQLAlchemy Enum, which becomes a NATIVE
+        # enum type on PostgreSQL, and PostgreSQL refuses CAST(<enum> AS VARCHAR)
+        # while accepting CAST(... AS TEXT). SQLite treats the two identically, so
+        # this costs nothing here and keeps the referential working on the
+        # PostgreSQL deployment .env.dev targets.
+        cast(Policy.status, Text).label("status"),
         cast(null(), String).label("framework_id"),
         Policy.created_at.label("created_at"),
     ).where(Policy.tenant_id == tenant_id)
 
 
-def _branch_governance_documents(tenant_id: str) -> Select:
-    """Governance repository — chartes, règlements intérieurs, plans."""
+def _branch_governance_documents(
+    tenant_id: str, user_id: str, user_role: str, is_elevated: bool
+) -> Select:
+    """Governance repository — chartes, règlements intérieurs, plans.
+
+    Carries the SAME read ACL as ``GET /governance/documents``. That listing hides
+    a document whose per-document grants do not admit the caller
+    (governance.py's ``_passes_document_grants``); the referential unions the table
+    directly, so without this clause a document restricted to three named people
+    would still have its *title* announced to every member of the tenant on the
+    register page — the register would quietly undo the restriction the repository
+    enforces.
+
+    The clause is the SQL transcription of that helper, precedence included: an
+    elevated governance role passes, the owner passes, a document with no grants at
+    all stays tenant-wide readable (the pre-ACL baseline every existing document
+    relies on), and otherwise a grant naming the user or their role is required.
+    With no grants anywhere — the state of every live tenant today — ``NOT EXISTS``
+    is true for every row and the result set is identical to before.
+    """
+    grants = select(GovernanceDocumentAccess.id).where(
+        GovernanceDocumentAccess.tenant_id == tenant_id,
+        GovernanceDocumentAccess.document_id == GovernanceDocument.id,
+    )
+    if is_elevated:
+        readable = literal(True)
+    else:
+        readable = or_(
+            GovernanceDocument.created_by_id == user_id,
+            ~grants.exists(),
+            grants.where(
+                or_(
+                    GovernanceDocumentAccess.user_id == user_id,
+                    GovernanceDocumentAccess.role == user_role,
+                )
+            ).exists(),
+        )
     return select(
         literal("governance_document").label("source_kind"),
         GovernanceDocument.id.label("source_id"),
@@ -310,7 +354,7 @@ def _branch_governance_documents(tenant_id: str) -> Select:
         cast(null(), String).label("status"),
         cast(null(), String).label("framework_id"),
         GovernanceDocument.created_at.label("created_at"),
-    ).where(GovernanceDocument.tenant_id == tenant_id)
+    ).where(GovernanceDocument.tenant_id == tenant_id, readable)
 
 
 def _branch_regulatory_updates(tenant_id: str) -> Select:
@@ -329,7 +373,7 @@ def _branch_regulatory_updates(tenant_id: str) -> Select:
         # applicability is what lets one filter span all four silos.
         case((RegulatoryUpdate.status == UpdateStatus.NOT_APPLICABLE, literal("not_applicable")),
              else_=literal("applicable")).label("applicability"),
-        cast(RegulatoryUpdate.status, String).label("status"),
+        cast(RegulatoryUpdate.status, Text).label("status"),   # TEXT: see _branch_policies
         cast(null(), String).label("framework_id"),
         RegulatoryUpdate.created_at.label("created_at"),
     ).where(RegulatoryUpdate.tenant_id == tenant_id)
@@ -338,6 +382,7 @@ def _branch_regulatory_updates(tenant_id: str) -> Select:
 async def _filtered_subquery(
     db: AsyncSession,
     tenant_id: str,
+    current_user: User,
     *,
     source_kind: str | None,
     source_type: str | None,
@@ -349,6 +394,15 @@ async def _filtered_subquery(
     scope: str,
 ) -> Subquery:
     """The whole referential, narrowed — entirely inside SQL."""
+    # Read off the caller BEFORE the probe below, into plain scalars. The probe's
+    # recovery is a rollback, which expires every ORM instance in the session —
+    # `current_user` included — so touching an attribute of it afterwards is a lazy
+    # load outside the greenlet: MissingGreenlet, a 500, and the SPA ejected to
+    # /service-down on exactly the deployment the probe exists to protect.
+    user_id = current_user.id
+    user_role = getattr(current_user.role, "value", current_user.role)
+    user_is_elevated = current_user.role in _DOCUMENT_ELEVATED_ROLES
+
     # Probed BEFORE anything else touches the session: the recovery from a missing
     # table is a rollback, which expires every ORM instance already loaded.
     with_applicability = await _applicability_table_ready(db)
@@ -365,7 +419,9 @@ async def _filtered_subquery(
     if "policy" in wanted:
         branches.append(_branch_policies(tenant_id))
     if "governance_document" in wanted:
-        branches.append(_branch_governance_documents(tenant_id))
+        branches.append(_branch_governance_documents(
+            tenant_id, user_id, user_role, user_is_elevated
+        ))
     if "regulatory_update" in wanted:
         branches.append(_branch_regulatory_updates(tenant_id))
     if not branches:
@@ -429,7 +485,7 @@ async def list_requirements(
     catalogue, not privileged data, and every write path stays in its own module.
     """
     filtered = await _filtered_subquery(
-        db, tenant_id,
+        db, tenant_id, current_user,
         source_kind=source_kind, source_type=source_type, domain=domain,
         requirement_type=requirement_type, applicability=applicability,
         framework_id=framework_id, search=search, scope=scope,
@@ -458,9 +514,20 @@ async def list_requirements(
 
 
 async def _facet(db: AsyncSession, filtered: Subquery, column) -> list[FacetBucket]:
+    """One bucket per distinct value, counted the way the list filter selects.
+
+    Grouped case-INSENSITIVELY because every filter in _filtered_subquery compares
+    ``func.lower()`` on both sides. Grouping on the raw value split one vocabulary
+    across two buckets whenever two silos spelled it differently — the corpus
+    holds a `POLICY` domain on 31 framework controls while a governance document
+    types itself `policy` — and clicking either of those buckets then returned 32
+    rows against a chip that promised 31 or 1. The label shown is ``min()`` of the
+    variants, so the bucket still reads as a real value rather than a slug.
+    """
+    key = func.lower(column)
     rows = (await db.execute(
-        select(column, func.count().label("n")).select_from(filtered)
-        .group_by(column).order_by(func.count().desc())
+        select(func.min(column), func.count().label("n")).select_from(filtered)
+        .group_by(key).order_by(func.count().desc())
     )).all()
     return [FacetBucket(value=r[0], count=r[1]) for r in rows]
 
@@ -487,7 +554,7 @@ async def requirement_facets(
     dropdown — the vocabulary is data, not a hard-coded frontend constant.
     """
     filtered = await _filtered_subquery(
-        db, tenant_id,
+        db, tenant_id, current_user,
         source_kind=source_kind, source_type=source_type, domain=domain,
         requirement_type=requirement_type, applicability=applicability,
         framework_id=framework_id, search=search, scope=scope,
@@ -512,17 +579,17 @@ async def policies_for_control(
 ):
     """The internal policies that claim to satisfy one framework control.
 
-    ``Policy.linked_controls`` is a JSON array of FrameworkControl ids. There is
-    no portable JSON-containment operator across SQLite/PostgreSQL/Oracle/MSSQL,
-    so the LIKE is a *prefilter* on the serialised column and membership is then
-    verified exactly in Python — the LIKE alone would match an id that merely
-    shares a prefix.
+    ``Policy.linked_controls`` is a JSON array of FrameworkControl ids. There is no
+    JSON-containment operator portable across SQLite/PostgreSQL/Oracle/MSSQL, and
+    the obvious prefilter — CAST(linked_controls AS VARCHAR) LIKE '%id%' — is a
+    hard error on PostgreSQL, which is the deployment target this repo's own
+    .env.dev points at. So membership is tested in Python over the tenant's own
+    policies, exactly as policies.py's GET /policies/by-control already does: an
+    organisation holds a handful of policies, the scan costs nothing, and the
+    answer is exact rather than prefix-matched.
     """
     candidates = (await db.execute(
-        select(Policy).where(
-            Policy.tenant_id == tenant_id,
-            cast(Policy.linked_controls, String).like(f'%{control_id}%'),
-        )
+        select(Policy).where(Policy.tenant_id == tenant_id)
     )).scalars().all()
     return [
         LinkedPolicyOut(

@@ -423,7 +423,19 @@ async def get_vuln_trend(
     }
 
 @router.post("", response_model=VulnOut, status_code=201)
-async def create_vuln(body: VulnCreate, db: AsyncSession = Depends(get_db), _: User = Depends(get_current_user), tenant_id: str = Depends(get_tenant_id)):
+async def create_vuln(
+    body: VulnCreate,
+    db: AsyncSession = Depends(get_db),
+    # Creating a security finding was the ONE write in this module still open to
+    # every authenticated user, while PATCH / DELETE / validate / impact /
+    # risk-scenario linking are all restricted to {CISO, RISK_MANAGER}. A VIEWER
+    # ("Read-only access") or an EXECUTIVE could therefore insert rows into the
+    # vulnerability register and then be unable to correct or remove them.
+    # Same set as update_vuln so the module has one write role; tenant_admin and
+    # super_admin auto-pass inside require_roles, and reads stay open.
+    _: User = Depends(require_roles(UserRole.CISO, UserRole.RISK_MANAGER)),
+    tenant_id: str = Depends(get_tenant_id),
+):
     # Each affected-asset id must resolve to a real Asset owned by this tenant
     # (422 listing whichever ids don't). affected_assets is required non-empty
     # by VulnCreate's model_validator above.

@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { Plus, X, Loader2, Crown, ShieldCheck, AlertTriangle, Clock, ChevronDown, ChevronRight, Users, List, RefreshCw, History } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { riskTreatmentApi, riskScenariosApi, usersApi } from "@/api/endpoints";
+import { riskTreatmentApi, riskScenariosApi, risksApi, usersApi } from "@/api/endpoints";
 import { MultiSelect } from "@/components/common/MultiSelect";
 
 const OPTIONS = ["mitigate", "accept", "transfer", "avoid"];
@@ -101,7 +101,12 @@ export default function RiskTreatmentPage() {
 
   useEffect(() => {
     load();
-    riskTreatmentApi.risks()
+    // riskTreatmentApi.risks() hard-codes page_size=200. Every treatment row's
+    // risk title is resolved from THIS list, so past the 200th risk the register
+    // showed an 8-character UUID prefix instead of a title. 500 is the backend's
+    // ceiling (PaginationParams le=500); beyond that the truncation is reported
+    // rather than hidden — see left_open.
+    risksApi.list({ page_size: 500 })
       .then((d: any) => setRisks((d.items || d || []).map((r: any) => ({ id: r.id, title: r.title }))))
       .catch(() => setRisks([]));
     riskScenariosApi.list()
@@ -313,7 +318,7 @@ export default function RiskTreatmentPage() {
                   {treatments.map((tr: any) => (
                     <tr key={tr.id} className="border-b border-gray-50 hover:bg-gray-50/50 transition-colors">
                       <td className="px-6 py-4 font-medium text-gray-900">{riskTitle(tr.risk_id)}</td>
-                      <td className="px-6 py-4"><span className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold border ${OPTION_BADGE[tr.treatment_option] || "bg-gray-100 text-gray-600"}`}>{tr.treatment_option}</span></td>
+                      <td className="px-6 py-4"><span className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold border ${OPTION_BADGE[tr.treatment_option] || "bg-gray-100 text-gray-600"}`}>{tr.treatment_option ? String(t(`vocab.${tr.treatment_option}` as never, String(tr.treatment_option).replace(/_/g, " "))) : "-"}</span></td>
                       <td className="px-6 py-4">
                         <div className="flex items-center gap-2">
                           <div className="w-24 h-2 bg-gray-100 rounded-full overflow-hidden"><div className="h-full bg-blue-500 rounded-full" style={{ width: `${tr.progress_percentage || 0}%` }} /></div>
@@ -404,7 +409,7 @@ export default function RiskTreatmentPage() {
                           {group.treatments.map((tr) => (
                             <tr key={tr.id} className="border-b border-gray-50 hover:bg-gray-50/50 transition-colors">
                               <td className="px-6 py-3 font-medium text-gray-900">{riskTitle(tr.risk_id)}</td>
-                              <td className="px-6 py-3"><span className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold border ${OPTION_BADGE[tr.treatment_option] || "bg-gray-100 text-gray-600"}`}>{tr.treatment_option}</span></td>
+                              <td className="px-6 py-3"><span className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold border ${OPTION_BADGE[tr.treatment_option] || "bg-gray-100 text-gray-600"}`}>{tr.treatment_option ? String(t(`vocab.${tr.treatment_option}` as never, String(tr.treatment_option).replace(/_/g, " "))) : "-"}</span></td>
                               <td className="px-6 py-3">
                                 <div className="flex items-center gap-2">
                                   <div className="w-24 h-2 bg-gray-100 rounded-full overflow-hidden"><div className="h-full bg-blue-500 rounded-full" style={{ width: `${tr.progress_percentage || 0}%` }} /></div>
@@ -466,7 +471,7 @@ export default function RiskTreatmentPage() {
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">{t("treatment.col_option", "Option")}</label>
                   <select value={form.treatment_option} onChange={(e) => setForm({ ...form, treatment_option: e.target.value })} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-                    {OPTIONS.map((o) => <option key={o} value={o}>{o}</option>)}
+                    {OPTIONS.map((o) => <option key={o} value={o}>{String(t(`vocab.${o}` as never, o.charAt(0).toUpperCase() + o.slice(1)))}</option>)}
                   </select>
                 </div>
                 <div>
@@ -549,7 +554,7 @@ export default function RiskTreatmentPage() {
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">{t("treatment.col_option", "Option")}</label>
                   <select value={supersedeForm.treatment_option} onChange={(e) => setSupersedeForm({ ...supersedeForm, treatment_option: e.target.value })} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-                    {OPTIONS.map((o) => <option key={o} value={o}>{o}</option>)}
+                    {OPTIONS.map((o) => <option key={o} value={o}>{String(t(`vocab.${o}` as never, o.charAt(0).toUpperCase() + o.slice(1)))}</option>)}
                   </select>
                 </div>
                 <div>

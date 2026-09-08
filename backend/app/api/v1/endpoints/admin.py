@@ -58,6 +58,13 @@ class AdminUserResponse(BaseModel):
     tenant_id: str
     tenant_name: str
     created_at: str
+    # Read-back for the expiry this console is now the only place able to set or
+    # clear (see UpdateUserRequest below). Without it a super admin sees an
+    # expired account as plainly "Active" while POST /auth/login refuses it, and
+    # the one console that can undo that cannot see what it is undoing. Optional
+    # with a default so CreateUserAdminResponse, which inherits this model, is
+    # unaffected.
+    expires_at: datetime | None = None
 
     model_config = {"from_attributes": True}
 
@@ -65,6 +72,13 @@ class AdminUserResponse(BaseModel):
 class UpdateUserRequest(BaseModel):
     is_active: bool | None = None
     role: str | None = None
+    # The platform-side way back from an expired account. login() refuses one
+    # (auth.py), the tenant console refuses to touch a super_admin at all
+    # (users.py update_user), and nothing else in the application can clear the
+    # date — so without this an account that outlives its expiry is
+    # unrecoverable over HTTP. Explicit null clears it; omitting the field
+    # leaves it alone, hence the model_fields_set test in the handler.
+    expires_at: datetime | None = None
 
 
 class CreateUserAdminRequest(BaseModel):
@@ -138,6 +152,7 @@ async def list_all_users(
             last_name=u.last_name,
             role=u.role.value,
             is_active=u.is_active,
+            expires_at=u.expires_at,
             tenant_id=u.tenant_id,
             tenant_name=tenant_name,
             created_at=u.created_at.isoformat() if u.created_at else "",
@@ -226,8 +241,17 @@ async def update_user(
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
+    # Same guard the deletion handler below and the tenant console already
+    # apply: the automated-task principal is an audit actor, not a person.
+    # Activating it or giving it a role is the first half of signing in AS the
+    # batch actor and having your own changes recorded as "the system did it".
+    if is_system_actor(user.email):
+        raise HTTPException(status_code=403, detail="The automated-task account cannot be modified.")
+
     if body.is_active is not None:
         user.is_active = body.is_active
+    if "expires_at" in body.model_fields_set:
+        user.expires_at = body.expires_at
     if body.role is not None:
         try:
             new_role = UserRole(body.role)
@@ -253,6 +277,7 @@ async def update_user(
         last_name=user.last_name,
         role=user.role.value,
         is_active=user.is_active,
+        expires_at=user.expires_at,
         tenant_id=user.tenant_id,
         tenant_name=tenant.name if tenant else "",
         created_at=user.created_at.isoformat() if user.created_at else "",

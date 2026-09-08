@@ -21,6 +21,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from sqlalchemy import func, or_, select
+from sqlalchemy.exc import OperationalError, ProgrammingError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.v1.dependencies.auth import get_current_user, get_tenant_id, require_roles
@@ -253,14 +254,22 @@ async def list_campaigns(
         clause = or_(AuditCampaign.name.ilike(pattern), AuditCampaign.description.ilike(pattern))
         q, cq = q.where(clause), cq.where(clause)
 
-    total = (await db.execute(cq)).scalar() or 0
-    rows = (await db.execute(
-        # Newest plan first, then a stable tiebreaker so paging never repeats a row.
-        q.order_by(AuditCampaign.period_start.desc().nullslast(),
-                   AuditCampaign.created_at.desc(),
-                   AuditCampaign.id)
-        .limit(limit).offset(offset)
-    )).scalars().all()
+    try:
+        total = (await db.execute(cq)).scalar() or 0
+        rows = (await db.execute(
+            # Newest plan first, then a stable tiebreaker so paging never repeats a row.
+            q.order_by(AuditCampaign.period_start.desc().nullslast(),
+                       AuditCampaign.created_at.desc(),
+                       AuditCampaign.id)
+            .limit(limit).offset(offset)
+        )).scalars().all()
+    except (OperationalError, ProgrammingError):
+        # audit_campaigns is built by create_all() at startup. Until that restart
+        # this listing raises, and the SPA hard-redirects to /service-down on any
+        # 5xx — the user is thrown out of the application instead of seeing an
+        # empty « campagnes » screen. No table means no campaigns.
+        await db.rollback()
+        return CampaignListOut(items=[], total=0, limit=limit, offset=offset)
     return CampaignListOut(
         items=[CampaignOut.model_validate(c) for c in rows],
         total=total, limit=limit, offset=offset,

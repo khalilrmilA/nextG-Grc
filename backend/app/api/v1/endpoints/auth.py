@@ -67,6 +67,24 @@ def _utcnow() -> datetime:
     return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
+def _token_claims(user: User) -> dict:
+    """The identity claims every access/refresh token this file mints carries.
+
+    ``email`` is here for the audit trail: ActivityLogMiddleware prefers a
+    payload ``email`` claim and otherwise resolves the actor with one indexed
+    SELECT per logged request — every mutation and every whitelisted read. It
+    cannot go stale: no endpoint in this application changes a user's email
+    address, and a token lives minutes, not months. It is not an authorization
+    input; get_current_user still reads the account from the database.
+    """
+    return {
+        "sub": user.id,
+        "tenant_id": user.tenant_id,
+        "role": user.role,
+        "email": user.email,
+    }
+
+
 def _enforce_password_policy(password: str) -> None:
     """Validate against the shared policy, surfacing failures as HTTP 422."""
     try:
@@ -304,6 +322,22 @@ async def login(request: Request, body: LoginRequest, db: AsyncSession = Depends
             await _journal_login(request, normalized_email, False, "disabled", user)
             raise HTTPException(status.HTTP_401_UNAUTHORIZED, _GENERIC_LOGIN_FAILURE)
 
+        # Time-limited accounts (external auditors, consultants) end here, not
+        # three screens later. get_current_user has always refused an expired
+        # account with a 403, but login itself did not look at expires_at: the
+        # sign-in succeeded, the journal recorded "ok", the SPA loaded, and then
+        # every single request 403'd. Two live accounts are in exactly that state.
+        # Not the generic failure string — the password has already been verified
+        # at this point, so naming the reason discloses nothing an attacker does
+        # not already have, and it is the same sentence get_current_user returns.
+        if user.expires_at is not None and user.expires_at < _utcnow():
+            logger.info("login.fail email_hash=%s reason=expired", email_hash)
+            await _journal_login(request, normalized_email, False, "expired", user)
+            raise HTTPException(
+                status.HTTP_403_FORBIDDEN,
+                "Account has expired. Contact your administrator.",
+            )
+
         # Success — clear any failure/lock state.
         if user.failed_login_count or user.locked_until:
             user.failed_login_count = 0
@@ -324,7 +358,7 @@ async def login(request: Request, body: LoginRequest, db: AsyncSession = Depends
                 mfa_challenge_token=create_mfa_challenge_token({"sub": user.id}),
             )
 
-        token_data = {"sub": user.id, "tenant_id": user.tenant_id, "role": user.role}
+        token_data = _token_claims(user)
         try:
             session = await _create_session(request, user, db)
             token_data["sid"] = session.id
@@ -382,6 +416,21 @@ async def mfa_login(request: Request, body: MfaLoginRequest, db: AsyncSession = 
     if not user or not user.is_active:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, _INVALID_MFA_CHALLENGE)
 
+    # The challenge token outlives a lockout triggered while it was being used
+    # (see the bad-code branch below), and it survives an account expiring
+    # between the two steps. Both are re-checked here, or this endpoint would be
+    # a five-minute window around the controls /login enforces.
+    if user.locked_until and user.locked_until > _utcnow():
+        raise HTTPException(
+            status.HTTP_423_LOCKED,
+            "Account temporarily locked due to failed login attempts. Try again later.",
+        )
+    if user.expires_at is not None and user.expires_at < _utcnow():
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            "Account has expired. Contact your administrator.",
+        )
+
     email_hash = _hash_email_for_log(user.email)
     device = (await db.execute(
         select(MfaDevice).where(MfaDevice.user_id == user.id, MfaDevice.confirmed == True)  # noqa: E712
@@ -401,11 +450,31 @@ async def mfa_login(request: Request, body: MfaLoginRequest, db: AsyncSession = 
         # nothing at all for second-factor brute force: the password step had
         # already succeeded, so the only trace was an application log line.
         await _journal_login(request, user.email, False, "mfa_bad_code", user)
+        # ...and it counts toward the SAME tenant-configurable lockout the
+        # password step uses. The challenge token is only single-use on success
+        # (revoke_jti below), so without this an attacker holding the password
+        # could keep re-submitting codes for the five minutes it lives, and then
+        # simply ask for another one — 6 digits with valid_window=1 is three
+        # acceptable codes at any instant, which is guessable given enough
+        # attempts. login() re-checks locked_until before it clears the counter,
+        # so a lockout raised here cannot be reset by logging in again.
+        tenant_row = await db.execute(select(Tenant.settings).where(Tenant.id == user.tenant_id))
+        security_cfg = resolve_security_settings(tenant_row.scalar_one_or_none())
+        user.failed_login_count = (user.failed_login_count or 0) + 1
+        if user.failed_login_count >= security_cfg["max_failed_logins"]:
+            user.locked_until = _utcnow() + timedelta(minutes=security_cfg["lockout_minutes"])
+            user.failed_login_count = 0
+            logger.info("login.lock email_hash=%s reason=mfa", email_hash)
+        await db.commit()
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid MFA code")
     device.last_used_at = datetime.now(timezone.utc).replace(tzinfo=None)
+    # A completed login clears the counter the bad-code branch above increments,
+    # mirroring login()'s own "Success — clear any failure/lock state" step.
+    if user.failed_login_count:
+        user.failed_login_count = 0
     await revoke_jti(payload.get("jti"))  # single-use: this challenge can't be redeemed twice
 
-    token_data = {"sub": user.id, "tenant_id": user.tenant_id, "role": user.role}
+    token_data = _token_claims(user)
     try:
         session = await _create_session(request, user, db)
         token_data["sid"] = session.id
@@ -583,7 +652,7 @@ async def register(request: Request, body: RegisterRequest, db: AsyncSession = D
                 ))
 
     await db.commit()
-    token_data = {"sub": user.id, "tenant_id": user.tenant_id, "role": user.role}
+    token_data = _token_claims(user)
     return TokenResponse(
         access_token=create_access_token(token_data),
         refresh_token=create_refresh_token(token_data),
@@ -841,7 +910,14 @@ async def refresh_token(request: Request, body: RefreshRequest, db: AsyncSession
     if not user or not user.is_active:
         raise HTTPException(status_code=401, detail="User not found or inactive")
 
-    token_data = {"sub": user.id, "tenant_id": user.tenant_id, "role": user.role}
+    # An expired account must not be able to mint fresh credentials either — the
+    # refresh token lives 7 days and would otherwise outlive the expiry date by
+    # most of a week. Same rule login() applies, same 401 shape this handler
+    # already uses for a deactivated account.
+    if user.expires_at is not None and user.expires_at < _utcnow():
+        raise HTTPException(status_code=401, detail="Account has expired. Contact your administrator.")
+
+    token_data = _token_claims(user)
 
     # Carry the session id through the rotation. It used to be dropped here, so
     # the first refresh (the SPA does one every 30 minutes) produced a token with

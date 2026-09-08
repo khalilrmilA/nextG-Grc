@@ -21,7 +21,7 @@ import {
   dashboardExportApi, parseDashboardExportError,
   type ActionPlanItem, type DashboardWidgetItem, type DashboardLayout,
 } from "../api/endpoints";
-import { useAuthStore, authSession, getUserRoles } from "../store/auth";
+import { useAuthStore, authSession, getUserRoles, hasAnyRole } from "../store/auth";
 import { useEntitlements } from "../context/EntitlementsContext";
 import { exportChartAsPng, exportBarChartAsPng, safeFileName, type BarChartEntry } from "../utils/exportUtils";
 import type {
@@ -31,13 +31,22 @@ import type {
 import ComplianceJourneyMap from "../components/features/compliance/ComplianceJourneyMap";
 import ReadinessScoreWidget from "../components/features/compliance/ReadinessScoreWidget";
 
-// ── Generic fallback dashboard data ───────────────────────────────────────────
-const DEMO_DATA: DashboardSummary = {
-  risk: { total_open: 24, critical: 3, high: 8, by_severity: { critical: 3, high: 8, medium: 9, low: 4 } },
-  compliance: { average_score: 72.5, total_assessments: 4, control_coverage_percent: 68.3, controls_by_status: { implemented: 89, in_progress: 24, not_started: 31, not_applicable: 8 } },
-  audit: { open_findings: 7 },
-  vendor: { total_vendors: 18 },
-  policy: { attestation_rate_percent: 84.2, total_attestations: 142 },
+// ── Generic dashboard fallback ────────────────────────────────────────────────
+//
+// This was DEMO_DATA: 24 open risks, a 72.5 % compliance score, 18 vendors,
+// 84.2 % attestation. Those figures rendered whenever `genericData` was absent
+// — and `genericData` is absent for the whole of NORMAL LOADING, not only on a
+// server error, so every visit to the home page flashed five invented numbers
+// before the real ones arrived. An evaluator who catches one fabricated figure
+// stops believing every other number in the product, so nothing is invented
+// any more: the shape is zeroed, and the cards render an em dash (never a "0",
+// which is itself a claim) until the real payload lands. See `unavailable`.
+const EMPTY_SUMMARY: DashboardSummary = {
+  risk: { total_open: 0, critical: 0, high: 0, by_severity: {} },
+  compliance: { average_score: null, total_assessments: 0, control_coverage_percent: 0, controls_by_status: {} },
+  audit: { open_findings: 0 },
+  vendor: { total_vendors: 0 },
+  policy: { attestation_rate_percent: 0, total_attestations: 0 },
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -91,6 +100,14 @@ function lsGet(key: string): string | null {
 function lsSet(key: string, value: string) {
   try { window.localStorage.setItem(key, value); } catch { /* private mode */ }
 }
+
+// PATCH /auth/me/frameworks is require_roles(CISO, COMPLIANCE_MANAGER,
+// POLICY_MANAGER) + the tenant_admin / super_admin auto-pass. Every other role
+// can reach this page, so the "Add framework" card used to open a modal whose
+// Save produced a 403 that handleAddFramework only console.error'd — the button
+// spun and nothing happened. The card is now hidden for those roles, and the
+// modal reports whatever the server does say.
+const FRAMEWORK_WRITE_ROLES = ["tenant_admin", "super_admin", "ciso", "compliance_manager", "policy_manager"];
 
 /** HTTP status of an axios rejection, 0 when the request never got an answer. */
 function statusOf(err: unknown): number {
@@ -1220,8 +1237,17 @@ function FrameworkDashboard({ data }: { data: any }) {
 
 // ── Generic fallback dashboard ────────────────────────────────────────────────
 
-function GenericDashboard({ d, isDemo }: { d: DashboardSummary; isDemo: boolean }) {
-  const { t } = useTranslation();
+function GenericDashboard({ d, unavailable, pending }: {
+  d: DashboardSummary;
+  /** GET /dashboard/summary answered with an error — say so, do not draw a 0. */
+  unavailable: boolean;
+  /** Still in flight. A number that is not known yet is an em dash, not a 0. */
+  pending: boolean;
+}) {
+  const { t, i18n } = useTranslation();
+  // One helper for every KPI on this card row: nothing may render a figure the
+  // server has not actually returned.
+  const kv = (v: string | number) => (pending || unavailable ? "—" : v);
   // Real risk-trend series (new risks logged per month, by severity) — replaces
   // the old hardcoded RISK_TREND constant. See dashboard.py:get_risk_trend for
   // why this is intake volume rather than a historical open-risk backlog.
@@ -1233,6 +1259,22 @@ function GenericDashboard({ d, isDemo }: { d: DashboardSummary; isDemo: boolean 
     ...live,
   });
   const riskTrend = trendData?.series ?? [];
+
+  // The X axis used to key on the backend's `month` field, which is an English
+  // abbreviation produced by strftime("%b") — the one hard-coded English string
+  // left on this page, and it stayed English in French and Arabic. The same
+  // response already carries `period` ("YYYY-MM"), so the axis keys on that and
+  // the label is formatted by the browser in the SPA's own language.
+  const monthLabel = (period: unknown): string => {
+    if (typeof period !== "string") return "";
+    const [y, m] = period.split("-").map(Number);
+    if (!y || !m) return period;
+    try {
+      return new Intl.DateTimeFormat(i18n.language, { month: "short" }).format(new Date(y, m - 1, 1));
+    } catch {
+      return period;
+    }
+  };
 
   // Month-over-month change in open critical+high risks, computed from the real
   // risk_snapshots series the trend chart already uses. The two KPI cards below
@@ -1281,25 +1323,32 @@ function GenericDashboard({ d, isDemo }: { d: DashboardSummary; isDemo: boolean 
           <h1 className="text-2xl font-bold text-gray-900">{t("dashboard.security_dashboard")}</h1>
           <p className="text-gray-500 text-sm mt-1">{t("dashboard.executive_overview")}</p>
         </div>
-        {isDemo && (
+        {unavailable && (
           <span className="flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 bg-amber-50 border border-amber-200 rounded-lg text-amber-700">
-            <Activity className="w-3.5 h-3.5" /> {t("nav.demo_data")}
+            <Activity className="w-3.5 h-3.5" /> {t("moduledash.error_title")}
           </span>
         )}
       </div>
 
+      {unavailable && (
+        <p className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3">
+          {t("moduledash.error_generic")}
+        </p>
+      )}
+
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-5">
-        <KpiCard title={t("dashboard.open_risks")} value={d.risk.total_open}
-          subtitle={`${d.risk.critical} ${t("compliance.severities.critical")} · ${d.risk.high} ${t("compliance.severities.high")}`}
+        <KpiCard title={t("dashboard.open_risks")} value={kv(d.risk.total_open)}
+          subtitle={pending || unavailable ? undefined : `${d.risk.critical} ${t("compliance.severities.critical")} · ${d.risk.high} ${t("compliance.severities.high")}`}
           icon={AlertTriangle} iconBg="bg-red-500"
           change={openRiskChange?.label} changePositive={openRiskChange?.positive} />
-        <KpiCard title={t("dashboard.compliance_score")} value={`${d.compliance.average_score ?? 0}%`}
-          subtitle={`${d.compliance.total_assessments} ${t("compliance.assessments")}`}
+        <KpiCard title={t("dashboard.compliance_score")}
+          value={pending || unavailable || d.compliance.average_score === null ? "—" : `${d.compliance.average_score}%`}
+          subtitle={pending || unavailable ? undefined : `${d.compliance.total_assessments} ${t("compliance.assessments")}`}
           icon={Shield} iconBg="bg-blue-500" />
-        <KpiCard title={t("dashboard.open_audit_findings")} value={d.audit.open_findings}
+        <KpiCard title={t("dashboard.open_audit_findings")} value={kv(d.audit.open_findings)}
           subtitle={t("dashboard.requires_remediation")}
           icon={ClipboardList} iconBg="bg-orange-500" />
-        <KpiCard title={t("nav.vendors")} value={d.vendor.total_vendors}
+        <KpiCard title={t("nav.vendors")} value={kv(d.vendor.total_vendors)}
           icon={Building2} iconBg="bg-indigo-500" />
       </div>
 
@@ -1326,9 +1375,9 @@ function GenericDashboard({ d, isDemo }: { d: DashboardSummary; isDemo: boolean 
           <ResponsiveContainer width="100%" height={180}>
             <BarChart data={riskTrend} barSize={20}>
               <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" vertical={false} />
-              <XAxis dataKey="month" tick={{ fontSize: 11, fill: "#9ca3af" }} axisLine={false} tickLine={false} />
+              <XAxis dataKey="period" tickFormatter={monthLabel} tick={{ fontSize: 11, fill: "#9ca3af" }} axisLine={false} tickLine={false} />
               <YAxis tick={{ fontSize: 11, fill: "#9ca3af" }} axisLine={false} tickLine={false} />
-              <Tooltip />
+              <Tooltip labelFormatter={monthLabel} />
               <Bar dataKey="critical" stackId="a" fill="#ef4444" />
               <Bar dataKey="high" stackId="a" fill="#f97316" radius={[4,4,0,0]} />
             </BarChart>
@@ -1339,18 +1388,21 @@ function GenericDashboard({ d, isDemo }: { d: DashboardSummary; isDemo: boolean 
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
           <div className="flex items-center justify-between mb-4">
             <h3 className="font-semibold text-gray-900">{t("dashboard.policy_attestation")}</h3>
-            <span className="text-2xl font-bold text-blue-600">{d.policy.attestation_rate_percent ?? 0}%</span>
+            {/* Same rule as the KPI row above: while the summary is in flight, or
+                when it failed, these percentages are not known — and a 0 % is a
+                claim, not a blank. */}
+            <span className="text-2xl font-bold text-blue-600">{kv(`${d.policy.attestation_rate_percent ?? 0}%`)}</span>
           </div>
           <div className="h-3 bg-gray-100 rounded-full overflow-hidden mb-3">
-            <div className="h-full bg-blue-500 rounded-full" style={{ width: `${d.policy.attestation_rate_percent ?? 0}%` }} />
+            <div className="h-full bg-blue-500 rounded-full" style={{ width: pending || unavailable ? "0%" : `${d.policy.attestation_rate_percent ?? 0}%` }} />
           </div>
-          <p className="text-xs text-gray-400">{d.policy.total_attestations} {t("dashboard.total_attestations")}</p>
+          <p className="text-xs text-gray-400">{pending || unavailable ? "" : `${d.policy.total_attestations} ${t("dashboard.total_attestations")}`}</p>
           <div className="mt-4 pt-4 border-t border-gray-100 flex items-center justify-between text-sm">
             <span className="text-gray-500">{t("dashboard.compliance_coverage")}</span>
-            <span className="font-bold text-gray-800">{d.compliance.control_coverage_percent}%</span>
+            <span className="font-bold text-gray-800">{kv(`${d.compliance.control_coverage_percent}%`)}</span>
           </div>
           <div className="mt-2 h-2 bg-gray-100 rounded-full overflow-hidden">
-            <div className="h-full bg-green-500 rounded-full" style={{ width: `${d.compliance.control_coverage_percent}%` }} />
+            <div className="h-full bg-green-500 rounded-full" style={{ width: pending || unavailable ? "0%" : `${d.compliance.control_coverage_percent}%` }} />
           </div>
         </div>
       </div>
@@ -1867,9 +1919,11 @@ function FrameworkManagementModal({
   const [loading, setLoading] = useState(true);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
+  const [addError, setAddError] = useState("");
 
   useEffect(() => {
     if (!isOpen) return;
+    setAddError("");
     loadFrameworks();
   }, [isOpen]);
 
@@ -1889,6 +1943,7 @@ function FrameworkManagementModal({
   async function handleAddFramework() {
     if (!selectedId) return;
     setAdding(true);
+    setAddError("");
     try {
       // Always read the live store value — the prop may be stale if the user
       // has already added a framework in this session without re-logging in.
@@ -1930,7 +1985,13 @@ function FrameworkManagementModal({
       onFrameworkAdded();
       onClose();
     } catch (err) {
-      console.error("Failed to add framework:", err);
+      const status = statusOf(err);
+      const detail = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
+      setAddError(
+        status === 403
+          ? t("common.access_restricted_hint")
+          : (typeof detail === "string" && detail) || t("errors.save_failed")
+      );
     } finally {
       setAdding(false);
     }
@@ -1994,6 +2055,11 @@ function FrameworkManagementModal({
             </div>
           )}
 
+          {/* A 403 from the role gate used to be console.error'd only. */}
+          {addError && (
+            <p className="p-2.5 bg-red-50 border border-red-100 rounded-lg text-xs text-red-700">{addError}</p>
+          )}
+
           {/* Action buttons */}
           <div className="flex gap-2 pt-2">
             <button
@@ -2022,22 +2088,34 @@ function FrameworkManagementModal({
 function OverviewDashboard({
   overviewData,
   genericData,
-  isDemo,
+  unavailable,
+  pending,
   onSelectFramework,
 }: {
   overviewData: any;
   genericData: any;
-  isDemo: boolean;
+  /** GET /dashboard/summary errored. */
+  unavailable: boolean;
+  /** GET /dashboard/summary is still in flight. */
+  pending: boolean;
   onSelectFramework: (fwId: string) => void;
 }) {
   const { t } = useTranslation();
   const navigate = useNavigate();
-  const d = genericData ?? DEMO_DATA;
+  // Zeroed shape, never invented figures — see EMPTY_SUMMARY at the top.
+  const d: DashboardSummary = genericData ?? EMPTY_SUMMARY;
+  const kv = (v: string | number) => (pending || unavailable ? "—" : v);
   const frameworks: any[] = overviewData?.frameworks ?? [];
   const [showFrameworkModal, setShowFrameworkModal] = useState(false);
   const authUser = useAuthStore((state) => state);
   const currentFrameworkIds = authUser?.selected_framework_ids || [];
   const primaryFrameworkId = authUser?.primary_framework_id || null;
+  // Scalar `role` as well as the roles array — the server checks both (the
+  // super_admin/tenant_admin auto-pass reads User.role, and get_effective_roles
+  // falls back to it when `roles` is empty). One live account is super_admin
+  // with roles ["viewer"]; the array alone would hide this card from it.
+  const canManageFrameworks =
+    FRAMEWORK_WRITE_ROLES.includes(authUser?.role ?? "") || hasAnyRole(authUser, FRAMEWORK_WRITE_ROLES);
 
   const live = useLiveQueryOptions();
   const { data: allActionItems = [] } = useQuery({
@@ -2197,7 +2275,8 @@ function OverviewDashboard({
             }}
           />
         ))}
-        {/* Add framework card */}
+        {/* Add framework card — hidden for roles the backend would 403. */}
+        {canManageFrameworks && (
         <button
           onClick={() => setShowFrameworkModal(true)}
           className="group bg-white rounded-2xl border border-gray-100 shadow-sm hover:shadow-lg hover:border-blue-200 transition-all p-6 text-left flex flex-col gap-4 w-full min-h-[240px] items-center justify-center"
@@ -2212,6 +2291,7 @@ function OverviewDashboard({
             </div>
           </div>
         </button>
+        )}
       </div>
     </div>
   );
@@ -2247,22 +2327,24 @@ function OverviewDashboard({
   // ordered selection rather than being a fixed block of four.
   const kpiCards: Record<MainKpiId, React.ReactNode> = {
     kpi_open_risks: (
-      <KpiCard title={t("dashboard.open_risks")} value={d.risk.total_open}
-        subtitle={`${d.risk.critical} ${t("compliance.severities.critical")} · ${d.risk.high} ${t("compliance.severities.high")}`}
+      <KpiCard title={t("dashboard.open_risks")} value={kv(d.risk.total_open)}
+        subtitle={pending || unavailable ? undefined : `${d.risk.critical} ${t("compliance.severities.critical")} · ${d.risk.high} ${t("compliance.severities.high")}`}
         icon={AlertTriangle} iconBg="bg-red-500" />
     ),
     kpi_compliance: (
-      <KpiCard title={t("dashboard.avg_compliance")} value={`${d.compliance.average_score ?? 0}%`}
-        subtitle={`${d.compliance.total_assessments} ${t("compliance.assessments")}`}
+      <KpiCard title={t("dashboard.avg_compliance")}
+        value={pending || unavailable || d.compliance.average_score === null ? "—" : `${d.compliance.average_score}%`}
+        subtitle={pending || unavailable ? undefined : `${d.compliance.total_assessments} ${t("compliance.assessments")}`}
         icon={Shield} iconBg="bg-blue-500" />
     ),
     kpi_findings: (
-      <KpiCard title={t("dashboard.open_audit_findings")} value={d.audit.open_findings}
+      <KpiCard title={t("dashboard.open_audit_findings")} value={kv(d.audit.open_findings)}
         icon={ClipboardList} iconBg="bg-orange-500" />
     ),
     kpi_attestation: (
-      <KpiCard title={t("dashboard.policy_attestation")} value={`${d.policy.attestation_rate_percent ?? 0}%`}
-        subtitle={`${d.policy.total_attestations} ${t("dashboard.attestations")}`}
+      <KpiCard title={t("dashboard.policy_attestation")}
+        value={pending || unavailable ? "—" : `${d.policy.attestation_rate_percent ?? 0}%`}
+        subtitle={pending || unavailable ? undefined : `${d.policy.total_attestations} ${t("dashboard.attestations")}`}
         icon={BookOpen} iconBg="bg-indigo-500" />
     ),
   };
@@ -2303,9 +2385,9 @@ function OverviewDashboard({
           </p>
         </div>
         <div className="flex flex-wrap items-center justify-end gap-2">
-          {isDemo && (
+          {unavailable && (
             <span className="flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 bg-amber-50 border border-amber-200 rounded-lg text-amber-700">
-              <Activity className="w-3.5 h-3.5" /> {t("nav.demo_data")}
+              <Activity className="w-3.5 h-3.5" /> {t("moduledash.error_title")}
             </span>
           )}
           <DashboardToolbar />
@@ -2404,14 +2486,18 @@ function DashboardStages() {
     ...live,
   });
 
-  const { data: genericData, isError: genericError } = useQuery({
+  const { data: genericData, isError: genericError, isPending: genericPending } = useQuery({
     queryKey: ["dashboard", "summary"],
     queryFn: dashboardApi.getSummary,
     retry: false,
     ...live,
   });
 
-  const isDemo = genericError || !genericData;
+  // The two states are NOT the same thing, and conflating them is what made the
+  // page draw invented numbers while it was merely loading. `pending` = not
+  // answered yet (show an em dash, say nothing); `unavailable` = answered with
+  // an error (say so explicitly).
+  const genericUnavailable = genericError || (!genericPending && !genericData);
 
   // No framework set at all → onboarding
   if (!primaryFrameworkId) {
@@ -2431,7 +2517,7 @@ function DashboardStages() {
             {t("dashboard.select_frameworks")}
           </Link>
         </div>
-        <GenericDashboard d={genericData ?? DEMO_DATA} isDemo={isDemo} />
+        <GenericDashboard d={genericData ?? EMPTY_SUMMARY} unavailable={genericUnavailable} pending={genericPending} />
       </div>
     );
   }
@@ -2527,7 +2613,8 @@ function DashboardStages() {
       <OverviewDashboard
         overviewData={overviewData}
         genericData={genericData}
-        isDemo={isDemo}
+        unavailable={genericUnavailable}
+        pending={genericPending}
         onSelectFramework={(fwId) => setSelectedFwId(fwId)}
       />
     </div>

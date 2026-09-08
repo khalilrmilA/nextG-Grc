@@ -123,6 +123,13 @@ class UpdateUserPayload(BaseModel):
     excluded_roles: list[str] | None = None   # replace the user's group-role carve-outs
     is_external: bool | None = None           # internal vs external auditor/consultant
     external_org: str | None = None           # firm name, when external
+    # POST /users/create accepts an expiry and nothing could ever change it
+    # afterwards, so a time-limited account (an external auditor's, typically)
+    # could be extended only by deleting and recreating it — and once past its
+    # date it cannot even sign in (auth.py login()). Explicit null clears the
+    # expiry; omitting the field leaves it alone, which is why the handler tests
+    # model_fields_set rather than `is not None`.
+    expires_at: datetime | None = None
 
 
 class ResetPasswordResponse(BaseModel):
@@ -289,10 +296,17 @@ async def update_user(
         "roles": old_roles,
         "excluded_roles": list(user.excluded_roles or []),
         "is_active": user.is_active,
+        # An expiry date ends access as surely as a deactivation does, so moving
+        # it is a rights change and belongs in the same diff. Serialised because
+        # ActivityLog.details is JSON.
+        "expires_at": user.expires_at.isoformat() if user.expires_at else None,
     }
 
     if body.is_active is not None:
         user.is_active = body.is_active
+
+    if "expires_at" in body.model_fields_set:
+        user.expires_at = body.expires_at
 
     if body.roles is not None:
         if not body.roles:
@@ -352,6 +366,7 @@ async def update_user(
         "roles": list(user.roles or []),
         "excluded_roles": list(user.excluded_roles or []),
         "is_active": user.is_active,
+        "expires_at": user.expires_at.isoformat() if user.expires_at else None,
     }
     changed = {
         field: {"from": old_entitlements[field], "to": new_entitlements[field]}
@@ -417,6 +432,24 @@ async def reset_user_password(
         raise HTTPException(403, "The automated-task account cannot be given a password.")
     new_password = _generate_password()
     user.hashed_password = await hash_password_async(new_password)
+    # Same rule as POST /users/create and POST /users/auditors: a password an
+    # administrator can read is temporary by definition. This was the only
+    # set-password path in the codebase that did not set the flag, so the value
+    # handed over here stayed the account's permanent password and the admin
+    # kept knowing it.
+    user.must_change_password = True
+
+    # An admin reset is either onboarding or containment; in the containment
+    # case, leaving the sessions opened with the OLD password alive defeats the
+    # point. auth.py's own token-based reset_password revokes them for exactly
+    # this reason. The user signs in again with the temporary password above.
+    from app.models.user_session import UserSession
+    open_sessions = (await db.execute(select(UserSession).where(
+        UserSession.user_id == user.id, UserSession.revoked_at.is_(None),
+    ))).scalars().all()
+    for sess in open_sessions:
+        sess.revoked_at = datetime.utcnow()
+
     await db.commit()
     return ResetPasswordResponse(temporary_password=new_password)
 
@@ -703,7 +736,7 @@ async def unassign_auditor(
 async def delete_auditor(
     auditor_id: str,
     db: Annotated[AsyncSession, Depends(get_db)],
-    _: Annotated[User, Depends(require_roles(UserRole.TENANT_ADMIN))],
+    current_user: Annotated[User, Depends(require_roles(UserRole.TENANT_ADMIN))],
     tenant_id: Annotated[str, Depends(get_tenant_id)],
 ):
     auditor = (await db.execute(
@@ -718,7 +751,44 @@ async def delete_auditor(
     # rows that reference a deleted user would dangle, and would be refused
     # outright by the foreign key once this moves off SQLite.
     assignments = (await db.execute(select(AuditorAssignment).where(AuditorAssignment.auditor_id == auditor_id))).scalars().all()
+
+    # Same record-of-fact capture as delete_user above, which this handler never
+    # had: activity_logs.user_id keeps pointing at the deleted account, and the
+    # only other trace is the middleware's {DELETE, /users/auditors/<uuid>} row —
+    # which names neither the auditor nor the assessments their access covered.
+    # "Who was granted sight of which assessment, and when was it withdrawn" is
+    # the first question an audit of the audit asks.
+    deleted = {
+        "subject_user_id": auditor.id,
+        "email": auditor.email,
+        "name": f"{auditor.first_name} {auditor.last_name}".strip(),
+        "role": auditor.role.value if hasattr(auditor.role, "value") else auditor.role,
+        "is_external": bool(auditor.is_external),
+        "external_org": auditor.external_org,
+        "assessment_ids": sorted(a.assessment_id for a in assignments),
+        "deleted_by": current_user.email,
+        "source": "admin_ui",
+    }
+    subject_name = deleted["name"]
+
     for a in assignments:
         await db.delete(a)
     await db.delete(auditor)
     await db.commit()
+
+    # After the commit — chain_and_add commits, so logging first would publish a
+    # deletion the database might still roll back. Best-effort, never silent.
+    try:
+        await chain_and_add(db, ActivityLog(
+            tenant_id=tenant_id,
+            user_id=current_user.id,
+            user_email=current_user.email,
+            action="user_deleted",
+            entity_type="user",
+            entity_id=auditor_id,
+            entity_name=subject_name,
+            details=deleted,
+            origin="api",
+        ))
+    except Exception:  # noqa: BLE001 — the deletion is already committed
+        logger.warning("user_deleted audit entry not recorded for auditor %s", auditor_id)

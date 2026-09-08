@@ -33,6 +33,7 @@ from typing import Annotated, Any
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from sqlalchemy import func, or_, select
+from sqlalchemy.exc import OperationalError, ProgrammingError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.v1.dependencies.auth import get_current_user, get_tenant_id, require_roles
@@ -314,10 +315,19 @@ async def list_grids(
     if search and search.strip():
         pattern = f"%{search.strip()}%"
         q = q.where(or_(AuditGrid.name.ilike(pattern), AuditGrid.description.ilike(pattern)))
-    grids = (await db.execute(
-        q.order_by(AuditGrid.is_default.desc(), AuditGrid.name, AuditGrid.id)
-        .limit(limit).offset(offset)
-    )).scalars().all()
+    try:
+        grids = (await db.execute(
+            q.order_by(AuditGrid.is_default.desc(), AuditGrid.name, AuditGrid.id)
+            .limit(limit).offset(offset)
+        )).scalars().all()
+    except (OperationalError, ProgrammingError):
+        # audit_grids is created by create_all() at startup; before that restart
+        # this list raises, and client.ts hard-redirects the SPA to /service-down
+        # on any 5xx — the user is ejected from the application rather than shown
+        # an empty « grilles d'audit » screen. No table means no grids, which is
+        # exactly true. Same tolerance compliance.py gives its own new tables.
+        await db.rollback()
+        return []
     if not grids:
         return []
     # One grouped count for the whole page — a per-grid count meant a query per

@@ -102,6 +102,9 @@ import type {
   DashboardExportFormat,
   DashboardExportCatalogue,
   DashboardExportFailure,
+  // ── Historical trends (objectifs 2, 3 and 6) ──────────────────────────────
+  TrendEnvelope,
+  ArchivedReportItem,
 } from "@/types";
 
 export interface ActionPlanItem {
@@ -193,12 +196,20 @@ export const authApi = {
   updateSelectedFrameworks: (primary_framework_id: string, selected_framework_ids: string[]) =>
     apiClient.patch<UserProfile>("/auth/me/frameworks", { primary_framework_id, selected_framework_ids }).then((r) => r.data),
 
+  // ── Personal API tokens — NOT IMPLEMENTED SERVER-SIDE ────────────────────
+  // /auth/api-tokens does not exist in backend/app (checked against the live
+  // route table): all three wrappers below answer 404. Nothing calls them.
+  // Left in place rather than deleted because the route may be landing in
+  // another lane — but do not wire a button to them until it has.
+  /** @deprecated 404 — POST /auth/api-tokens is not implemented. */
   generateApiToken: (name: string) =>
     apiClient.post<{ token: string; token_name: string; created_at: string }>("/auth/api-tokens", { name }).then((r) => r.data),
 
+  /** @deprecated 404 — GET /auth/api-tokens is not implemented. */
   listApiTokens: () =>
     apiClient.get<Array<{ token_name: string; created_at: string; last_used?: string }>>("/auth/api-tokens").then((r) => r.data),
 
+  /** @deprecated 404 — DELETE /auth/api-tokens/{name} is not implemented. */
   deleteApiToken: (tokenName: string) =>
     apiClient.delete(`/auth/api-tokens/${tokenName}`),
 
@@ -208,8 +219,12 @@ export const authApi = {
   getAiAccessStatus: () =>
     apiClient.get<{ requests: AiAccessRequest[]; quotas: AiUsageQuota[] }>("/auth/ai-access/status").then((r) => r.data),
 
+  /** AI quota for the signed-in user. The path is /auth/ai-access/usage — the
+   *  whole ai_access router hangs off /auth/ai-access. It was spelled
+   *  "/auth/ai-usage" here, which is not a route, so SettingsPage and
+   *  AiUsageWidget (the only two callers) got a 404 and showed nothing. */
   getAiUsage: () =>
-    apiClient.get<AiTokenUsage>("/auth/ai-usage").then((r) => r.data),
+    apiClient.get<AiTokenUsage>("/auth/ai-access/usage").then((r) => r.data),
 
   checkAiAccess: () =>
     apiClient.get<{ has_access: boolean; tokens_used: number; tokens_limit: number; requests_used: number; requests_limit: number; percentage_used: number; reset_at: string | null }>("/ai/access-check").then((r) => r.data),
@@ -241,8 +256,21 @@ export const frameworksApi = {
 
   delete: (id: string) => apiClient.delete(`/frameworks/${id}`),
 
-  getControls: (frameworkId: string) =>
-    apiClient.get<FrameworkControl[]>(`/frameworks/${frameworkId}/controls`).then((r) => r.data),
+  /** The framework's requirements, classified and in the caller's language.
+   *  Every filter is optional and applied server-side; "unclassified" is a
+   *  legal value for `domain` / `requirement_type` (same string as the facet
+   *  key), and the values are matched case-insensitively. */
+  getControls: (
+    frameworkId: string,
+    params?: {
+      domain?: string;
+      requirement_type?: string;
+      is_mandatory?: boolean;
+      applicability?: string;
+      q?: string;
+    },
+  ) =>
+    apiClient.get<FrameworkControl[]>(`/frameworks/${frameworkId}/controls`, { params }).then((r) => r.data),
 
   getCrosswalk: (frameworkId: string, controlId: string) =>
     apiClient
@@ -448,7 +476,9 @@ export interface ChecklistDocItem {
 }
 
 export const complianceApi = {
-  listAssessments: (params?: { page?: number; page_size?: number }) =>
+  /** `include_archived` brings back assessments moved to ARCHIVED — a past
+   *  perimeter, deliberately out of the live picture unless asked for. */
+  listAssessments: (params?: { page?: number; page_size?: number; include_archived?: boolean }) =>
     apiClient
       .get<PaginatedResponse<AssessmentListItem>>("/compliance/assessments", { params })
       .then((r) => r.data),
@@ -559,9 +589,23 @@ export const complianceApi = {
       .then((r) => r.data as StoredFileVersionItem[]),
   listDeletedFiles: () =>
     apiClient.get("/compliance/files/deleted").then((r) => r.data as StoredFileVersionItem[]),
+  /** @deprecated The route is HTTPBearer-only, so a bare <a href> to this URL
+   *  401s. Use `downloadFileVersion` (blob) unless you are fetching it yourself
+   *  with an Authorization header, as DocumentViewerModal does. */
   downloadFileVersionUrl: (versionId: string, acknowledgeIntegrityFailure = false) =>
     `${API_BASE}/compliance/files/versions/${versionId}/download` +
     (acknowledgeIntegrityFailure ? "?acknowledge_integrity_failure=true" : ""),
+
+  /** One stored version, authenticated. `acknowledgeIntegrityFailure` is the
+   *  override that serves a file whose checksum no longer matches, so a damaged
+   *  file can still be investigated rather than being simply unreachable. */
+  downloadFileVersion: (versionId: string, acknowledgeIntegrityFailure = false) =>
+    apiClient
+      .get(`/compliance/files/versions/${versionId}/download`, {
+        params: acknowledgeIntegrityFailure ? { acknowledge_integrity_failure: true } : undefined,
+        responseType: "blob",
+      })
+      .then((r) => r.data as Blob),
 
   // ── Checklist document management ──────────────────────────────────────────
   downloadDocumentUrl: (docId: string) =>
@@ -699,6 +743,15 @@ export const complianceApi = {
         responseType: "blob",
       })
       .then((r) => r.data as Blob),
+
+  /** Show/hide one proof from the auditor's view. Returns the updated
+   *  attachment, whose `is_visible_to_auditor` is the new state. CISO-only
+   *  server-side, so offer the toggle to a CISO rather than letting others
+   *  walk into the refusal. */
+  toggleActionAttachmentVisibility: (attachmentId: string) =>
+    apiClient
+      .patch<ActionItemAttachment>(`/compliance/action-plan/attachments/${attachmentId}/visibility`)
+      .then((r) => r.data),
 
   deleteActionAttachment: (attachmentId: string) =>
     apiClient.delete(`/compliance/action-plan/attachments/${attachmentId}`),
@@ -891,8 +944,10 @@ export const aiApi = {
 // ─── Audits ──────────────────────────────────
 
 export const auditsApi = {
-  /** @deprecated GET /audits answers with a bare array, not a page. Kept because
-   *  AuditsPage already handles both shapes — new callers want `listAll`. */
+  /** @deprecated GET /audits answers with a bare array, not a page, and takes no
+   *  `page` / `page_size` at all — they are accepted here for the callers that
+   *  already pass them, but the server IGNORES them and returns everything.
+   *  Kept because AuditsPage handles both shapes; new callers want `listAll`. */
   list: (params?: { page?: number; page_size?: number }) =>
     apiClient.get<PaginatedResponse<Audit>>("/audits", { params }).then((r) => r.data),
 
@@ -1382,6 +1437,11 @@ export interface PolicyAttestation {
 }
 
 export const policiesApi = {
+  /** GET /policies declares NO query parameters (list_policies in policies.py):
+   *  it always returns every policy of the tenant, newest first. `page`,
+   *  `page_size` and `limit` are accepted here only so the existing callers
+   *  keep compiling — the server ignores them, so do not build a pager on
+   *  them, and expect the whole register in the response. */
   list: (params?: { page?: number; page_size?: number; limit?: number }) =>
     apiClient.get<Policy[]>("/policies", { params }).then((r) => r.data),
 
@@ -1750,6 +1810,11 @@ export const dashboardExportApi = {
 export const subscriptionsApi = {
   get: () => apiClient.get<Subscription>("/subscriptions/current").then((r) => r.data),
 
+  /** @deprecated 404 — POST /subscriptions/checkout does not exist in
+   *  backend/app; there is no self-serve billing on this platform. A tier
+   *  change goes through PATCH /subscriptions/current (admin-gated), which is
+   *  `update()` below. Kept, not deleted, in case the route is being added
+   *  elsewhere — but nothing may call this until it is. */
   createCheckoutSession: (tier: string, billing_cycle: string) =>
     apiClient
       .post<{ checkout_url: string }>("/subscriptions/checkout", { tier, billing_cycle })
@@ -1805,10 +1870,24 @@ export const notificationsApi = {
 // ─── Reports ─────────────────────────────────
 
 export const reportsApi = {
-  listTypes: () => apiClient.get("/reports/types").then((r) => r.data),
+  /** The five report types, LOCALISED. Match on `id`, never on the label —
+   *  the name changes with the UI language. */
+  listTypes: (lang?: string) =>
+    apiClient.get("/reports/types", { params: lang ? { lang } : undefined }).then((r) => r.data),
 
-  download: async (reportType: string) => {
+  /**
+   * Generate and download. The document is already produced in the UI language
+   * (the client sends Accept-Language on every request and the generator falls
+   * back to it); `lang` is for the case the tender actually asks about —
+   * deliberately producing the French or Arabic edition from a session in
+   * another language. It is echoed into the file name so two languages of the
+   * same report do not overwrite each other in the user's Downloads folder.
+   *
+   * `archive: false` skips the historique — use it for a throwaway copy.
+   */
+  download: async (reportType: string, lang?: string, archive = true) => {
     const response = await apiClient.get(`/reports/${reportType}/generate`, {
+      params: { ...(lang ? { lang } : {}), ...(archive ? {} : { archive: false }) },
       responseType: "blob",
     });
     // Create blob URL and trigger download
@@ -1817,20 +1896,38 @@ export const reportsApi = {
     const link = document.createElement("a");
     const date = new Date().toISOString().split("T")[0];
     link.href = url;
-    link.download = `${reportType}_report_${date}.pdf`;
+    link.download = `${reportType}_report_${date}${lang ? `_${lang}` : ""}.pdf`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
     window.URL.revokeObjectURL(url);
   },
 
-  preview: async (reportType: string): Promise<string> => {
+  preview: async (reportType: string, lang?: string): Promise<string> => {
     const response = await apiClient.get(`/reports/${reportType}/preview`, {
+      params: lang ? { lang } : undefined,
       responseType: "blob",
     });
     const blob = new Blob([response.data], { type: "application/pdf" });
     return window.URL.createObjectURL(blob);
   },
+
+  // ── « Archivage des rapports dans l'historique » ──────────────────────────
+  // The purpose-built pair, replacing the roundabout read through
+  // complianceApi.listFileVersions("report:<type>", tenantId): these are gated
+  // on the report-archive role set rather than on the file-versions one, and
+  // the download re-verifies the sha256 before serving (409 if the bytes on
+  // disk no longer match what was recorded — that is the point of an archive).
+  /** Every report this tenant has produced, newest first. */
+  history: (params?: { report_type?: string; limit?: number }) =>
+    apiClient.get<ArchivedReportItem[]>("/reports/history", { params }).then((r) => r.data),
+
+  /** One archived version, exactly as it was produced. Blob rather than a bare
+   *  URL: the route is HTTPBearer-only, so an <a href> would 401. */
+  downloadArchivedReport: (versionId: string) =>
+    apiClient
+      .get(`/reports/history/${versionId}/download`, { responseType: "blob" })
+      .then((r) => r.data as Blob),
 };
 
 // ─── Scheduled Reports (Elite Pack) ───────────────────────────
@@ -2200,8 +2297,23 @@ export const incidentsApi = {
 
 // ─── Vulnerabilities ────────────────────────
 export const vulnerabilitiesApi = {
-  list: (params?: { severity?: string; status_filter?: string }) =>
+  /** Bounded at limit=1000 (5000 max). The register-wide total is NOT in the
+   *  body — use `listWithTotal` when the screen states a count. */
+  list: (params?: { severity?: string; status_filter?: string; limit?: number; offset?: number }) =>
     apiClient.get("/vulnerabilities", { params }).then((r) => r.data),
+
+  /** Same call, carrying X-Total-Count so a page can say "showing X of Y"
+   *  honestly. The header is readable same-origin (prod is proxied through the
+   *  gateway); on a cross-origin dev split it is absent until the backend's
+   *  CORS exposes it, so `totalKnown` says whether `total` is the real total or
+   *  just this page's length — never print a silent 0. */
+  listWithTotal: (params?: { severity?: string; status_filter?: string; limit?: number; offset?: number }) =>
+    apiClient.get("/vulnerabilities", { params }).then((r) => {
+      const items = (Array.isArray(r.data) ? r.data : []) as Record<string, unknown>[];
+      const header = (r.headers as unknown as Record<string, unknown> | undefined)?.["x-total-count"];
+      const total = Number(header);
+      return { items, total: Number.isFinite(total) ? total : items.length, totalKnown: Number.isFinite(total) };
+    }),
   stats: () => apiClient.get("/vulnerabilities/stats").then((r) => r.data),
   get: (id: string) => apiClient.get(`/vulnerabilities/${id}`).then((r) => r.data),
   create: (data: Record<string, unknown>) => apiClient.post("/vulnerabilities", data).then((r) => r.data),
@@ -2214,6 +2326,24 @@ export const vulnerabilitiesApi = {
   setScenarios: (id: string, scenarioIds: string[]) =>
     apiClient.put(`/vulnerabilities/${id}/risk-scenarios`, { scenario_ids: scenarioIds }).then((r) => r.data),
   delete: (id: string) => apiClient.delete(`/vulnerabilities/${id}`),
+
+  /**
+   * « Tendances historiques » — one point per calendar month.
+   *
+   * Gated require_feature("custom_dashboards") + require_roles_strict(...), the
+   * same pair as the module dashboard whose history this is. So it has FIVE
+   * outcomes a caller must handle and none of them may eject the user:
+   *   200 source=trend_snapshot_daily — the real balance; render total:null as
+   *       a GAP, never as 0, and show `as_of`.
+   *   200 source=intake_volume — the fallback: what was opened that month, not
+   *       what stayed open. Label it as intake (i18n moduledash.trend_intake).
+   *   200 source=unavailable — say the history could not be read; draw nothing.
+   *   402 — Elite up-sell; client.ts already dispatches the `elite-upsell` event.
+   *   403 — restricted profile (strict roles: a tenant_admin does NOT auto-pass).
+   *       Expected, not an error: show the restriction, do not surface a crash.
+   */
+  trend: (months = 6) =>
+    apiClient.get<TrendEnvelope>("/vulnerabilities/trend", { params: { months } }).then((r) => r.data),
 };
 
 // ─── Threats ────────────────────────────────
@@ -2245,6 +2375,24 @@ export const threatsApi = {
   dismissWatch: (id: string) => apiClient.post(`/threats/watch/${id}/dismiss`).then((r) => r.data),
   promoteWatch: (id: string, data: Record<string, unknown>) =>
     apiClient.post(`/threats/watch/${id}/promote`, data).then((r) => r.data),
+
+  /**
+   * « Tendances historiques » — one point per calendar month.
+   *
+   * Gated require_feature("custom_dashboards") + require_roles_strict(...), the
+   * same pair as the module dashboard whose history this is. So it has FIVE
+   * outcomes a caller must handle and none of them may eject the user:
+   *   200 source=trend_snapshot_daily — the real balance; render total:null as
+   *       a GAP, never as 0, and show `as_of`.
+   *   200 source=intake_volume — the fallback: what was opened that month, not
+   *       what stayed open. Label it as intake (i18n moduledash.trend_intake).
+   *   200 source=unavailable — say the history could not be read; draw nothing.
+   *   402 — Elite up-sell; client.ts already dispatches the `elite-upsell` event.
+   *   403 — restricted profile (strict roles: a tenant_admin does NOT auto-pass).
+   *       Expected, not an error: show the restriction, do not surface a crash.
+   */
+  trend: (months = 6) =>
+    apiClient.get<TrendEnvelope>("/threats/trend", { params: { months } }).then((r) => r.data),
 };
 
 // ─── Risk Scenarios ─────────────────────────
@@ -2273,17 +2421,71 @@ export const scenarioVersionsApi = {
 };
 
 // ─── Applied Controls ───────────────────────
+/** Filters GET /applied-controls accepts (list_controls in applied_controls.py). */
+export interface AppliedControlListParams {
+  status?: string;
+  validation_status?: string;
+  expiring_within_days?: number;
+  include_evaluation?: boolean;
+  limit?: number;
+  offset?: number;
+}
+
 export const appliedControlsApi = {
   // The register, for reporting or an audit — carries each control's latest
   // effectiveness evaluation on the same row.
   exportUrl: (format: "csv" | "xml" = "csv") => `/data/export/applied-controls?format=${format}`,
   history: (id: string) => apiClient.get(`/applied-controls/${id}/history`).then((r) => r.data),
-  list: (params?: { status?: string }) =>
+
+  /** `status` / `validation_status` are independent (a control can be
+   *  implemented and never signed off); `expiring_within_days` is the
+   *  obsolescence filter and includes already-expired controls;
+   *  `include_evaluation` attaches each control's latest effectiveness
+   *  evaluation. The register-wide total is in X-Total-Count only — use
+   *  `listWithTotal` when the screen states a count. */
+  list: (params?: AppliedControlListParams) =>
     apiClient.get("/applied-controls", { params }).then((r) => r.data),
+
+  /** Same call, keeping the total the response body cannot carry.
+   *  X-Total-Count is readable same-origin (prod goes through the gateway); on
+   *  a cross-origin dev split it is absent until CORS exposes it, hence the
+   *  fall back to the page length rather than a wrong "0". */
+  listWithTotal: (params?: AppliedControlListParams) =>
+    apiClient.get("/applied-controls", { params }).then((r) => {
+      const items = (Array.isArray(r.data) ? r.data : []) as Record<string, unknown>[];
+      const header = (r.headers as unknown as Record<string, unknown> | undefined)?.["x-total-count"];
+      const total = Number(header);
+      return { items, total: Number.isFinite(total) ? total : items.length, totalKnown: Number.isFinite(total) };
+    }),
+
   get: (id: string) => apiClient.get(`/applied-controls/${id}`).then((r) => r.data),
   create: (data: Record<string, unknown>) => apiClient.post("/applied-controls", data).then((r) => r.data),
   update: (id: string, data: Record<string, unknown>) => apiClient.patch(`/applied-controls/${id}`, data).then((r) => r.data),
-  delete: (id: string) => apiClient.delete(`/applied-controls/${id}`),
+
+  /** DELETE /applied-controls/{id} requires ?reason= (3 chars minimum) — the
+   *  no-argument version this used to be could only ever answer 422. Removing a
+   *  control removes a claimed mitigation from every risk that counted on it,
+   *  which is why the backend refuses to do it unexplained. */
+  delete: (id: string, reason: string) =>
+    apiClient.delete(`/applied-controls/${id}`, { params: { reason } }),
+
+  /** « Alertes sur les contrôles obsolètes » — expired / expiring / deprecated /
+   *  unverified, with the reason on every row. */
+  obsolescence: (params?: { window_days?: number; limit?: number }) =>
+    apiClient.get("/applied-controls/obsolescence", { params }).then((r) => r.data),
+
+  /** « Historique des modifications » for the WHOLE register (GET /history),
+   *  including controls since deleted — not the per-control `history(id)`. */
+  registerHistory: (params?: { action?: string; control_id?: string; limit?: number; offset?: number }) =>
+    apiClient.get("/applied-controls/history", { params }).then((r) => r.data),
+
+  /** Security-referent sign-off (CISO / risk manager). */
+  validate: (id: string, notes?: string) =>
+    apiClient.post(`/applied-controls/${id}/validate`, { notes: notes ?? null }).then((r) => r.data),
+
+  /** Send the control back for rework. */
+  reject: (id: string, notes?: string) =>
+    apiClient.post(`/applied-controls/${id}/reject`, { notes: notes ?? null }).then((r) => r.data),
 };
 
 // ─── Security Exceptions & Risk Acceptance ──
@@ -2292,17 +2494,26 @@ export const securityApi = {
     apiClient.get("/security/exceptions", { params }).then((r) => r.data),
   createException: (data: Record<string, unknown>) => apiClient.post("/security/exceptions", data).then((r) => r.data),
   approveException: (id: string) => apiClient.patch(`/security/exceptions/${id}/approve`).then((r) => r.data),
-  rejectException: (id: string, reason?: string) => apiClient.patch(`/security/exceptions/${id}/reject?reason=${reason || ""}`).then((r) => r.data),
+  // params, not string interpolation: a justification containing & or # used to
+  // truncate the reason or invent extra query parameters.
+  rejectException: (id: string, reason?: string) =>
+    apiClient.patch(`/security/exceptions/${id}/reject`, null, { params: { reason: reason || "" } }).then((r) => r.data),
   listAcceptances: () => apiClient.get("/security/acceptances").then((r) => r.data),
   createAcceptance: (data: Record<string, unknown>) => apiClient.post("/security/acceptances", data).then((r) => r.data),
   approveAcceptance: (id: string) => apiClient.patch(`/security/acceptances/${id}/approve`).then((r) => r.data),
 };
 
 // ─── Risk Matrices ──────────────────────────
+// Changing the matrix re-scores every risk graded on it, so each write carries a
+// governance `reason` — required by the route (min 5 chars), not optional.
 export const riskMatricesApi = {
   list: () => apiClient.get("/risk-matrices").then((r) => r.data),
-  create: (data: Record<string, unknown>) => apiClient.post("/risk-matrices", data).then((r) => r.data),
-  delete: (id: string) => apiClient.delete(`/risk-matrices/${id}`),
+  create: (data: Record<string, unknown>, reason: string) =>
+    apiClient.post("/risk-matrices", data, { params: { reason } }).then((r) => r.data),
+  setDefault: (id: string, reason: string) =>
+    apiClient.put(`/risk-matrices/${id}/default`, null, { params: { reason } }).then((r) => r.data),
+  delete: (id: string, reason: string) =>
+    apiClient.delete(`/risk-matrices/${id}`, { params: { reason } }),
 };
 
 // ─── Trust Center ───────────────────────────
@@ -2412,19 +2623,36 @@ export const webhooksApi = {
 };
 
 // ─── Data Import/Export (CSV + XML — see backend/app/api/v1/endpoints/data_io.py) ───
-export type DataIoFormat = "csv" | "xml";
+/** What /data/export/* accepts (_EXPORT_FORMATS in data_io.py). Imports only
+ *  ever read csv or xml — see DataIoImportFormat below. */
+export type DataIoFormat = "csv" | "xml" | "xlsx" | "pdf";
+
+/** What /data/import/* can parse. xlsx/pdf are export-only — the route answers
+ *  400 for them — so a screen must not offer them as import choices. */
+export type DataIoImportFormat = "csv" | "xml";
+
+const DATA_IO_MIME: Record<DataIoFormat, string> = {
+  csv: "text/csv",
+  xml: "application/xml",
+  xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  pdf: "application/pdf",
+};
 
 export const dataApi = {
   exportCsv: async (module: string) => dataApi.exportData(module, "csv"),
   exportXml: async (module: string) => dataApi.exportData(module, "xml"),
   /** `extraParams` carries the per-dataset filters a few exports accept:
-   *  `audit_id` on audit-findings, `framework_id` on framework-controls. */
-  exportData: async (module: string, format: DataIoFormat = "csv", extraParams?: Record<string, string | undefined>) => {
+   *  `audit_id` on audit-findings, `framework_id` on framework-controls.
+   *  `lang` translates the header row (xlsx/csv) and the document heading
+   *  (pdf); omitted, the backend falls back to the Accept-Language this client
+   *  sends on every request, so the export is already in the UI language —
+   *  pass it only to override that. */
+  exportData: async (module: string, format: DataIoFormat = "csv", extraParams?: Record<string, string | undefined>, lang?: string) => {
     const resp = await apiClient.get(`/data/export/${module}`, {
-      params: { format, ...(extraParams ?? {}) },
+      params: { format, ...(lang ? { lang } : {}), ...(extraParams ?? {}) },
       responseType: "blob",
     });
-    const mime = format === "xml" ? "application/xml" : "text/csv";
+    const mime = DATA_IO_MIME[format] ?? "application/octet-stream";
     const blob = new Blob([resp.data], { type: mime });
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -2435,6 +2663,10 @@ export const dataApi = {
   },
   importCsv: async (module: string, file: File) => dataApi.importData(module, file, "csv"),
   importXml: async (module: string, file: File) => dataApi.importData(module, file, "xml"),
+  // Typed on the wide DataIoFormat rather than DataIoImportFormat because
+  // callers hold ONE format state for both buttons (DataActions does); the
+  // narrow type is exported for a screen that separates them. Passing xlsx or
+  // pdf here is a 400 from the route, not a silent no-op.
   importData: async (module: string, file: File, format: DataIoFormat = "csv") => {
     const fd = new FormData();
     fd.append("file", file);
@@ -2445,16 +2677,17 @@ export const dataApi = {
 
   // ── Named exports for the datasets that take a filter ─────────────────────
   /** Every constat, or only one engagement's. */
-  exportAuditFindings: (format: DataIoFormat = "csv", auditId?: string) =>
-    dataApi.exportData("audit-findings", format, auditId ? { audit_id: auditId } : undefined),
+  exportAuditFindings: (format: DataIoFormat = "csv", auditId?: string, lang?: string) =>
+    dataApi.exportData("audit-findings", format, auditId ? { audit_id: auditId } : undefined, lang),
 
   /** The framework catalogue itself (one row per framework). */
-  exportFrameworks: (format: DataIoFormat = "csv") => dataApi.exportData("frameworks", format),
+  exportFrameworks: (format: DataIoFormat = "csv", lang?: string) =>
+    dataApi.exportData("frameworks", format, undefined, lang),
 
   /** The controls of one framework — or of all of them when `frameworkId` is
    *  omitted, which on a 94-framework tenant is a very large file. */
-  exportFrameworkControls: (format: DataIoFormat = "csv", frameworkId?: string) =>
-    dataApi.exportData("framework-controls", format, frameworkId ? { framework_id: frameworkId } : undefined),
+  exportFrameworkControls: (format: DataIoFormat = "csv", frameworkId?: string, lang?: string) =>
+    dataApi.exportData("framework-controls", format, frameworkId ? { framework_id: frameworkId } : undefined, lang),
 };
 
 // ─── Contract Collaboration ─────────────────
@@ -2645,8 +2878,19 @@ export const supportApi = {
 // GET /assets returns { items, total, page, page_size }. CIA + lifecycle endpoints
 // are Elite-gated and 402 → elite-upsell for non-elite tenants.
 export const assetsApi = {
-  list: (params?: { page?: number; page_size?: number }) =>
-    apiClient.get("/assets", { params }).then((r) => r.data),
+  /** `asset_type`, `criticality`, `asset_class` and `status` are all applied in
+   *  SQL by list_assets — filtering client-side over one loaded page only ever
+   *  searches the 200 most recent assets. `status` is the operational state
+   *  (operational | degraded | out_of_service | quarantined | lost), which is a
+   *  different question from the lifecycle stage. */
+  list: (params?: {
+    page?: number;
+    page_size?: number;
+    asset_type?: string;
+    criticality?: string;
+    asset_class?: string;
+    status?: string;
+  }) => apiClient.get("/assets", { params }).then((r) => r.data),
   stats: () => apiClient.get("/assets/stats").then((r) => r.data),
   // Lightweight {id, name, asset_type} for pickers and graphs. The list
   // endpoint caps page_size at 200, so callers that need the whole inventory
@@ -2777,6 +3021,14 @@ export const governanceApi = {
   groupDelete: (id: string) => apiClient.delete(`/governance/groups/${id}`),
   docsList: () => apiClient.get("/governance/documents").then((r) => r.data),
   docsCreate: (data: Record<string, unknown>) => apiClient.post("/governance/documents", data).then((r) => r.data),
+  /** Spelled PUT by the route, but the body is a partial: an omitted field is
+   *  left untouched, and changing `content` archives the previous version
+   *  first (pass `change_summary` with it). Fields: title, content,
+   *  typology, module, entity, access_level, change_summary. */
+  docsUpdate: (id: string, data: Record<string, unknown>) =>
+    apiClient.put(`/governance/documents/${id}`, data).then((r) => r.data),
+  docsGet: (id: string) => apiClient.get(`/governance/documents/${id}`).then((r) => r.data),
+  docsVersions: (id: string) => apiClient.get(`/governance/documents/${id}/versions`).then((r) => r.data),
   docsDelete: (id: string) => apiClient.delete(`/governance/documents/${id}`),
 
   // Per-document ACL (M11.3)
@@ -2790,13 +3042,38 @@ export const governanceApi = {
   committeeCreate: (data: Record<string, unknown>) => apiClient.post("/governance/committees", data).then((r) => r.data),
   committeeUpdate: (id: string, data: Record<string, unknown>) => apiClient.patch(`/governance/committees/${id}`, data).then((r) => r.data),
   committeeDelete: (id: string) => apiClient.delete(`/governance/committees/${id}`),
+
+  /**
+   * « Tendances historiques » — one point per calendar month.
+   *
+   * Gated require_feature("custom_dashboards") + require_roles_strict(...), the
+   * same pair as the module dashboard whose history this is. So it has FIVE
+   * outcomes a caller must handle and none of them may eject the user:
+   *   200 source=trend_snapshot_daily — the real balance; render total:null as
+   *       a GAP, never as 0, and show `as_of`.
+   *   200 source=intake_volume — the fallback: what was opened that month, not
+   *       what stayed open. Label it as intake (i18n moduledash.trend_intake).
+   *   200 source=unavailable — say the history could not be read; draw nothing.
+   *   402 — Elite up-sell; client.ts already dispatches the `elite-upsell` event.
+   *   403 — restricted profile (strict roles: a tenant_admin does NOT auto-pass).
+   *       Expected, not an error: show the restriction, do not surface a crash.
+   */
+  trend: (months = 6) =>
+    apiClient.get<TrendEnvelope>("/governance/trend", { params: { months } }).then((r) => r.data),
 };
 
 // ── Archiving + retention (Elite Pack) ───────────────────────────────────────
 export const archivingApi = {
   list: () => apiClient.get("/archiving").then((r) => r.data),
   create: (data: Record<string, unknown>) => apiClient.post("/archiving", data).then((r) => r.data),
-  purgeExpired: () => apiClient.post("/archiving/purge-expired").then((r) => r.data),
+  /** Destroys every record past its retention date. `reason` is REQUIRED by the
+   *  route (5 chars minimum) and is sealed into the audit trail with the
+   *  manifest of what was purged; the zero-argument version this used to be
+   *  could only ever answer 422. Always offer `dryRun` first. */
+  purgeExpired: (reason: string, dryRun = false) =>
+    apiClient
+      .post("/archiving/purge-expired", null, { params: { reason, dry_run: dryRun } })
+      .then((r) => r.data),
   exportFile: (format: "xlsx" | "csv" | "pdf") => apiClient.get("/archiving/export/download", { params: { format }, responseType: "blob" }).then((r) => r.data),
   listRules: () => apiClient.get("/archiving/rules").then((r) => r.data),
   createRule: (data: { entity_type: string; criteria: string; enabled?: boolean; retention_days?: number | null }) =>

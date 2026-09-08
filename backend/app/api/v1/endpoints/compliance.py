@@ -4111,7 +4111,7 @@ class DocumentLogEntry(BaseModel):
 async def get_document_log(
     assessment_id: str,
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
     tenant_id: str = Depends(get_tenant_id),
 ):
     """Return all uploaded documents for an assessment, enriched with uploader info."""
@@ -4125,11 +4125,21 @@ async def get_document_log(
     if not a:
         raise HTTPException(status_code=404, detail="Assessment not found")
 
-    docs = (await db.execute(
+    stmt = (
         select(UploadedDocument)
         .where(UploadedDocument.assessment_id == assessment_id)
         .order_by(UploadedDocument.created_at.desc())
-    )).scalars().all()
+    )
+    # The download honours is_visible_to_auditor; this listing did not, so an
+    # auditor still read the id, the file name and the uploader of a document
+    # deliberately withheld from them — and the id is what the download takes.
+    # NULL means "never set" and has always meant visible.
+    if current_user.role == UserRole.AUDITOR:
+        stmt = stmt.where(or_(
+            UploadedDocument.is_visible_to_auditor == True,  # noqa: E712
+            UploadedDocument.is_visible_to_auditor.is_(None),
+        ))
+    docs = (await db.execute(stmt)).scalars().all()
 
     uploader_ids = {d.uploaded_by_id for d in docs if d.uploaded_by_id}
     from app.models.user import User as UserModel
@@ -5387,7 +5397,7 @@ async def list_file_versions(
     parent_type: str,
     parent_id: str,
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(require_roles(UserRole.CISO, UserRole.AUDITOR, UserRole.COMPLIANCE_MANAGER)),
+    current_user: User = Depends(require_roles(UserRole.CISO, UserRole.AUDITOR, UserRole.COMPLIANCE_MANAGER)),
     tenant_id: str = Depends(get_tenant_id),
 ):
     """Every file ever attached to one parent, newest first, with its integrity state.
@@ -5409,6 +5419,36 @@ async def list_file_versions(
         .order_by(StoredFileVersion.version_number.desc())
         .limit(500)
     )).scalars().all()
+
+    # A file withheld from the auditors must not be listed to one: the download
+    # answers 404 for them, but this listing still printed the name, the size and
+    # the version id of every hidden evidence, document and action-plan proof.
+    # Same rule the assessment document-log applies. NULL has always meant visible.
+    if current_user.role == UserRole.AUDITOR and rows:
+        hidden: set[tuple[str, str]] = set()
+        by_type = {
+            file_integrity.EVIDENCE: (Evidence, set()),
+            file_integrity.DOCUMENT: (UploadedDocument, set()),
+            _ACTION_ATTACHMENT: (ActionItemAttachment, set()),
+        }
+        for row in rows:
+            entry = by_type.get(row.entity_type)
+            if entry and row.entity_id:
+                entry[1].add(row.entity_id)
+        for etype, (model, ids) in by_type.items():
+            if not ids:
+                continue
+            stmt = select(model.id).where(
+                model.id.in_(ids),
+                model.tenant_id == tenant_id,
+                model.is_visible_to_auditor == False,  # noqa: E712
+            )
+            # action_item_attachments is one of the tables create_all() only
+            # builds at the next restart, so this read must tolerate its absence.
+            found = (await _attachment_rows(db, stmt)) if etype == _ACTION_ATTACHMENT \
+                else (await db.execute(stmt)).scalars().all()
+            hidden |= {(etype, i) for i in found}
+        rows = [r for r in rows if (r.entity_type, r.entity_id) not in hidden]
 
     out: list[FileVersionOut] = []
     for row in rows:
@@ -5496,12 +5536,31 @@ async def download_file_version(
     # auditor could read a hidden attachment through
     # GET /files/action_item/{id}/versions + this download.
     if current_user.role == UserRole.AUDITOR and row.entity_type in (
-        file_integrity.EVIDENCE, _ACTION_ATTACHMENT,
+        file_integrity.EVIDENCE, file_integrity.DOCUMENT, _ACTION_ATTACHMENT,
     ):
         if row.entity_type == file_integrity.EVIDENCE:
             owner = (await db.execute(
                 select(Evidence).where(Evidence.id == row.entity_id)
             )).scalar_one_or_none()
+        elif row.entity_type == file_integrity.DOCUMENT:
+            # A checklist document is recorded as a stored file version with
+            # parent_type="assessment", so an auditor holding an assessment id
+            # (the auditor portal gives them one) could list its versions and
+            # pull the bytes of a document hidden from them — measured: both
+            # documents flagged is_visible_to_auditor=0 came back 200 here while
+            # /documents/{id}/download correctly answered 404.
+            doc = (await db.execute(
+                select(UploadedDocument).where(
+                    UploadedDocument.id == row.entity_id,
+                    UploadedDocument.tenant_id == tenant_id,
+                )
+            )).scalar_one_or_none()
+            # NULL has always meant "visible" for a document, exactly as
+            # /documents/{id}/download reads it — mirror that route rather than
+            # the stricter test the evidence branch below applies.
+            if doc is not None and doc.is_visible_to_auditor is False:
+                raise HTTPException(status_code=404, detail="File version not found")
+            owner = None
         else:
             attachments = await _attachment_rows(db, select(ActionItemAttachment).where(
                 ActionItemAttachment.id == row.entity_id,

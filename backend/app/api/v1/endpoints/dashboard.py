@@ -1061,23 +1061,45 @@ async def get_executive_summary(
     critical_risks = risk_by_severity.get(RiskSeverity.CRITICAL.value, 0)
     high_risks = risk_by_severity.get(RiskSeverity.HIGH.value, 0)
 
+    # The board's « top 5 » ranked on the INHERENT product (likelihood x impact)
+    # alone, which contradicted the platform's own definition of how big a risk
+    # is: Risk.is_above_appetite (models/risk.py) reads the residual score and
+    # falls back to the inherent one only when there is none. The contradiction
+    # was visible, not theoretical — on the demo tenant a severity=low risk with
+    # a 2x2 residual sat at #1 with 20.0, above six `high` risks — and it is the
+    # treated-risk case a bank will look for first. nullif() reproduces the model
+    # property exactly: it treats a 0 factor as "not assessed", not as a residual
+    # of zero. Both inputs are returned alongside the effective score, so a
+    # reader can see why a treated risk now sits below an untreated one: a row
+    # carrying a residual_score was ranked on it, one carrying null was not.
+    # Deliberately NOT a third `score_basis` string field — it is derivable from
+    # residual_score being null, nothing reads it, and its value ("inherent")
+    # is a machine token the export's shared vocabulary table cannot translate,
+    # which would put an English word into the French tender artefact.
+    _inherent_score = func.coalesce(Risk.likelihood, 0) * func.coalesce(Risk.impact, 0)
+    _residual_score = func.nullif(Risk.residual_likelihood, 0) * func.nullif(Risk.residual_impact, 0)
+    _effective_score = func.coalesce(_residual_score, _inherent_score)
     top_risks = [
         {
             "id": rid,
             "title": title,
             "severity": _key_of(severity),
-            # likelihood x impact, the same product the 5x5 heatmap plots. Null
-            # factors score 0 rather than dropping the row: an unscored risk is a
-            # governance problem the board should still see listed.
+            # The score the ranking used. Null factors score 0 rather than
+            # dropping the row: an unscored risk is a governance problem the
+            # board should still see listed.
             "score": round(float(score or 0), 1),
+            "inherent_score": round(float(inherent or 0), 1),
+            "residual_score": round(float(residual), 1) if residual is not None else None,
         }
-        for rid, title, severity, score in await _exec_rows(
+        for rid, title, severity, score, residual, inherent in await _exec_rows(
             db, select(
                 Risk.id, Risk.title, Risk.severity,
-                (func.coalesce(Risk.likelihood, 0) * func.coalesce(Risk.impact, 0)).label("score"),
+                _effective_score.label("score"),
+                _residual_score.label("residual"),
+                _inherent_score.label("inherent"),
             )
             .where(Risk.tenant_id == tenant_id, Risk.status != RiskStatus.CLOSED)
-            .order_by((func.coalesce(Risk.likelihood, 0) * func.coalesce(Risk.impact, 0)).desc())
+            .order_by(_effective_score.desc())
             .limit(5), degraded, "risks.top")
     ]
 

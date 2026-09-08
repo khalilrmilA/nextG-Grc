@@ -19,6 +19,9 @@ const REL_BADGE: Record<string, string> = {
   to_watch: "bg-amber-100 text-amber-700 border-amber-200",
   non_pertinent: "bg-gray-100 text-gray-500 border-gray-200",
 };
+// The triage verdict on a CVE. Rendered through t() with a humanised fallback
+// (keys: cve.rel_pertinent / cve.rel_to_watch / cve.rel_non_pertinent) — this
+// select printed the raw enum in every language.
 const RELEVANCE = ["pertinent", "to_watch", "non_pertinent"];
 
 // CVSS v3 vector metrics, spelled out. "AV:N/AC:L/PR:N" is precise and
@@ -35,13 +38,23 @@ const VECTOR_METRICS: Record<string, { label: string; values: Record<string, str
   A: { label: "Availability impact", values: { H: "High", L: "Low", N: "None" } },
 };
 
-function decodeVector(vector?: string | null): { label: string; value: string }[] {
+/** The English text in VECTOR_METRICS is the t() fallback, not the rendered
+ *  string: these eight metric names and their values were printed in English
+ *  whatever the interface language was. Keys go under cve.vec_* / cve.vecv_*. */
+function decodeVector(
+  vector: string | null | undefined,
+  tr: (key: string, fallback: string) => string,
+): { key: string; label: string; value: string }[] {
   if (!vector) return [];
   return vector
     .split("/")
     .map((part) => part.split(":"))
     .filter(([k, v]) => k && v && VECTOR_METRICS[k])
-    .map(([k, v]) => ({ label: VECTOR_METRICS[k].label, value: VECTOR_METRICS[k].values[v] || v }));
+    .map(([k, v]) => ({
+      key: k,
+      label: tr(`cve.vec_${k}`, VECTOR_METRICS[k].label),
+      value: tr(`cve.vecv_${k}_${v}`, VECTOR_METRICS[k].values[v] || v),
+    }));
 }
 
 // NVD tags a reference by what it is. Patch and Mitigation are the ones a
@@ -109,7 +122,7 @@ function CveSheet({
     }
   }
 
-  const decoded = decodeVector(cve?.cvss_vector);
+  const decoded = decodeVector(cve?.cvss_vector, (k, fb) => String(t(k as never, fb)));
   const refs: any[] = cve?.references || [];
 
   return (
@@ -168,7 +181,7 @@ function CveSheet({
                 <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-400 mb-2">{t("cve.attack_vector", "Attack vector")}</h3>
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                   {decoded.map((d) => (
-                    <div key={d.label} className="rounded-xl border border-gray-100 bg-gray-50/60 px-3 py-2">
+                    <div key={d.key} className="rounded-xl border border-gray-100 bg-gray-50/60 px-3 py-2">
                       <div className="text-[11px] text-gray-400">{d.label}</div>
                       <div className="text-sm font-medium text-gray-800">{d.value}</div>
                     </div>
@@ -286,7 +299,7 @@ function CveSheet({
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">{t("cve.col_rel", "Relevance")}</label>
                   <select value={relevance} onChange={(e) => setRelevance(e.target.value)} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-                    {RELEVANCE.map((r) => <option key={r} value={r}>{r.replace(/_/g, " ")}</option>)}
+                    {RELEVANCE.map((r) => <option key={r} value={r}>{String(t(`cve.rel_${r}` as never, r.replace(/_/g, " ")))}</option>)}
                   </select>
                 </div>
                 <div>
@@ -332,6 +345,7 @@ export default function CvePage() {
   const [syncing, setSyncing] = useState(false);
   const [syncMsg, setSyncMsg] = useState("");
   const [busy, setBusy] = useState("");
+  const [annotateError, setAnnotateError] = useState("");
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -416,12 +430,17 @@ export default function CvePage() {
 
   async function setRelevance(cve: any, relevance: string) {
     setBusy(cve.cve_id);
+    setAnnotateError("");
     try {
       // Preserve existing notes/linked_asset_ids — the API requires the full
       // annotation payload, so a relevance-only change must not wipe them.
       await cveApi.annotate(cve.cve_id, { relevance, notes: cve.notes || null, linked_asset_ids: cve.linked_asset_ids || [] });
       setItems((prev) => prev.map((c) => (c.cve_id === cve.cve_id ? { ...c, relevance } : c)));
-    } catch {} finally { setBusy(""); }
+    } catch (err: any) {
+      // This used to `catch {}`: the triage badge simply did not move and the
+      // user had no way to tell a refused write from a slow one.
+      setAnnotateError(err?.response?.data?.detail || t("errors.save_failed"));
+    } finally { setBusy(""); }
   }
 
   const inputCls = "border border-gray-200 rounded-xl text-sm px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500";
@@ -444,6 +463,7 @@ export default function CvePage() {
       </div>
 
       {syncMsg && <div className="p-3 rounded-xl text-sm bg-blue-50 text-blue-700">{syncMsg}</div>}
+      {annotateError && <div className="p-3 rounded-xl text-sm bg-red-50 text-red-700">{annotateError}</div>}
 
       <div className="flex items-center gap-3 flex-wrap">
         <form onSubmit={(e) => { e.preventDefault(); load(); }} className="relative flex-1 min-w-[16rem] max-w-md">
@@ -493,7 +513,7 @@ export default function CvePage() {
         </button>
         <select value={relFilter} onChange={(e) => setRelFilter(e.target.value)} className={inputCls}>
           <option value="">{t("cve.all_relevance", "All relevance")}</option>
-          {RELEVANCE.map((r) => <option key={r} value={r}>{r.replace(/_/g, " ")}</option>)}
+          {RELEVANCE.map((r) => <option key={r} value={r}>{String(t(`cve.rel_${r}` as never, r.replace(/_/g, " ")))}</option>)}
           <option value="untriaged">{t("cve.untriaged", "untriaged")}</option>
         </select>
         <button onClick={load} className="inline-flex items-center gap-2 bg-white border border-gray-200 text-gray-700 px-4 py-2 rounded-xl text-sm font-medium hover:bg-gray-50">
@@ -565,7 +585,7 @@ export default function CvePage() {
                           className={`text-xs rounded-full px-2.5 py-1 border font-semibold focus:outline-none ${c.relevance ? REL_BADGE[c.relevance] : "bg-white text-gray-500 border-gray-200"}`}
                         >
                           <option value="">{t("cve.triage", "Triage…")}</option>
-                          {RELEVANCE.map((r) => <option key={r} value={r}>{r.replace(/_/g, " ")}</option>)}
+                          {RELEVANCE.map((r) => <option key={r} value={r}>{String(t(`cve.rel_${r}` as never, r.replace(/_/g, " ")))}</option>)}
                         </select>
                       </td>
                       <td className="px-6 py-4 text-center">

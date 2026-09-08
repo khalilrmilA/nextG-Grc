@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Plus, Search, X, Loader2, Filter, AlertTriangle, ShieldAlert, Clock, Flame, GitCommitHorizontal } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { incidentsApi, vulnerabilitiesApi, assetsApi } from "@/api/endpoints";
+import { incidentsApi, vulnerabilitiesApi, assetsApi, usersApi } from "@/api/endpoints";
 import { MultiSelect } from "@/components/common/MultiSelect";
 
 const SEV_BADGE: Record<string, string> = {
@@ -27,7 +27,16 @@ const CATEGORY_OPTIONS = [
 ];
 
 const SEVERITY_OPTIONS = ["critical", "high", "medium", "low"];
-const STATUS_OPTIONS = ["open", "investigating", "contained", "resolved", "closed"];
+// post_mortem is a real Incident status — the backend's /incidents/stats counts
+// it and /incidents?status_filter=post_mortem filters on it — but it was absent
+// here, so those incidents were unreachable from the status filter.
+const STATUS_OPTIONS = ["open", "investigating", "contained", "resolved", "closed", "post_mortem"];
+
+/** Raw backend enum -> the SPA's language, falling back to a humanised form of
+ *  the value itself so an enum with no key yet still reads as a label. */
+function humanise(v: string): string {
+  return v ? v.replace(/_/g, " ").replace(/^./, (c) => c.toUpperCase()) : "";
+}
 
 export default function IncidentsPage() {
   const { t } = useTranslation();
@@ -71,10 +80,24 @@ export default function IncidentsPage() {
   const [form, setForm] = useState({ ...emptyForm });
   const [vulnOptions, setVulnOptions] = useState<any[]>([]);
   const [assetOptions, setAssetOptions] = useState<any[]>([]);
+  // "Assigned To" printed the raw assigned_to_id UUID. GET /users is
+  // tenant_admin-only, so the map stays empty for most roles — in that case the
+  // cell keeps whatever it showed before rather than claiming "unassigned".
+  const [userNames, setUserNames] = useState<Record<string, string>>({});
 
   useEffect(() => {
     vulnerabilitiesApi.list().then((data: any) => setVulnOptions(Array.isArray(data) ? data : data.items || [])).catch(() => setVulnOptions([]));
-    assetsApi.list().then((data: any) => setAssetOptions(Array.isArray(data) ? data : data.items || [])).catch(() => setAssetOptions([]));
+    // GET /assets defaults to page_size=20, so this picker offered the FIRST
+    // TWENTY assets and silently hid the rest of the inventory. /assets/options
+    // exists for exactly this: {id, name, asset_type} for the whole register.
+    usersApi.list()
+      .then((us: any) => setUserNames(Object.fromEntries(
+        (Array.isArray(us) ? us : []).map((u: any) => [
+          u.id, `${u.first_name ?? ""} ${u.last_name ?? ""}`.trim() || u.email,
+        ]),
+      )))
+      .catch(() => setUserNames({}));
+    assetsApi.options().then((data: any) => setAssetOptions(Array.isArray(data) ? data : data.items || [])).catch(() => setAssetOptions([]));
   }, []);
 
   async function load() {
@@ -190,7 +213,7 @@ export default function IncidentsPage() {
           </select>
           <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="border border-gray-200 rounded-xl text-sm px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500">
             <option value="">{t("incidents.all_statuses")}</option>
-            {STATUS_OPTIONS.map((s) => <option key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</option>)}
+            {STATUS_OPTIONS.map((s) => <option key={s} value={s}>{String(t(`vocab.${s}` as never, humanise(s)))}</option>)}
           </select>
         </div>
       </div>
@@ -220,19 +243,19 @@ export default function IncidentsPage() {
               {filtered.map((item: any) => (
                 <tr key={item.id} className="border-b border-gray-50 hover:bg-gray-50/50 transition-colors">
                   <td className="px-6 py-4 font-medium text-gray-900">{item.title}</td>
-                  <td className="px-6 py-4 text-gray-600">{item.category?.replace(/_/g, " ")}</td>
+                  <td className="px-6 py-4 text-gray-600">{item.category ? String(t(`vocab.${item.category}` as never, humanise(item.category))) : "-"}</td>
                   <td className="px-6 py-4">
                     <span className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold border ${SEV_BADGE[item.severity] || "bg-gray-100 text-gray-600"}`}>
-                      {item.severity}
+                      {String(t(`vocab.${item.severity}` as never, humanise(item.severity)))}
                     </span>
                   </td>
                   <td className="px-6 py-4">
                     <span className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold border ${STATUS_BADGE[item.status] || "bg-gray-100 text-gray-600"}`}>
-                      {item.status}
+                      {String(t(`vocab.${item.status}` as never, humanise(item.status)))}
                     </span>
                   </td>
                   <td className="px-6 py-4 text-gray-500">{item.detected_at ? new Date(item.detected_at).toLocaleDateString() : "-"}</td>
-                  <td className="px-6 py-4 text-gray-500">{item.assigned_to_id || "-"}</td>
+                  <td className="px-6 py-4 text-gray-500">{item.assigned_to_id ? (userNames[item.assigned_to_id] || item.assigned_to_id) : "-"}</td>
                   <td className="px-6 py-4 text-right">
                     <button
                       type="button"
@@ -274,7 +297,7 @@ export default function IncidentsPage() {
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">{t("incidents.form_category")}</label>
                   <select value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-                    {CATEGORY_OPTIONS.map((c) => <option key={c} value={c}>{c.replace(/_/g, " ")}</option>)}
+                    {CATEGORY_OPTIONS.map((c) => <option key={c} value={c}>{String(t(`vocab.${c}` as never, humanise(c)))}</option>)}
                   </select>
                 </div>
                 <div>

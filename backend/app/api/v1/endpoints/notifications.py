@@ -8,7 +8,7 @@ from sqlalchemy import select, and_, func, update, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
-from app.api.v1.dependencies import get_current_user, require_roles
+from app.api.v1.dependencies import get_current_user, get_tenant_id, require_roles
 from app.models.user import User, UserRole
 from app.models.notification import (
     Notification, NotificationPreference,
@@ -193,16 +193,13 @@ async def clear_all_notifications(
 
 @router.post("/check-deadlines", status_code=status.HTTP_200_OK)
 async def check_deadlines_and_generate(
-    # run_all_checks() takes no tenant_id: it sweeps every tenant on the
-    # platform and returns platform-wide counts. Behind a bare get_current_user
-    # that made an unbounded, unthrottled full-database scan — and notification
-    # writes for other tenants' users — reachable by any account, including an
-    # external auditor. Restrict the trigger to the roles that own the
-    # notification programme (tenant_admin / super_admin auto-pass) until the
-    # generator itself can be scoped to one tenant.
+    # The trigger stays restricted to the roles that own the notification
+    # programme (tenant_admin / super_admin auto-pass): the sweep is an
+    # unthrottled scan of every register and it writes rows and sends mail.
     current_user: User = Depends(
         require_roles(UserRole.CISO, UserRole.RISK_MANAGER, UserRole.COMPLIANCE_MANAGER)
     ),
+    tenant_id: str = Depends(get_tenant_id),
     db: AsyncSession = Depends(get_db),
 ):
     """
@@ -214,11 +211,14 @@ async def check_deadlines_and_generate(
     button on top of that, and run_all_checks is idempotent, so pressing it
     between sweeps costs a set of dedup queries and creates nothing twice.
 
-    The counts returned are still platform-wide, because the generator has no
-    tenant parameter — see the handover notes.
+    Scoped to the caller's tenant. Until run_all_checks took a tenant_id, one
+    tenant's click swept all eleven — writing notifications and mailing the
+    other ten tenants' users, and returning platform-wide counts to a caller
+    who is entitled to none of them. The scheduler still passes None and keeps
+    the whole-platform sweep.
     """
     from app.services.notification_generator import run_all_checks
-    results = await run_all_checks(db)
+    results = await run_all_checks(db, tenant_id)
     return {
         "status": "success",
         "notifications_created": results,

@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { Plus, Search, X, Loader2, ShieldOff, CheckCircle, XCircle, AlertTriangle } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { securityApi } from "@/api/endpoints";
+import { securityApi, usersApi } from "@/api/endpoints";
 
 const EXCEPTION_STATUS_BADGE: Record<string, string> = {
   draft: "bg-gray-100 text-gray-600 border-gray-200",
@@ -28,6 +28,12 @@ const SEV_BADGE: Record<string, string> = {
 
 const SEVERITY_OPTIONS = ["critical", "high", "medium", "low"];
 const EXCEPTION_TYPE_OPTIONS = ["risk", "control", "vulnerability", "requirement", "asset"];
+
+/** Raw backend enum -> the SPA's language, falling back to a humanised form of
+ *  the value itself so an enum with no key yet still reads as a label. */
+function humanise(v: string): string {
+  return v ? v.replace(/_/g, " ").replace(/^./, (c) => c.toUpperCase()) : "";
+}
 
 export default function SecurityExceptionsPage() {
   const { t } = useTranslation();
@@ -56,6 +62,15 @@ export default function SecurityExceptionsPage() {
   const [showAccModal, setShowAccModal] = useState(false);
   const [accError, setAccError] = useState("");
   const [accSubmitting, setAccSubmitting] = useState(false);
+  // Approve/reject are gated server-side (CISO role, four-eyes: a requester may
+  // not approve their own waiver) and 409 on a lapsed or already-decided one.
+  // All three handlers used to `catch {}`, so every one of those refusals was a
+  // button click that did nothing at all, with no explanation anywhere.
+  const [actionError, setActionError] = useState("");
+  // "Requested By" printed the raw requester UUID. GET /users is
+  // tenant_admin-only, so for other roles the map stays empty and the cell keeps
+  // its previous value rather than losing the information entirely.
+  const [userNames, setUserNames] = useState<Record<string, string>>({});
   const [accForm, setAccForm] = useState({
     name: "",
     justification: "",
@@ -87,6 +102,13 @@ export default function SecurityExceptionsPage() {
   useEffect(() => {
     loadExceptions();
     loadAcceptances();
+    usersApi.list()
+      .then((us: any) => setUserNames(Object.fromEntries(
+        (Array.isArray(us) ? us : []).map((u: any) => [
+          u.id, `${u.first_name ?? ""} ${u.last_name ?? ""}`.trim() || u.email,
+        ]),
+      )))
+      .catch(() => setUserNames({}));
   }, []);
 
   async function handleExcSubmit(e: React.FormEvent) {
@@ -129,26 +151,48 @@ export default function SecurityExceptionsPage() {
     }
   }
 
+  /** Whatever the server actually said, in the user's language when it is a
+   *  status we can name ourselves. */
+  function describeError(err: unknown): string {
+    const detail = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
+    if (typeof detail === "string" && detail) return detail;
+    const status = (err as { response?: { status?: number } })?.response?.status ?? 0;
+    if (status === 403) return t("common.access_restricted_hint");
+    return t("errors.save_failed");
+  }
+
   async function handleApproveException(id: string) {
+    setActionError("");
     try {
       await securityApi.approveException(id);
       loadExceptions();
-    } catch {}
+    } catch (err) {
+      setActionError(describeError(err));
+    }
   }
 
   async function handleRejectException(id: string) {
-    const reason = prompt("Rejection reason (optional):");
+    setActionError("");
+    const reason = window.prompt(t("moduledash.reject_reason"));
+    // null = the user cancelled the prompt; an empty string is a deliberate
+    // "no reason given" and still rejects.
+    if (reason === null) return;
     try {
       await securityApi.rejectException(id, reason || undefined);
       loadExceptions();
-    } catch {}
+    } catch (err) {
+      setActionError(describeError(err));
+    }
   }
 
   async function handleApproveAcceptance(id: string) {
+    setActionError("");
     try {
       await securityApi.approveAcceptance(id);
       loadAcceptances();
-    } catch {}
+    } catch (err) {
+      setActionError(describeError(err));
+    }
   }
 
   const filteredExceptions = exceptions.filter((i) =>
@@ -170,6 +214,12 @@ export default function SecurityExceptionsPage() {
           <Plus className="w-4 h-4" /> {activeTab === "exceptions" ? t("security_exceptions.new_exception_btn") : t("security_exceptions.new_risk_acceptance")}
         </button>
       </div>
+
+      {actionError && (
+        <div className="flex items-start gap-2 p-3 bg-red-50 border border-red-100 rounded-xl text-sm text-red-700">
+          <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" /> {actionError}
+        </div>
+      )}
 
       {/* Tabs */}
       <div className="flex gap-1 bg-gray-100 rounded-xl p-1 w-fit">
@@ -230,19 +280,31 @@ export default function SecurityExceptionsPage() {
                       <td className="px-6 py-4 font-medium text-gray-900">{item.title}</td>
                       <td className="px-6 py-4">
                         <span className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold border ${SEV_BADGE[item.severity] || "bg-gray-100 text-gray-600"}`}>
-                          {item.severity}
+                          {String(t(`vocab.${item.severity}` as never, humanise(item.severity)))}
                         </span>
                       </td>
                       <td className="px-6 py-4">
                         <span className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold border ${EXCEPTION_STATUS_BADGE[item.status] || "bg-gray-100 text-gray-600"}`}>
-                          {item.status?.replace(/_/g, " ")}
+                          {String(t(`vocab.${item.status}` as never, humanise(item.status)))}
                         </span>
+                        {/* SEOut.is_expired is derived on read, so a waiver
+                            whose window closed is flagged even on the worker
+                            that has not yet written the status transition. */}
+                        {item.is_expired && item.status !== "expired" && (
+                          <span className="ml-1.5 inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold border bg-gray-100 text-gray-500 border-gray-200">
+                            {t("vocab.expired")}
+                          </span>
+                        )}
                       </td>
-                      <td className="px-6 py-4 text-gray-600">{item.exception_type || "-"}</td>
+                      <td className="px-6 py-4 text-gray-600">{item.exception_type ? String(t(`vocab.${item.exception_type}` as never, humanise(item.exception_type))) : "-"}</td>
                       <td className="px-6 py-4 text-gray-500">{item.expiration_date ? new Date(item.expiration_date).toLocaleDateString() : "-"}</td>
-                      <td className="px-6 py-4 text-gray-500">{item.requested_by_id || "-"}</td>
+                      <td className="px-6 py-4 text-gray-500">{item.requested_by_id ? (userNames[item.requested_by_id] || item.requested_by_id) : "-"}</td>
                       <td className="px-6 py-4 text-right">
-                        {(item.status === "pending_approval" || item.status === "draft") && (
+                        {/* The backend accepts a decision only on
+                            pending_approval, and refuses one on a waiver whose
+                            expiry has already passed — offering the button in
+                            those states produced a 409 the user never saw. */}
+                        {item.status === "pending_approval" && !item.is_expired && (
                           <div className="flex items-center justify-end gap-2">
                             <button onClick={() => handleApproveException(item.id)} className="inline-flex items-center gap-1 text-green-600 hover:text-green-700 text-xs font-medium">
                               <CheckCircle className="w-4 h-4" /> {t("security_exceptions.approve")}
@@ -288,13 +350,18 @@ export default function SecurityExceptionsPage() {
                     <td className="px-6 py-4 font-medium text-gray-900">{item.name}</td>
                     <td className="px-6 py-4">
                       <span className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold border ${ACCEPTANCE_STATUS_BADGE[item.status] || "bg-gray-100 text-gray-600"}`}>
-                        {item.status}
+                        {String(t(`vocab.${item.status}` as never, humanise(item.status)))}
                       </span>
+                      {item.is_expired && item.status !== "expired" && (
+                        <span className="ml-1.5 inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold border bg-gray-100 text-gray-500 border-gray-200">
+                          {t("vocab.expired")}
+                        </span>
+                      )}
                     </td>
                     <td className="px-6 py-4 text-gray-600 max-w-xs truncate">{item.justification || "-"}</td>
                     <td className="px-6 py-4 text-gray-500">{item.expiration_date ? new Date(item.expiration_date).toLocaleDateString() : "-"}</td>
                     <td className="px-6 py-4 text-right">
-                      {item.status === "pending" && (
+                      {item.status === "pending" && !item.is_expired && (
                         <button onClick={() => handleApproveAcceptance(item.id)} className="inline-flex items-center gap-1 text-green-600 hover:text-green-700 text-xs font-medium">
                           <CheckCircle className="w-4 h-4" /> {t("security_exceptions.approve")}
                         </button>
@@ -335,13 +402,13 @@ export default function SecurityExceptionsPage() {
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">{t("common.severity")}</label>
                   <select value={excForm.severity} onChange={(e) => setExcForm({ ...excForm, severity: e.target.value })} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-                    {SEVERITY_OPTIONS.map((s) => <option key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</option>)}
+                    {SEVERITY_OPTIONS.map((s) => <option key={s} value={s}>{String(t(`vocab.${s}` as never, humanise(s)))}</option>)}
                   </select>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">{t("security_exceptions.exception_type")}</label>
                   <select value={excForm.exception_type} onChange={(e) => setExcForm({ ...excForm, exception_type: e.target.value })} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-                    {EXCEPTION_TYPE_OPTIONS.map((tp) => <option key={tp} value={tp}>{tp.charAt(0).toUpperCase() + tp.slice(1)}</option>)}
+                    {EXCEPTION_TYPE_OPTIONS.map((tp) => <option key={tp} value={tp}>{String(t(`vocab.${tp}` as never, humanise(tp)))}</option>)}
                   </select>
                 </div>
               </div>

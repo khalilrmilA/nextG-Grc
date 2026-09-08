@@ -118,6 +118,24 @@ class ApiClient {
           config.headers["Accept-Language"] = currentUiLanguage();
         }
 
+        // Multipart uploads. This instance declares Content-Type: application/json
+        // as a DEFAULT, and axios 1.x reads that default in transformRequest —
+        // which runs after this interceptor but before the adapter. Its rule is
+        // "FormData + a JSON content type => JSON.stringify(formDataToJSON(data))",
+        // so a FormData body sent without an explicit multipart header is quietly
+        // re-encoded as JSON and the File is serialised to {}: the request leaves
+        // carrying no file at all and the endpoint answers 422 (file required).
+        // That is why several upload wrappers whose comment says "Content-Type is
+        // left to the browser" have in fact never worked — framework import, audit
+        // and auditor evidence, action-plan attachments.
+        // Clearing the header here puts the request back on axios' FormData path,
+        // where the browser sets multipart/form-data WITH the boundary. Call sites
+        // that already pass "multipart/form-data" by hand are unaffected: axios
+        // drops that hand-written value the same way (it has no boundary either).
+        if (config.headers && typeof FormData !== "undefined" && config.data instanceof FormData) {
+          config.headers.delete("Content-Type");
+        }
+
         // Viewer role = read-only — block all mutating requests client-side.
         const method = (config.method ?? "get").toUpperCase();
         const writeMethods = ["POST", "PUT", "PATCH", "DELETE"];

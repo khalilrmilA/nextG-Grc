@@ -513,17 +513,65 @@ async def list_policy_controls(pid: str, db: AsyncSession = Depends(get_db), _: 
 
 
 @router.delete("/{pid}", status_code=204)
-async def delete_policy(pid: str, db: AsyncSession = Depends(get_db), _: User = Depends(require_roles(UserRole.POLICY_MANAGER, UserRole.CISO)), tenant_id: str = Depends(get_tenant_id)):
+async def delete_policy(pid: str, db: AsyncSession = Depends(get_db), user: User = Depends(require_roles(UserRole.POLICY_MANAGER, UserRole.CISO)), tenant_id: str = Depends(get_tenant_id)):
     p = await _policy(db, pid, tenant_id)
     # Delete child records before the policy to avoid FK constraint errors
     versions = (await db.execute(select(PolicyVersion).where(PolicyVersion.policy_id == pid))).scalars().all()
     attestations = (await db.execute(select(PolicyAttestation).where(PolicyAttestation.policy_id == pid))).scalars().all()
+
+    # Destroying an approved policy also destroys every version of it and every
+    # attestation anyone signed against it — the exact record a bank auditor asks
+    # for after the fact. delete_framework and governance.delete_document both
+    # write a pre-delete trace into the hash chain first; this one did not, so the
+    # rows simply vanished. Everything the entry needs is captured as plain values
+    # BEFORE the deletes, because chain_and_add rolls back internally when it loses
+    # the seq race and a rollback expires every ORM instance in this session.
+    trace = {
+        "policy_number": p.policy_number,
+        "status": p.status.value if hasattr(p.status, "value") else str(p.status),
+        "category": p.category,
+        "owner_id": p.owner_id,
+        "linked_controls": list(p.linked_controls or []),
+        "versions": [
+            {"version_number": v.version_number,
+             "is_current": bool(v.is_current),
+             "authored_by_id": v.authored_by_id,
+             "approved_by_id": v.approved_by_id,
+             "content_length": len(v.content or "")}
+            for v in versions
+        ],
+        "attestations": [
+            {"user_id": a.user_id,
+             "status": a.status.value if hasattr(a.status, "value") else str(a.status),
+             "acknowledged_at": str(a.acknowledged_at) if a.acknowledged_at else None}
+            for a in attestations
+        ],
+    }
+    title = (p.title or "")[:255] or None
+
     for v in versions:
         await db.delete(v)
     for a in attestations:
         await db.delete(a)
     await db.delete(p)
     await db.commit()
+
+    try:
+        await chain_and_add(db, ActivityLog(
+            tenant_id=tenant_id,
+            user_id=user.id,
+            user_email=user.email,
+            action="delete",
+            entity_type="policy",
+            entity_id=pid,
+            entity_name=title,
+            details=trace,
+            origin="api",
+        ))
+    except Exception:
+        # Log-and-continue: a chain failure must not turn a completed delete into
+        # a 500 the SPA reads as /service-down.
+        pass
 
 
 # ── Versions ─────────────────────────────────────────────────────────────

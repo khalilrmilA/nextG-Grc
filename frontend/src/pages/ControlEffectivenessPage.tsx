@@ -14,6 +14,9 @@ const PERF_BADGE: Record<string, string> = {
   non_performant: "bg-red-100 text-red-700 border-red-200",
 };
 
+// The second element is the t() FALLBACK, not the rendered label — the five
+// criteria headers, the three score choices and the performance badge were the
+// last raw English left on this page. Keys go under ctrleval.* like the rest.
 const CRITERIA: [string, string][] = [
   ["formalisme", "Formalism"],
   ["type_controle", "Control type"],
@@ -22,7 +25,7 @@ const CRITERIA: [string, string][] = [
   ["quatre_yeux", "Four-eyes principle"],
 ];
 
-const SCORE_LABELS = ["0 — absent", "1 — partial", "2 — full"];
+const SCORE_LABELS = ["absent", "partial", "full"];
 
 type ControlLite = { id: string; name: string; ref_id?: string };
 
@@ -174,7 +177,7 @@ export default function ControlEffectivenessPage() {
               <thead>
                 <tr className="border-b border-gray-100 bg-gray-50/50">
                   <th className="text-left px-6 py-3 font-medium text-gray-500">{t("ctrleval.col_control", "Control")}</th>
-                  {CRITERIA.map(([k, label]) => <th key={k} className="text-center px-3 py-3 font-medium text-gray-500">{label}</th>)}
+                  {CRITERIA.map(([k, label]) => <th key={k} className="text-center px-3 py-3 font-medium text-gray-500">{String(t(`ctrleval.crit_${k}` as never, label))}</th>)}
                   <th className="text-left px-6 py-3 font-medium text-gray-500">{t("ctrleval.col_perf", "Performance")}</th>
                 </tr>
               </thead>
@@ -183,7 +186,7 @@ export default function ControlEffectivenessPage() {
                   <tr key={ev.id} className="border-b border-gray-50 hover:bg-gray-50/50 transition-colors">
                     <td className="px-6 py-4 font-medium text-gray-900">{controlName(ev.applied_control_id)}</td>
                     {CRITERIA.map(([k]) => <td key={k} className="text-center px-3 py-4 tabular-nums text-gray-700">{ev[k]}</td>)}
-                    <td className="px-6 py-4"><span className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold border ${PERF_BADGE[ev.performance_level] || "bg-gray-100 text-gray-600"}`}>{(ev.performance_level || "").replace(/_/g, " ")}</span></td>
+                    <td className="px-6 py-4"><span className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold border ${PERF_BADGE[ev.performance_level] || "bg-gray-100 text-gray-600"}`}>{ev.performance_level ? String(t(`ctrleval.level_${ev.performance_level}` as never, String(ev.performance_level).replace(/_/g, " "))) : "-"}</span></td>
                   </tr>
                 ))}
               </tbody>
@@ -212,13 +215,13 @@ export default function ControlEffectivenessPage() {
               <div className="rounded-xl border border-gray-100 bg-gray-50/50 p-4 space-y-3">
                 <div className="flex items-center justify-between">
                   <p className="text-sm font-semibold text-gray-700">{t("ctrleval.criteria", "5 criteria (0–2)")}</p>
-                  <span className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold border ${PERF_BADGE[previewLevel]}`}>{previewLevel.replace(/_/g, " ")} · {total}/10</span>
+                  <span className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold border ${PERF_BADGE[previewLevel]}`}>{String(t(`ctrleval.level_${previewLevel}` as never, previewLevel.replace(/_/g, " ")))} · {total}/10</span>
                 </div>
                 {CRITERIA.map(([key, label]) => (
                   <div key={key} className="flex items-center gap-3">
-                    <span className="w-40 shrink-0 text-sm text-gray-600">{label}</span>
+                    <span className="w-40 shrink-0 text-sm text-gray-600">{String(t(`ctrleval.crit_${key}` as never, label))}</span>
                     <select value={(form as any)[key]} onChange={(e) => setForm({ ...form, [key]: parseInt(e.target.value) })} className="flex-1 border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-                      {SCORE_LABELS.map((l, i) => <option key={i} value={i}>{l}</option>)}
+                      {SCORE_LABELS.map((l, i) => <option key={i} value={i}>{i} — {String(t(`ctrleval.score_${l}` as never, l))}</option>)}
                     </select>
                   </div>
                 ))}

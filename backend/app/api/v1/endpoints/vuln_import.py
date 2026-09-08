@@ -56,6 +56,11 @@ class ScanJournalOut(BaseModel):
 @router.post("/upload", response_model=ScanJournalOut, status_code=201)
 async def upload_scan(
     current_user: Annotated[User, Depends(_GATE)],
+    # Ingesting an export WRITES findings into the vulnerability register — the
+    # same effect POST /vulnerabilities has, and it carried only the billing
+    # gate. Same role set the connectors above already use; the journal below
+    # stays readable to anyone entitled to the module.
+    _role: Annotated[User, Depends(_CONNECTOR_ADMIN)],
     tenant_id: Annotated[str, Depends(get_tenant_id)],
     db: Annotated[AsyncSession, Depends(get_db)],
     tool: Annotated[str, Form()] = "csv",

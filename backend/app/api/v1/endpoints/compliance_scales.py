@@ -35,7 +35,7 @@ from typing import Annotated, Any
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from sqlalchemy import func, or_, select
-from sqlalchemy.exc import IntegrityError, OperationalError
+from sqlalchemy.exc import IntegrityError, OperationalError, ProgrammingError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.v1.dependencies.auth import get_current_user, get_tenant_id, require_roles
@@ -160,9 +160,16 @@ async def _ensure_builtin(db: AsyncSession) -> None:
     and the whole customisable grid stays theoretical. Idempotent, and safe to
     lose — a failure here degrades to "no built-in listed", never to an error.
     """
-    exists = (await db.execute(
-        select(ComplianceScale.id).where(ComplianceScale.is_builtin == True).limit(1)  # noqa: E712
-    )).first()
+    try:
+        exists = (await db.execute(
+            select(ComplianceScale.id).where(ComplianceScale.is_builtin == True).limit(1)  # noqa: E712
+        )).first()
+    except (OperationalError, ProgrammingError):
+        # compliance_scales itself is built by create_all() at startup. Before
+        # that restart even the probe raises, and a 5xx here bounces the whole SPA
+        # to /service-down; "no grid available yet" is the truthful answer.
+        await db.rollback()
+        return
     if exists:
         return
     try:
@@ -268,10 +275,17 @@ async def list_scales(
     )
     if is_active is not None:
         q = q.where(ComplianceScale.is_active == is_active)
-    scales = (await db.execute(
-        q.order_by(ComplianceScale.is_builtin.desc(), ComplianceScale.is_default.desc(),
-                   ComplianceScale.name, ComplianceScale.id)
-    )).scalars().all()
+    try:
+        scales = (await db.execute(
+            q.order_by(ComplianceScale.is_builtin.desc(), ComplianceScale.is_default.desc(),
+                       ComplianceScale.name, ComplianceScale.id)
+        )).scalars().all()
+    except (OperationalError, ProgrammingError):
+        # Same reason as in _ensure_builtin: an empty list of grids, not a 5xx
+        # that ejects the user from the application. GET /default-levels still
+        # answers, so the "start from the standard scale" button keeps working.
+        await db.rollback()
+        return []
     usage = await _usage_counts(db, [s.id for s in scales])
     return [_to_out(s, usage.get(s.id, 0)) for s in scales]
 

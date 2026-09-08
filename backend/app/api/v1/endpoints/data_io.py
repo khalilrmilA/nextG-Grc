@@ -282,7 +282,11 @@ def _validate_asset_row(row: dict, tenant_id: str) -> tuple[Asset | None, str | 
     if not name:
         return None, "name is required"
     try:
-        at = (row.get("asset_type") or "application").strip().lower()
+        # /export/assets emits the column as "type", not "asset_type", so an
+        # export -> edit -> import round trip silently reset every asset to
+        # APPLICATION. Both spellings are accepted; nothing that already sends
+        # "asset_type" changes behaviour.
+        at = (row.get("asset_type") or row.get("type") or "application").strip().lower()
         crit = (row.get("criticality") or "medium").strip().lower()
         # Same tolerant coercion as asset_type/criticality: an unknown or empty
         # value falls back to the column's own default rather than rejecting the

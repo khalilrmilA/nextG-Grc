@@ -7,6 +7,9 @@ import { MultiSelect, type MultiSelectOption as Option } from "@/components/comm
 
 // ─── Version timeline modal (RFP mod 5.2) ──────────────────────────────────────
 
+// English text here is the t() fallback, not the rendered label: the version
+// diff printed these field names, and "N linked"/"none", in English whatever
+// the interface language was. Keys go under risk_scenarios.field_* / diff_*.
 const FIELD_LABELS: Record<string, string> = {
   name: "Name", description: "Description", justification: "Justification",
   current_probability: "Current Probability", current_impact: "Current Impact", current_risk_level: "Current Risk Level",
@@ -15,10 +18,17 @@ const FIELD_LABELS: Record<string, string> = {
   asset_ids: "Assets", applied_control_ids: "Applied Controls",
 };
 
-function fmtVal(v: unknown): string {
-  if (v === null || v === undefined || v === "") return "—";
-  if (Array.isArray(v)) return v.length ? `${v.length} linked` : "none";
-  return String(v);
+function useFmtVal() {
+  const { t } = useTranslation();
+  return (v: unknown): string => {
+    if (v === null || v === undefined || v === "") return "—";
+    if (Array.isArray(v)) {
+      return v.length
+        ? String(t("risk_scenarios.diff_n_linked", "{{count}} linked", { count: v.length }))
+        : String(t("common.none", "none"));
+    }
+    return String(v);
+  };
 }
 
 function VersionTimelineModal({ scenarioId, scenarioName, onClose }: { scenarioId: string; scenarioName: string; onClose: () => void }) {
@@ -31,6 +41,7 @@ function VersionTimelineModal({ scenarioId, scenarioName, onClose }: { scenarioI
   const [diffTo, setDiffTo] = useState<number | null>(null);
   const [diff, setDiff] = useState<any[] | null>(null);
   const [diffing, setDiffing] = useState(false);
+  const fmtVal = useFmtVal();
 
   function load() {
     setLoading(true);
@@ -124,7 +135,7 @@ function VersionTimelineModal({ scenarioId, scenarioName, onClose }: { scenarioI
                   <div className="mt-2.5 space-y-1.5">
                     {diff.map((d: any) => (
                       <div key={d.field} className="text-xs bg-white rounded-lg px-3 py-2 border border-gray-100">
-                        <span className="font-medium text-gray-700">{FIELD_LABELS[d.field] || d.field}</span>{": "}
+                        <span className="font-medium text-gray-700">{String(t(`risk_scenarios.field_${d.field}` as never, FIELD_LABELS[d.field] || d.field))}</span>{": "}
                         <span className="text-red-500 line-through">{fmtVal(d.from_value)}</span>
                         {" → "}
                         <span className="text-green-600 font-medium">{fmtVal(d.to_value)}</span>
@@ -387,7 +398,7 @@ export default function RiskScenariosPage() {
           <Filter className="w-4 h-4 text-gray-400" />
           <select value={treatmentFilter} onChange={(e) => setTreatmentFilter(e.target.value)} className="border border-gray-200 rounded-xl text-sm px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500">
             <option value="">{t("risk_scenarios.all_treatments")}</option>
-            {TREATMENT_OPTIONS.map((tr) => <option key={tr} value={tr}>{tr.charAt(0).toUpperCase() + tr.slice(1)}</option>)}
+            {TREATMENT_OPTIONS.map((tr) => <option key={tr} value={tr}>{String(t(`vocab.${tr}` as never, tr.charAt(0).toUpperCase() + tr.slice(1)))}</option>)}
           </select>
         </div>
         <div className="flex items-center gap-2">
@@ -515,7 +526,7 @@ export default function RiskScenariosPage() {
                       )}{item.name}</td>
                     <td className="px-6 py-4">
                       <span className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold border ${TREATMENT_BADGE[item.treatment] || "bg-gray-100 text-gray-600"}`}>
-                        {item.treatment}
+                        {item.treatment ? String(t(`vocab.${item.treatment}` as never, String(item.treatment).replace(/_/g, " "))) : "-"}
                       </span>
                     </td>
                     <td className="px-6 py-4 text-center text-gray-700">{item.current_probability}</td>
@@ -666,13 +677,13 @@ export default function RiskScenariosPage() {
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">{t("risk_scenarios.form_treatment_label")}</label>
                   <select value={form.treatment} onChange={(e) => setForm({ ...form, treatment: e.target.value })} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-                    {TREATMENT_OPTIONS.map((tr) => <option key={tr} value={tr}>{tr.charAt(0).toUpperCase() + tr.slice(1)}</option>)}
+                    {TREATMENT_OPTIONS.map((tr) => <option key={tr} value={tr}>{String(t(`vocab.${tr}` as never, tr.charAt(0).toUpperCase() + tr.slice(1)))}</option>)}
                   </select>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">{t("risk_scenarios.form_knowledge_label")}</label>
                   <select value={form.strength_of_knowledge} onChange={(e) => setForm({ ...form, strength_of_knowledge: e.target.value })} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-                    {SOK_OPTIONS.map((s) => <option key={s} value={s}>{s.replace(/_/g, " ")}</option>)}
+                    {SOK_OPTIONS.map((s) => <option key={s} value={s}>{String(t(`vocab.${s}` as never, s.replace(/_/g, " ")))}</option>)}
                   </select>
                 </div>
               </div>

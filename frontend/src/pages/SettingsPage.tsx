@@ -9,8 +9,8 @@ import {
   ChevronLeft, ChevronRight, Network, PlugZap, X,
 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useAuthStore, PLAN_FEATURES, type PlanTier } from "../store/auth";
-import { notificationsApi, authApi, directoryApi } from "../api/endpoints";
+import { useAuthStore, hasAnyRole, PLAN_FEATURES, type PlanTier } from "../store/auth";
+import { notificationsApi, authApi, directoryApi, usersApi } from "../api/endpoints";
 import type { NotificationPreference, NotificationType, NotificationChannel } from "../types";
 import { useAppearance, appearanceStore, type ThemeMode, type Density, type AccentColor, type FontSize, type SidebarStyle } from "../store/appearance";
 import { useFramework } from "../context/FrameworkContext";
@@ -117,9 +117,26 @@ function LockedOverlay({ requiredPlan }: { requiredPlan: string }) {
 
 // ── Tab: Framework ────────────────────────────────────────────────────────────
 
+// PATCH /auth/me/frameworks is require_roles(CISO, COMPLIANCE_MANAGER,
+// POLICY_MANAGER) — plus the tenant_admin / super_admin auto-pass. Every other
+// role (viewer, executive, auditor, risk_manager …) can OPEN this tab, because
+// ROUTE_ROLES["/framework"] is wider than the write gate, and used to get a
+// silent 403: handleSave had try/finally with no catch, so the button spun and
+// nothing happened, twice, forever.
+const FRAMEWORK_WRITE_ROLES = ["tenant_admin", "super_admin", "ciso", "compliance_manager", "policy_manager"];
+
 function FrameworkTab() {
   const { t } = useTranslation();
   const { primaryFramework, selectedFrameworks, allFrameworks, loading, saveFrameworks } = useFramework();
+  const user = useAuthStore(u => u);
+  // The scalar `role` is checked as well as the roles array, because the server
+  // does: require_roles auto-passes on User.role for super_admin/tenant_admin,
+  // and get_effective_roles falls back to the scalar role when `roles` is empty.
+  // The live database holds an account whose scalar role is super_admin while
+  // its roles array says ["viewer"] — reading the array alone would hide this
+  // button from the one person the backend never refuses.
+  const canSave =
+    FRAMEWORK_WRITE_ROLES.includes(user?.role ?? "") || hasAnyRole(user, FRAMEWORK_WRITE_ROLES);
 
   const [primaryId, setPrimaryId] = useState<string>(() => primaryFramework?.id ?? "");
   const [secondaryIds, setSecondaryIds] = useState<string[]>(
@@ -127,6 +144,7 @@ function FrameworkTab() {
   );
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [saveError, setSaveError] = useState("");
   const [search, setSearch] = useState("");
 
   // Sync when context loads
@@ -144,10 +162,20 @@ function FrameworkTab() {
   async function handleSave() {
     if (!primaryId) return;
     setSaving(true);
+    setSaveError("");
     try {
       await saveFrameworks(primaryId, [primaryId, ...secondaryIds.filter(x => x !== primaryId)]);
       setSaved(true);
       setTimeout(() => setSaved(false), 2500);
+    } catch (err: unknown) {
+      // A 403 here is the role gate, not a bug — say so instead of spinning.
+      const status = (err as { response?: { status?: number } })?.response?.status;
+      const detail = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
+      setSaveError(
+        status === 403
+          ? t("common.access_restricted_hint")
+          : (typeof detail === "string" && detail) || t("errors.save_failed")
+      );
     } finally {
       setSaving(false);
     }
@@ -169,7 +197,7 @@ function FrameworkTab() {
       {/* Summary */}
       {primaryFw && (
         <div className="p-3 bg-blue-50 border border-blue-100 rounded-xl text-sm text-blue-800">
-          <strong>Primary:</strong> {primaryFw.name} ({primaryFw.control_count} controls)
+          <strong>{t("settings.primary_label")}:</strong> {primaryFw.name} ({t("compliance.controls_count", { count: primaryFw.control_count })})
           {secondaryIds.length > 0 && (
             <span className="ml-2 text-blue-600">
               {t("settings.secondary_count", { count: secondaryIds.length })}
@@ -238,7 +266,7 @@ function FrameworkTab() {
                   )}
                 </div>
 
-                <p className="text-xs text-gray-400 mt-1 ml-6">{fw.control_count} controls</p>
+                <p className="text-xs text-gray-400 mt-1 ml-6">{t("compliance.controls_count", { count: fw.control_count })}</p>
 
                 {isPrimary && (
                   <span className="ml-6 mt-1 inline-block text-xs font-medium text-blue-700 bg-blue-100 px-2 py-0.5 rounded-full">
@@ -251,6 +279,12 @@ function FrameworkTab() {
         </div>
       )}
 
+      {saveError && (
+        <div className="flex items-start gap-2 p-3 bg-red-50 border border-red-100 rounded-xl text-sm text-red-700">
+          <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" /> {saveError}
+        </div>
+      )}
+
       <div className="flex items-center justify-between pt-4 border-t border-gray-100">
         <p className="text-xs text-gray-400">{t("settings.framework_note")}</p>
         <div className="flex items-center gap-3">
@@ -259,15 +293,22 @@ function FrameworkTab() {
               <Check className="w-4 h-4" /> {t("settings.saved")}
             </span>
           )}
-          <button
-            type="button"
-            onClick={handleSave}
-            disabled={saving || !primaryId}
-            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-          >
-            {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-            {saving ? t("settings.saving") : t("settings.save_frameworks")}
-          </button>
+          {canSave ? (
+            <button
+              type="button"
+              onClick={handleSave}
+              disabled={saving || !primaryId}
+              className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            >
+              {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+              {saving ? t("settings.saving") : t("settings.save_frameworks")}
+            </button>
+          ) : (
+            /* No write gate client-side would just produce a 403 on click. */
+            <span className="flex items-center gap-1.5 text-xs text-gray-400">
+              <Lock className="w-3.5 h-3.5" /> {t("common.access_restricted")}
+            </span>
+          )}
         </div>
       </div>
     </div>
@@ -276,17 +317,26 @@ function FrameworkTab() {
 
 // ── Tab: Profile ──────────────────────────────────────────────────────────────
 
+// This tab used to be a form that saved nothing. Its Save button called
+// `setSaved(true)` and NOTHING else — no request, no mutation — so the green
+// "Saved" tick appeared and the edit was gone on the next reload; the fields
+// were seeded with "Admin" / "admin@demo.com" when the store was empty, and the
+// phone, timezone and language rows were invented settings with no column, no
+// endpoint and no effect (the real language switcher is in the top bar, and the
+// value shown here said "English" whatever the interface language was).
+// There is no route to write them: auth.py exposes only /me/framework(s),
+// /change-password and /logout — no PATCH /auth/me. So the tab now shows the
+// real account, read-only, and says who can change it. Wiring an editable
+// profile needs a backend route first (see needs_integration).
 function ProfileTab() {
   const { t } = useTranslation();
   const user = useAuthStore(u => u);
-  const [form, setForm] = useState({
-    firstName: user?.name.split(" ")[0] ?? "Admin",
-    lastName:  user?.name.split(" ")[1] ?? "",
-    email:     user?.email ?? "admin@demo.com",
-    phone: "", timezone: "UTC+1 (Paris)", language: "English",
-  });
-  const [saved, setSaved] = useState(false);
-  function save() { setSaved(true); setTimeout(() => setSaved(false), 2500); }
+  const nameParts = (user?.name ?? "").trim().split(/\s+/).filter(Boolean);
+  const form = {
+    firstName: nameParts[0] ?? "",
+    lastName:  nameParts.slice(1).join(" "),
+    email:     user?.email ?? "",
+  };
 
   return (
     <div className="space-y-6">
@@ -311,42 +361,33 @@ function ProfileTab() {
 
       <div className="grid grid-cols-2 gap-4">
         <Field label={t("settings.first_name")}>
-          <Input value={form.firstName} onChange={v => setForm(f => ({ ...f, firstName: v }))} />
+          <Input value={form.firstName} disabled />
         </Field>
         <Field label={t("settings.last_name")}>
-          <Input value={form.lastName} onChange={v => setForm(f => ({ ...f, lastName: v }))} />
+          <Input value={form.lastName} disabled />
         </Field>
       </div>
       <Field label={t("settings.email_address")}>
-        <Input value={form.email} onChange={v => setForm(f => ({ ...f, email: v }))} type="email" />
+        <Input value={form.email} type="email" disabled />
       </Field>
-      <Field label={t("settings.phone_number")} hint={t("settings.phone_hint")}>
-        <Input value={form.phone} onChange={v => setForm(f => ({ ...f, phone: v }))} placeholder="+33 6 00 00 00 00" />
-      </Field>
-      <div className="grid grid-cols-2 gap-4">
-        <Field label={t("settings.timezone")}>
-          <select value={form.timezone} onChange={e => setForm(f => ({ ...f, timezone: e.target.value }))}
-            className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500">
-            {["UTC-8 (Los Angeles)", "UTC-5 (New York)", "UTC+0 (London)", "UTC+1 (Paris)", "UTC+3 (Riyadh)", "UTC+8 (Singapore)"].map(tz => (
-              <option key={tz}>{tz}</option>
-            ))}
-          </select>
-        </Field>
-        <Field label={t("settings.language")}>
-          <select value={form.language} onChange={e => setForm(f => ({ ...f, language: e.target.value }))}
-            className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500">
-            {["English", "Français", "العربية", "Español", "Deutsch"].map(l => <option key={l}>{l}</option>)}
-          </select>
-        </Field>
-      </div>
-      <SaveBar onSave={save} saved={saved} />
+
+      <p className="text-xs text-gray-500 bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5">
+        {t(
+          "settings.profile_readonly",
+          "Your name and email address are managed by your administrator. To change your password, use the Security tab.",
+        )}
+      </p>
     </div>
   );
 }
 
 // ── Tab: Notifications ────────────────────────────────────────────────────────
 
-// Rows we show in the UI (subset of all NotificationType values)
+// Rows we show in the UI (subset of all NotificationType values).
+// The English text is the t() FALLBACK, not the rendered string: these labels
+// were the last bare-English block on this page and stayed English in French
+// and Arabic. Keys land in en/fr/ar under notif_pref.* (see needs_integration);
+// until they do the fallback keeps today's wording exactly.
 const EMAIL_ROWS: { type: NotificationType; label: string; description: string }[] = [
   { type: "risk_new",              label: "New risk created",       description: "When a new risk is added to the register" },
   { type: "risk_overdue",          label: "Risk treatment overdue", description: "When a risk treatment deadline passes" },
@@ -460,8 +501,8 @@ function NotificationsTab() {
             key={type}
             enabled={isEnabled(type, "email")}
             onChange={() => toggle(type, "email")}
-            label={label}
-            description={description}
+            label={String(t(`notif_pref.${type}` as never, label))}
+            description={String(t(`notif_pref.${type}_desc` as never, description))}
           />
         ))}
       </div>
@@ -476,7 +517,7 @@ function NotificationsTab() {
             key={type}
             enabled={isEnabled(type, "in_app")}
             onChange={() => toggle(type, "in_app")}
-            label={label}
+            label={String(t(`notif_pref.${type}` as never, label))}
           />
         ))}
       </div>
@@ -541,12 +582,14 @@ function SecurityTab() {
   function relTime(iso?: string | null) {
     if (!iso) return "";
     const diff = Date.now() - new Date(iso).getTime();
-    if (diff < 60_000) return "Just now";
+    // The active-sessions list is the one place on this page that still printed
+    // bare English ("Just now", "3h ago") in the French and Arabic UI.
+    if (diff < 60_000) return String(t("activity_log.time_just_now"));
     const m = Math.floor(diff / 60_000);
-    if (m < 60) return `${m}m ago`;
+    if (m < 60) return String(t("settings.rel_minutes_ago", "{{count}}m ago", { count: m }));
     const h = Math.floor(m / 60);
-    if (h < 24) return `${h}h ago`;
-    return `${Math.floor(h / 24)}d ago`;
+    if (h < 24) return String(t("settings.rel_hours_ago", "{{count}}h ago", { count: h }));
+    return String(t("settings.rel_days_ago", "{{count}}d ago", { count: Math.floor(h / 24) }));
   }
 
   return (
@@ -659,6 +702,11 @@ function SecurityTab() {
 // ── Tab: AI Access ────────────────────────────────────────────────────────────
 
 function AiAccessTab() {
+  // Every string below went through t() with an English default rather than a
+  // bare literal: the keys do not exist in en/fr/ar yet (locale files are not
+  // this lane's), so the fallback keeps today's wording and the tab becomes
+  // translatable the moment the keys land. See needs_integration.
+  const { t } = useTranslation();
   const [showRequestDialog, setShowRequestDialog] = useState(false);
 
   const { data: usage, isLoading: usageLoading } = useQuery({
@@ -677,8 +725,8 @@ function AiAccessTab() {
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-base font-semibold text-gray-900">AI Access & Usage</h2>
-        <p className="text-sm text-gray-500 mt-0.5">Manage your AI feature access and monitor token usage</p>
+        <h2 className="text-base font-semibold text-gray-900">{t("ai_access.title", "AI Access & Usage")}</h2>
+        <p className="text-sm text-gray-500 mt-0.5">{t("ai_access.subtitle", "Manage your AI feature access and monitor token usage")}</p>
       </div>
 
       {/* Current Usage */}
@@ -689,11 +737,11 @@ function AiAccessTab() {
       ) : usage ? (
         <div className="bg-white border border-gray-200 rounded-xl p-5 space-y-6">
           <div>
-            <h3 className="text-sm font-semibold text-gray-800 mb-4">Token Usage This Month</h3>
+            <h3 className="text-sm font-semibold text-gray-800 mb-4">{t("ai_access.usage_title", "Token Usage This Month")}</h3>
             <div className="space-y-3">
               <div>
                 <div className="flex items-center justify-between mb-2">
-                  <span className="text-sm font-medium text-gray-700">Tokens</span>
+                  <span className="text-sm font-medium text-gray-700">{t("ai_access.tokens", "Tokens")}</span>
                   <span className="text-sm font-medium text-gray-900">
                     {usage.tokens_used} / {usage.tokens_limit}
                   </span>
@@ -714,7 +762,7 @@ function AiAccessTab() {
 
               <div>
                 <div className="flex items-center justify-between mb-2">
-                  <span className="text-sm font-medium text-gray-700">Requests</span>
+                  <span className="text-sm font-medium text-gray-700">{t("ai_access.requests", "Requests")}</span>
                   <span className="text-sm font-medium text-gray-900">
                     {usage.requests_made} / {usage.requests_limit}
                   </span>
@@ -734,7 +782,7 @@ function AiAccessTab() {
               </div>
             </div>
             <p className="text-xs text-gray-500 mt-4">
-              Resets on {new Date(usage.reset_at).toLocaleDateString()}
+              {t("ai_access.resets_on", "Resets on {{date}}", { date: new Date(usage.reset_at).toLocaleDateString() })}
             </p>
           </div>
         </div>
@@ -743,7 +791,7 @@ function AiAccessTab() {
       {/* Access Requests */}
       {status && status.requests.length > 0 && (
         <div className="bg-white border border-gray-200 rounded-xl p-5 space-y-4">
-          <h3 className="text-sm font-semibold text-gray-800">Access Requests</h3>
+          <h3 className="text-sm font-semibold text-gray-800">{t("ai_access.requests_title", "Access Requests")}</h3>
           <div className="space-y-3">
             {status.requests.map((req) => (
               <div key={req.id} className="flex items-start justify-between p-3 bg-gray-50 rounded-lg border border-gray-100">
@@ -760,7 +808,7 @@ function AiAccessTab() {
                       : "bg-yellow-100 text-yellow-700"
                   }`}
                 >
-                  {req.status.charAt(0).toUpperCase() + req.status.slice(1)}
+                  {String(t(`vocab.${req.status}` as never, req.status))}
                 </span>
               </div>
             ))}
@@ -775,9 +823,9 @@ function AiAccessTab() {
             <Zap className="w-5 h-5 text-blue-600" />
           </div>
           <div className="flex-1">
-            <h3 className="text-sm font-semibold text-gray-900">Need More AI Access?</h3>
+            <h3 className="text-sm font-semibold text-gray-900">{t("ai_access.need_more", "Need More AI Access?")}</h3>
             <p className="text-xs text-gray-600 mt-1">
-              Request access to additional AI features like document generation and intelligent analysis.
+              {t("ai_access.need_more_desc", "Request access to additional AI features like document generation and intelligent analysis.")}
             </p>
           </div>
         </div>
@@ -786,7 +834,7 @@ function AiAccessTab() {
           onClick={() => setShowRequestDialog(true)}
           className="w-full py-2.5 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors"
         >
-          Request AI Access
+          {t("ai_access.request_cta", "Request AI Access")}
         </button>
       </div>
 
@@ -801,6 +849,9 @@ function AiAccessTab() {
 
 // ── Tab: Appearance ───────────────────────────────────────────────────────────
 
+// `label` is the t() fallback, not the rendered string — the accent swatch's
+// tooltip and the sidebar previews were bare English (a title="" attribute
+// included). Keys go under settings.accent_* / settings.sidebar_*.
 const ACCENT_OPTIONS: { value: AccentColor; label: string; bg: string; ring: string }[] = [
   { value: "blue",    label: "Ocean Blue",    bg: "bg-blue-500",    ring: "ring-blue-500"    },
   { value: "violet",  label: "Violet",        bg: "bg-violet-500",  ring: "ring-violet-500"  },
@@ -1225,7 +1276,8 @@ function AppearanceTab() {
             <button
               key={value}
               type="button"
-              title={label}
+              title={String(t(`settings.accent_${value}` as never, label))}
+              aria-label={String(t(`settings.accent_${value}` as never, label))}
               onClick={() => handleSet({ accent: value })}
               className={`w-9 h-9 rounded-full ${bg} transition-all ${
                 ap.accent === value ? `ring-2 ring-offset-2 ${ring} scale-110` : "opacity-70 hover:opacity-100 hover:scale-105"
@@ -1249,7 +1301,7 @@ function AppearanceTab() {
             <OptionCard key={value} selected={ap.fontSize === value} onClick={() => handleSet({ fontSize: value })}>
               <div className="flex flex-col items-center gap-1 py-1">
                 <span className={`${preview} font-semibold text-gray-700 dark:text-gray-300`}>Aa</span>
-                <span className="text-xs text-gray-500">{label}</span>
+                <span className="text-xs text-gray-500">{String(t(`settings.sidebar_${value}` as never, label))}</span>
               </div>
             </OptionCard>
           ))}
@@ -1339,194 +1391,151 @@ function AppearanceTab() {
 }
 
 // ── Tab: Admin (admin-only) ───────────────────────────────────────────────────
+//
+// This tab used to render a hard-coded roster of five invented people
+// ("Sophie Martin", "Jean Dupont", admin@demo.com …) with working-looking
+// Invite / Suspend / Delete / change-role controls that only mutated local
+// component state. Nothing was ever sent to the server and nothing was ever
+// read from it, so an evaluator opening Settings saw five accounts that do not
+// exist in the tenant — and could "delete" a user with no effect. One invented
+// figure on screen puts every other number in the product in doubt, so the
+// fabricated roster is gone.
+//
+// What replaces it is the real thing, read-only: GET /users for this tenant.
+// Management (invite, roles, activate/deactivate, reset password, delete) is
+// NOT duplicated here — it already exists, wired to the API, on /company-admin,
+// and two half-implementations of user management is how the fake one appeared
+// in the first place. This tab links there.
 
-type DemoRole = "admin" | "ciso" | "auditor" | "viewer";
-type DemoPlan = PlanTier;
-
-interface ManagedUser {
-  id: string; name: string; email: string;
-  role: DemoRole; plan: DemoPlan; status: "active" | "invited" | "suspended";
-  lastLogin: string;
+interface AdminUserRow {
+  id: string; first_name: string; last_name: string; email: string;
+  roles: string[]; effective_roles: string[]; is_active: boolean;
+  expires_at?: string | null;
 }
-
-const ROLE_BADGE: Record<DemoRole, string> = {
-  admin:   "bg-yellow-100 text-yellow-700",
-  ciso:    "bg-blue-100 text-blue-700",
-  auditor: "bg-purple-100 text-purple-700",
-  viewer:  "bg-gray-100 text-gray-600",
-};
-
-const STATUS_BADGE: Record<ManagedUser["status"], string> = {
-  active:    "bg-green-100 text-green-700",
-  invited:   "bg-orange-100 text-orange-700",
-  suspended: "bg-red-100 text-red-600",
-};
 
 function AdminTab() {
   const { t } = useTranslation();
-  const [users, setUsers] = useState<ManagedUser[]>([
-    { id: "1", name: "Admin",        email: "admin@demo.com",   role: "admin",   plan: "enterprise",   status: "active",    lastLogin: "Now"          },
-    { id: "2", name: "Sophie Martin", email: "ciso@demo.com",    role: "ciso",    plan: "professional", status: "active",    lastLogin: "2 hours ago"  },
-    { id: "3", name: "Jean Dupont",   email: "auditor@demo.com", role: "auditor", plan: "starter",      status: "active",    lastLogin: "Yesterday"    },
-    { id: "4", name: "Trial User",    email: "viewer@demo.com",  role: "viewer",  plan: "free_trial",   status: "active",    lastLogin: "3 days ago"   },
-    { id: "5", name: "Pending User",  email: "pending@demo.com", role: "viewer",  plan: "free_trial",   status: "invited",   lastLogin: "Never"        },
-  ]);
-  const [showInvite, setShowInvite] = useState(false);
-  const [invite, setInvite]         = useState({ email: "", role: "viewer" as DemoRole, plan: "free_trial" as DemoPlan });
+  const user = useAuthStore(u => u);
+  // GET /users is require_roles(TENANT_ADMIN) server-side. The tab is only in
+  // the nav for super_admin, but ?tab=admin is reachable by hand from any
+  // account, so the gate is enforced on the content too — otherwise every role
+  // sees an admin console it cannot use and a 403 it cannot read.
+  const canRead = user?.role === "tenant_admin" || user?.role === "super_admin";
 
-  function sendInvite() {
-    if (!invite.email.trim()) return;
-    setUsers(prev => [...prev, {
-      id: String(Date.now()), name: invite.email.split("@")[0],
-      email: invite.email.trim(), role: invite.role, plan: invite.plan,
-      status: "invited", lastLogin: "Never",
-    }]);
-    setInvite({ email: "", role: "viewer", plan: "free_trial" });
-    setShowInvite(false);
+  const { data: users = [], isLoading, isError } = useQuery({
+    queryKey: ["settings", "users"],
+    queryFn: usersApi.list,
+    enabled: canRead,
+    retry: false,
+  });
+
+  if (!canRead) {
+    return (
+      <div className="bg-white border border-gray-200 rounded-xl p-8 text-center">
+        <Lock className="w-8 h-8 text-gray-300 mx-auto mb-3" />
+        <p className="text-sm font-semibold text-gray-800">{t("common.access_restricted")}</p>
+        <p className="text-xs text-gray-500 mt-1 max-w-sm mx-auto">{t("common.access_restricted_hint")}</p>
+      </div>
+    );
   }
 
-  function toggleSuspend(id: string) {
-    setUsers(prev => prev.map(u => u.id === id
-      ? { ...u, status: u.status === "suspended" ? "active" : "suspended" }
-      : u,
-    ));
-  }
-
-  function removeUser(id: string) {
-    setUsers(prev => prev.filter(u => u.id !== id));
-  }
-
-  function changeRole(id: string, role: DemoRole) {
-    setUsers(prev => prev.map(u => u.id === id ? { ...u, role } : u));
-  }
-
-  function changePlan(id: string, plan: DemoPlan) {
-    setUsers(prev => prev.map(u => u.id === id ? { ...u, plan } : u));
-  }
+  const rows = users as AdminUserRow[];
+  const activeCount = rows.filter(u => u.is_active).length;
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-base font-semibold text-gray-900 flex items-center gap-2">
-            <Crown className="w-4 h-4 text-yellow-500" /> {t("settings.admin_title")}
+            <Crown className="w-4 h-4 text-yellow-500" /> {t("company_admin.title")}
           </h2>
-          <p className="text-sm text-gray-500 mt-0.5">{t("settings.admin_subtitle")}</p>
+          <p className="text-sm text-gray-500 mt-0.5">{t("company_admin.subtitle")}</p>
         </div>
-        <button type="button" onClick={() => setShowInvite(v => !v)}
-          className="flex items-center gap-1.5 px-3 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors">
-          <Plus className="w-4 h-4" /> {t("settings.invite_user")}
-        </button>
+        {/* Management lives on /company-admin — this tab deliberately does not
+            duplicate it. A plain <a> keeps this file free of a router import. */}
+        <a
+          href="/company-admin"
+          className="flex items-center gap-1.5 px-3 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
+        >
+          <Plus className="w-4 h-4" /> {t("company_admin.invite_member")}
+        </a>
       </div>
 
-      {/* Invite form */}
-      {showInvite && (
-        <div className="bg-blue-50 border border-blue-100 rounded-xl p-4 space-y-3">
-          <p className="text-sm font-semibold text-blue-800">{t("settings.invite_new_user")}</p>
-          <div className="grid grid-cols-3 gap-3">
-            <input value={invite.email} onChange={e => setInvite(i => ({ ...i, email: e.target.value }))}
-              placeholder="user@company.com" type="email"
-              className="col-span-1 px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white" />
-            <select value={invite.role} onChange={e => setInvite(i => ({ ...i, role: e.target.value as DemoRole }))}
-              className="px-3 py-2 border border-gray-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500">
-              <option value="admin">{t("roles.admin")}</option>
-              <option value="ciso">{t("roles.ciso")}</option>
-              <option value="auditor">{t("roles.auditor")}</option>
-              <option value="viewer">{t("roles.viewer")}</option>
-            </select>
-            <select value={invite.plan} onChange={e => setInvite(i => ({ ...i, plan: e.target.value as DemoPlan }))}
-              className="px-3 py-2 border border-gray-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500">
-              <option value="free_trial">{t("plan.free_trial")}</option>
-              <option value="starter">{t("plan.starter")}</option>
-              <option value="professional">{t("plan.professional")}</option>
-              <option value="enterprise">{t("plan.enterprise")}</option>
-            </select>
-          </div>
-          <div className="flex gap-2">
-            <button type="button" onClick={sendInvite}
-              className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700">{t("settings.send_invite")}</button>
-            <button type="button" onClick={() => setShowInvite(false)}
-              className="px-4 py-2 text-gray-600 text-sm rounded-lg hover:bg-gray-100">{t("common.cancel")}</button>
-          </div>
+      {isError && (
+        <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-100 rounded-xl text-sm text-red-700">
+          <AlertTriangle className="w-4 h-4 flex-shrink-0" /> {t("company_admin.err_load")}
         </div>
       )}
 
-      {/* Users table */}
+      {/* Roster — read-only, straight from the API */}
       <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
-        <table className="w-full text-sm">
-          <thead className="bg-gray-50 border-b border-gray-200">
-            <tr>
-              {[t("settings.col_user"), t("settings.col_role"), t("settings.col_plan"), t("settings.col_status"), t("settings.col_last_login"), t("settings.col_actions")].map(h => (
-                <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">{h}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-100">
-            {users.map(u => (
-              <tr key={u.id} className="hover:bg-gray-50 transition-colors">
-                <td className="px-4 py-3">
-                  <div className="flex items-center gap-2.5">
-                    <div className="w-7 h-7 rounded-full bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
-                      {u.name.charAt(0)}
-                    </div>
-                    <div>
-                      <p className="font-medium text-gray-800">{u.name}</p>
-                      <p className="text-xs text-gray-400">{u.email}</p>
-                    </div>
-                  </div>
-                </td>
-                <td className="px-4 py-3">
-                  <select value={u.role} onChange={e => changeRole(u.id, e.target.value as DemoRole)}
-                    className={`px-2 py-1 rounded-full text-xs font-semibold border-0 cursor-pointer ${ROLE_BADGE[u.role]}`}>
-                    <option value="admin">{t("roles.admin")}</option>
-                    <option value="ciso">{t("roles.ciso")}</option>
-                    <option value="auditor">{t("roles.auditor")}</option>
-                    <option value="viewer">{t("roles.viewer")}</option>
-                  </select>
-                </td>
-                <td className="px-4 py-3">
-                  <select value={u.plan} onChange={e => changePlan(u.id, e.target.value as DemoPlan)}
-                    className="px-2 py-1 bg-gray-100 rounded-lg text-xs font-medium text-gray-600 border-0 cursor-pointer">
-                    <option value="free_trial">{t("plan.free_trial")}</option>
-                    <option value="starter">{t("plan.starter")}</option>
-                    <option value="professional">{t("plan.professional")}</option>
-                    <option value="enterprise">{t("plan.enterprise")}</option>
-                  </select>
-                </td>
-                <td className="px-4 py-3">
-                  <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${STATUS_BADGE[u.status]}`}>
-                    {u.status}
-                  </span>
-                </td>
-                <td className="px-4 py-3 text-xs text-gray-400">{u.lastLogin}</td>
-                <td className="px-4 py-3">
-                  <div className="flex items-center gap-2">
-                    <button type="button" onClick={() => toggleSuspend(u.id)}
-                      className={`text-xs font-medium transition-colors ${u.status === "suspended" ? "text-green-600 hover:text-green-700" : "text-orange-500 hover:text-orange-700"}`}>
-                      {u.status === "suspended" ? t("settings.activate") : t("settings.suspend")}
-                    </button>
-                    <button type="button" onClick={() => removeUser(u.id)}
-                      className="text-red-400 hover:text-red-600 transition-colors">
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                </td>
+        {isLoading ? (
+          <div className="flex items-center justify-center py-12">
+            <Loader2 className="w-5 h-5 animate-spin text-gray-400" />
+          </div>
+        ) : rows.length === 0 ? (
+          <p className="py-12 text-center text-sm text-gray-400">
+            {isError ? t("dashctl.not_available") : t("company_admin.no_members")}
+          </p>
+        ) : (
+          <table className="w-full text-sm">
+            <thead className="bg-gray-50 border-b border-gray-200">
+              <tr>
+                {[t("settings.col_user"), t("settings.col_role"), t("settings.col_status")].map(h => (
+                  <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">{h}</th>
+                ))}
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {rows.map(u => {
+                const fullName = `${u.first_name ?? ""} ${u.last_name ?? ""}`.trim() || u.email;
+                const roleList = (u.effective_roles?.length ? u.effective_roles : u.roles) ?? [];
+                return (
+                  <tr key={u.id} className="hover:bg-gray-50 transition-colors">
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-2.5">
+                        <div className="w-7 h-7 rounded-full bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
+                          {fullName.charAt(0).toUpperCase()}
+                        </div>
+                        <div>
+                          <p className="font-medium text-gray-800">{fullName}</p>
+                          <p className="text-xs text-gray-400">{u.email}</p>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="flex flex-wrap gap-1">
+                        {roleList.length === 0
+                          ? <span className="text-xs text-gray-400">{t("company_admin.group_no_roles")}</span>
+                          : roleList.map(r => (
+                            <span key={r} className="px-2 py-0.5 rounded-full text-xs font-semibold bg-blue-50 text-blue-700">
+                              {String(t(`company_admin.roles.${r}_label` as never, r))}
+                            </span>
+                          ))}
+                      </div>
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${u.is_active ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-600"}`}>
+                        {u.is_active ? t("company_admin.active") : t("company_admin.inactive")}
+                      </span>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        )}
       </div>
 
-      {/* Stats */}
-      <div className="grid grid-cols-4 gap-3">
+      {/* Stats — counted from the rows actually returned, never invented */}
+      <div className="grid grid-cols-3 gap-3">
         {[
-          { label: t("settings.stat_total_users"), value: users.length,                                     color: "text-gray-800" },
-          { label: t("settings.stat_active"),      value: users.filter(u => u.status === "active").length,   color: "text-green-600" },
-          { label: t("settings.stat_invited"),     value: users.filter(u => u.status === "invited").length,  color: "text-orange-500" },
-          { label: t("settings.stat_suspended"),   value: users.filter(u => u.status === "suspended").length, color: "text-red-500" },
+          { label: t("company_admin.total_members"), value: rows.length,                 color: "text-gray-800" },
+          { label: t("company_admin.active"),        value: activeCount,                 color: "text-green-600" },
+          { label: t("company_admin.inactive"),      value: rows.length - activeCount,   color: "text-gray-500" },
         ].map(({ label, value, color }) => (
           <div key={label} className="bg-white border border-gray-200 rounded-xl p-4 text-center">
-            <p className={`text-2xl font-bold ${color}`}>{value}</p>
+            <p className={`text-2xl font-bold ${color}`}>{isLoading || isError ? "—" : value}</p>
             <p className="text-xs text-gray-500 mt-1">{label}</p>
           </div>
         ))}
@@ -1578,7 +1587,7 @@ export default function SettingsPage() {
     { id: "notifications", icon: Bell,      label: t("settings.notifications")      },
     { id: "security",      icon: Shield,    label: t("settings.security")           },
     { id: "directory",     icon: Network,   label: t("settings.directory", "Directory (AD/LDAP)"), adminOnly: true },
-    { id: "ai-access",     icon: Zap,       label: "AI Access"                      },
+    { id: "ai-access",     icon: Zap,       label: t("settings.ai_access", "AI Access") },
     { id: "appearance",    icon: Palette,   label: t("settings.appearance")         },
     { id: "admin",         icon: Crown,     label: t("settings.admin_panel"), superAdminOnly: true },
   ];
@@ -1593,6 +1602,19 @@ export default function SettingsPage() {
   });
 
   function tabContent(tab: Tab): React.ReactNode {
+    // ?tab=<id> is honoured from the URL for ANY account, so the tab list is not
+    // the gate — this is. Both tabs enforce their own role check inside as well;
+    // this stops a non-admin even being offered a directory form that asks for a
+    // service-account bind password before answering 403.
+    if (!visibleTabs.some((v) => v.id === tab)) {
+      return (
+        <div className="bg-white border border-gray-200 rounded-xl p-8 text-center">
+          <Lock className="w-8 h-8 text-gray-300 mx-auto mb-3" />
+          <p className="text-sm font-semibold text-gray-800">{t("common.access_restricted")}</p>
+          <p className="text-xs text-gray-500 mt-1 max-w-sm mx-auto">{t("common.access_restricted_hint")}</p>
+        </div>
+      );
+    }
     if (tab === "admin") return <AdminTab />;
     const required = TAB_MIN_PLAN[tab];
     if (required && !isAdmin && !planAllows(plan, required)) {
@@ -1647,7 +1669,7 @@ export default function SettingsPage() {
           {/* Plan info chip at bottom of settings nav */}
           <div className="mt-6 p-3 bg-gray-50 border border-gray-200 rounded-xl">
             <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">{t("settings.current_plan_label")}</p>
-            <p className="text-sm font-bold text-gray-800 mt-1">{isAdmin ? "Admin (Enterprise)" : PLAN_FEATURES[plan].label}</p>
+            <p className="text-sm font-bold text-gray-800 mt-1">{isAdmin ? `${t("roles.admin")} (${PLAN_FEATURES.enterprise.label})` : PLAN_FEATURES[plan].label}</p>
             {plan === "free_trial" && !isAdmin && (
               <p className="text-xs text-orange-500 mt-0.5">{t("settings.days_remaining", { days: user?.daysRemaining ?? 14 })}</p>
             )}
@@ -1657,7 +1679,7 @@ export default function SettingsPage() {
             {canManageLicense && (
               <button type="button" onClick={() => setLicenseOpen(true)}
                 className="mt-3 flex items-center justify-center gap-1.5 w-full px-3 py-2 rounded-lg text-xs font-medium bg-indigo-600 text-white hover:bg-indigo-700 transition-colors">
-                <KeyRound className="w-3.5 h-3.5" /> Enter license key
+                <KeyRound className="w-3.5 h-3.5" /> {t("license.title")}
               </button>
             )}
           </div>

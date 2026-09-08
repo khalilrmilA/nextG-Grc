@@ -233,19 +233,42 @@ async def get_current_user_optional(
             return None
         from sqlalchemy import select
         result = await db.execute(select(User).where(User.id == user_id))
-        return result.scalar_one_or_none()
+        user = result.scalar_one_or_none()
+        # A deactivated or expired account is not an identity. get_current_user
+        # refuses both; here the consequence is simply that the caller is treated
+        # as anonymous, which is the correct reading of a token whose account no
+        # longer has access.
+        if user is None or not user.is_active:
+            return None
+        if user.expires_at is not None and user.expires_at < datetime.now(timezone.utc).replace(tzinfo=None):
+            return None
+        return user
     except Exception:
         return None
 
 
 async def get_current_user_ws(token: str, db: AsyncSession) -> User:
-    """Authenticate a WebSocket connection using a raw token string."""
+    """Authenticate a WebSocket / SSE connection using a raw token string.
+
+    Carries the same four checks get_current_user applies on every HTTP route —
+    token type, is_active, account expiry and session revocation. It used to read
+    only `sub` + is_active, so ANY token this deployment signs opened a channel:
+    the 7-day refresh token, and the mfa_challenge token minted between the
+    password check and the TOTP step (i.e. a half-finished login). Its only
+    current call site (support.py::_channel_user) re-applies the missing three
+    itself; keeping them here too means the next channel route inherits them
+    instead of having to remember. The session check fails open on a lookup
+    error, exactly as get_current_user does, so a session-table problem can
+    never lock a channel out.
+    """
     from app.core.security import decode_token
     from sqlalchemy import select
     try:
         payload = await decode_token(token)
     except Exception:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
+    if payload.get("type") != "access":
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token type")
     user_id: str | None = payload.get("sub")
     if not user_id:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
@@ -253,6 +276,21 @@ async def get_current_user_ws(token: str, db: AsyncSession) -> User:
     user = result.scalar_one_or_none()
     if not user or not user.is_active:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found or inactive")
+
+    if user.expires_at is not None and user.expires_at < datetime.now(timezone.utc).replace(tzinfo=None):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Account has expired")
+
+    sid = payload.get("sid")
+    if sid:
+        try:
+            from app.models.user_session import UserSession
+            sess = (await db.execute(select(UserSession).where(UserSession.id == sid))).scalar_one_or_none()
+            if sess is not None and sess.revoked_at is not None:
+                raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Session revoked. Please sign in again.")
+        except HTTPException:
+            raise
+        except Exception:
+            pass  # never break the channel on a session-check error
     return user
 
 

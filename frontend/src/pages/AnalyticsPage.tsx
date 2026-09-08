@@ -197,6 +197,14 @@ const KEY_NAMESPACES = [
   "audit_detail.statuses",
   "audit_campaign.statuses",
   "compliance.status_options",
+  // There is a SECOND enum dictionary, moduledash.vocab in locales/*.ts, and it
+  // carries seven asset-state values the top-level one does not (operational,
+  // degraded, quarantined, out_of_service, lost, blocker, none). It is consulted
+  // LAST, not first: on the keys the two share it disagrees with the per-screen
+  // namespaces ("Implemented" vs the compliance screen's "Compliant"), and the
+  // screen-specific wording is the correct one where it exists. At the end it
+  // can only add labels that used to fall through to the humanised key.
+  "moduledash.vocab",
 ];
 
 function useBucketLabel() {

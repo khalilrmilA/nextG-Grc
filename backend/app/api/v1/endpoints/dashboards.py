@@ -247,6 +247,7 @@ async def _cve_summary(db: AsyncSession, tenant_id: str, top_n: int = 5) -> dict
         )).scalars().all()
     except Exception:
         logger.warning("CVE dashboard tile failed", exc_info=True)
+        await _rollback(db)
         return {"pertinent_count": 0, "top": []}
 
     return {
@@ -324,6 +325,7 @@ async def risks_dashboard(
         heatmap = [{"likelihood": lk, "impact": im, "count": int(n)} for lk, im, n in result.all()]
     except Exception:
         logger.warning("risk heatmap tile failed", exc_info=True)
+        await _rollback(db)
         heatmap = []
     return {
         "total": await _total(db, Risk, tenant_id),
@@ -361,6 +363,7 @@ async def _committee_summary(db: AsyncSession, tenant_id: str) -> dict:
         committees = result.scalars().all()
     except Exception:
         logger.warning("governance committee tile failed", exc_info=True)
+        await _rollback(db)
         return {"total": 0, "next_meeting": None}
 
     upcoming = [

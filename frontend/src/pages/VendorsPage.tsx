@@ -336,19 +336,19 @@ function AddVendorModal({ onClose, onSaved }: { readonly onClose: () => void; re
           </div>
 
           <div>
-            <label htmlFor="v-contract" className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Upload Contract (Optional)</label>
+            <label htmlFor="v-contract" className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">{t("vendors.upload_contract_optional", "Upload Contract (Optional)")}</label>
             <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 text-center cursor-pointer hover:border-blue-400 hover:bg-blue-50 transition-colors"
               onClick={() => document.getElementById("v-contract")?.click()}>
               <input id="v-contract" type="file" accept=".pdf,.docx,.xlsx,.xls,.txt" className="hidden"
                 onChange={e => setContractFile(e.target.files?.[0] || null)} />
               <p className="text-sm text-gray-600">
                 {contractFile ? (
-                  <>✓ <strong>{contractFile.name}</strong> selected</>
+                  <>✓ <strong>{contractFile.name}</strong></>
                 ) : (
-                  <>Click to upload contract (PDF, DOCX, XLSX, XLS, TXT)</>
+                  <>{t("vendors.upload_contract_hint", "Click to upload contract (PDF, DOCX, XLSX, XLS, TXT)")}</>
                 )}
               </p>
-              <p className="text-xs text-gray-400 mt-1">AI will automatically review the contract</p>
+              <p className="text-xs text-gray-400 mt-1">{t("vendors.upload_contract_ai_note", "AI will automatically review the contract")}</p>
             </div>
           </div>
 
@@ -415,11 +415,11 @@ function AddVendorModal({ onClose, onSaved }: { readonly onClose: () => void; re
                 <div className="flex items-center justify-between mb-2">
                   <div className="flex items-center gap-2">
                     <Sparkles className="w-4 h-4 text-gray-600" />
-                    <h3 className="text-sm font-bold text-gray-900">AI Risk Assessment</h3>
+                    <h3 className="text-sm font-bold text-gray-900">{t("vendors.ai_risk_assessment")}</h3>
                   </div>
                   <div className="text-right">
                     <div className="text-2xl font-bold">{aiResult.initial_risk_score.toFixed(1)}<span className="text-xs text-gray-500">/10</span></div>
-                    <div className="text-xs uppercase font-semibold">{aiResult.risk_level}</div>
+                    <div className="text-xs uppercase font-semibold">{String(t(`vendors.tiers.${aiResult.risk_level}` as never, aiResult.risk_level))}</div>
                   </div>
                 </div>
                 <p className="text-xs text-gray-700">{aiResult.summary}</p>
@@ -470,7 +470,7 @@ function AddVendorModal({ onClose, onSaved }: { readonly onClose: () => void; re
               )}
 
               <div className="bg-gray-50 rounded-lg p-3 text-xs text-gray-600">
-                <strong>Suggested Risk Score:</strong> {form.risk_score}/40 (auto-set from AI analysis)
+<strong>{t("vendors.suggested_risk_score", "Suggested Risk Score")}:</strong> {form.risk_score}/40
               </div>
             </div>
           )}
@@ -485,7 +485,7 @@ function AddVendorModal({ onClose, onSaved }: { readonly onClose: () => void; re
                 </button>
                 <button type="submit"
                   className="flex-1 py-2.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium transition-colors">
-                  Next: Questionnaire →
+                  {t("vendors.next_questionnaire", "Next: Questionnaire")} →
                 </button>
               </>
             )}
@@ -493,19 +493,19 @@ function AddVendorModal({ onClose, onSaved }: { readonly onClose: () => void; re
               <>
                 <button type="button" onClick={() => setStep(1)} disabled={analyzing}
                   className="flex-1 py-2.5 rounded-lg border border-gray-200 text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors disabled:opacity-50">
-                  ← Back
+                  ← {t("common.back")}
                 </button>
                 <button type="button" onClick={handleAnalyze} disabled={analyzing}
                   className="flex-1 py-2.5 rounded-lg bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white text-sm font-medium transition-colors disabled:opacity-50 flex items-center justify-center gap-2">
                   {analyzing ? (
                     <>
                       <Loader2 className="w-4 h-4 animate-spin" />
-                      AI Analyzing...
+                      {t("ai.analyzing", "AI Analyzing…")}
                     </>
                   ) : (
                     <>
                       <Sparkles className="w-4 h-4" />
-                      Analyze with AI
+                      {t("vendors.analyze_with_ai", "Analyze with AI")}
                     </>
                   )}
                 </button>
@@ -515,7 +515,7 @@ function AddVendorModal({ onClose, onSaved }: { readonly onClose: () => void; re
               <>
                 <button type="button" onClick={() => setStep(2)} disabled={uploading}
                   className="flex-1 py-2.5 rounded-lg border border-gray-200 text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors disabled:opacity-50">
-                  ← Back
+                  ← {t("common.back")}
                 </button>
                 <button type="button" onClick={handleFinalSave} disabled={uploading}
                   className="flex-1 py-2.5 rounded-lg bg-green-600 hover:bg-green-700 text-white text-sm font-medium transition-colors disabled:opacity-50 flex items-center justify-center gap-2">
@@ -551,14 +551,18 @@ interface ContractItem {
   created_at: string;
 }
 
-const CONTRACT_STATUS_LABELS: Record<string, { label: string; color: string }> = {
-  pending_ai: { label: "AI Analyzing", color: "bg-blue-100 text-blue-700" },
-  ai_reviewed: { label: "Ready for CISO", color: "bg-yellow-100 text-yellow-700" },
-  pending_ciso: { label: "Pending CISO", color: "bg-orange-100 text-orange-700" },
-  approved: { label: "Approved", color: "bg-green-100 text-green-700" },
-  rejected: { label: "Rejected", color: "bg-red-100 text-red-700" },
-  sent_to_vendor: { label: "Sent to Vendor", color: "bg-purple-100 text-purple-700" },
-  signed: { label: "Signed Agreement", color: "bg-emerald-100 text-emerald-800" },
+// Badge colour per contract workflow state. The LABEL is no longer baked in
+// English here — it goes through t() at render time with the English text as
+// the fallback, so the badge follows the interface language once the keys are
+// added to en/fr/ar (see needs_integration).
+const CONTRACT_STATUS_LABELS: Record<string, { key: string; fallback: string; color: string }> = {
+  pending_ai: { key: "vendors.contract_status.pending_ai", fallback: "AI Analyzing", color: "bg-blue-100 text-blue-700" },
+  ai_reviewed: { key: "vendors.contract_status.ai_reviewed", fallback: "Ready for CISO", color: "bg-yellow-100 text-yellow-700" },
+  pending_ciso: { key: "vendors.contract_status.pending_ciso", fallback: "Pending CISO", color: "bg-orange-100 text-orange-700" },
+  approved: { key: "vendors.contract_status.approved", fallback: "Approved", color: "bg-green-100 text-green-700" },
+  rejected: { key: "vendors.contract_status.rejected", fallback: "Rejected", color: "bg-red-100 text-red-700" },
+  sent_to_vendor: { key: "vendors.contract_status.sent_to_vendor", fallback: "Sent to Vendor", color: "bg-purple-100 text-purple-700" },
+  signed: { key: "vendors.contract_status.signed", fallback: "Signed Agreement", color: "bg-emerald-100 text-emerald-800" },
 };
 
 function VendorDetailModal({ vendor, onClose, onRunAI }: { readonly vendor: VendorEntry; readonly onClose: () => void; readonly onRunAI: () => void }) {
@@ -631,7 +635,7 @@ function VendorDetailModal({ vendor, onClose, onRunAI }: { readonly vendor: Vend
                 : "text-gray-500 hover:text-gray-700"
             }`}
           >
-            Overview
+            {t("vendors.tab_overview", "Overview")}
             {activeTab === "overview" && (
               <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-600"></div>
             )}
@@ -645,7 +649,7 @@ function VendorDetailModal({ vendor, onClose, onRunAI }: { readonly vendor: Vend
             }`}
           >
             <MapIcon className="w-3.5 h-3.5" />
-            Risk Cartography
+            {t("nav.risk_cartography", "Risk Cartography")}
             {activeTab === "cartography" && (
               <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-600"></div>
             )}
@@ -719,7 +723,7 @@ function VendorDetailModal({ vendor, onClose, onRunAI }: { readonly vendor: Vend
             <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
               <div className="flex items-center gap-2 mb-3">
                 <Sparkles className="w-4 h-4 text-blue-600" />
-                <p className="text-xs font-semibold text-blue-700">AI Risk Assessment Result</p>
+                <p className="text-xs font-semibold text-blue-700">{t("vendors.ai_risk_assessment")}</p>
               </div>
               <div className="prose prose-sm max-w-none text-gray-700 text-xs overflow-y-auto max-h-64">
                 {(vendor as any).description.split('\n').map((line: string, i: number) => (
@@ -734,7 +738,7 @@ function VendorDetailModal({ vendor, onClose, onRunAI }: { readonly vendor: Vend
             <div className="flex items-center justify-between mb-2">
               <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide flex items-center gap-1">
                 <FileCheck className="w-3 h-3" />
-                Contracts {contracts.length > 0 && `(${contracts.length})`}
+                {t("vendors.contracts", "Contracts")} {contracts.length > 0 && `(${contracts.length})`}
               </p>
             </div>
             {loadingContracts ? (
@@ -743,7 +747,7 @@ function VendorDetailModal({ vendor, onClose, onRunAI }: { readonly vendor: Vend
               </div>
             ) : contracts.length === 0 ? (
               <div className="bg-gray-50 rounded-xl p-3 text-center">
-                <p className="text-xs text-gray-500">No contracts uploaded yet</p>
+                <p className="text-xs text-gray-500">{t("vendors.no_contracts", "No contracts uploaded yet")}</p>
               </div>
             ) : (
               <div className="space-y-2">
@@ -760,12 +764,12 @@ function VendorDetailModal({ vendor, onClose, onRunAI }: { readonly vendor: Vend
                           </div>
                         </div>
                         <span className={`text-xs font-semibold px-2 py-0.5 rounded-full flex-shrink-0 ${statusCfg.color}`}>
-                          {statusCfg.label}
+                          {String(t(statusCfg.key as never, statusCfg.fallback))}
                         </span>
                       </div>
                       {contract.ciso_comments && (
                         <div className="mt-2 text-xs text-gray-600 bg-yellow-50 border border-yellow-100 rounded p-2">
-                          <strong>CISO:</strong> {contract.ciso_comments}
+                          <strong>{t("company_admin.roles.ciso_label")}:</strong> {contract.ciso_comments}
                         </div>
                       )}
                       {/* Start Collaboration button — available once AI has reviewed */}
@@ -776,8 +780,8 @@ function VendorDetailModal({ vendor, onClose, onRunAI }: { readonly vendor: Vend
                           className="mt-2 w-full flex items-center justify-center gap-1.5 py-1.5 text-xs font-medium rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-50 transition-colors"
                         >
                           {startingCollab === contract.id
-                            ? <><Loader2 className="w-3 h-3 animate-spin" /> Opening…</>
-                            : <><ExternalLink className="w-3 h-3" /> Start Collaboration with Vendor</>}
+                            ? <><Loader2 className="w-3 h-3 animate-spin" /> {t("common.loading")}</>
+                            : <><ExternalLink className="w-3 h-3" /> {t("vendors.start_collaboration", "Start Collaboration with Vendor")}</>}
                         </button>
                       )}
                     </div>
