@@ -4,7 +4,8 @@ import LegalPage from "@/components/landing/LegalPage";
 import { canonicalUrl, hreflangAlternates, OG_LOCALE, type Locale } from "@/lib/seo";
 import { OG_IMAGE } from "@/lib/brand";
 
-export function generateMetadata({ params }: { params: { locale: Locale } }): Metadata {
+export async function generateMetadata(props: { params: Promise<{ locale: Locale }> }): Promise<Metadata> {
+  const params = await props.params;
   const title = "Privacy Policy | GRCEye";
   const description =
     "How GRCEye collects, uses, stores and protects personal data, and the rights you have over it under the GDPR.";
@@ -27,7 +28,8 @@ export function generateMetadata({ params }: { params: { locale: Locale } }): Me
   };
 }
 
-export default function PrivacyPage({ params }: { params: { locale: Locale } }) {
+export default async function PrivacyPage(props: { params: Promise<{ locale: Locale }> }) {
+  const params = await props.params;
   const to = (path: string) => `/${params.locale}${path}`;
   return (
     <LegalPage

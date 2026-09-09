@@ -23,7 +23,8 @@ const META: Record<Locale, { title: string; description: string }> = {
   },
 };
 
-export function generateMetadata({ params }: { params: { locale: Locale } }): Metadata {
+export async function generateMetadata(props: { params: Promise<{ locale: Locale }> }): Promise<Metadata> {
+  const params = await props.params;
   const m = META[params.locale];
   return {
     title: { absolute: m.title },
@@ -57,7 +58,8 @@ const ABOUT_JSON_LD = {
   mainEntity: { "@id": ORG_ID },
 };
 
-export default function AboutPage({ params }: { params: { locale: Locale } }) {
+export default async function AboutPage(props: { params: Promise<{ locale: Locale }> }) {
+  const params = await props.params;
   const to = (path: string) => `/${params.locale}${path}`;
   return (
     <>

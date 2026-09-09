@@ -128,6 +128,17 @@ function serveDashboard(res, urlPath) {
 function handler(req, res) {
   const u = req.url || "/";
 
+  // Next's Image Optimization API is enabled by default and answers 200 here even
+  // though the marketing site uses zero next/image components — so it is pure
+  // attack surface, and the version we run is affected by an unauthenticated RCE
+  // through it (AVIF handling) plus several DoS advisories. Nothing legitimate
+  // requests this path, so refuse it outright rather than relying only on the
+  // framework upgrade.
+  if (u === "/_next/image" || u.startsWith("/_next/image?")) {
+    res.writeHead(404, { "content-type": "text/plain", "x-robots-tag": "noindex" });
+    return res.end("not found");
+  }
+
   if (u === "/api" || u.startsWith("/api/")) return proxy(req, res, BACKEND);
 
   if (u.startsWith("/assets/")) return serveDashboard(res, u);

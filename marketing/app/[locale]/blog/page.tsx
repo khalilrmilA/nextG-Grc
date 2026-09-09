@@ -6,7 +6,8 @@ import { canonicalUrl, hreflangAlternates, OG_LOCALE, type Locale } from "@/lib/
 import { OG_IMAGE } from "@/lib/brand";
 import { PAGE_META } from "@/lib/seo-meta";
 
-export function generateMetadata({ params }: { params: { locale: Locale } }): Metadata {
+export async function generateMetadata(props: { params: Promise<{ locale: Locale }> }): Promise<Metadata> {
+  const params = await props.params;
   const m = PAGE_META.blog[params.locale];
   return {
     title: { absolute: m.title },
@@ -25,7 +26,8 @@ export function generateMetadata({ params }: { params: { locale: Locale } }): Me
   };
 }
 
-export default function BlogPage({ params }: { params: { locale: Locale } }) {
+export default async function BlogPage(props: { params: Promise<{ locale: Locale }> }) {
+  const params = await props.params;
   // Localize server-side so the client bundle only ships this locale's text —
   // importing all 12 posts' fr+ar translations directly into a client component
   // would bundle every locale's content into every locale's page.

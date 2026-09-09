@@ -20,7 +20,8 @@ const FAQ_Q_BY_LOCALE: Record<Locale, FaqQ> = {
   ar: (ar as unknown as { public: { faq_q: FaqQ } }).public.faq_q,
 };
 
-export function generateMetadata({ params }: { params: { locale: Locale } }): Metadata {
+export async function generateMetadata(props: { params: Promise<{ locale: Locale }> }): Promise<Metadata> {
+  const params = await props.params;
   const m = PAGE_META.faq[params.locale];
   return {
     title: m.title,
@@ -61,7 +62,8 @@ function buildFaqJsonLd(locale: Locale) {
   };
 }
 
-export default function FAQPage({ params }: { params: { locale: Locale } }) {
+export default async function FAQPage(props: { params: Promise<{ locale: Locale }> }) {
+  const params = await props.params;
   return (
     <>
       <script

@@ -4,7 +4,8 @@ import { canonicalUrl, hreflangAlternates, OG_LOCALE, type Locale } from "@/lib/
 import { OG_IMAGE } from "@/lib/brand";
 import { PAGE_META } from "@/lib/seo-meta";
 
-export function generateMetadata({ params }: { params: { locale: Locale } }): Metadata {
+export async function generateMetadata(props: { params: Promise<{ locale: Locale }> }): Promise<Metadata> {
+  const params = await props.params;
   const m = PAGE_META.solutions[params.locale];
   return {
     title: m.title,

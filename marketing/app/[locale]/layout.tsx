@@ -204,13 +204,18 @@ function buildJsonLd(locale: Language) {
 }
 
 /* ── Root Layout ──────────────────────────────────────────────── */
-export default function RootLayout({
-  children,
-  params,
-}: {
-  readonly children: React.ReactNode;
-  readonly params: { locale: string };
-}) {
+export default async function RootLayout(
+  props: {
+    readonly children: React.ReactNode;
+    readonly params: Promise<{ locale: string }>;
+  }
+) {
+  const params = await props.params;
+
+  const {
+    children
+  } = props;
+
   if (!isLocale(params.locale)) notFound();
   const lang = params.locale as Language;
 

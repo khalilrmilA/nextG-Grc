@@ -4,7 +4,8 @@ import LegalPage from "@/components/landing/LegalPage";
 import { canonicalUrl, hreflangAlternates, OG_LOCALE, type Locale } from "@/lib/seo";
 import { OG_IMAGE } from "@/lib/brand";
 
-export function generateMetadata({ params }: { params: { locale: Locale } }): Metadata {
+export async function generateMetadata(props: { params: Promise<{ locale: Locale }> }): Promise<Metadata> {
+  const params = await props.params;
   const title = "Security at GRCEye | How We Protect Your Compliance Data";
   const description =
     "The security controls built into GRCEye: multi-factor authentication, role-based access control, tenant isolation, audit logging and self-hosted AI.";
@@ -27,7 +28,8 @@ export function generateMetadata({ params }: { params: { locale: Locale } }): Me
   };
 }
 
-export default function SecurityPage({ params }: { params: { locale: Locale } }) {
+export default async function SecurityPage(props: { params: Promise<{ locale: Locale }> }) {
+  const params = await props.params;
   const to = (path: string) => `/${params.locale}${path}`;
   return (
     <LegalPage

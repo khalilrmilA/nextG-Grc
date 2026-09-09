@@ -20,7 +20,8 @@ const ARTICLE_UI = {
   ar: { faq: "الأسئلة الشائعة", ctaTitle: "هل أنت مستعد لتطبيق ذلك؟", ctaBody: "توفر GRCEye لفرق الأمن منصة واحدة للمخاطر والامتثال والتدقيق ومخاطر الموردين والسياسات، بذكاء اصطناعي يعمل على بنيتك التحتية الخاصة.", ctaTrial: "ابدأ التجربة المجانية", ctaTalk: "تواصل معنا", continueReading: "تابع القراءة", allArticles: "جميع المقالات" },
 } as const;
 
-export async function generateMetadata({ params }: { params: { slug: string; locale: Locale } }): Promise<Metadata> {
+export async function generateMetadata(props: { params: Promise<{ slug: string; locale: Locale }> }): Promise<Metadata> {
+  const params = await props.params;
   const raw = findPostBySlug(params.slug);
   if (!raw) return { title: "Article not found" };
   const post = localizePost(raw, params.locale);
@@ -52,7 +53,8 @@ export async function generateMetadata({ params }: { params: { slug: string; loc
   };
 }
 
-export default function ArticlePage({ params }: { params: { slug: string; locale: Locale } }) {
+export default async function ArticlePage(props: { params: Promise<{ slug: string; locale: Locale }> }) {
+  const params = await props.params;
   const raw = findPostBySlug(params.slug);
   if (!raw) notFound();
   const post = localizePost(raw, params.locale);

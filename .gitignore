@@ -75,3 +75,6 @@ backend/uploads/
 
 # Local pre-change copies of stale SEO assets (see the 2026-09-08 SEO pass)
 .seo-stale-backup-*/
+
+# Pre-upgrade dependency + dist snapshots (2026-09-09 vulnerability pass)
+.deps-rollback-*/
