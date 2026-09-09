@@ -24,7 +24,15 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import Response
 from sqlalchemy import text
-from jose import jwt, JWTError
+# PyJWT rather than python-jose: jose pulls in `ecdsa`, whose Minerva timing
+# side-channel (CVE-2024-23342) has no upstream fix and never will — the
+# library states it is not designed to be side-channel resistant. Nothing here
+# needs it (JWT_ALGORITHM is HS256), and PyJWT covers the same surface, so the
+# dependency is dropped instead of carrying a permanently-open advisory.
+# Tokens are unaffected: both emit standard HS256 JWTs under the same secret,
+# so sessions issued before this change keep validating.
+import jwt
+from jwt import PyJWTError as JWTError
 
 from app.core.config import settings
 from app.core.database import AsyncSessionLocal

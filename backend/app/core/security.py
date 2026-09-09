@@ -2,7 +2,15 @@ import uuid
 import asyncio
 from datetime import datetime, timedelta, timezone
 from typing import Any
-from jose import jwt, JWTError
+# PyJWT rather than python-jose: jose pulls in `ecdsa`, whose Minerva timing
+# side-channel (CVE-2024-23342) has no upstream fix and never will — the
+# library states it is not designed to be side-channel resistant. Nothing here
+# needs it (JWT_ALGORITHM is HS256), and PyJWT covers the same surface, so the
+# dependency is dropped instead of carrying a permanently-open advisory.
+# Tokens are unaffected: both emit standard HS256 JWTs under the same secret,
+# so sessions issued before this change keep validating.
+import jwt
+from jwt import PyJWTError as JWTError
 from passlib.context import CryptContext
 from fastapi import HTTPException, status
 from app.core import shared_state
