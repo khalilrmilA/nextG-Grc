@@ -8,12 +8,13 @@ import logging
 from datetime import datetime, timezone
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
+from app.core.rate_limit import limiter
 from app.models.user import User
 from app.models.mfa_device import MfaDevice
 from app.models.activity_log import ActivityLog
@@ -74,6 +75,11 @@ class VerifyRequest(BaseModel):
     code: str
 
 
+class CodeRequest(BaseModel):
+    # Required only when the account already has a CONFIRMED device.
+    code: str | None = None
+
+
 class StatusResponse(BaseModel):
     enabled: bool
     confirmed: bool
@@ -82,6 +88,23 @@ class StatusResponse(BaseModel):
 async def _device_for(user_id: str, db: AsyncSession) -> MfaDevice | None:
     result = await db.execute(select(MfaDevice).where(MfaDevice.user_id == user_id))
     return result.scalar_one_or_none()
+
+
+def _require_current_code(device: MfaDevice | None, body: CodeRequest | None) -> None:
+    """Removing or replacing a CONFIRMED second factor needs a code from it.
+
+    Without this, anyone holding a live session (a stolen token, an unlocked
+    browser) could switch the second factor off with one POST — the very thing
+    MFA exists to stop. An unconfirmed enrollment protects nothing yet, so
+    cancelling it needs no code.
+    """
+    if device is None or not device.confirmed:
+        return
+    code = ((body.code if body else None) or "").strip()
+    if not code:
+        raise HTTPException(status_code=400, detail="Enter a current code from your authenticator app to continue.")
+    if not _pyotp().totp.TOTP(device.secret).verify(code, valid_window=1):
+        raise HTTPException(status_code=400, detail="Invalid or expired code.")
 
 
 @router.get("/status", response_model=StatusResponse)
@@ -94,14 +117,18 @@ async def mfa_status(
 
 
 @router.post("/enroll", response_model=EnrollResponse)
+@limiter.limit("10/minute")
 async def mfa_enroll(
+    request: Request,
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
+    body: CodeRequest | None = None,
 ):
     """Start (or restart) enrollment: issue a fresh unconfirmed TOTP secret."""
     pyotp = _pyotp()
     secret = pyotp.random_base32()
     device = await _device_for(current_user.id, db)
+    _require_current_code(device, body)
     # Re-enrolling over a confirmed device clears `confirmed`, and login() only
     # challenges on a confirmed device — so this call, on its own, turns the
     # account's second factor OFF until the new secret is verified. That is a
@@ -143,11 +170,15 @@ async def mfa_verify(
 
 
 @router.post("/disable", status_code=status.HTTP_204_NO_CONTENT)
+@limiter.limit("10/minute")
 async def mfa_disable(
+    request: Request,
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
+    body: CodeRequest | None = None,
 ):
     device = await _device_for(current_user.id, db)
+    _require_current_code(device, body)
     if device is not None:
         was_confirmed = bool(device.confirmed)
         await db.delete(device)

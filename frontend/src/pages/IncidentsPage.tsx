@@ -4,6 +4,8 @@ import { Plus, Search, X, Loader2, Filter, AlertTriangle, ShieldAlert, Clock, Fl
 import { useTranslation } from "react-i18next";
 import { incidentsApi, vulnerabilitiesApi, assetsApi, usersApi } from "@/api/endpoints";
 import { MultiSelect } from "@/components/common/MultiSelect";
+import IncidentDetailModal from "@/components/incidents/IncidentDetailModal";
+import { useAuthStore, hasAnyRole } from "@/store/auth";
 
 const SEV_BADGE: Record<string, string> = {
   critical: "bg-red-100 text-red-700 border-red-200",
@@ -18,6 +20,7 @@ const STATUS_BADGE: Record<string, string> = {
   contained: "bg-orange-100 text-orange-700 border-orange-200",
   resolved: "bg-green-100 text-green-700 border-green-200",
   closed: "bg-gray-100 text-gray-600 border-gray-200",
+  post_mortem: "bg-purple-100 text-purple-700 border-purple-200",
 };
 
 const CATEGORY_OPTIONS = [
@@ -52,6 +55,15 @@ export default function IncidentsPage() {
   const [submitting, setSubmitting] = useState(false);
   const [draftingId, setDraftingId] = useState<string | null>(null);
   const [draftError, setDraftError] = useState("");
+  const [selected, setSelected] = useState<any | null>(null);
+  // PATCH and DELETE /incidents/{id} are require_roles(SECURITY_ANALYST, CISO);
+  // require_roles auto-passes the scalar tenant_admin / super_admin role. Viewer
+  // (and every other role) gets 403, so the panel opens read-only for them.
+  // (Group-granted roles / delegations are resolved server-side only; the
+  // backend stays the authority and its 403 detail is shown if we guess wrong.)
+  const user = useAuthStore((u) => u);
+  const isAdmin = user?.role === "tenant_admin" || user?.role === "super_admin";
+  const canManage = isAdmin || hasAnyRole(user, ["security_analyst", "ciso"]);
 
   async function createScenarioFromIncident(incidentId: string) {
     setDraftingId(incidentId);
@@ -241,7 +253,7 @@ export default function IncidentsPage() {
             </thead>
             <tbody>
               {filtered.map((item: any) => (
-                <tr key={item.id} className="border-b border-gray-50 hover:bg-gray-50/50 transition-colors">
+                <tr key={item.id} onClick={() => setSelected(item)} className="border-b border-gray-50 hover:bg-gray-50/50 transition-colors cursor-pointer">
                   <td className="px-6 py-4 font-medium text-gray-900">{item.title}</td>
                   <td className="px-6 py-4 text-gray-600">{item.category ? String(t(`vocab.${item.category}` as never, humanise(item.category))) : "-"}</td>
                   <td className="px-6 py-4">
@@ -259,7 +271,7 @@ export default function IncidentsPage() {
                   <td className="px-6 py-4 text-right">
                     <button
                       type="button"
-                      onClick={() => createScenarioFromIncident(item.id)}
+                      onClick={(e) => { e.stopPropagation(); createScenarioFromIncident(item.id); }}
                       disabled={draftingId === item.id}
                       title={t("incidents.create_scenario", "Create risk scenario from this incident")}
                       className="inline-flex items-center justify-center p-1.5 rounded-lg text-blue-600 hover:bg-blue-50 hover:text-blue-800 disabled:opacity-50"
@@ -273,6 +285,23 @@ export default function IncidentsPage() {
           </table>
         )}
       </div>
+
+      {/* Detail / edit modal */}
+      {selected && (
+        <IncidentDetailModal
+          key={selected.id}
+          incident={selected}
+          canEdit={canManage}
+          canDelete={canManage}
+          vulnOptions={vulnOptions}
+          assetOptions={assetOptions}
+          userNames={userNames}
+          drafting={draftingId === selected.id}
+          onCreateScenario={createScenarioFromIncident}
+          onClose={() => setSelected(null)}
+          onChanged={() => { load(); loadStats(); }}
+        />
+      )}
 
       {/* Create Modal */}
       {showModal && (

@@ -2,6 +2,7 @@
 
 Parses vulnerability-scanner exports into ``Vulnerability`` rows:
 - Nessus ``.nessus`` XML (parsed with defusedxml — safe against XXE/entity bombs)
+- OpenVAS / Greenbone XML reports (detected from the document root, not the name)
 - Generic CSV exports from Qualys / OpenVAS (and similar)
 
 Findings are auto-matched to existing assets by IP / hostname where possible,
@@ -166,7 +167,10 @@ def parse_nessus(content: bytes, include_info: bool = False) -> list[ParsedFindi
     avoid importing pure host-info noise.
     """
     text = content.decode("utf-8", errors="replace") if isinstance(content, (bytes, bytearray)) else content
-    root = safe_xml_fromstring(text)
+    return _nessus_from_root(safe_xml_fromstring(text), include_info=include_info)
+
+
+def _nessus_from_root(root, include_info: bool = False) -> list[ParsedFinding]:
     findings: list[ParsedFinding] = []
 
     for host in root.iter("ReportHost"):
@@ -219,6 +223,83 @@ def parse_nessus(content: bytes, include_info: bool = False) -> list[ParsedFindi
                 host_name=host_name,
                 references=refs,
                 solution=solution,
+            ))
+    return findings
+
+
+# ---------------------------------------------------------------------------
+# OpenVAS / Greenbone XML report
+# ---------------------------------------------------------------------------
+
+def _openvas_tag(tags: str | None, name: str) -> str | None:
+    """Read one ``key=value`` entry from an NVT's pipe-separated <tags>."""
+    for part in (tags or "").split("|"):
+        key, _, value = part.partition("=")
+        if key.strip() == name and value.strip():
+            return value.strip()
+    return None
+
+
+def _openvas_from_root(root, include_info: bool = False) -> list[ParsedFinding]:
+    """Parse a Greenbone/OpenVAS XML report (GMP get_reports / 'XML' export).
+
+    Each <result> carries its host (IP text + optional <hostname>), the NVT
+    (oid, name, cvss, tags, solution, refs) and a threat/severity. Log-level
+    results are host-info noise and skipped unless ``include_info``.
+    """
+    findings: list[ParsedFinding] = []
+    for results in root.iter("results"):
+        for res in results.findall("result"):
+            nvt = res.find("nvt")
+            if nvt is None:
+                continue
+            cvss = _parse_float(res.findtext("severity")) or _parse_float(nvt.findtext("cvss_base"))
+            threat = (res.findtext("threat") or "").strip()
+            severity = _TEXT_SEVERITY.get(threat.lower()) if threat else None
+            if severity is None:
+                severity = _cvss_to_severity(cvss) if cvss is not None else "medium"
+            if severity == "informational" and not include_info:
+                continue
+
+            host_el = res.find("host")
+            host_ip = ((host_el.text or "").strip() or None) if host_el is not None else None
+            host_name = (host_el.findtext("hostname") or "").strip() or None if host_el is not None else None
+            if host_ip and not _looks_like_ip(host_ip) and not host_name:
+                host_name, host_ip = host_ip, None
+
+            cves: list[str] = []
+            urls: list[str] = []
+            for ref in nvt.iter("ref"):
+                rtype = (ref.get("type") or "").lower()
+                rid = (ref.get("id") or "").strip()
+                if rid and rtype == "cve":
+                    cves.append(rid)
+                elif rid and rtype == "url":
+                    urls.append(rid)
+            # Older GMP reports list CVEs in a single comma-separated <cve>.
+            for raw in (nvt.findtext("cve") or "").replace(" ", "").split(","):
+                if raw and raw.upper() != "NOCVE" and raw not in cves:
+                    cves.append(raw)
+
+            tags = nvt.findtext("tags")
+            title = (nvt.findtext("name") or res.findtext("name") or "").strip() or "Unnamed finding"
+            description = (
+                (res.findtext("description") or "").strip()
+                or _openvas_tag(tags, "summary")
+                or None
+            )
+            solution = (nvt.findtext("solution") or "").strip() or _openvas_tag(tags, "solution")
+
+            findings.append(ParsedFinding(
+                title=title[:500],
+                ref_id=cves[0] if cves else (nvt.get("oid") or None),
+                description=description,
+                severity=severity,
+                cvss_score=cvss,
+                host_ip=host_ip,
+                host_name=host_name,
+                references=[*cves, *urls],
+                solution=solution or None,
             ))
     return findings
 
@@ -368,12 +449,33 @@ async def _build_control_remediation_index(db: AsyncSession, tenant_id: str) -> 
     return {c.ref_id: c for c in result.scalars().all() if c.ref_id}
 
 
+def _parse_xml_findings(content: bytes) -> list[ParsedFinding]:
+    """Pick the XML parser from the document itself, not the file name.
+
+    ``.xml`` used to mean "Nessus" unconditionally, so an OpenVAS XML report
+    went through the Nessus parser, matched no <ReportHost>, and was journaled
+    as a *completed* import of zero findings — a silent loss.
+    """
+    text = content.decode("utf-8", errors="replace") if isinstance(content, (bytes, bytearray)) else content
+    root = safe_xml_fromstring(text)
+    tag = root.tag.split("}")[-1]
+    if tag.startswith("NessusClientData") or root.find(".//ReportHost") is not None:
+        return _nessus_from_root(root)
+    if root.find(".//results/result/nvt") is not None or tag in ("report", "get_reports_response"):
+        return _openvas_from_root(root)
+    raise ValueError(
+        f"Unrecognised XML report (root <{tag}>). Supported XML: Nessus (.nessus) and "
+        f"OpenVAS/Greenbone XML reports; other tools can be imported as CSV."
+    )
+
+
 def _parse_findings(tool: str, filename: str | None, content: bytes) -> list[ParsedFinding]:
-    tool_l = (tool or "").strip().lower()
     fname = (filename or "").strip().lower()
-    is_nessus = tool_l in ("nessus", "tenable") or fname.endswith(".nessus") or fname.endswith(".xml")
-    if is_nessus:
-        return parse_nessus(content)
+    head = bytes(content[:512]).lstrip(b"\xef\xbb\xbf \t\r\n") if isinstance(content, (bytes, bytearray)) else str(content)[:512].lstrip().encode()
+    # XML by extension or by content — so a Nessus/Tenable CSV export (which the
+    # old tool-name rule forced through the XML parser) now reads as CSV.
+    if fname.endswith((".nessus", ".xml")) or head.startswith(b"<"):
+        return _parse_xml_findings(content)
     return parse_csv(content)
 
 

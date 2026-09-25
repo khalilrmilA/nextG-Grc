@@ -8,7 +8,7 @@ from datetime import datetime
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -21,7 +21,7 @@ from app.api.v1.dependencies.auth import get_tenant_id, require_roles
 from app.api.v1.dependencies.features import require_feature
 from app.services.scanner_import import import_scan
 from app.models.scanner_connector import ScannerConnector
-from app.services.scanner_connectors import sync_connector, test_connector
+from app.services.scanner_connectors import PULL_TOOLS, sync_connector, test_connector
 
 router = APIRouter()
 
@@ -120,14 +120,27 @@ _CONNECTOR_TOOLS = {"tenable", "nessus", "qualys", "openvas", "demo"}
 
 
 class ConnectorIn(BaseModel):
-    name: str
+    name: str = Field(min_length=1, max_length=200)
     tool: str
-    base_url: str | None = None
-    api_key: str | None = None
-    api_secret: str | None = None
+    base_url: str | None = Field(default=None, max_length=500)
+    api_key: str | None = Field(default=None, max_length=500)
+    api_secret: str | None = Field(default=None, max_length=500)
     verify_ssl: bool = True
     schedule_enabled: bool = False
-    interval_hours: int = 168
+    interval_hours: int = Field(default=168, ge=1, le=8760)  # 1 hour .. 1 year
+
+
+class ConnectorPatch(BaseModel):
+    """Partial update. Secrets are only replaced when a non-empty value is sent,
+    so the UI can edit a schedule without ever holding the stored keys."""
+    name: str | None = Field(default=None, min_length=1, max_length=200)
+    base_url: str | None = Field(default=None, max_length=500)
+    api_key: str | None = Field(default=None, max_length=500)
+    api_secret: str | None = Field(default=None, max_length=500)
+    verify_ssl: bool | None = None
+    enabled: bool | None = None
+    schedule_enabled: bool | None = None
+    interval_hours: int | None = Field(default=None, ge=1, le=8760)
 
 
 class ConnectorOut(BaseModel):
@@ -161,6 +174,25 @@ async def _get_connector(db: AsyncSession, cid: str, tenant_id: str) -> ScannerC
     return conn
 
 
+def _clean_base_url(raw: str | None) -> str | None:
+    """Empty -> None; otherwise it must at least be an http(s) URL. Reachability
+    and the private-address policy are checked at call time (scanner_connectors
+    ._check_target), where DNS is resolved for the request actually made."""
+    url = (raw or "").strip()
+    if not url:
+        return None
+    if not url.lower().startswith(("http://", "https://")):
+        raise HTTPException(400, "base_url must start with http:// or https://")
+    return url
+
+
+def _assert_schedulable(tool: str, schedule_enabled: bool) -> None:
+    # OpenVAS has no pull (GMP, not HTTP): a schedule on it could only ever fail
+    # and raise a failure alert every interval.
+    if schedule_enabled and tool not in PULL_TOOLS:
+        raise HTTPException(400, f"'{tool}' connectors are file-import only and cannot sync automatically")
+
+
 @router.post("/connectors", response_model=ConnectorOut, status_code=201)
 async def create_connector(
     body: ConnectorIn,
@@ -171,9 +203,10 @@ async def create_connector(
 ):
     if body.tool not in _CONNECTOR_TOOLS:
         raise HTTPException(400, f"tool must be one of {sorted(_CONNECTOR_TOOLS)}")
+    _assert_schedulable(body.tool, body.schedule_enabled)
     conn = ScannerConnector(
-        tenant_id=tenant_id, name=body.name, tool=body.tool, base_url=body.base_url,
-        api_key=body.api_key, api_secret=body.api_secret, verify_ssl=body.verify_ssl,
+        tenant_id=tenant_id, name=body.name.strip(), tool=body.tool, base_url=_clean_base_url(body.base_url),
+        api_key=body.api_key or None, api_secret=body.api_secret or None, verify_ssl=body.verify_ssl,
         schedule_enabled=body.schedule_enabled, interval_hours=body.interval_hours,
     )
     db.add(conn)
@@ -193,6 +226,40 @@ async def list_connectors(
         .order_by(ScannerConnector.created_at.desc())
     )
     return list(result.scalars().all())
+
+
+@router.patch("/connectors/{cid}", response_model=ConnectorOut)
+async def update_connector(
+    cid: str,
+    body: ConnectorPatch,
+    current_user: Annotated[User, Depends(_GATE)],
+    _role: Annotated[User, Depends(_CONNECTOR_ADMIN)],
+    tenant_id: Annotated[str, Depends(get_tenant_id)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    """Partial update (schedule, enable, URL, credentials). Tool is immutable."""
+    conn = await _get_connector(db, cid, tenant_id)
+    sent = body.model_fields_set
+    if "name" in sent and body.name is not None:
+        if not body.name.strip():
+            raise HTTPException(400, "name cannot be empty")
+        conn.name = body.name.strip()
+    if "base_url" in sent:
+        conn.base_url = _clean_base_url(body.base_url)
+    # Never clear a stored secret by omission or by an empty field.
+    if body.api_key:
+        conn.api_key = body.api_key
+    if body.api_secret:
+        conn.api_secret = body.api_secret
+    for flag in ("verify_ssl", "enabled", "schedule_enabled"):
+        if flag in sent and getattr(body, flag) is not None:
+            setattr(conn, flag, getattr(body, flag))
+    if "interval_hours" in sent and body.interval_hours is not None:
+        conn.interval_hours = body.interval_hours
+    _assert_schedulable((conn.tool or "").lower(), bool(conn.schedule_enabled))
+    await db.commit()
+    await db.refresh(conn)
+    return conn
 
 
 @router.delete("/connectors/{cid}", status_code=204)

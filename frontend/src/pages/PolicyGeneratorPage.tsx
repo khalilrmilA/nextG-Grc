@@ -448,7 +448,12 @@ export default function PolicyGeneratorPage() {
   const [done, setDone] = useState(false);
   const [error, setError] = useState("");
   const [copied, setCopied] = useState(false);
-  const [saved, setSaved] = useState(false);
+  // The content last written to the Policy record this page is attached to
+  // (null = nothing persisted yet). Drives the "Save as Draft" enabled state.
+  const [persistedContent, setPersistedContent] = useState<string | null>(null);
+  const persistedRef = useRef<string | null>(null);
+  function markPersisted(c: string | null) { persistedRef.current = c; setPersistedContent(c); }
+  const [busy, setBusy] = useState(false);
   const [editing, setEditing] = useState(false);
   const [editContent, setEditContent] = useState("");
   const [approved, setApproved] = useState(false);
@@ -456,6 +461,53 @@ export default function PolicyGeneratorPage() {
   const abortRef = useRef<AbortController | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const outputRef = useRef<string>("");
+  // One generation must yield at most one Policy. The auto-save at the end of
+  // the stream creates it; "Save as Draft" / "Approve & Save" then add a
+  // version to / approve THAT record instead of creating another one.
+  const policyIdRef = useRef<string | null>(null);
+  // True while policyIdRef points at a draft this page generated itself — a
+  // regeneration of the same document then adds a version to it rather than
+  // stacking a fresh draft. False for approved records and for documents
+  // opened from the "previous documents" list.
+  const reuseOnRegenRef = useRef(false);
+  // In-flight auto-save, awaited by the explicit save buttons so a quick
+  // click right after the stream ends cannot race it into a duplicate.
+  const autoSaveRef = useRef<Promise<void> | null>(null);
+
+  function forgetPolicy() {
+    policyIdRef.current = null;
+    reuseOnRegenRef.current = false;
+    autoSaveRef.current = null;
+    markPersisted(null);
+    setApproved(false);
+  }
+
+  function policyMeta() {
+    const category = DOCUMENT_CATEGORIES.find(c => c.docs.some(d => d === selectedDoc))?.label || "General";
+    return {
+      title: selectedDoc ?? "",
+      description: `AI-generated ${selectedDoc} for ${form.org_name}. Industry: ${form.industry}. Frameworks: ${form.frameworks.join(", ") || "None"}.`,
+      category,
+      linked_controls: preselectedControls.map(c => c.control_id),
+    };
+  }
+
+  /** Write `content` to the attached Policy (new version) or create the Policy
+   *  if none is attached yet. Returns the new version id when one was created
+   *  via the versions endpoint, else null. */
+  async function persistContent(content: string, changeSummary: string): Promise<string | null> {
+    const id = policyIdRef.current;
+    if (id) {
+      const v = await policiesApi.createVersion(id, { content, change_summary: changeSummary });
+      markPersisted(content);
+      return v.id;
+    }
+    const p = await policiesApi.create({ ...policyMeta(), content } as any);
+    policyIdRef.current = String(p.id);
+    setSelectedPolicyId(String(p.id));
+    markPersisted(content);
+    return null;
+  }
 
   useEffect(() => {
     if (preselectedFramework) {
@@ -488,6 +540,7 @@ export default function PolicyGeneratorPage() {
     try {
       await policiesApi.delete(policyId);
       await refetchPolicies();
+      if (policyIdRef.current === policyId) forgetPolicy();
       if (selectedPolicyId === policyId) {
         setSelectedPolicyId(null);
         setOutput("");
@@ -510,10 +563,14 @@ export default function PolicyGeneratorPage() {
     setOutput("");
     setDone(false);
     setError("");
-    setSaved(false);
     setEditing(false);
     setEditContent("");
     outputRef.current = "";
+    // Regenerating the same document keeps writing into the draft the last
+    // generation auto-saved; anything else starts a new record.
+    if (!reuseOnRegenRef.current) forgetPolicy();
+    autoSaveRef.current = null;
+    markPersisted(null);
     setApproved(false);
     setStreaming(true);
 
@@ -552,20 +609,18 @@ export default function PolicyGeneratorPage() {
           setDone(true);
           await refreshAiTokens();
           if (selectedDoc && outputRef.current.trim()) {
-            try {
-              const category = DOCUMENT_CATEGORIES.find(c => c.docs.some(d => d === selectedDoc))?.label || "General";
-              await policiesApi.create({
-                title: selectedDoc,
-                description: `AI-generated ${selectedDoc} for ${form.org_name}. Industry: ${form.industry}. Frameworks: ${form.frameworks.join(", ") || "None"}.`,
-                category,
-                linked_controls: [],
-                content: outputRef.current,
-              } as any);
-              setSaved(true);
-              await refetchPolicies();
-            } catch {
-              // silent — user can still save manually
-            }
+            const content = outputRef.current;
+            const summary = policyIdRef.current ? "Regenerated with AI" : "Initial version";
+            autoSaveRef.current = (async () => {
+              try {
+                await persistContent(content, summary);
+                reuseOnRegenRef.current = true;
+                await refetchPolicies();
+              } catch {
+                // silent — user can still save manually
+              }
+            })();
+            await autoSaveRef.current;
           }
         },
         ctrl.signal,
@@ -576,7 +631,8 @@ export default function PolicyGeneratorPage() {
       }
       setStreaming(false);
     }
-  }, [selectedDoc, form, t]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedDoc, form, t, targetControls, preselectedControls]);
 
   const currentContent = editing ? editContent : (editContent || output);
 
@@ -634,44 +690,49 @@ ${currentContent
   }
 
   async function handleSaveToPolicies() {
-    if (!selectedDoc) return;
+    if (!selectedDoc || busy) return;
+    setBusy(true);
     try {
-      const content = editing ? editContent : output;
-      const category = DOCUMENT_CATEGORIES.find(c => c.docs.some(d => d === selectedDoc))?.label || "General";
-      await policiesApi.create({
-        title: selectedDoc,
-        description: `AI-generated ${selectedDoc} for ${form.org_name}. Industry: ${form.industry}. Frameworks: ${form.frameworks.join(", ") || "None"}.`,
-        category,
-        linked_controls: preselectedControls.map(c => c.control_id),
-        content,
-      } as any);
-      setSaved(true);
+      if (autoSaveRef.current) await autoSaveRef.current;
+      const content = currentContent;
+      if (policyIdRef.current && content === persistedRef.current) return; // already saved
+      await persistContent(content, "Edited in Doc Generator");
       await refetchPolicies();
     } catch (err) {
       console.error("Failed to save policy:", err);
       setError(t("docgen.save_failed"));
+    } finally {
+      setBusy(false);
     }
   }
 
   async function handleApprove() {
-    if (!selectedDoc) return;
+    if (!selectedDoc || busy) return;
+    setBusy(true);
     try {
-      const content = editing ? editContent : output;
-      const category = DOCUMENT_CATEGORIES.find(c => c.docs.some(d => d === selectedDoc))?.label || "General";
-      await policiesApi.create({
-        title: selectedDoc,
-        description: `AI-generated ${selectedDoc} for ${form.org_name}. Industry: ${form.industry}. Frameworks: ${form.frameworks.join(", ") || "None"}.`,
-        category,
-        status: "approved",
-        linked_controls: preselectedControls.map(c => c.control_id),
-        content,
-      } as any);
+      if (autoSaveRef.current) await autoSaveRef.current;
+      const content = currentContent;
+      let versionId: string | null = null;
+      if (!policyIdRef.current || content !== persistedRef.current) {
+        versionId = await persistContent(content, "Approved in Doc Generator");
+      }
+      const id = policyIdRef.current;
+      if (!id) throw new Error("No policy to approve");
+      if (!versionId) {
+        const versions = await policiesApi.getVersions(id);
+        versionId = (versions.find(v => v.is_current) ?? versions[0])?.id ?? null;
+      }
+      if (versionId) await policiesApi.approveVersion(id, versionId);
+      await policiesApi.update(id, { status: "approved" });
+      // An approved record is never silently rewritten by a regeneration.
+      reuseOnRegenRef.current = false;
       setApproved(true);
-      setSaved(true);
       await refetchPolicies();
     } catch (err) {
       console.error("Failed to approve policy:", err);
       setError(t("docgen.save_failed"));
+    } finally {
+      setBusy(false);
     }
   }
 
@@ -736,7 +797,7 @@ ${currentContent
                   return (
                     <button
                       key={doc}
-                      onClick={() => { setSelectedDoc(doc); setOutput(""); setDone(false); setError(""); }}
+                      onClick={() => { if (doc !== selectedDoc) { forgetPolicy(); setSelectedPolicyId(null); } setSelectedDoc(doc); setOutput(""); setDone(false); setError(""); }}
                       className={`w-full flex items-center justify-between gap-2 px-3 py-2.5 rounded-xl text-left text-sm transition-colors ${
                         isSelected
                           ? "bg-blue-600 text-white"
@@ -999,13 +1060,14 @@ ${currentContent
                 <>
                   <button
                     onClick={handleSaveToPolicies}
-                    disabled={saved}
+                    disabled={busy || (persistedContent !== null && currentContent === persistedContent)}
                     className="flex items-center gap-1.5 text-xs text-gray-700 bg-white border border-gray-200 hover:bg-gray-50 disabled:opacity-60 px-3 py-1.5 rounded-lg transition-colors"
                   >
                     <Save className="w-3.5 h-3.5" /> {t("docgen.save_draft")}
                   </button>
                   <button
                     onClick={handleApprove}
+                    disabled={busy}
                     className="flex items-center gap-1.5 text-xs text-white bg-green-600 hover:bg-green-700 px-3 py-1.5 rounded-lg transition-colors font-medium"
                   >
                     <CheckCircle className="w-3.5 h-3.5" /> {t("docgen.approve_save")}
@@ -1144,12 +1206,19 @@ ${currentContent
                         setEditing(false);
                         setEditContent("");
                         setDone(true);
+                        // Saving an opened document adds a version to it
+                        // instead of creating a copy.
+                        forgetPolicy();
                         try {
                           const versions = await policiesApi.getVersions(String(policy.id));
                           const current = versions.find(v => v.is_current) ?? versions[0];
-                          setOutput(current?.content ?? "No content found for this document.");
+                          const shown = current?.content ?? "No content found for this document.";
+                          setOutput(shown);
+                          policyIdRef.current = String(policy.id);
+                          markPersisted(shown);
                         } catch {
                           setOutput("Failed to load document content.");
+                          setDone(false);
                         }
                       }}
                       className={`group p-3 rounded-lg border transition-all cursor-pointer ${

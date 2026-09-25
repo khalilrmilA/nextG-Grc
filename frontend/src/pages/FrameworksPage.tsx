@@ -937,6 +937,13 @@ export default function FrameworksPage() {
             <Upload className="w-4 h-4" />
             {t("frameworks.import_framework")}
           </button>
+          {/* Hand-written referential (norme / réglementation / politique interne) —
+              the builder above assembles one from existing controls instead. */}
+          <button type="button" onClick={() => navigate("/framework/custom/new")}
+            className="flex items-center gap-2 border border-gray-200 text-gray-700 hover:bg-gray-50 px-4 py-2 rounded-lg text-sm font-medium transition-colors">
+            <FileText className="w-4 h-4" />
+            {t("frameworks.create_from_scratch", "Create from scratch")}
+          </button>
           <button type="button" onClick={() => navigate("/framework/builder")}
             className="flex items-center gap-2 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors">
             <Plus className="w-4 h-4" />

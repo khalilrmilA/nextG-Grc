@@ -3005,6 +3005,7 @@ export const vulnImportApi = {
 export const scannerConnectorsApi = {
   list: () => apiClient.get("/vuln-import/connectors").then((r) => r.data),
   create: (data: Record<string, unknown>) => apiClient.post("/vuln-import/connectors", data).then((r) => r.data),
+  update: (id: string, data: Record<string, unknown>) => apiClient.patch(`/vuln-import/connectors/${id}`, data).then((r) => r.data),
   remove: (id: string) => apiClient.delete(`/vuln-import/connectors/${id}`),
   test: (id: string) => apiClient.post(`/vuln-import/connectors/${id}/test`).then((r) => r.data),
   sync: (id: string) => apiClient.post(`/vuln-import/connectors/${id}/sync`).then((r) => r.data),
@@ -3123,7 +3124,8 @@ export const mfaApi = {
   status: () => apiClient.get("/mfa/status").then((r) => r.data),
   enroll: () => apiClient.post("/mfa/enroll").then((r) => r.data),
   verify: (code: string) => apiClient.post("/mfa/verify", { code }).then((r) => r.data),
-  disable: () => apiClient.post("/mfa/disable").then((r) => r.data),
+  // A confirmed device can only be removed with a current code from it.
+  disable: (code?: string) => apiClient.post("/mfa/disable", { code: code ?? null }).then((r) => r.data),
 };
 
 // ── OCR document capture (Elite Pack) ────────────────────────────────────────

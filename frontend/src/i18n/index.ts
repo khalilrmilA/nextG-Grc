@@ -5,6 +5,8 @@ import fr from "./locales/fr";
 import ar from "./locales/ar";
 import { eliteEn, eliteFr, eliteAr } from "./eliteLocales";
 import { gapEn, gapFr, gapAr } from "./locales/gapfills";
+import { menuEn, menuFr, menuAr } from "./menuLocales";
+import { fixFr, fixAr } from "./fixLocales";
 
 export type Language = "en" | "fr" | "ar";
 export const LANGUAGES: { code: Language; label: string; nativeLabel: string; rtl: boolean }[] = [
@@ -61,12 +63,19 @@ i18n
 i18n.addResourceBundle("en", "translation", eliteEn, true, true);
 i18n.addResourceBundle("fr", "translation", eliteFr, true, true);
 i18n.addResourceBundle("ar", "translation", eliteAr, true, true);
+i18n.addResourceBundle("en", "translation", menuEn, true, true);
+i18n.addResourceBundle("fr", "translation", menuFr, true, true);
+i18n.addResourceBundle("ar", "translation", menuAr, true, true);
 
 // Gap-fill recently-added feature strings (deep merge, NON-destructive — only fills keys
 // still missing from the locale files, never overwrites an existing translation).
 i18n.addResourceBundle("en", "translation", gapEn, true, false);
 i18n.addResourceBundle("fr", "translation", gapFr, true, false);
 i18n.addResourceBundle("ar", "translation", gapAr, true, false);
+
+// 2026-09-25 fixes — non-destructive, like the gap-fills.
+i18n.addResourceBundle("fr", "translation", fixFr, true, false);
+i18n.addResourceBundle("ar", "translation", fixAr, true, false);
 
 // Apply direction immediately on load
 applyDirection(savedLang);

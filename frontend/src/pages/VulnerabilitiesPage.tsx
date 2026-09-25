@@ -388,10 +388,20 @@ Weak SSH ciphers,Low,3.7,,Backup Storage Array,Restrict to strong ciphers`;
   const [connMsg, setConnMsg] = useState("");
   const [connBusy, setConnBusy] = useState("");
   const [addingConn, setAddingConn] = useState(false);
-  const emptyConn = { name: "", tool: "demo", base_url: "", api_key: "", api_secret: "" };
+  const emptyConn = { name: "", tool: "demo", base_url: "", api_key: "", api_secret: "", schedule_enabled: false, interval_hours: 168 };
   const [connForm, setConnForm] = useState({ ...emptyConn });
-  const connNeedsUrl = connForm.tool !== "demo";
-  const connNeedsKeys = connForm.tool === "tenable";
+  // Tools the backend can pull from on its own; OpenVAS (GMP, not HTTP) is file-import only.
+  const PULL_TOOLS = ["demo", "tenable", "nessus", "qualys"];
+  const SYNC_INTERVALS = [
+    { hours: 24, label: t("vulnerabilities.interval_daily", "Daily") },
+    { hours: 168, label: t("vulnerabilities.interval_weekly", "Weekly") },
+    { hours: 720, label: t("vulnerabilities.interval_monthly", "Monthly") },
+  ];
+  const intervalLabel = (h: number) =>
+    SYNC_INTERVALS.find((i) => i.hours === h)?.label ?? t("vulnerabilities.interval_hours", "Every {{count}}h", { count: h });
+  const connCanPull = PULL_TOOLS.includes(connForm.tool);
+  const connNeedsUrl = connForm.tool !== "demo" && connForm.tool !== "openvas";
+  const connNeedsKeys = ["tenable", "nessus", "qualys"].includes(connForm.tool);
 
   async function loadConnectors() {
     setConnLoading(true);
@@ -405,6 +415,7 @@ Weak SSH ciphers,Low,3.7,,Backup Storage Array,Restrict to strong ciphers`;
       await scannerConnectorsApi.create({
         name: connForm.name, tool: connForm.tool,
         base_url: connForm.base_url || null, api_key: connForm.api_key || null, api_secret: connForm.api_secret || null,
+        schedule_enabled: connCanPull && connForm.schedule_enabled, interval_hours: connForm.interval_hours,
       });
       setConnForm({ ...emptyConn });
       loadConnectors();
@@ -426,6 +437,15 @@ Weak SSH ciphers,Low,3.7,,Backup Storage Array,Restrict to strong ciphers`;
         : `✗ ${j.error || "sync failed"}`);
       loadConnectors(); setLoading(true); load(); loadStats();
     } catch { setConnMsg("Sync failed"); } finally { setConnBusy(""); }
+  }
+  async function updateConn(id: string, patch: Record<string, unknown>) {
+    setConnBusy(id + ":upd"); setConnMsg("");
+    try {
+      const updated = await scannerConnectorsApi.update(id, patch);
+      setConnectors((cs) => cs.map((c) => (c.id === id ? updated : c)));
+    } catch (err: any) {
+      setConnMsg(err?.response?.data?.detail || t("vulnerabilities.conn_update_failed", "Could not update connector"));
+    } finally { setConnBusy(""); }
   }
   async function deleteConn(id: string) {
     setConnBusy(id + ":del");
@@ -1218,11 +1238,52 @@ Weak SSH ciphers,Low,3.7,,Backup Storage Array,Restrict to strong ciphers`;
               ) : connectors.length === 0 ? (
                 <p className="text-sm text-gray-400 py-2">{t("vulnerabilities.no_connectors", "No connectors yet. Add one below.")}</p>
               ) : connectors.map((cn) => (
-                <div key={cn.id} className="flex items-center gap-3 border border-gray-100 rounded-xl px-4 py-3">
+                <div key={cn.id} className="flex flex-wrap items-center gap-3 border border-gray-100 rounded-xl px-4 py-3">
                   <div className="w-9 h-9 rounded-lg bg-blue-50 flex items-center justify-center"><Plug className="w-4 h-4 text-blue-600" /></div>
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium text-gray-900 truncate">{cn.name}</p>
-                    <p className="text-xs text-gray-500 capitalize">{cn.tool}{cn.schedule_enabled ? ` · every ${cn.interval_hours}h` : ""}{cn.last_status ? ` · last: ${cn.last_status}` : ""}</p>
+                    <p className="text-xs text-gray-500">
+                      <span className="capitalize">{cn.tool}</span>
+                      {" · "}
+                      {cn.last_sync_at
+                        ? <>
+                            {t("vulnerabilities.last_sync", "Last sync")}: {new Date(cn.last_sync_at + (String(cn.last_sync_at).endsWith("Z") ? "" : "Z")).toLocaleString()}
+                            {cn.last_status && (
+                              <span className={`ms-1.5 rounded-full px-2 py-0.5 text-[10px] font-semibold ${cn.last_status === "failed" ? "bg-red-50 text-red-600" : "bg-green-50 text-green-700"}`}>{cn.last_status}</span>
+                            )}
+                          </>
+                        : t("vulnerabilities.never_synced", "Never synced")}
+                    </p>
+                    {PULL_TOOLS.includes(cn.tool) ? (
+                      <div className="flex items-center gap-2 mt-1.5">
+                        <label className="inline-flex items-center gap-1.5 text-xs text-gray-600 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={!!cn.schedule_enabled}
+                            disabled={!!connBusy}
+                            onChange={(e) => updateConn(cn.id, { schedule_enabled: e.target.checked })}
+                            className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                          />
+                          {t("vulnerabilities.auto_sync", "Automatic sync")}
+                        </label>
+                        {cn.schedule_enabled && (
+                          <select
+                            value={cn.interval_hours}
+                            disabled={!!connBusy}
+                            onChange={(e) => updateConn(cn.id, { interval_hours: Number(e.target.value) })}
+                            className="border border-gray-200 rounded-lg px-2 py-0.5 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          >
+                            {!SYNC_INTERVALS.some((i) => i.hours === cn.interval_hours) && (
+                              <option value={cn.interval_hours}>{intervalLabel(cn.interval_hours)}</option>
+                            )}
+                            {SYNC_INTERVALS.map((i) => <option key={i.hours} value={i.hours}>{i.label}</option>)}
+                          </select>
+                        )}
+                        {connBusy === cn.id + ":upd" && <Loader2 className="w-3.5 h-3.5 animate-spin text-blue-500" />}
+                      </div>
+                    ) : (
+                      <p className="text-xs text-amber-600 mt-1">{t("vulnerabilities.file_import_only", "File import only — export the report and use Import.")}</p>
+                    )}
                   </div>
                   <button onClick={() => testConn(cn.id)} disabled={!!connBusy} className="text-xs px-3 py-1.5 rounded-lg border border-gray-200 hover:bg-gray-50 disabled:opacity-50">
                     {connBusy === cn.id + ":test" ? "…" : t("vulnerabilities.test", "Test")}
@@ -1240,24 +1301,41 @@ Weak SSH ciphers,Low,3.7,,Backup Storage Array,Restrict to strong ciphers`;
               <div className="grid grid-cols-2 gap-3">
                 <input value={connForm.name} onChange={(e) => setConnForm({ ...connForm, name: e.target.value })} placeholder={t("vulnerabilities.conn_name", "Name")} className="border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
                 <select value={connForm.tool} onChange={(e) => setConnForm({ ...connForm, tool: e.target.value })} className="border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-                  <option value="demo">Demo (simulated)</option>
-                  <option value="tenable">Tenable.io</option>
-                  <option value="nessus">Nessus</option>
-                  <option value="qualys">Qualys</option>
-                  <option value="openvas">OpenVAS</option>
+                  <option value="demo">{t("vulnerabilities.tool_demo", "Demo (simulated)")}</option>
+                  <optgroup label={t("vulnerabilities.tools_auto_pull", "Pulls findings automatically")}>
+                    <option value="tenable">Tenable.io</option>
+                    <option value="nessus">Nessus (Professional / Manager)</option>
+                    <option value="qualys">Qualys VM</option>
+                  </optgroup>
+                  <optgroup label={t("vulnerabilities.tools_file_only", "File import only")}>
+                    <option value="openvas">{t("vulnerabilities.tool_openvas_file", "OpenVAS / Greenbone (file import only)")}</option>
+                  </optgroup>
                 </select>
               </div>
               {connNeedsUrl && (
-                <input value={connForm.base_url} onChange={(e) => setConnForm({ ...connForm, base_url: e.target.value })} placeholder={connForm.tool === "tenable" ? "https://cloud.tenable.com" : "https://scanner.host:port"} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                <input value={connForm.base_url} onChange={(e) => setConnForm({ ...connForm, base_url: e.target.value })} placeholder={connForm.tool === "tenable" ? "https://cloud.tenable.com" : connForm.tool === "qualys" ? "https://qualysapi.qualys.com" : "https://nessus.host:8834"} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
               )}
               {connNeedsKeys && (
                 <div className="grid grid-cols-2 gap-3">
-                  <input value={connForm.api_key} onChange={(e) => setConnForm({ ...connForm, api_key: e.target.value })} placeholder={t("vulnerabilities.access_key", "Access key")} className="border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-                  <input value={connForm.api_secret} onChange={(e) => setConnForm({ ...connForm, api_secret: e.target.value })} placeholder={t("vulnerabilities.secret_key", "Secret key")} type="password" className="border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                  <input value={connForm.api_key} onChange={(e) => setConnForm({ ...connForm, api_key: e.target.value })} placeholder={connForm.tool === "qualys" ? t("vulnerabilities.api_username", "API username") : t("vulnerabilities.access_key", "Access key")} autoComplete="off" className="border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                  <input value={connForm.api_secret} onChange={(e) => setConnForm({ ...connForm, api_secret: e.target.value })} placeholder={connForm.tool === "qualys" ? t("vulnerabilities.api_password", "API password") : t("vulnerabilities.secret_key", "Secret key")} type="password" autoComplete="new-password" className="border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                </div>
+              )}
+              {connCanPull && (
+                <div className="flex items-center gap-3">
+                  <label className="inline-flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
+                    <input type="checkbox" checked={connForm.schedule_enabled} onChange={(e) => setConnForm({ ...connForm, schedule_enabled: e.target.checked })} className="rounded border-gray-300 text-blue-600 focus:ring-blue-500" />
+                    {t("vulnerabilities.auto_sync", "Automatic sync")}
+                  </label>
+                  {connForm.schedule_enabled && (
+                    <select value={connForm.interval_hours} onChange={(e) => setConnForm({ ...connForm, interval_hours: Number(e.target.value) })} className="border border-gray-200 rounded-xl px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                      {SYNC_INTERVALS.map((i) => <option key={i.hours} value={i.hours}>{i.label}</option>)}
+                    </select>
+                  )}
                 </div>
               )}
               <div className="flex items-center justify-between gap-3">
-                <p className="text-xs text-gray-400">{connForm.tool === "demo" ? t("vulnerabilities.demo_note", "Demo connector simulates a pull that matches your assets.") : t("vulnerabilities.live_note", "Live pull needs a reachable scanner + valid credentials.")}</p>
+                <p className="text-xs text-gray-400">{connForm.tool === "demo" ? t("vulnerabilities.demo_note", "Demo connector simulates a pull that matches your assets.") : connForm.tool === "openvas" ? t("vulnerabilities.openvas_note", "OpenVAS speaks GMP, not HTTP — it cannot be pulled. Export the report (XML or CSV) and use Import.") : t("vulnerabilities.live_note", "Live pull needs a reachable scanner + valid credentials.")}</p>
                 <button type="submit" disabled={addingConn} className="inline-flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-xl text-sm font-medium hover:bg-blue-700 disabled:opacity-50">
                   {addingConn && <Loader2 className="w-4 h-4 animate-spin" />} {t("vulnerabilities.add", "Add")}
                 </button>

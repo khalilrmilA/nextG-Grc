@@ -22,6 +22,7 @@ import {
   Target, Workflow, Siren, ShieldCheck, ShieldOff, Landmark, Webhook,
   Library, ListChecks, Grid3x3, ScrollText,
 } from "lucide-react";
+import { kbArticleForPath } from "../../kb";
 
 // roles: null = visible to all authenticated non-auditor users
 // tenant_admin always has access everywhere; ciso is now a regular (but broad) role
@@ -48,59 +49,86 @@ const MODULE_FEATURES: Record<string, readonly string[]> = {
   "governance":             ["raci_governance", "document_repository"],
 };
 
+// Sidebar menus, grouped by domain. Each group is a collapsible menu; the one
+// holding the current page opens itself. Every item keeps its own role list —
+// keep those in sync with App.tsx's ROUTE_ROLES.
 const NAV_GROUPS = [
   {
-    label: "Core",
+    id: "overview", label: "Overview", icon: LayoutDashboard,
     items: [
       { to: "/dashboard",  icon: LayoutDashboard, label: "Dashboard",     module: "dashboard",  roles: null },
-      { to: "/assets",     icon: Boxes,           label: "Assets",        module: "assets",     roles: null },
-      { to: "/asset-graph", icon: Network,     label: "Asset Cartography", module: "asset-graph", roles: ["tenant_admin","ciso","risk_manager","compliance_manager","control_owner","business_owner","security_analyst","viewer","executive"] },
       { to: "/analytics",  icon: BarChart3,       label: "Analytics",     module: "analytics",  roles: ["tenant_admin","ciso","risk_manager","compliance_manager","control_owner","business_owner","security_analyst","viewer","executive"] },
-      { to: "/risk-treatment", icon: ShieldAlert, label: "Risk Treatment", module: "risk-treatment", roles: ["tenant_admin","ciso","risk_manager","control_owner","business_owner","security_analyst","viewer","executive"] },
-      { to: "/control-effectiveness", icon: Gauge, label: "Control Effectiveness", module: "control-effectiveness", roles: ["tenant_admin","ciso","risk_manager","control_owner","business_owner","security_analyst","viewer","executive"] },
-      { to: "/risk-cartography", icon: Map,           label: "Risk Cartography", module: "risk-cartography", roles: ["tenant_admin","ciso","risk_manager","compliance_manager","control_owner","business_owner","security_analyst","viewer","executive"] },
-      { to: "/risks",          icon: Target,          label: "Risk Register",  module: "risks",          roles: ["tenant_admin","ciso","risk_manager","compliance_manager","control_owner","business_owner","security_analyst","viewer","executive"] },
-      { to: "/risk-scenarios", icon: Workflow,        label: "Risk Scenarios", module: "risk-scenarios", roles: ["tenant_admin","ciso","risk_manager","compliance_manager","control_owner","business_owner","security_analyst","viewer","executive"] },
-      { to: "/compliance", icon: CheckSquare,     label: "Compliance",    module: "compliance", roles: ["tenant_admin","ciso","risk_manager","compliance_manager","policy_manager","control_owner","business_owner","security_analyst","viewer","executive"] },
-      { to: "/action-plan", icon: ListTodo,       label: "Action Plan",   module: "action-plan", roles: ["tenant_admin","ciso","risk_manager","compliance_manager","control_owner","business_owner","security_analyst","viewer","executive"] },
-      { to: "/requirements", icon: Library,   label: "Requirements Referential", module: "requirements", roles: ["tenant_admin","ciso","compliance_manager","policy_manager","viewer","executive"] },
-      { to: "/framework",  icon: BookOpen,        label: "Frameworks",    module: "frameworks", roles: ["tenant_admin","ciso","compliance_manager","policy_manager","viewer","executive"] },
     ],
   },
   {
-    label: "Security",
+    id: "asset_risk", label: "Asset & Risk Management", icon: Boxes,
     items: [
-      { to: "/incidents",       icon: Siren,     label: "Incidents",          module: "incidents",         roles: ["tenant_admin","ciso","risk_manager","compliance_manager","control_owner","business_owner","security_analyst","viewer","executive"] },
+      { to: "/assets",     icon: Boxes,           label: "Assets",        module: "assets",     roles: null },
+      { to: "/asset-graph", icon: Network,     label: "Asset Cartography", module: "asset-graph", roles: ["tenant_admin","ciso","risk_manager","compliance_manager","control_owner","business_owner","security_analyst","viewer","executive"] },
+      { to: "/risks",          icon: Target,          label: "Risk Register",  module: "risks",          roles: ["tenant_admin","ciso","risk_manager","compliance_manager","control_owner","business_owner","security_analyst","viewer","executive"] },
+      { to: "/risk-scenarios", icon: Workflow,        label: "Risk Scenarios", module: "risk-scenarios", roles: ["tenant_admin","ciso","risk_manager","compliance_manager","control_owner","business_owner","security_analyst","viewer","executive"] },
+      { to: "/risk-cartography", icon: Map,           label: "Risk Cartography", module: "risk-cartography", roles: ["tenant_admin","ciso","risk_manager","compliance_manager","control_owner","business_owner","security_analyst","viewer","executive"] },
+      { to: "/risk-treatment", icon: ShieldAlert, label: "Risk Treatment", module: "risk-treatment", roles: ["tenant_admin","ciso","risk_manager","control_owner","business_owner","security_analyst","viewer","executive"] },
+    ],
+  },
+  {
+    id: "security", label: "Vulnerability & Threats", icon: Bug,
+    items: [
       { to: "/vulnerabilities", icon: Bug,      label: "Vulnerabilities",   module: "vulnerabilities", roles: null },
       { to: "/cve",             icon: Database,  label: "CVE Knowledge Base", module: "cve",            roles: null },
       { to: "/threats",         icon: Radar,    label: "Threat Library",    module: "threats",         roles: ["tenant_admin","ciso","risk_manager","compliance_manager","control_owner","business_owner","security_analyst","viewer","executive"] },
+      { to: "/incidents",       icon: Siren,     label: "Incidents",          module: "incidents",         roles: ["tenant_admin","ciso","risk_manager","compliance_manager","control_owner","business_owner","security_analyst","viewer","executive"] },
+    ],
+  },
+  {
+    id: "compliance", label: "Compliance & Controls", icon: CheckSquare,
+    items: [
+      { to: "/compliance", icon: CheckSquare,     label: "Compliance",    module: "compliance", roles: ["tenant_admin","ciso","risk_manager","compliance_manager","policy_manager","control_owner","business_owner","security_analyst","viewer","executive"] },
+      { to: "/framework",  icon: BookOpen,        label: "Frameworks",    module: "frameworks", roles: ["tenant_admin","ciso","compliance_manager","policy_manager","viewer","executive"] },
+      { to: "/requirements", icon: Library,   label: "Requirements Referential", module: "requirements", roles: ["tenant_admin","ciso","compliance_manager","policy_manager","viewer","executive"] },
+      { to: "/action-plan", icon: ListTodo,       label: "Action Plan",   module: "action-plan", roles: ["tenant_admin","ciso","risk_manager","compliance_manager","control_owner","business_owner","security_analyst","viewer","executive"] },
+      { to: "/control-effectiveness", icon: Gauge, label: "Control Effectiveness", module: "control-effectiveness", roles: ["tenant_admin","ciso","risk_manager","control_owner","business_owner","security_analyst","viewer","executive"] },
       { to: "/applied-controls",    icon: ShieldCheck, label: "Applied Controls",     module: "applied-controls",    roles: ["tenant_admin","ciso","risk_manager","compliance_manager","control_owner","business_owner","security_analyst","viewer","executive"] },
       { to: "/security-exceptions", icon: ShieldOff,   label: "Exceptions & Waivers", module: "security-exceptions", roles: ["tenant_admin","ciso","risk_manager","compliance_manager","control_owner","business_owner","security_analyst","viewer","executive"] },
     ],
   },
   {
-    label: "Operations",
+    id: "audit", label: "Audit", icon: ClipboardList,
     items: [
       { to: "/audits",           icon: ClipboardList,  label: "Audits",             module: "audits",           roles: ["tenant_admin","ciso","compliance_manager","viewer","executive"] },
       { to: "/recommendations", icon: ListChecks,     label: "Recommendation Tracking", module: "recommendations", roles: ["tenant_admin","ciso","compliance_manager","risk_manager","auditor","control_owner","business_owner","viewer","executive"] },
       { to: "/audit-grids",     icon: Grid3x3,        label: "Evaluation Grids",     module: "audit_grids",     roles: ["tenant_admin","ciso","compliance_manager"] },
-      { to: "/policies",         icon: FileText,       label: "Policies",           module: "policies",         roles: ["tenant_admin","ciso","compliance_manager","policy_manager","viewer","executive"] },
-      { to: "/policy-generator", icon: Wand2,          label: "Doc Generator",      module: "policy-generator", roles: ["tenant_admin","ciso","policy_manager","viewer","executive"] },
-      { to: "/ocr",              icon: ScanLine,       label: "Document Capture",   module: "ocr",              roles: null },
-      { to: "/vendors",          icon: Building2,      label: "3rd Parties (TPRM)", module: "vendors",          roles: ["tenant_admin","ciso","vendor_manager","viewer","executive"] },
-      { to: "/reports",          icon: ClipboardCheck, label: "Reports",            module: "reports",          roles: null },
-      { to: "/support",          icon: Headphones,     label: "Support",            module: "support",          roles: null },
     ],
   },
   {
-    label: "Governance",
+    id: "documents", label: "Policies & Documents", icon: FileText,
+    items: [
+      { to: "/policies",         icon: FileText,       label: "Policies",           module: "policies",         roles: ["tenant_admin","ciso","compliance_manager","policy_manager","viewer","executive"] },
+      { to: "/policy-generator", icon: Wand2,          label: "Doc Generator",      module: "policy-generator", roles: ["tenant_admin","ciso","policy_manager","viewer","executive"] },
+      { to: "/ocr",              icon: ScanLine,       label: "Document Capture",   module: "ocr",              roles: null },
+    ],
+  },
+  {
+    id: "third_parties", label: "Third Parties", icon: Building2,
+    items: [
+      { to: "/vendors",          icon: Building2,      label: "3rd Parties (TPRM)", module: "vendors",          roles: ["tenant_admin","ciso","vendor_manager","viewer","executive"] },
+    ],
+  },
+  {
+    id: "governance", label: "Governance", icon: Scale,
     items: [
       { to: "/governance", icon: Scale,   label: "Governance", module: "governance", roles: ["tenant_admin","ciso","compliance_manager","policy_manager","viewer","executive"] },
+      { to: "/regulatory",          icon: Landmark,   label: "Regulatory Updates",  module: "regulatory",          roles: ["tenant_admin","ciso","compliance_manager","policy_manager","viewer","executive"] },
       { to: "/activity-log", icon: ScrollText, label: "Activity Log", module: "activity_log", roles: ["tenant_admin","ciso","compliance_manager","auditor","risk_manager"] },
       { to: "/archiving",  icon: Archive, label: "Archiving",  module: "archiving",  roles: ["tenant_admin","ciso","compliance_manager","auditor","risk_manager"] },
-      { to: "/system-check", icon: ClipboardCheck, label: "System Check", module: "system-check", roles: ["tenant_admin"] },
-      { to: "/regulatory",          icon: Landmark,   label: "Regulatory Updates",  module: "regulatory",          roles: ["tenant_admin","ciso","compliance_manager","policy_manager","viewer","executive"] },
       { to: "/webhooks",            icon: Webhook,     label: "Webhooks",            module: "webhooks",            roles: ["tenant_admin"] },
+    ],
+  },
+  {
+    id: "reporting", label: "Reports & Support", icon: ClipboardCheck,
+    items: [
+      { to: "/reports",          icon: ClipboardCheck, label: "Reports",            module: "reports",          roles: null },
+      { to: "/support",          icon: Headphones,     label: "Support",            module: "support",          roles: null },
     ],
   },
 ];
@@ -606,6 +634,23 @@ export default function Layout() {
 
   const { primaryFramework } = useFramework();
   const { hasAnyFeature } = useEntitlements();
+
+  // Which sidebar menus are expanded. Remembered per browser; the menu holding
+  // the current page is always opened on navigation.
+  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>(() => {
+    try { return JSON.parse(localStorage.getItem("grc_nav_open") || "{}"); } catch { return {}; }
+  });
+  useEffect(() => {
+    const active = NAV_GROUPS.find(g => g.items.some(i =>
+      location.pathname === i.to || location.pathname.startsWith(i.to + "/")));
+    if (active && !openGroups[active.id]) setOpenGroups(prev => ({ ...prev, [active.id]: true }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.pathname]);
+  useEffect(() => {
+    try { localStorage.setItem("grc_nav_open", JSON.stringify(openGroups)); } catch { /* ignore */ }
+  }, [openGroups]);
+  const toggleGroup = (id: string) => setOpenGroups(prev => ({ ...prev, [id]: !prev[id] }));
+
   const plan        = user?.plan ?? "free_trial";
   const isAdmin     = user?.role === "tenant_admin";
   const isSuperAdmin = user?.role === "super_admin";
@@ -687,7 +732,7 @@ export default function Layout() {
         </div>
 
         {/* Navigation */}
-        <nav className="flex-1 px-3 py-4 space-y-5 overflow-y-auto">
+        <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
           {/* Auditor-only section */}
           {user?.role === "auditor" && (
             <div>
@@ -718,56 +763,76 @@ export default function Layout() {
           )}
 
           {/* Standard nav groups — hidden for auditor role */}
-          {user?.role !== "auditor" && NAV_GROUPS.map(group => (
-            <div key={group.label}>
-              <p className={`text-xs font-semibold uppercase tracking-widest px-3 mb-2 ${sc.navLabel}`}>
-                {t(`nav.${group.label.toLowerCase()}` as never, group.label)}
-              </p>
-              <div className="space-y-0.5">
-                {group.items.map(({ to, icon: Icon, label, module, roles }) => {
-                  const userRoles = getUserRoles(user);
-                  if (roles && !userRoles.some(r => roles.includes(r))) return null;
-                  // Was hardwired false with this branch unreachable. The tenant's
-                  // real entitlements now decide it.
-                  const gatedBy = MODULE_FEATURES[module];
-                  const locked = gatedBy ? !hasAnyFeature(gatedBy) : false;
-                  if (locked) {
-                    return (
-                      <button
-                        key={to}
-                        type="button"
-                        onClick={() => navigate("/settings")}
-                        title={`${label} is not enabled for your organisation`}
-                        className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium w-full transition-all group opacity-50 ${sc.navItem}`}
-                      >
-                        <Icon className="w-4 h-4 flex-shrink-0" />
-                        <span className="flex-1 text-left">{t(`nav.${module}` as never, label)}</span>
-                        <Lock className="w-3 h-3 group-hover:text-blue-400 transition-colors" />
-                      </button>
-                    );
+          {user?.role !== "auditor" && NAV_GROUPS.map(group => {
+            const userRoles = getUserRoles(user);
+            const visible = group.items.filter(({ roles }) => !roles || userRoles.some(r => roles.includes(r)));
+            if (visible.length === 0) return null;
+
+            const renderItem = ({ to, icon: Icon, label, module }: (typeof visible)[number], nested: boolean) => {
+              const gatedBy = MODULE_FEATURES[module];
+              const locked = gatedBy ? !hasAnyFeature(gatedBy) : false;
+              const pad = nested ? "ps-9 pe-3 py-2" : "px-3 py-2.5";
+              if (locked) {
+                return (
+                  <button
+                    key={to}
+                    type="button"
+                    onClick={() => navigate("/settings")}
+                    title={`${label} is not enabled for your organisation`}
+                    className={`flex items-center gap-3 ${pad} rounded-xl text-sm font-medium w-full transition-all group opacity-50 ${sc.navItem}`}
+                  >
+                    <Icon className="w-4 h-4 flex-shrink-0" />
+                    <span className="flex-1 text-left">{t(`nav.${module}` as never, label)}</span>
+                    <Lock className="w-3 h-3 group-hover:text-blue-400 transition-colors" />
+                  </button>
+                );
+              }
+              return (
+                <NavLink
+                  key={to}
+                  to={to}
+                  className={({ isActive }) =>
+                    `flex items-center gap-3 ${pad} rounded-xl text-sm font-medium transition-all ${
+                      isActive ? sc.navActive : sc.navItem
+                    }`
                   }
-                  return (
-                    <NavLink
-                      key={to}
-                      to={to}
-                      className={({ isActive }) =>
-                        `flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all ${
-                          isActive ? sc.navActive : sc.navItem
-                        }`
-                      }
-                    >
-                      {({ isActive }) => (
-                        <>
-                          <Icon className={`w-4 h-4 flex-shrink-0 ${isActive ? sc.navIconActive : sc.navIcon}`} />
-                          <span className="flex-1">{t(`nav.${module.replace(/-/g, "_")}` as never, label)}</span>
-                        </>
-                      )}
-                    </NavLink>
-                  );
-                })}
+                >
+                  {({ isActive }) => (
+                    <>
+                      <Icon className={`w-4 h-4 flex-shrink-0 ${isActive ? sc.navIconActive : sc.navIcon}`} />
+                      <span className="flex-1">{t(`nav.${module.replace(/-/g, "_")}` as never, label)}</span>
+                    </>
+                  )}
+                </NavLink>
+              );
+            };
+
+            // A menu with a single page is just a link.
+            if (visible.length === 1) return <div key={group.id}>{renderItem(visible[0], false)}</div>;
+
+            const GroupIcon = group.icon;
+            const isOpen = !!openGroups[group.id];
+            const holdsActive = visible.some(i => location.pathname === i.to || location.pathname.startsWith(i.to + "/"));
+            return (
+              <div key={group.id}>
+                <button
+                  type="button"
+                  onClick={() => toggleGroup(group.id)}
+                  aria-expanded={isOpen}
+                  className={`flex items-center gap-3 px-3 py-2.5 w-full rounded-xl text-sm font-semibold transition-all ${sc.navItem}`}
+                >
+                  <GroupIcon className={`w-4 h-4 flex-shrink-0 ${holdsActive ? sc.navIconActive : sc.navIcon}`} />
+                  <span className="flex-1 text-start">{t(`navgroup.${group.id}` as never, group.label)}</span>
+                  <ChevronRight className={`w-3.5 h-3.5 transition-transform rtl:rotate-180 ${isOpen ? "rotate-90 rtl:rotate-90" : ""}`} />
+                </button>
+                {isOpen && (
+                  <div className="mt-0.5 space-y-0.5">
+                    {visible.map(item => renderItem(item, true))}
+                  </div>
+                )}
               </div>
-            </div>
-          ))}
+            );
+          })}
         </nav>
 
 
@@ -788,7 +853,7 @@ export default function Layout() {
             </NavLink>
           )}
           {[
-            { to: "/documentation", icon: BookOpen, label: t("nav.documentation", "Documentation") },
+            { to: "/docs", icon: BookOpen, label: t("nav.documentation", "Documentation") },
             { to: "/settings", icon: Settings,   label: t("nav.settings") },
             { to: "/help",     icon: HelpCircle, label: t("nav.help")     },
           ].map(({ to, icon: Icon, label }) => (
@@ -856,6 +921,17 @@ export default function Layout() {
           <div className="flex items-center gap-3">
             {/* Language switcher */}
             <LanguageSwitcher />
+            {/* Help for the current page — opens its Knowledge Base article */}
+            {user?.role !== "auditor" && (
+              <NavLink
+                to={`/docs/${kbArticleForPath(location.pathname) ?? "getting-started"}`}
+                title={t("kb.help_for_page", "Help for this page")}
+                aria-label={t("kb.help_for_page", "Help for this page")}
+                className="w-8 h-8 rounded-lg flex items-center justify-center text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition-colors"
+              >
+                <HelpCircle className="w-4 h-4" />
+              </NavLink>
+            )}
             {/* Live notification bell */}
             <NotificationBell />
             {/* Avatar */}

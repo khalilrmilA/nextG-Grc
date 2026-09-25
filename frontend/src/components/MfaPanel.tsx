@@ -41,9 +41,18 @@ export default function MfaPanel() {
     } catch (err: any) { setError(err?.response?.data?.detail || "Invalid code"); }
     finally { setBusy(false); }
   }
-  async function disable() {
-    setBusy(true);
-    try { await mfaApi.disable(); setEnroll(null); loadStatus(); } catch {} finally { setBusy(false); }
+  // Turning a confirmed second factor off takes a current code from it.
+  const [disabling, setDisabling] = useState(false);
+  const [disableCode, setDisableCode] = useState("");
+  async function disable(e: React.FormEvent) {
+    e.preventDefault();
+    setBusy(true); setError("");
+    try {
+      await mfaApi.disable(disableCode.trim());
+      setEnroll(null); setDisabling(false); setDisableCode("");
+      loadStatus();
+    } catch (err: any) { setError(err?.response?.data?.detail || t("mfa.invalid_code", "Invalid code")); }
+    finally { setBusy(false); }
   }
   function copySecret() {
     if (enroll?.secret) { navigator.clipboard?.writeText(enroll.secret); setCopied(true); setTimeout(() => setCopied(false), 1500); }
@@ -56,16 +65,33 @@ export default function MfaPanel() {
       {loading ? (
         <div className="flex items-center justify-center py-6"><Loader2 className="w-5 h-5 animate-spin text-blue-500" /></div>
       ) : confirmed ? (
+        <>
         <div className="flex items-center gap-4">
           <div className="w-10 h-10 rounded-xl bg-green-50 flex items-center justify-center shrink-0"><ShieldCheck className="w-5 h-5 text-green-600" /></div>
           <div className="flex-1 min-w-0">
             <p className="text-sm font-semibold text-gray-800">{t("mfa.enabled", "Two-factor authentication is enabled")}</p>
             <p className="text-xs text-gray-500">{t("mfa.enabled_sub", "Your account is protected by an authenticator app.")}</p>
           </div>
-          <button onClick={disable} disabled={busy} className="inline-flex items-center gap-2 bg-white border border-gray-200 text-red-600 px-4 py-2 rounded-lg text-sm font-medium hover:bg-red-50 disabled:opacity-50">
-            {busy && <Loader2 className="w-4 h-4 animate-spin" />} {t("mfa.disable", "Disable")}
-          </button>
+          {!disabling && (
+            <button onClick={() => { setDisabling(true); setError(""); }} className="inline-flex items-center gap-2 bg-white border border-gray-200 text-red-600 px-4 py-2 rounded-lg text-sm font-medium hover:bg-red-50">
+              {t("mfa.disable", "Disable")}
+            </button>
+          )}
         </div>
+        {disabling && (
+        <form onSubmit={disable} className="mt-4 pt-4 border-t border-gray-100 space-y-2">
+          <p className="text-sm text-gray-700">{t("mfa.disable_prompt", "Enter the current 6-digit code from your authenticator app to turn two-factor off.")}</p>
+          {error && <div className="p-3 bg-red-50 text-red-700 rounded-xl text-sm">{error}</div>}
+          <div className="flex items-center gap-2">
+            <input autoFocus value={disableCode} onChange={(e) => setDisableCode(e.target.value.replace(/\D/g, "").slice(0, 6))} placeholder="123456" inputMode="numeric" className="w-40 border border-gray-200 rounded-xl px-4 py-2.5 text-lg tracking-[0.3em] font-mono text-center focus:outline-none focus:ring-2 focus:ring-red-500" />
+            <button type="submit" disabled={busy || disableCode.length !== 6} className="inline-flex items-center gap-2 bg-red-600 text-white px-5 py-2.5 rounded-xl text-sm font-medium hover:bg-red-700 disabled:opacity-50">
+              {busy && <Loader2 className="w-4 h-4 animate-spin" />} {t("mfa.disable_confirm", "Turn off two-factor")}
+            </button>
+            <button type="button" onClick={() => { setDisabling(false); setDisableCode(""); setError(""); }} className="px-4 py-2.5 text-sm text-gray-600 hover:text-gray-800">{t("common.cancel", "Cancel")}</button>
+          </div>
+        </form>
+        )}
+        </>
       ) : !enroll ? (
         <div className="flex items-center gap-4">
           <div className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center shrink-0"><KeyRound className="w-5 h-5 text-blue-600" /></div>

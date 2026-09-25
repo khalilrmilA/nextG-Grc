@@ -498,7 +498,7 @@ function FrameworksTab({ frameworks }: { readonly frameworks: LoadState<FwItem[]
       {/* Add new */}
       <Card className="p-5 border-dashed border-2 border-gray-200 flex flex-col items-center justify-center gap-2 cursor-pointer hover:border-blue-300 hover:bg-blue-50/30 transition-colors"
         // @ts-expect-error onClick is valid on div
-        onClick={() => navigate("/frameworks/custom/new")}>
+        onClick={() => navigate("/framework/custom/new")}>
         <div className="w-9 h-9 rounded-xl bg-gray-100 flex items-center justify-center">
           <Zap className="w-4 h-4 text-gray-400" />
         </div>
@@ -849,7 +849,7 @@ export default function CheatSheetPage() {
           { label: "Compliance", path: "/compliance", color: "bg-blue-50 text-blue-700 hover:bg-blue-100" },
           { label: "Risk Register", path: "/risks", color: "bg-red-50 text-red-700 hover:bg-red-100" },
           { label: "Frameworks", path: "/framework", color: "bg-purple-50 text-purple-700 hover:bg-purple-100" },
-          { label: "Custom Framework", path: "/frameworks/custom/new", color: "bg-violet-50 text-violet-700 hover:bg-violet-100" },
+          { label: "Custom Framework", path: "/framework/custom/new", color: "bg-violet-50 text-violet-700 hover:bg-violet-100" },
           { label: "Vendors", path: "/vendors", color: "bg-emerald-50 text-emerald-700 hover:bg-emerald-100" },
           { label: "Policies", path: "/policies", color: "bg-amber-50 text-amber-700 hover:bg-amber-100" },
           { label: "Audits", path: "/audits", color: "bg-orange-50 text-orange-700 hover:bg-orange-100" },

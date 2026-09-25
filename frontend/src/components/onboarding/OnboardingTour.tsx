@@ -78,7 +78,6 @@ const TOUR_STEP_META: TourStepMeta[] = [
   // ── Governance ──
   { id: "governance", target: 'a[href="/governance"]',   icon: Scale,         iconColor: "from-purple-500 to-indigo-600", placement: "right", route: "/governance" },
   { id: "archiving",  target: 'a[href="/archiving"]',    icon: Archive,       iconColor: "from-amber-600 to-orange-700", placement: "right",  route: "/archiving" },
-  { id: "system_check", target: 'a[href="/system-check"]', icon: ClipboardCheck, iconColor: "from-teal-500 to-cyan-600", placement: "right", route: "/system-check" },
   { id: "regulatory", target: 'a[href="/regulatory"]',   icon: Landmark,      iconColor: "from-indigo-500 to-purple-600", placement: "right", route: "/regulatory" },
   { id: "webhooks",   target: 'a[href="/webhooks"]',     icon: Webhook,       iconColor: "from-slate-500 to-zinc-600",   placement: "right",  route: "/webhooks" },
   // ── Wrap-up ──

@@ -280,7 +280,7 @@ export default {
     full_guide: "Guide complet →",
     step_label: "Étape {{num}}",
     score_not_run: "Non exécuté",
-    new_assessment: "Nouvel audit",
+    new_assessment: "Nouvelle évaluation",
     assessment_name: "Nom de l'évaluation",
     framework: "Référentiel",
     scope: "Périmètre",
