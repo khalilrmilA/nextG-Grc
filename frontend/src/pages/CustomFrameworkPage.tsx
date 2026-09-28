@@ -16,6 +16,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
+import type { TFunction } from "i18next";
 import {
   ArrowLeft, Plus, Trash2, ChevronDown, ChevronRight,
   Loader2, CheckCircle, Save,
@@ -38,6 +39,12 @@ const DOMAINS = [
   "IDENTIFY", "PROTECT", "DETECT", "RESPOND", "RECOVER", "GOVERNANCE", "POLICY",
 ];
 const REQUIREMENT_TYPES = ["exigence", "recommandation", "mesure"];
+
+/** Display label for a controlled-vocabulary value (region, industry, domain);
+ *  the value itself is what the API stores, only the label is translated. */
+function vocab(t: TFunction, group: string, value: string): string {
+  return t(`fw_options.${group}.${value.toLowerCase().replace(/[^a-z0-9]+/g, "_")}`, { defaultValue: value });
+}
 const SOURCE_TYPES = ["norme", "reglementation", "loi", "politique_interne"];
 
 /** types/index.ts is owned by another lane and predates these columns; the
@@ -235,7 +242,7 @@ function MetadataStep({
                   : "bg-white text-gray-600 border-gray-200 hover:bg-gray-50"
               }`}
             >
-              {r}
+              {vocab(t, "region", r)}
             </button>
           ))}
         </div>
@@ -255,7 +262,7 @@ function MetadataStep({
                   : "bg-white text-gray-600 border-gray-200 hover:bg-gray-50"
               }`}
             >
-              {i}
+              {vocab(t, "industry", i)}
             </button>
           ))}
         </div>
@@ -432,10 +439,10 @@ function ControlBuilderStep({ framework }: { readonly framework: Framework }) {
                 {expanded === ctrl.id && (
                   <div className="px-4 pb-3 text-xs text-gray-500 space-y-1">
                     {ctrl.domain && (
-                      <p><span className="font-medium">{t("framework_editor.control_domain")}:</span> {ctrl.domain}</p>
+                      <p><span className="font-medium">{t("framework_editor.control_domain")}:</span> {vocab(t, "domain", ctrl.domain)}</p>
                     )}
                     {ctrl.category && (
-                      <p><span className="font-medium">{t("framework_editor.control_category")}:</span> {ctrl.category}</p>
+                      <p><span className="font-medium">{t("framework_editor.control_category")}:</span> {vocab(t, "domain", ctrl.category)}</p>
                     )}
                     {ctrl.requirement_type && (
                       <p>
@@ -503,7 +510,7 @@ function ControlBuilderStep({ framework }: { readonly framework: Framework }) {
                 >
                   <option value="">{t("common.none")}</option>
                   {CATEGORIES.map((c) => (
-                    <option key={c} value={c}>{c}</option>
+                    <option key={c} value={c}>{vocab(t, "domain", c)}</option>
                   ))}
                 </select>
               </div>
@@ -537,7 +544,7 @@ function ControlBuilderStep({ framework }: { readonly framework: Framework }) {
                   onChange={(e) => setDomain(e.target.value)}
                 >
                   <option value="">{t("requirements.domain_unclassified")}</option>
-                  {DOMAINS.map((d) => <option key={d} value={d}>{d}</option>)}
+                  {DOMAINS.map((d) => <option key={d} value={d}>{vocab(t, "domain", d)}</option>)}
                 </select>
               </div>
               <div>

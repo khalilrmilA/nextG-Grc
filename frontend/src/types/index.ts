@@ -83,6 +83,10 @@ export interface Framework extends BaseEntity {
   source_type?: string | null;
   /** Set on a tenant fork, so /upstream-diff knows what it was cloned from. */
   cloned_from_framework_id?: string | null;
+  /** Machine translation into the UI language (stored text in original_*). */
+  translated?: boolean;
+  original_name?: string | null;
+  original_description?: string | null;
 }
 
 export interface FrameworkControl extends BaseEntity {
@@ -111,6 +115,11 @@ export interface FrameworkControl extends BaseEntity {
   /** Set only when the text above was overlaid with a translation. */
   lang?: string | null;
   translation_source?: string | null;
+  /** Machine translation into the UI language (stored text in original_*). */
+  translated?: boolean;
+  original_title?: string | null;
+  original_description?: string | null;
+  original_guidance?: string | null;
 }
 
 export interface FrameworkControlVersion extends BaseEntity {

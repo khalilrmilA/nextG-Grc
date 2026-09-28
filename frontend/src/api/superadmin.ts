@@ -10,6 +10,8 @@ export interface SuperAdminUser {
   tenant_id: string;
   tenant_name: string;
   is_active: boolean;
+  /** Per-user Elite Pack grant, independent of the tenant's plan. */
+  elite_access?: boolean;
   created_at: string;
 }
 
@@ -80,6 +82,9 @@ export const superAdminUsersApi = {
 
   setRole: (id: string, role: string) =>
     apiClient.patch<SuperAdminUser>(`/admin/users/${id}`, { role }).then((r) => r.data),
+
+  setElite: (id: string, elite_access: boolean) =>
+    apiClient.patch<SuperAdminUser>(`/admin/users/${id}`, { elite_access }).then((r) => r.data),
 
   delete: (id: string) =>
     apiClient.delete(`/admin/users/${id}`),

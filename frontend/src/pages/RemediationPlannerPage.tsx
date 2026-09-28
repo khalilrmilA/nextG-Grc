@@ -143,7 +143,7 @@ export default function RemediationPlannerPage() {
   }
 
   return (
-    <AiGate featureLabel="Remediation Planner">
+    <AiGate featureLabel={t("compliance.remediation_planner")}>
       <div className="p-8 max-w-4xl space-y-6">
         {/* Header */}
         <div>

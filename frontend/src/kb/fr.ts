@@ -61,7 +61,7 @@ export const kbFr: KbArticle[] = [
       },
       {
         heading: "S’orienter : la barre latérale",
-        body: "La barre latérale gauche est organisée en menus par domaine, repliables : **Vue d’ensemble**, **Gestion des actifs et des risques**, **Vulnérabilités et menaces**, **Conformité et contrôles**, **Audit**, **Politiques et documents**, **Tiers**, **Gouvernance** et **Rapports et support**. Cliquez sur le nom d’un menu pour l’ouvrir ou le fermer. Vous ne voyez que les pages autorisées par votre rôle. Un élément grisé avec un cadenas signifie que ce module n’est pas activé pour votre organisation. En bas se trouvent **Documentation** (ce site), **Paramètres** et **Aide & Support**.",
+        body: "La barre latérale gauche est organisée en menus repliables, un par domaine : **Vue d’ensemble**, **Gestion des actifs**, **Gestion des risques**, **Gestion des vulnérabilités**, **Gestion des menaces**, **Gestion des incidents**, **Gestion de la conformité**, **Gestion des contrôles**, **Gestion des audits**, **Politiques et documents**, **Gestion des tiers**, **Gouvernance** et **Rapports et support**. Cliquez sur le nom d’un menu pour l’ouvrir ou le fermer. Vous ne voyez que les pages autorisées par votre rôle. Un élément grisé avec un cadenas signifie que ce module n’est pas activé pour votre organisation. En bas se trouvent **Documentation** (ce site), **Paramètres** et **Aide & Support**.",
       },
       {
         heading: "Langue et aide",
@@ -126,7 +126,7 @@ export const kbFr: KbArticle[] = [
   {
     id: "assets",
     route: "/assets",
-    group: "asset_risk",
+    group: "assets",
     title: "Inventaire des actifs",
     summary: "Le registre de vos actifs primordiaux et actifs supports, avec valorisation DIC, propriétaire, statut et cycle de vie.",
     keywords: ["inventaire", "actifs", "CMDB", "serveur", "application", "base de données", "CIA", "DIC", "propriétaire", "cycle de vie", "fin de vie", "end-of-life"],
@@ -164,7 +164,7 @@ export const kbFr: KbArticle[] = [
   {
     id: "asset-graph",
     route: "/asset-graph",
-    group: "asset_risk",
+    group: "assets",
     title: "Cartographie des actifs",
     summary: "Une carte interactive reliant les entités de votre organisation, les processus métiers et les actifs qui les supportent.",
     keywords: ["carte", "cartographie", "graphe", "entité", "département", "processus métier", "dépendances", "cartography", "map"],
@@ -193,7 +193,7 @@ export const kbFr: KbArticle[] = [
   {
     id: "risks",
     route: "/risks",
-    group: "asset_risk",
+    group: "risk",
     title: "Registre des risques",
     summary: "Votre liste centrale des risques, cotés en vraisemblance × impact, avec carte des risques, appétence au risque et validation de la cible.",
     keywords: ["risque", "registre des risques", "risk register", "heatmap", "carte de chaleur", "vraisemblance", "probabilité", "impact", "appétence", "risque résiduel", "risque inhérent", "export"],
@@ -232,7 +232,7 @@ export const kbFr: KbArticle[] = [
   {
     id: "risk-scenarios",
     route: "/risk-scenarios",
-    group: "asset_risk",
+    group: "risk",
     title: "Scénarios de risque",
     summary: "Décrivez comment une menace pourrait exploiter une vulnérabilité sur un actif, et évaluez le risque actuel par rapport au risque cible avec une décision de traitement.",
     keywords: ["scénario", "scénario de risque", "menace", "vulnérabilité", "actif", "traitement", "priorité", "EBIOS", "historique des versions", "scenario"],
@@ -270,7 +270,7 @@ export const kbFr: KbArticle[] = [
   {
     id: "risk-cartography",
     route: "/risk-cartography",
-    group: "asset_risk",
+    group: "risk",
     title: "Cartographie des risques",
     summary: "Créez vos propres cartes des risques avec taille de grille, libellés d’axes, zones de couleur et positions manuelles personnalisés, et exportez-les en PDF.",
     keywords: ["carte des risques", "cartographie", "heatmap", "matrice", "zones", "grille", "PDF", "risk map", "cartography"],
@@ -305,7 +305,7 @@ export const kbFr: KbArticle[] = [
   {
     id: "risk-treatment",
     route: "/risk-treatment",
-    group: "asset_risk",
+    group: "risk",
     title: "Traitement des risques",
     summary: "Enregistrez la décision de traitement de chaque risque (réduire, accepter, transférer, éviter) avec suivi du calendrier, du coût et de l’avancement.",
     keywords: ["plan de traitement", "traitement des risques", "treatment plan", "réduire", "atténuer", "accepter", "transférer", "éviter", "assurance", "budget", "échéance"],
@@ -342,7 +342,7 @@ export const kbFr: KbArticle[] = [
   {
     id: "vulnerabilities",
     route: "/vulnerabilities",
-    group: "security",
+    group: "vulnerability",
     title: "Vulnérabilités",
     summary: "Suivez et corrigez les vulnérabilités de sécurité, de la saisie manuelle, de l’import des scanners et des connecteurs automatiques jusqu’à la clôture.",
     keywords: ["CVE", "CVSS", "vulnérabilité", "scan", "scanner", "nessus", "tenable", "qualys", "openvas", "import", "connecteur", "EASM", "surface d’attaque", "correctif", "patch", "remédiation"],
@@ -382,7 +382,7 @@ export const kbFr: KbArticle[] = [
         tips: [
           "Nessus nécessite une édition qui autorise l’accès API, comme Nessus Manager. Si votre édition ne le permet pas, exportez le scan au format `.nessus` et utilisez **Importer un scan**.",
           "OpenVAS / Greenbone fonctionne uniquement par import de fichier : il ne peut pas être interrogé à distance. Exportez le rapport en XML ou CSV et utilisez **Importer un scan**.",
-          "Un connecteur EASM (surface d’attaque externe) dédié est en préparation. D’ici là, importez vos résultats EASM au format **Generic CSV** (CSV générique).",
+          "Les connecteurs **EASM (surface d’attaque externe)** récupèrent les vulnérabilités de votre plateforme de surface d’attaque : saisissez son URL de base, la clé API, le mode d’authentification et le chemin de l’endpoint des vulnérabilités, puis cliquez sur **Tester** — la correspondance des champs s’affiche avec un aperçu. Les domaines et IP nouvellement découverts sont créés comme actifs (étiquette `easm`) ; attribuez-leur un propriétaire lors de la revue.",
         ],
       },
       {
@@ -397,7 +397,7 @@ export const kbFr: KbArticle[] = [
   {
     id: "cve",
     route: "/cve",
-    group: "security",
+    group: "vulnerability",
     title: "Base de connaissances CVE",
     summary: "Recherchez dans le catalogue public des CVE du NVD, maintenez-le à jour et décidez quelles CVE concernent votre environnement.",
     keywords: ["CVE", "NVD", "CWE", "KEV", "exploitée", "exploited", "CISA", "tri", "triage", "pertinence", "bulletin", "avis de sécurité", "correctif", "patch"],
@@ -428,7 +428,7 @@ export const kbFr: KbArticle[] = [
   {
     id: "threats",
     route: "/threats",
-    group: "security",
+    group: "threat",
     title: "Bibliothèque des menaces",
     summary: "Un catalogue de menaces — intégrées, MITRE ATT&CK et flux en temps réel — que vous adoptez dans votre propre registre et profil.",
     keywords: ["menace", "threat", "MITRE", "ATT&CK", "CISA", "SANS", "flux", "feed", "renseignement sur les menaces", "threat intelligence", "CTI", "profil de menace", "veille"],
@@ -466,7 +466,7 @@ export const kbFr: KbArticle[] = [
   {
     id: "incidents",
     route: "/incidents",
-    group: "security",
+    group: "incident",
     title: "Incidents",
     summary: "Enregistrez les incidents de sécurité, mettez-les à jour tout au long de leur cycle de vie et transformez-les en scénarios de risque.",
     keywords: ["incident", "incident de sécurité", "violation de données", "breach", "malware", "logiciel malveillant", "hameçonnage", "phishing", "panne", "notification", "événement de sécurité", "modifier", "statut", "cycle de vie", "chronologie", "cause racine", "post-mortem", "retour d’expérience"],
@@ -659,7 +659,7 @@ export const kbFr: KbArticle[] = [
   {
     id: "control-effectiveness",
     route: "/control-effectiveness",
-    group: "compliance",
+    group: "controls",
     title: "Efficacité des contrôles",
     summary: "Évaluez sur cinq critères dans quelle mesure chaque contrôle appliqué fonctionne réellement, et assurez le suivi de ceux jugés inefficaces.",
     keywords: ["efficacité", "effectiveness", "test des contrôles", "évaluation", "quatre yeux", "four-eyes", "performance", "assurance"],
@@ -686,7 +686,7 @@ export const kbFr: KbArticle[] = [
   {
     id: "applied-controls",
     route: "/applied-controls",
-    group: "compliance",
+    group: "controls",
     title: "Contrôles appliqués",
     summary: "Le registre des mesures de sécurité en place ou prévues, avec coût, effort, avancement, expiration et validation.",
     keywords: ["contrôle", "mesure de sécurité", "safeguard", "mesure", "mise en œuvre", "coût", "validation", "sign-off", "expiration", "NIST CSF"],
@@ -717,7 +717,7 @@ export const kbFr: KbArticle[] = [
   {
     id: "security-exceptions",
     route: "/security-exceptions",
-    group: "compliance",
+    group: "controls",
     title: "Exceptions et dérogations",
     summary: "Demandez, approuvez et suivez les exceptions formelles aux règles de sécurité et les acceptations de risques, avec mesures compensatoires et dates d’expiration.",
     keywords: ["exception", "dérogation", "waiver", "acceptation du risque", "risk acceptance", "approbation", "mesure compensatoire", "contrôle compensatoire", "expiration"],
@@ -1048,29 +1048,6 @@ export const kbFr: KbArticle[] = [
       {
         heading: "Astuces",
         tips: ["Les RSSI et administrateurs peuvent cliquer sur **Contrôle de référentiel en brouillon** pour transformer une mise à jour en nouveau contrôle dans un référentiel personnalisé."],
-      },
-    ],
-  },
-  {
-    id: "activity-log",
-    route: "/activity-log",
-    group: "governance",
-    title: "Journal d’activité",
-    summary: "La piste d’audit : qui a fait quoi, qui s’est connecté et qui a consulté un enregistrement donné.",
-    keywords: ["piste d’audit", "audit trail", "journal", "log", "historique", "connexion", "sign-in", "login", "journal d’accès", "traçabilité"],
-    sections: [
-      {
-        heading: "À quoi ça sert",
-        body: "Le Journal d’activité enregistre chaque modification sur la plateforme, y compris les champs modifiés (avant → après). Il comporte trois onglets : **Activité**, **Connexions** (compte, adresse IP, appareil, résultat) et **Accès à cet enregistrement** (qui a consulté ou téléchargé un enregistrement). Accessible aux administrateurs, RSSI, responsables conformité et gestionnaires de risques.",
-      },
-      {
-        heading: "Comment enquêter",
-        steps: [
-          "Dans **Activité**, filtrez par entité, action, catégorie (Accès, Validations, Modifications, Autre), origine et date.",
-          "Dépliez une ligne pour voir les champs modifiés.",
-          "Dans **Connexions**, cochez **Échouée** pour n’afficher que les connexions échouées.",
-          "Dans **Accès à cet enregistrement**, choisissez un type d’enregistrement et un identifiant, puis cliquez sur **Rechercher**.",
-        ],
       },
     ],
   },

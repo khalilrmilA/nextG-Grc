@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { useTranslation } from "react-i18next";
+import type { TFunction } from "i18next";
 import {
   Map, Plus, Edit2, Trash2, ArrowLeft, Download, Grid3x3,
   AlertTriangle, ChevronDown, ChevronUp, RotateCcw, Pencil,
@@ -14,6 +15,14 @@ import type {
   CartographyRisk,
   CartographyScope,
 } from "@/types";
+import appI18n from "@/i18n";
+
+/** Intl locale for the current UI language (Arabic keeps Latin digits). */
+function uiLocale(): string {
+  const l = appI18n.language || "en";
+  return l.startsWith("fr") ? "fr-FR" : l.startsWith("ar") ? "ar-u-nu-latn" : "en-US";
+}
+
 
 // ── Default template ──────────────────────────────────────────────────────────
 const DEFAULT_GRID_PRESETS: Record<string, CartographyDefinition> = {
@@ -50,6 +59,49 @@ const DEFAULT_GRID_PRESETS: Record<string, CartographyDefinition> = {
     ],
   },
 };
+
+// The preset labels above are English template values. They are localized when
+// a preset seeds the builder (the user then edits and saves them as data), and
+// a saved label that still equals one of these untouched English defaults is
+// shown in the UI language — anything the user typed is displayed verbatim.
+const PRESET_LABEL_KEYS: Record<string, string> = {
+  "Very Low": "cartography_ui.lbl_very_low",
+  "Low": "cartography_ui.lbl_low",
+  "Medium": "cartography_ui.lbl_medium",
+  "High": "cartography_ui.lbl_high",
+  "Very High": "cartography_ui.lbl_very_high",
+  "Critical": "cartography_ui.lbl_critical",
+  "Rare": "cartography_ui.lbl_rare",
+  "Unlikely": "cartography_ui.lbl_unlikely",
+  "Possible": "cartography_ui.lbl_possible",
+  "Likely": "cartography_ui.lbl_likely",
+  "Almost Certain": "cartography_ui.lbl_almost_certain",
+  "Negligible": "cartography_ui.lbl_negligible",
+  "Minor": "cartography_ui.lbl_minor",
+  "Moderate": "cartography_ui.lbl_moderate",
+  "Major": "cartography_ui.lbl_major",
+  "Catastrophic": "cartography_ui.lbl_catastrophic",
+};
+
+type TFn = TFunction;
+
+function presetLabel(t: TFn, label: string): string {
+  const key = PRESET_LABEL_KEYS[label];
+  if (key) return String(t(key));
+  const m = /^Level (\d+)$/.exec(label);
+  return m ? String(t("cartography_ui.lbl_level", { n: m[1] })) : label;
+}
+
+function localizedPreset(t: TFn, size: string): CartographyDefinition | undefined {
+  const p = DEFAULT_GRID_PRESETS[size];
+  if (!p) return undefined;
+  return {
+    ...p,
+    likelihood_labels: p.likelihood_labels.map((l) => presetLabel(t, l)),
+    impact_labels: p.impact_labels.map((l) => presetLabel(t, l)),
+    risk_levels: p.risk_levels.map((r) => ({ ...r, name: presetLabel(t, r.name) })),
+  };
+}
 
 // ── Helper: zone color for a cell score ──────────────────────────────────────
 function zoneColor(score: number, riskLevels: CartographyRiskLevel[]): string {
@@ -144,9 +196,9 @@ function CartographyGrid({
                 key={ci}
                 className="text-center text-xs text-gray-500 font-medium truncate px-0.5"
                 style={{ width: colWidth }}
-                title={impact_labels[ci] ?? String(ci + 1)}
+                title={impact_labels[ci] != null ? presetLabel(t, impact_labels[ci]) : String(ci + 1)}
               >
-                {impact_labels[ci] ?? ci + 1}
+                {impact_labels[ci] != null ? presetLabel(t, impact_labels[ci]) : ci + 1}
               </div>
             ))}
           </div>
@@ -160,10 +212,10 @@ function CartographyGrid({
                 <div
                   className="flex items-center justify-end pr-1 text-xs text-gray-500 font-medium truncate"
                   style={{ width: "2.5rem", minWidth: "2.5rem" }}
-                  title={likelihood_labels[l - 1] ?? String(l)}
+                  title={likelihood_labels[l - 1] != null ? presetLabel(t, likelihood_labels[l - 1]) : String(l)}
                 >
                   <span className="text-right leading-tight">
-                    {likelihood_labels[l - 1] ?? l}
+                    {likelihood_labels[l - 1] != null ? presetLabel(t, likelihood_labels[l - 1]) : l}
                   </span>
                 </div>
 
@@ -256,7 +308,7 @@ function CartographyGrid({
               className="w-3 h-3 rounded-sm border border-white/60"
               style={{ backgroundColor: lvl.color }}
             />
-            <span>{lvl.name}</span>
+            <span>{presetLabel(t, lvl.name)}</span>
             <span className="text-gray-400">({lvl.min_score}–{lvl.max_score})</span>
           </div>
         ))}
@@ -289,7 +341,7 @@ function CartographyBuilderModal({
   const [scopeType, setScopeType] = useState<CartographyScope["type"]>(initScope.type);
   const [scopeValue, setScopeValue] = useState(initScope.value ?? "");
 
-  const initDef = initial?.definition ?? DEFAULT_GRID_PRESETS["5"];
+  const initDef = initial?.definition ?? localizedPreset(t, "5")!;
   const [gridRows, setGridRows] = useState(initDef.grid_rows);
   const [gridCols, setGridCols] = useState(initDef.grid_cols);
   const [llLabels, setLlLabels] = useState<string[]>(initDef.likelihood_labels);
@@ -302,7 +354,7 @@ function CartographyBuilderModal({
     const n = parseInt(size);
     setGridRows(n);
     setGridCols(n);
-    const preset = DEFAULT_GRID_PRESETS[size];
+    const preset = localizedPreset(t, size);
     if (preset) {
       setLlLabels([...preset.likelihood_labels]);
       setIlLabels([...preset.impact_labels]);
@@ -324,14 +376,14 @@ function CartographyBuilderModal({
   function handleRowsChange(val: number) {
     const n = Math.max(2, Math.min(10, val));
     setGridRows(n);
-    const defaults = ["Very Low","Low","Medium","High","Very High","Level 6","Level 7","Level 8","Level 9","Level 10"];
+    const defaults = ["Very Low","Low","Medium","High","Very High","Level 6","Level 7","Level 8","Level 9","Level 10"].map((l) => presetLabel(t, l));
     setLlLabels(prev => resizeLabels(prev, n, defaults));
   }
 
   function handleColsChange(val: number) {
     const n = Math.max(2, Math.min(10, val));
     setGridCols(n);
-    const defaults = ["Negligible","Minor","Moderate","Major","Catastrophic","Level 6","Level 7","Level 8","Level 9","Level 10"];
+    const defaults = ["Negligible","Minor","Moderate","Major","Catastrophic","Level 6","Level 7","Level 8","Level 9","Level 10"].map((l) => presetLabel(t, l));
     setIlLabels(prev => resizeLabels(prev, n, defaults));
   }
 
@@ -1110,7 +1162,7 @@ export default function RiskCartographyPage() {
                     <AlertTriangle className="w-3 h-3" />
                     {c.risk_count ?? 0} {t("cartography.risks")}
                   </span>
-                  <span>{new Date(c.created_at).toLocaleDateString()}</span>
+                  <span>{new Date(c.created_at).toLocaleDateString(uiLocale())}</span>
                 </div>
                 {/* Scope badge */}
                 {c.definition.scope && c.definition.scope.type !== "all" && (

@@ -30,6 +30,7 @@ from app.models.auditor_assignment import AuditorAssignment
 from app.models.activity_log import ActivityLog
 from app.services.activity_chain import chain_and_add, is_system_actor
 from app.services.authz import get_effective_roles
+from app.services.ai_locale import get_request_language
 from app.api.v1.dependencies import get_tenant_id
 from app.api.v1.dependencies.auth import get_current_user, require_roles
 
@@ -37,7 +38,7 @@ router = APIRouter()
 logger = logging.getLogger(__name__)
 
 
-async def _send_welcome_email(user: User) -> None:
+async def _send_welcome_email(user: User, ui_lang: str | None = None) -> None:
     """Email a first-login 'set your password' link to an admin-created user.
 
     Reuses the exact same mechanism as /auth/forgot-password: a single-use,
@@ -48,7 +49,7 @@ async def _send_welcome_email(user: User) -> None:
     """
     try:
         from app.core.config import settings as app_settings
-        from app.services.email_service import send_email
+        from app.services.email_service import send_welcome_email
 
         raw_token = secrets.token_urlsafe(32)
         token_hash = hashlib.sha256(raw_token.encode()).hexdigest()
@@ -63,20 +64,16 @@ async def _send_welcome_email(user: User) -> None:
         base = (getattr(app_settings, "FRONTEND_BASE_URL", "") or "https://grceye.com/app").rstrip("/")
         set_password_link = f"{base}/reset-password?token={raw_token}"
 
-        await send_email(
-            to_email=user.email,
-            subject="Welcome to GRCEye — set your password",
-            template_name="notification.html",
-            context={
-                "title": f"Welcome, {user.first_name}",
-                "message": (
-                    "An administrator created a GRCEye account for you. Click below to "
-                    "set your own password and sign in (link valid for 1 hour). If you "
-                    "weren't expecting this, contact your administrator."
-                ),
-                "action_url": set_password_link,
-                "action_label": "Set my password",
-            },
+        # A brand-new user has no remembered UI language: the tenant's locale
+        # when it has one, else the language of the admin who created them.
+        from app.services.user_language import recipient_language
+        async with AsyncSessionLocal() as db:
+            lang = await recipient_language(db, None, tenant_id=user.tenant_id)
+        if lang == "en" and ui_lang:
+            lang = ui_lang
+        await send_welcome_email(
+            to_email=user.email, first_name=user.first_name,
+            set_password_link=set_password_link, lang=lang,
         )
     except Exception:  # noqa: BLE001 — must never fail account creation
         logger.warning("welcome email failed to send for new user %s", user.id)
@@ -190,6 +187,7 @@ async def create_user(
     db: Annotated[AsyncSession, Depends(get_db)],
     _: Annotated[User, Depends(require_roles(UserRole.TENANT_ADMIN))],
     tenant_id: Annotated[str, Depends(get_tenant_id)],
+    ui_lang: Annotated[str, Depends(get_request_language)],
 ):
     """Create a user with one or more assignable roles. Server generates a temporary
     password, forces a password change on first login, and emails the new user a
@@ -245,7 +243,7 @@ async def create_user(
     db.add(new_user)
     await db.commit()
 
-    await _send_welcome_email(new_user)
+    await _send_welcome_email(new_user, ui_lang)
 
     return CreateUserResponse(
         id=new_user.id, email=new_user.email,

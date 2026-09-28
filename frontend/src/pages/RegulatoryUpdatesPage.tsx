@@ -20,9 +20,18 @@ import {
   FilePlus2,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import { AutoTranslatedBadge, pickText, useShowOriginal } from "@/components/common/AutoTranslatedBadge";
 import { regulatoryApi, frameworksApi } from "@/api/endpoints";
 import type { Framework } from "@/types";
 import { useAuthStore, hasAnyRole } from "@/store/auth";
+import appI18n from "@/i18n";
+
+/** Intl locale for the current UI language (Arabic keeps Latin digits). */
+function uiLocale(): string {
+  const l = appI18n.language || "en";
+  return l.startsWith("fr") ? "fr-FR" : l.startsWith("ar") ? "ar-u-nu-latn" : "en-US";
+}
+
 
 const IMPACT_BADGE: Record<string, string> = {
   critical: "bg-red-100 text-red-700 border-red-200",
@@ -48,8 +57,10 @@ function formatLabel(s: string) {
 }
 
 export default function RegulatoryUpdatesPage() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const navigate = useNavigate();
+  // Feed items are machine-translated into the UI language by the API.
+  const { isOriginal, toggle: toggleOriginal } = useShowOriginal();
   const user = useAuthStore((u) => u);
   const canDraftControl = hasAnyRole(user, ["ciso", "tenant_admin", "super_admin"]);
   const [items, setItems] = useState<any[]>([]);
@@ -131,7 +142,8 @@ export default function RegulatoryUpdatesPage() {
 
   useEffect(() => {
     load();
-  }, [statusFilter]);
+    // Reload on a UI language switch: the API returns feed text in that language.
+  }, [statusFilter, i18n.language]);
 
   async function handleApprove(id: string) {
     setApproving(id);
@@ -164,7 +176,7 @@ export default function RegulatoryUpdatesPage() {
         load();
       }
     } catch {
-      setFetchResult({ created: 0, message: "Failed to fetch news. Make sure the backend is running." });
+      setFetchResult({ created: 0, message: t("regulatory.fetch_failed") });
     } finally {
       setFetching(false);
     }
@@ -210,6 +222,7 @@ export default function RegulatoryUpdatesPage() {
     (i) =>
       i.status !== "pending_approval" &&
       (i.title?.toLowerCase().includes(search.toLowerCase()) ||
+        i.original_title?.toLowerCase().includes(search.toLowerCase()) ||
         i.regulation_name?.toLowerCase().includes(search.toLowerCase()))
   );
 
@@ -286,7 +299,10 @@ export default function RegulatoryUpdatesPage() {
               <div key={item.id} className="flex items-start gap-4 px-6 py-4 hover:bg-gray-50/40 transition-colors">
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
-                    <span className="font-medium text-sm text-gray-900">{item.title}</span>
+                    <span className="font-medium text-sm text-gray-900">{pickText(item, "title", isOriginal(item.id))}</span>
+                    {item.translated && (
+                      <AutoTranslatedBadge showingOriginal={isOriginal(item.id)} onToggle={() => toggleOriginal(item.id)} />
+                    )}
                     {item.impact && (
                       <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-semibold border ${IMPACT_BADGE[item.impact] || "bg-gray-100 text-gray-600"}`}>
                         {item.impact}
@@ -301,7 +317,7 @@ export default function RegulatoryUpdatesPage() {
                     )}
                   </div>
                   {item.description && (
-                    <p className="text-xs text-gray-500 mt-1 line-clamp-2">{item.description}</p>
+                    <p className="text-xs text-gray-500 mt-1 line-clamp-2">{pickText(item, "description", isOriginal(item.id))}</p>
                   )}
                   {item.url && (
                     <a href={item.url} target="_blank" rel="noreferrer"
@@ -421,7 +437,7 @@ export default function RegulatoryUpdatesPage() {
                         <ChevronDown className="w-4 h-4 text-gray-400" />
                       )}
                     </td>
-                    <td className="px-6 py-4 font-medium text-gray-900">{item.title}</td>
+                    <td className="px-6 py-4 font-medium text-gray-900">{pickText(item, "title", isOriginal(item.id))}</td>
                     <td className="px-6 py-4 text-gray-600">{item.source || "-"}</td>
                     <td className="px-6 py-4 text-gray-600">{item.regulation_name || "-"}</td>
                     <td className="px-6 py-4">
@@ -444,22 +460,25 @@ export default function RegulatoryUpdatesPage() {
                     </td>
                     <td className="px-6 py-4 text-gray-500">
                       {item.effective_date
-                        ? new Date(item.effective_date).toLocaleDateString()
+                        ? new Date(item.effective_date).toLocaleDateString(uiLocale())
                         : "-"}
                     </td>
                     <td className="px-6 py-4 text-gray-500">
-                      {item.deadline ? new Date(item.deadline).toLocaleDateString() : "-"}
+                      {item.deadline ? new Date(item.deadline).toLocaleDateString(uiLocale()) : "-"}
                     </td>
                   </tr>
                   {expandedId === item.id && (
                     <tr key={`${item.id}-detail`} className="border-b border-gray-50">
                       <td colSpan={8} className="px-6 py-4 bg-gray-50/30">
                         <div className="space-y-3">
+                          {item.translated && (
+                            <AutoTranslatedBadge showingOriginal={isOriginal(item.id)} onToggle={() => toggleOriginal(item.id)} />
+                          )}
                           {item.description && (
                             <div>
                               <p className="text-xs font-medium text-gray-500 mb-1">{t("regulatory.detail_description")}</p>
                               <p className="text-sm text-gray-700 whitespace-pre-wrap">
-                                {item.description}
+                                {pickText(item, "description", isOriginal(item.id))}
                               </p>
                             </div>
                           )}
@@ -477,13 +496,13 @@ export default function RegulatoryUpdatesPage() {
                             {item.effective_date && (
                               <span className="inline-flex items-center gap-1 text-xs text-gray-500">
                                 <Calendar className="w-3 h-3" /> {t("regulatory.detail_effective")}{" "}
-                                {new Date(item.effective_date).toLocaleDateString()}
+                                {new Date(item.effective_date).toLocaleDateString(uiLocale())}
                               </span>
                             )}
                             {item.deadline && (
                               <span className="inline-flex items-center gap-1 text-xs text-gray-500">
                                 <AlertCircle className="w-3 h-3" /> {t("regulatory.detail_deadline")}{" "}
-                                {new Date(item.deadline).toLocaleDateString()}
+                                {new Date(item.deadline).toLocaleDateString(uiLocale())}
                               </span>
                             )}
                           </div>

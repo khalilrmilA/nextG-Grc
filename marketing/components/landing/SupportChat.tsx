@@ -63,11 +63,15 @@ async function streamSupport(
   messages: { role: string; content: string }[],
   cbs: StreamCbs,
   signal: AbortSignal,
+  language: string,
 ) {
+  // The site language the visitor picked, sent explicitly: without it the
+  // backend guessed from the message text or the browser's Accept-Language,
+  // so an Arabic page could get an English answer.
   const resp = await fetch(`${API_BASE}/public/support-chat`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ messages }),
+    headers: { "Content-Type": "application/json", "Accept-Language": language },
+    body: JSON.stringify({ messages, language }),
     signal,
   });
 
@@ -129,7 +133,7 @@ function RenderContent({ text }: { text: string }) {
 }
 
 export default function SupportChat() {
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
   const [open, setOpen] = useState(false);
   const [minimized, setMinimized] = useState(false);
   const [input, setInput] = useState("");
@@ -197,6 +201,7 @@ export default function SupportChat() {
           onDone: () => setLoading(false),
         },
         abortRef.current.signal,
+        lang,
       );
     } catch (err: unknown) {
       const e = err as { name?: string; message?: string };

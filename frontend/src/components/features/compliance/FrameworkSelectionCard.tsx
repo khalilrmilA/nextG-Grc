@@ -1,4 +1,5 @@
 import { Check } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import type { Framework } from "@/types";
 
 interface Props {
@@ -22,6 +23,7 @@ export default function FrameworkSelectionCard({
   framework, selected, isPrimary, onSelectPrimary, onToggleSecondary,
   userIndustry, userCountry,
 }: Props) {
+  const { t } = useTranslation();
   const recommended = isRecommended(framework, userIndustry, userCountry);
 
   const colorMap: Record<string, string> = {
@@ -62,7 +64,7 @@ export default function FrameworkSelectionCard({
       {/* Recommended badge */}
       {recommended && (
         <span className="absolute -top-2.5 left-3 text-xs font-semibold bg-amber-400 text-amber-900 px-2 py-0.5 rounded-full">
-          Recommended
+          {t("auth.recommended")}
         </span>
       )}
 
@@ -100,7 +102,7 @@ export default function FrameworkSelectionCard({
         <span className={`text-xs font-mono font-semibold px-1.5 py-0.5 rounded ${badgeMap[color]}`}>
           {framework.short_name}
         </span>
-        <span className="text-xs text-gray-400">{framework.control_count} controls</span>
+        <span className="text-xs text-gray-400">{t("compliance.controls_count", { count: framework.control_count })}</span>
       </div>
 
       {/* Description */}
@@ -112,7 +114,7 @@ export default function FrameworkSelectionCard({
       {isPrimary && (
         <div className="ml-6 mt-2">
           <span className="text-xs font-medium text-blue-700 bg-blue-100 px-2 py-0.5 rounded-full">
-            Primary Framework
+            {t("auth.primary_framework")}
           </span>
         </div>
       )}

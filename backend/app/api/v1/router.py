@@ -96,6 +96,9 @@ api_router.include_router(audit_grids.router, prefix="/audit-grids", tags=["Audi
 api_router.include_router(audit_comments.router, prefix="/audit-comments", tags=["Audit Comments"])
 api_router.include_router(compliance_scales.router, prefix="/compliance-scales", tags=["Compliance Scales"])
 api_router.include_router(admin.router, prefix="/admin", tags=["Super Admin"])
+# Automatic machine translation of system content — status for super admins.
+from app.api.v1.endpoints import translations_admin  # noqa: E402
+api_router.include_router(translations_admin.router, prefix="/admin/translations", tags=["Super Admin"])
 api_router.include_router(reports.router, prefix="/reports", tags=["Reports"])
 api_router.include_router(data_io.router, prefix="/data", tags=["Data Import/Export"])
 api_router.include_router(activity_log.router, prefix="/activity-log", tags=["Activity Log"])

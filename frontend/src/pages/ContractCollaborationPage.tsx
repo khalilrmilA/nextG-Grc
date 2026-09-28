@@ -7,6 +7,8 @@
  */
 import { useEffect, useRef, useState, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
+import { useTranslation } from "react-i18next";
+import i18next from "i18next";
 import {
   ArrowLeft, Copy, CheckCircle2, Send, RefreshCw,
   AlertTriangle, AlertCircle, Info, ChevronDown,
@@ -14,7 +16,7 @@ import {
   ExternalLink, Check, X, Plus, CalendarDays, Lock, FileSignature,
 } from "lucide-react";
 import { contractCollabApi, type CollabData, type CollabMessage } from "@/api/endpoints";
-import { readSseStream, makeThinkFilter } from "@/lib/sse";
+import { readSseStream, makeThinkFilter, aiLanguageHeaders, withUiLanguage } from "@/lib/sse";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -39,6 +41,12 @@ interface ActionItem {
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
+
+/** Display locale for dates/times, following the interface language. */
+const uiLocale = () => {
+  const l = i18next.language || "en";
+  return l.startsWith("fr") ? "fr-FR" : l.startsWith("ar") ? "ar-u-nu-latn" : "en-US";
+};
 
 const SEV_COLOR: Record<string, string> = {
   critical: "bg-red-100 text-red-800 border-red-300",
@@ -73,7 +81,7 @@ function fmtDate(iso: string | undefined): string {
     const normalized = /^\d{4}-\d{2}-\d{2}$/.test(iso) ? `${iso}T12:00:00` : iso;
     const d = new Date(normalized);
     if (isNaN(d.getTime())) return iso; // Return raw string if not a real date
-    return d.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
+    return d.toLocaleDateString(uiLocale(), { year: "numeric", month: "short", day: "numeric" });
   } catch {
     return iso;
   }
@@ -88,6 +96,7 @@ interface FinalizePlanModalProps {
 }
 
 function FinalizePlanModal({ plan, onClose, onSave }: FinalizePlanModalProps) {
+  const { t } = useTranslation();
   const [dates, setDates] = useState<Record<string, string>>(() => {
     const init: Record<string, string> = {};
     for (const item of plan) {
@@ -118,7 +127,7 @@ function FinalizePlanModal({ plan, onClose, onSave }: FinalizePlanModalProps) {
         <div className="flex items-center justify-between px-5 py-4 border-b">
           <div className="flex items-center gap-2">
             <CalendarDays className="w-5 h-5 text-blue-600" />
-            <h2 className="font-semibold text-gray-900">Finalize Action Plan Deadlines</h2>
+            <h2 className="font-semibold text-gray-900">{t("contract_collab.finalize_title")}</h2>
           </div>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-700">
             <X className="w-5 h-5" />
@@ -126,8 +135,7 @@ function FinalizePlanModal({ plan, onClose, onSave }: FinalizePlanModalProps) {
         </div>
 
         <p className="px-5 py-3 text-sm text-gray-500 border-b bg-gray-50">
-          Set a real calendar deadline for each action item. The vendor will see these dates
-          and CISO will be notified 10 days before any unfinished item is due.
+          {t("contract_collab.finalize_desc")}
         </p>
 
         <div className="flex-1 overflow-y-auto px-5 py-3 space-y-3">
@@ -136,7 +144,7 @@ function FinalizePlanModal({ plan, onClose, onSave }: FinalizePlanModalProps) {
               <div className="flex-1 min-w-0">
                 <p className="text-xs font-medium text-gray-800 truncate">{item.action}</p>
                 <span className={`text-[10px] uppercase font-semibold px-1.5 py-0.5 rounded-full ${SEV_COLOR[item.priority]}`}>
-                  {item.priority}
+                  {t(`vocab.${item.priority}`, { defaultValue: item.priority })}
                 </span>
               </div>
               <input
@@ -152,12 +160,12 @@ function FinalizePlanModal({ plan, onClose, onSave }: FinalizePlanModalProps) {
         <div className="px-5 py-4 border-t flex justify-end gap-2">
           <button onClick={onClose}
             className="px-4 py-2 text-sm text-gray-600 border rounded-lg hover:bg-gray-50">
-            Cancel
+            {t("common.cancel")}
           </button>
           <button onClick={handleSave} disabled={saving}
             className="flex items-center gap-1.5 px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50">
             {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <CalendarDays className="w-4 h-4" />}
-            {saving ? "Saving…" : "Finalize Plan"}
+            {saving ? t("common.saving") : t("contract_collab.finalize_plan")}
           </button>
         </div>
       </div>
@@ -172,6 +180,7 @@ interface AddIssueFormProps {
 }
 
 function AddIssueForm({ onAdd }: AddIssueFormProps) {
+  const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const [clause, setClause]     = useState("");
   const [severity, setSeverity] = useState<AISuggestion["severity"]>("medium");
@@ -190,17 +199,17 @@ function AddIssueForm({ onAdd }: AddIssueFormProps) {
       <button
         onClick={() => setOpen(true)}
         className="flex items-center gap-1.5 w-full py-2 text-xs text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded-lg border border-dashed border-blue-300 justify-center mt-1">
-        <Plus className="w-3.5 h-3.5" /> Add Custom Issue
+        <Plus className="w-3.5 h-3.5" /> {t("contract_collab.add_custom_issue")}
       </button>
     );
   }
 
   return (
     <div className="border rounded-lg p-3 bg-blue-50 border-blue-200 space-y-2 mt-1">
-      <p className="text-xs font-semibold text-blue-800">New Custom Issue</p>
+      <p className="text-xs font-semibold text-blue-800">{t("contract_collab.new_custom_issue")}</p>
       <div className="flex gap-2">
         <input
-          placeholder="Clause / Section"
+          placeholder={t("contract_collab.clause_placeholder")}
           className="flex-1 text-xs border rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-400"
           value={clause}
           onChange={e => setClause(e.target.value)}
@@ -209,21 +218,21 @@ function AddIssueForm({ onAdd }: AddIssueFormProps) {
           className="text-xs border rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-400"
           value={severity}
           onChange={e => setSeverity(e.target.value as AISuggestion["severity"])}>
-          <option value="critical">Critical</option>
-          <option value="high">High</option>
-          <option value="medium">Medium</option>
-          <option value="low">Low</option>
+          <option value="critical">{t("vocab.critical")}</option>
+          <option value="high">{t("vocab.high")}</option>
+          <option value="medium">{t("vocab.medium")}</option>
+          <option value="low">{t("vocab.low")}</option>
         </select>
       </div>
       <textarea
-        placeholder="Describe the issue…"
+        placeholder={t("contract_collab.issue_placeholder")}
         rows={2}
         className="w-full text-xs border rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-400 resize-none"
         value={issue}
         onChange={e => setIssue(e.target.value)}
       />
       <textarea
-        placeholder="Recommended fix…"
+        placeholder={t("contract_collab.fix_placeholder")}
         rows={2}
         className="w-full text-xs border rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-400 resize-none"
         value={fix}
@@ -232,11 +241,11 @@ function AddIssueForm({ onAdd }: AddIssueFormProps) {
       <div className="flex gap-2 justify-end">
         <button onClick={() => setOpen(false)}
           className="text-xs px-2.5 py-1 text-gray-600 border rounded hover:bg-gray-50">
-          Cancel
+          {t("common.cancel")}
         </button>
         <button onClick={handleAdd}
           className="text-xs px-2.5 py-1 bg-blue-600 text-white rounded hover:bg-blue-700">
-          Add Issue
+          {t("contract_collab.add_issue")}
         </button>
       </div>
     </div>
@@ -250,6 +259,7 @@ interface AddPlanItemFormProps {
 }
 
 function AddPlanItemForm({ onAdd }: AddPlanItemFormProps) {
+  const { t } = useTranslation();
   const [open, setOpen]           = useState(false);
   const [action, setAction]       = useState("");
   const [responsible, setResp]    = useState("");
@@ -268,16 +278,16 @@ function AddPlanItemForm({ onAdd }: AddPlanItemFormProps) {
       <button
         onClick={() => setOpen(true)}
         className="flex items-center gap-1.5 w-full py-2 text-xs text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded-lg border border-dashed border-blue-300 justify-center mt-1">
-        <Plus className="w-3.5 h-3.5" /> Add Custom Plan Item
+        <Plus className="w-3.5 h-3.5" /> {t("contract_collab.add_custom_plan_item")}
       </button>
     );
   }
 
   return (
     <div className="border rounded-lg p-3 bg-blue-50 border-blue-200 space-y-2 mt-1">
-      <p className="text-xs font-semibold text-blue-800">New Plan Item</p>
+      <p className="text-xs font-semibold text-blue-800">{t("contract_collab.new_plan_item")}</p>
       <textarea
-        placeholder="Action to complete…"
+        placeholder={t("contract_collab.action_placeholder")}
         rows={2}
         className="w-full text-xs border rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-400 resize-none"
         value={action}
@@ -285,7 +295,7 @@ function AddPlanItemForm({ onAdd }: AddPlanItemFormProps) {
       />
       <div className="flex gap-2">
         <input
-          placeholder="Responsible party"
+          placeholder={t("contract_collab.responsible_placeholder")}
           className="flex-1 text-xs border rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-400"
           value={responsible}
           onChange={e => setResp(e.target.value)}
@@ -294,10 +304,10 @@ function AddPlanItemForm({ onAdd }: AddPlanItemFormProps) {
           className="text-xs border rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-400"
           value={priority}
           onChange={e => setPriority(e.target.value as ActionItem["priority"])}>
-          <option value="critical">Critical</option>
-          <option value="high">High</option>
-          <option value="medium">Medium</option>
-          <option value="low">Low</option>
+          <option value="critical">{t("vocab.critical")}</option>
+          <option value="high">{t("vocab.high")}</option>
+          <option value="medium">{t("vocab.medium")}</option>
+          <option value="low">{t("vocab.low")}</option>
         </select>
         <input
           type="date"
@@ -309,11 +319,11 @@ function AddPlanItemForm({ onAdd }: AddPlanItemFormProps) {
       <div className="flex gap-2 justify-end">
         <button onClick={() => setOpen(false)}
           className="text-xs px-2.5 py-1 text-gray-600 border rounded hover:bg-gray-50">
-          Cancel
+          {t("common.cancel")}
         </button>
         <button onClick={handleAdd} disabled={!action.trim()}
           className="text-xs px-2.5 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-40">
-          Add Item
+          {t("contract_collab.add_item")}
         </button>
       </div>
     </div>
@@ -323,6 +333,7 @@ function AddPlanItemForm({ onAdd }: AddPlanItemFormProps) {
 // ── Component ─────────────────────────────────────────────────────────────────
 
 export default function ContractCollaborationPage() {
+  const { t } = useTranslation();
   const { collabId } = useParams<{ collabId: string }>();
   const navigate = useNavigate();
 
@@ -426,13 +437,14 @@ export default function ContractCollaborationPage() {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
+          ...aiLanguageHeaders(),
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
-        body: JSON.stringify({
+        body: JSON.stringify(withUiLanguage({
           contract_text: contractText,
           ai_review: collab.ai_review ?? undefined,
           vendor_name: collab.vendor_name,
-        }),
+        })),
         signal: ctrl.signal,
       });
 
@@ -577,9 +589,9 @@ export default function ContractCollaborationPage() {
   if (!collab) {
     return (
       <div className="p-8 text-center text-gray-500">
-        Collaboration not found.
-        <button onClick={() => navigate("/vendors")} className="ml-2 text-blue-600 underline">
-          Back to vendors
+        {t("contract_collab.not_found")}
+        <button onClick={() => navigate("/vendors")} className="ms-2 text-blue-600 underline">
+          {t("contract_collab.back_to_vendors")}
         </button>
       </div>
     );
@@ -606,11 +618,11 @@ export default function ContractCollaborationPage() {
         <div className="bg-white border-b px-6 py-3 flex items-center gap-4 shrink-0">
           <button onClick={() => navigate("/vendors")}
             className="text-gray-500 hover:text-gray-800 flex items-center gap-1 text-sm">
-            <ArrowLeft className="w-4 h-4" /> Vendors
+            <ArrowLeft className="w-4 h-4 rtl:rotate-180" /> {t("nav.vendors")}
           </button>
           <div className="flex-1">
             <h1 className="font-semibold text-gray-900 text-sm leading-tight">
-              Contract Collaboration — <span className="text-blue-700">{collab.vendor_name}</span>
+              {t("contract_collab.title")} — <span className="text-blue-700">{collab.vendor_name}</span>
             </h1>
             <p className="text-xs text-gray-500 truncate max-w-xs">{collab.contract_id}</p>
           </div>
@@ -618,17 +630,17 @@ export default function ContractCollaborationPage() {
           <span className={`px-2.5 py-1 rounded-full text-xs font-semibold ${
             isAgreed ? "bg-green-100 text-green-800" : "bg-yellow-100 text-yellow-800"
           }`}>
-            {isAgreed ? "✓ Agreed" : "In Negotiation"}
+            {isAgreed ? `✓ ${t("contract_collab.agreed")}` : t("contract_collab.in_negotiation")}
           </span>
 
           <div className="flex items-center gap-2 text-xs text-gray-500">
             <span className={`flex items-center gap-1 ${collab.agreed_by_internal ? "text-green-600" : ""}`}>
               {collab.agreed_by_internal ? <Check className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
-              Your side
+              {t("contract_collab.your_side")}
             </span>
             <span className={`flex items-center gap-1 ${collab.agreed_by_vendor ? "text-green-600" : ""}`}>
               {collab.agreed_by_vendor ? <Check className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
-              Vendor
+              {t("contract_collab.vendor")}
             </span>
           </div>
 
@@ -639,13 +651,13 @@ export default function ContractCollaborationPage() {
           <button onClick={copyShare}
             className="flex items-center gap-1 text-xs bg-blue-600 text-white px-2.5 py-1.5 rounded hover:bg-blue-700">
             {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
-            {copied ? "Copied!" : "Copy Link"}
+            {copied ? t("contract_collab.copied") : t("contract_collab.copy_link")}
           </button>
 
           {!isAgreed && (
             <button onClick={markAgreed}
               className="flex items-center gap-1 text-xs bg-green-600 text-white px-2.5 py-1.5 rounded hover:bg-green-700">
-              <CheckCircle2 className="w-3.5 h-3.5" /> Mark Agreed
+              <CheckCircle2 className="w-3.5 h-3.5" /> {t("contract_collab.mark_agreed")}
             </button>
           )}
         </div>
@@ -657,21 +669,21 @@ export default function ContractCollaborationPage() {
           <div className="flex flex-col w-[55%] border-r bg-white">
             <div className="flex items-center justify-between px-4 py-2 border-b bg-gray-50">
               <span className="text-xs font-semibold text-gray-600 uppercase tracking-wide">
-                Working Contract Draft
+                {t("contract_collab.working_draft")}
               </span>
               <button
                 onClick={saveText}
                 disabled={!textDirty || saving}
                 className="flex items-center gap-1 text-xs px-2.5 py-1 rounded bg-blue-600 text-white disabled:opacity-40 hover:bg-blue-700">
                 {saving ? <Loader2 className="w-3 h-3 animate-spin" /> : null}
-                {saving ? "Saving…" : "Save Changes"}
+                {saving ? t("common.saving") : t("contract_collab.save_changes")}
               </button>
             </div>
             <textarea
               className="flex-1 p-4 font-mono text-xs resize-none focus:outline-none text-gray-800 leading-relaxed"
               value={contractText}
               onChange={e => { setContractText(e.target.value); setTextDirty(true); }}
-              placeholder="Contract text will appear here…"
+              placeholder={t("contract_collab.text_placeholder")}
               readOnly={isAgreed}
             />
           </div>
@@ -694,10 +706,10 @@ export default function ContractCollaborationPage() {
                   {tab === "chat"        && <MessageSquare className="w-3.5 h-3.5" />}
                   {tab === "plan"        && <ClipboardList className="w-3.5 h-3.5" />}
                   {tab === "agreement"   && <FileSignature className="w-3.5 h-3.5" />}
-                  {tab === "suggestions" && `Issues (${suggestions.length})`}
-                  {tab === "chat"        && `Chat (${messages.length})`}
-                  {tab === "plan"        && `Plan (${donePlan}/${actionPlan.length})`}
-                  {tab === "agreement"   && (bothSigned ? "Signed ✓" : "Sign")}
+                  {tab === "suggestions" && t("contract_collab.tab_issues", { count: suggestions.length })}
+                  {tab === "chat"        && t("contract_collab.tab_chat", { count: messages.length })}
+                  {tab === "plan"        && t("contract_collab.tab_plan", { done: donePlan, total: actionPlan.length })}
+                  {tab === "agreement"   && (bothSigned ? `${t("contract_collab.signed")} ✓` : t("contract_collab.sign"))}
                 </button>
               ))}
             </div>
@@ -706,20 +718,20 @@ export default function ContractCollaborationPage() {
             {activeTab === "suggestions" && (
               <div className="flex flex-col flex-1 overflow-hidden">
                 <div className="px-4 py-2 border-b bg-gray-50 flex items-center justify-between">
-                  <span className="text-xs text-gray-500">AI-identified issues + your own</span>
+                  <span className="text-xs text-gray-500">{t("contract_collab.issues_hint")}</span>
                   <button
                     onClick={generateAnalysis}
                     disabled={aiStreaming}
                     className="flex items-center gap-1 text-xs px-2.5 py-1 rounded bg-purple-600 text-white hover:bg-purple-700 disabled:opacity-50">
                     {aiStreaming
-                      ? <><Loader2 className="w-3 h-3 animate-spin" /> Analysing…</>
-                      : <><RefreshCw className="w-3 h-3" /> {suggestions.length ? "Re-analyse" : "Generate Analysis"}</>}
+                      ? <><Loader2 className="w-3 h-3 animate-spin" /> {t("contract_collab.analysing")}</>
+                      : <><RefreshCw className="w-3 h-3" /> {suggestions.length ? t("contract_collab.reanalyse") : t("contract_collab.generate_analysis")}</>}
                   </button>
                 </div>
 
                 {aiStreaming && (
                   <div className="px-4 py-3 bg-purple-50 border-b text-xs text-purple-700 font-mono whitespace-pre-wrap max-h-32 overflow-y-auto">
-                    {aiRaw || "Analysing contract…"}
+                    {aiRaw || t("contract_collab.analysing_contract")}
                   </div>
                 )}
 
@@ -727,7 +739,7 @@ export default function ContractCollaborationPage() {
                   {suggestions.length === 0 && !aiStreaming && (
                     <div className="text-center py-8 text-gray-400 text-sm">
                       <Lightbulb className="w-8 h-8 mx-auto mb-2 opacity-30" />
-                      Click "Generate Analysis" or add a custom issue below
+                      {t("contract_collab.issues_empty")}
                     </div>
                   )}
                   {suggestions.map(s => (
@@ -737,22 +749,22 @@ export default function ContractCollaborationPage() {
                       <div className="flex items-center justify-between mb-1">
                         <div className="flex items-center gap-1.5 text-xs font-semibold">
                           {SEV_ICON(s.severity)}
-                          <span className="uppercase">{s.severity}</span>
+                          <span className="uppercase">{t(`vocab.${s.severity}`, { defaultValue: s.severity })}</span>
                           <span className="font-normal text-gray-600">— {s.clause}</span>
                           {s.custom && (
                             <span className="text-[10px] bg-blue-200 text-blue-800 px-1.5 py-0.5 rounded-full font-semibold">
-                              Custom
+                              {t("contract_collab.custom")}
                             </span>
                           )}
                         </div>
                         {s.status === "open" && (
                           <div className="flex gap-1">
                             <button onClick={() => updateSuggStatus(s.id, "accepted")}
-                              className="p-0.5 rounded hover:bg-green-200" title="Accept">
+                              className="p-0.5 rounded hover:bg-green-200" title={t("contract_collab.accept")} aria-label={t("contract_collab.accept")}>
                               <Check className="w-3.5 h-3.5 text-green-700" />
                             </button>
                             <button onClick={() => updateSuggStatus(s.id, "rejected")}
-                              className="p-0.5 rounded hover:bg-red-200" title="Dismiss">
+                              className="p-0.5 rounded hover:bg-red-200" title={t("contract_collab.dismiss")} aria-label={t("contract_collab.dismiss")}>
                               <X className="w-3.5 h-3.5 text-red-700" />
                             </button>
                           </div>
@@ -760,12 +772,12 @@ export default function ContractCollaborationPage() {
                         {s.status !== "open" && (
                           <span className={`text-xs font-semibold px-1.5 py-0.5 rounded-full ${
                             s.status === "accepted" ? "bg-green-200 text-green-800" : "bg-gray-200 text-gray-500"
-                          }`}>{s.status}</span>
+                          }`}>{t(`vocab.${s.status}`, { defaultValue: s.status })}</span>
                         )}
                       </div>
                       <p className="text-xs mb-1.5 text-gray-700">{s.issue}</p>
                       <div className="bg-white/60 rounded p-2 text-xs text-gray-800 font-mono leading-relaxed">
-                        <span className="text-gray-400 text-[10px] uppercase font-semibold mr-1">Fix:</span>
+                        <span className="text-gray-400 text-[10px] uppercase font-semibold me-1">{t("contract_collab.fix_label")}</span>
                         {s.fix}
                       </div>
                     </div>
@@ -784,7 +796,7 @@ export default function ContractCollaborationPage() {
                   {messages.length === 0 && (
                     <div className="text-center py-8 text-gray-400 text-sm">
                       <MessageSquare className="w-8 h-8 mx-auto mb-2 opacity-30" />
-                      No messages yet. Start the conversation.
+                      {t("contract_collab.no_messages")}
                     </div>
                   )}
                   {messages.map(m => (
@@ -799,7 +811,7 @@ export default function ContractCollaborationPage() {
                         {m.message}
                       </div>
                       <span className="text-[10px] text-gray-300 mt-0.5 px-1">
-                        {new Date(m.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                        {new Date(m.created_at).toLocaleTimeString(uiLocale(), { hour: "2-digit", minute: "2-digit" })}
                       </span>
                     </div>
                   ))}
@@ -809,7 +821,7 @@ export default function ContractCollaborationPage() {
                 <div className="border-t p-3 flex gap-2">
                   <input
                     className="flex-1 text-sm border rounded-full px-3.5 py-2 focus:outline-none focus:ring-2 focus:ring-blue-400"
-                    placeholder={isAgreed ? "Agreement finalised" : "Type a message…"}
+                    placeholder={isAgreed ? t("contract_collab.agreement_finalised") : t("contract_collab.type_message")}
                     value={newMsg}
                     disabled={isAgreed}
                     onChange={e => setNewMsg(e.target.value)}
@@ -831,11 +843,11 @@ export default function ContractCollaborationPage() {
                 <div className="px-4 py-2 border-b bg-gray-50 flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <span className="text-xs text-gray-500">
-                      Vendor progress · {donePlan}/{actionPlan.length} done
+                      {t("contract_collab.vendor_progress", { done: donePlan, total: actionPlan.length })}
                     </span>
                     {isFinalized && (
                       <span className="flex items-center gap-1 text-[10px] text-green-700 bg-green-100 px-1.5 py-0.5 rounded-full font-semibold">
-                        <Lock className="w-2.5 h-2.5" /> Plan locked {fmtDate(collab.plan_finalized_at ?? undefined)}
+                        <Lock className="w-2.5 h-2.5" /> {t("contract_collab.plan_locked", { date: fmtDate(collab.plan_finalized_at ?? undefined) })}
                       </span>
                     )}
                   </div>
@@ -845,7 +857,7 @@ export default function ContractCollaborationPage() {
                         onClick={generateAnalysis}
                         disabled={aiStreaming}
                         className="flex items-center gap-1 text-xs px-2.5 py-1 rounded bg-purple-600 text-white hover:bg-purple-700 disabled:opacity-50">
-                        <RefreshCw className="w-3 h-3" /> Generate Plan
+                        <RefreshCw className="w-3 h-3" /> {t("contract_collab.generate_plan")}
                       </button>
                     )}
                     {actionPlan.length > 0 && (
@@ -853,7 +865,7 @@ export default function ContractCollaborationPage() {
                         onClick={() => setShowFinalizeModal(true)}
                         className="flex items-center gap-1 text-xs px-2.5 py-1 rounded bg-blue-600 text-white hover:bg-blue-700">
                         <CalendarDays className="w-3 h-3" />
-                        {isFinalized ? "Update Dates" : "Set Deadlines"}
+                        {isFinalized ? t("contract_collab.update_dates") : t("contract_collab.set_deadlines")}
                       </button>
                     )}
                   </div>
@@ -880,7 +892,7 @@ export default function ContractCollaborationPage() {
                   {actionPlan.length === 0 && (
                     <div className="text-center py-12 text-gray-400 text-sm">
                       <ClipboardList className="w-8 h-8 mx-auto mb-2 opacity-30" />
-                      Generate the analysis first to create the action plan
+                      {t("contract_collab.plan_empty")}
                     </div>
                   )}
                   {actionPlan.map(a => (
@@ -904,7 +916,7 @@ export default function ContractCollaborationPage() {
                         </p>
                         <div className="flex items-center gap-3 mt-1 flex-wrap">
                           <span className={`text-[10px] uppercase font-semibold px-1.5 py-0.5 rounded-full ${SEV_COLOR[a.priority]}`}>
-                            {a.priority}
+                            {t(`vocab.${a.priority}`, { defaultValue: a.priority })}
                           </span>
                           <span className="text-[10px] text-gray-500">👤 {a.responsible}</span>
                           {a.deadline && (
@@ -917,14 +929,14 @@ export default function ContractCollaborationPage() {
                           )}
                           {String(a.id).startsWith("custom_") && (
                             <span className="text-[10px] bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded-full font-semibold">
-                              Custom
+                              {t("contract_collab.custom")}
                             </span>
                           )}
                         </div>
                       </div>
                       {a.done && (
                         <span className="text-[10px] text-green-700 bg-green-100 px-1.5 py-0.5 rounded-full font-semibold shrink-0">
-                          Done ✓
+                          {t("contract_collab.done")} ✓
                         </span>
                       )}
                     </div>
@@ -943,7 +955,7 @@ export default function ContractCollaborationPage() {
                 {bothSigned && (
                   <div className="flex items-center gap-2 px-4 py-2 bg-emerald-50 border-b border-emerald-200 text-xs font-semibold text-emerald-800 shrink-0">
                     <CheckCircle2 className="w-4 h-4" />
-                    Fully Executed — both parties have signed. A contract record has been created.
+                    {t("contract_collab.fully_executed_internal")}
                   </div>
                 )}
 
@@ -951,15 +963,15 @@ export default function ContractCollaborationPage() {
                 <div className="flex items-center gap-4 px-4 py-2 border-b bg-gray-50 text-xs shrink-0">
                   <div className={`flex items-center gap-1.5 ${collab.ciso_signed_at ? "text-green-700" : "text-gray-400"}`}>
                     {collab.ciso_signed_at
-                      ? <><Check className="w-3.5 h-3.5" /> You signed as <strong>{collab.ciso_signature}</strong></>
-                      : <><X className="w-3.5 h-3.5" /> Awaiting your signature</>
+                      ? <><Check className="w-3.5 h-3.5" /> {t("contract_collab.you_signed_as")} <strong>{collab.ciso_signature}</strong></>
+                      : <><X className="w-3.5 h-3.5" /> {t("contract_collab.awaiting_your_signature")}</>
                     }
                   </div>
                   <span className="text-gray-300">|</span>
                   <div className={`flex items-center gap-1.5 ${collab.vendor_signed_at ? "text-green-700" : "text-amber-600"}`}>
                     {collab.vendor_signed_at
-                      ? <><Check className="w-3.5 h-3.5" /> Vendor signed as <strong>{collab.vendor_signature}</strong></>
-                      : <><Loader2 className="w-3.5 h-3.5" /> Awaiting vendor signature</>
+                      ? <><Check className="w-3.5 h-3.5" /> {t("contract_collab.vendor_signed_as")} <strong>{collab.vendor_signature}</strong></>
+                      : <><Loader2 className="w-3.5 h-3.5" /> {t("contract_collab.awaiting_vendor_signature")}</>
                     }
                   </div>
                 </div>
@@ -967,11 +979,11 @@ export default function ContractCollaborationPage() {
                 {/* CISO sign panel */}
                 {!collab.ciso_signed_at && (
                   <div className="px-4 py-3 border-b bg-blue-50 shrink-0">
-                    <p className="text-xs font-semibold text-blue-900 mb-2">Sign this agreement</p>
+                    <p className="text-xs font-semibold text-blue-900 mb-2">{t("contract_collab.sign_this")}</p>
                     <div className="flex gap-2">
                       <input
                         className="flex-1 text-sm border rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-400"
-                        placeholder="Type your full name to sign…"
+                        placeholder={t("contract_collab.sign_placeholder")}
                         value={sigName}
                         onChange={e => setSigName(e.target.value)}
                         onKeyDown={e => e.key === "Enter" && handleSign()}
@@ -981,7 +993,7 @@ export default function ContractCollaborationPage() {
                         disabled={!sigName.trim() || signing}
                         className="flex items-center gap-1.5 px-3 py-2 bg-blue-600 text-white text-sm rounded hover:bg-blue-700 disabled:opacity-40">
                         {signing ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileSignature className="w-4 h-4" />}
-                        {signing ? "Signing…" : "Sign Agreement"}
+                        {signing ? t("contract_collab.signing") : t("contract_collab.sign_agreement")}
                       </button>
                     </div>
                   </div>
@@ -996,7 +1008,7 @@ export default function ContractCollaborationPage() {
                   ) : (
                     <div className="text-center py-12 text-gray-400 text-sm">
                       <FileSignature className="w-8 h-8 mx-auto mb-2 opacity-30" />
-                      Agreement document will appear here once both parties agree.
+                      {t("contract_collab.agreement_empty")}
                     </div>
                   )}
                 </div>

@@ -1,4 +1,6 @@
+import { TranslatedText } from "@/components/common/AutoTranslatedBadge";
 import { useState, useEffect } from "react";
+import { useTranslation } from "react-i18next";
 import { useParams, useNavigate } from "react-router-dom";
 import {
   ArrowLeft, Loader2, CheckCircle, XCircle, AlertTriangle,
@@ -47,6 +49,8 @@ function MatrixRow({
   readonly expanded: boolean;
   readonly onToggle: () => void;
 }) {
+  const { t } = useTranslation();
+  const actionStatus = (st: string) => t(`traceability.action_status.${st}`, { defaultValue: st.replace("_", " ") });
   const hasGap = row.gap_id !== null;
   const hasActions = row.action_items.length > 0;
 
@@ -62,7 +66,7 @@ function MatrixRow({
             <ControlStatusIcon status={row.control_status} />
             <div>
               <span className="text-xs font-mono text-gray-400 mr-1.5">{row.control_identifier}</span>
-              <span className="text-sm text-gray-800">{row.control_title}</span>
+              <TranslatedText item={row} field="control_title" className="text-sm text-gray-800" />
               {row.control_category && (
                 <span className="ml-2 text-xs text-gray-400 bg-gray-50 px-1.5 py-0.5 rounded">{row.control_category}</span>
               )}
@@ -78,20 +82,20 @@ function MatrixRow({
               <div className="flex items-center gap-2 mt-1">
                 {row.gap_severity && (
                   <span className={`text-xs font-medium px-1.5 py-0.5 rounded-full ${SEVERITY_COLOR[row.gap_severity] ?? ""}`}>
-                    {row.gap_severity}
+                    {t(`compliance.severities.${row.gap_severity}`, { defaultValue: row.gap_severity })}
                   </span>
                 )}
                 {row.is_certification_blocker && (
-                  <span className="text-xs">🔴 Blocker</span>
+                  <span className="text-xs">🔴 {t("compliance.blocker")}</span>
                 )}
                 {row.recommendation_status && (
-                  <span className="text-xs text-gray-400 capitalize">{row.recommendation_status}</span>
+                  <span className="text-xs text-gray-400 capitalize">{t(`compliance.rec_status.${row.recommendation_status}`, { defaultValue: row.recommendation_status })}</span>
                 )}
               </div>
             </div>
           ) : (
             <span className="text-xs text-green-600 flex items-center gap-1">
-              <CheckCircle className="w-3 h-3" /> No gap
+              <CheckCircle className="w-3 h-3" /> {t("traceability.no_gap")}
             </span>
           )}
         </td>
@@ -105,7 +109,7 @@ function MatrixRow({
                   key={ai.id}
                   className={`text-xs font-medium px-2 py-0.5 rounded-full border ${ACTION_STATUS_COLOR[ai.status] ?? ""}`}
                 >
-                  {ai.status.replace("_", " ")}
+                  {actionStatus(ai.status)}
                 </span>
               ))}
               {row.action_items.length > 2 && (
@@ -113,7 +117,7 @@ function MatrixRow({
               )}
             </div>
           ) : hasGap ? (
-            <span className="text-xs text-yellow-600">No action item yet</span>
+            <span className="text-xs text-yellow-600">{t("traceability.no_action_yet")}</span>
           ) : (
             <span className="text-xs text-gray-300">—</span>
           )}
@@ -137,16 +141,16 @@ function MatrixRow({
               {/* Gap detail */}
               {hasGap && (
                 <div>
-                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Gap Detail</p>
+                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">{t("traceability.gap_detail")}</p>
                   <p className="text-sm text-gray-700">{row.gap_description}</p>
                   {row.remediation_priority != null && (
                     <p className="text-xs text-gray-400 mt-1">
-                      Priority score: <strong>{row.remediation_priority}</strong>
+                      {t("traceability.priority_score")}: <strong>{row.remediation_priority}</strong>
                     </p>
                   )}
                   {row.ai_confidence != null && (
                     <p className="text-xs text-gray-400 mt-0.5">
-                      AI confidence: <strong>{Math.round(row.ai_confidence * 100)}%</strong>
+                      {t("compliance.ai_confidence")}: <strong>{Math.round(row.ai_confidence * 100)}%</strong>
                     </p>
                   )}
                 </div>
@@ -156,7 +160,7 @@ function MatrixRow({
               {hasActions && (
                 <div>
                   <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
-                    Action Items ({row.action_items.length})
+                    {t("traceability.action_items")} ({row.action_items.length})
                   </p>
                   <div className="space-y-2">
                     {row.action_items.map((ai) => (
@@ -164,15 +168,15 @@ function MatrixRow({
                         <div className="flex items-center justify-between">
                           <p className="text-xs font-medium text-gray-800">{ai.title}</p>
                           <span className={`text-xs font-semibold ${PRIORITY_COLOR[ai.priority] ?? "text-gray-500"}`}>
-                            {ai.priority}
+                            {t(`action_plan.priority_${ai.priority}`, { defaultValue: ai.priority })}
                           </span>
                         </div>
                         <div className="flex items-center gap-3 mt-1">
                           <span className={`text-xs font-medium px-1.5 py-0.5 rounded border ${ACTION_STATUS_COLOR[ai.status] ?? ""}`}>
-                            {ai.status.replace("_", " ")}
+                            {actionStatus(ai.status)}
                           </span>
                           {ai.due_date && (
-                            <span className="text-xs text-gray-400">Due {ai.due_date}</span>
+                            <span className="text-xs text-gray-400">{t("traceability.due", { date: ai.due_date })}</span>
                           )}
                         </div>
                       </div>
@@ -193,6 +197,7 @@ function MatrixRow({
 export default function TraceabilityPage() {
   const { assessmentId } = useParams<{ assessmentId: string }>();
   const navigate = useNavigate();
+  const { t } = useTranslation();
   const [matrix, setMatrix] = useState<TraceabilityMatrix | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -203,7 +208,7 @@ export default function TraceabilityPage() {
     if (!assessmentId) return;
     traceabilityApi.getMatrix(assessmentId)
       .then(setMatrix)
-      .catch(() => setError("Failed to load traceability matrix."))
+      .catch(() => setError(t("traceability.load_failed")))
       .finally(() => setLoading(false));
   }, [assessmentId]);
 
@@ -225,7 +230,7 @@ export default function TraceabilityPage() {
 
   if (error || !matrix) {
     return (
-      <div className="p-8 text-center text-sm text-red-600">{error || "No data."}</div>
+      <div className="p-8 text-center text-sm text-red-600">{error || t("common.no_data")}</div>
     );
   }
 
@@ -248,16 +253,16 @@ export default function TraceabilityPage() {
           className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-800 mb-3"
         >
           <ArrowLeft className="w-4 h-4" />
-          Back to assessment
+          {t("compliance.back_to_assessment")}
         </button>
         <div className="flex items-start justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">Traceability Matrix</h1>
+            <h1 className="text-2xl font-bold text-gray-900">{t("compliance.traceability_matrix")}</h1>
             <p className="text-sm text-gray-500 mt-1">{matrix.assessment_name}</p>
           </div>
           <button className="flex items-center gap-1.5 text-sm border border-gray-200 hover:bg-gray-50 text-gray-600 px-3 py-1.5 rounded-lg transition-colors">
             <Download className="w-4 h-4" />
-            Export CSV
+            {t("compliance.export_csv_btn")}
           </button>
         </div>
       </div>
@@ -265,12 +270,12 @@ export default function TraceabilityPage() {
       {/* KPI row */}
       <div className="grid grid-cols-6 gap-3">
         {[
-          { label: "Controls",     value: summary.total_controls, color: "text-gray-800"  },
-          { label: "Compliant",    value: summary.compliant,      color: "text-green-600" },
-          { label: "Partial",      value: summary.partial,        color: "text-yellow-600"},
-          { label: "Gaps",         value: summary.gaps,           color: "text-red-600"   },
-          { label: "Action Items", value: summary.action_items_total, color: "text-blue-600" },
-          { label: "Open Actions", value: summary.action_items_open,  color: "text-orange-600"},
+          { label: t("compliance.controls"),     value: summary.total_controls, color: "text-gray-800"  },
+          { label: t("compliance.filter_compliant"),    value: summary.compliant,      color: "text-green-600" },
+          { label: t("traceability.partial"),      value: summary.partial,        color: "text-yellow-600"},
+          { label: t("compliance.gaps"),         value: summary.gaps,           color: "text-red-600"   },
+          { label: t("traceability.action_items"), value: summary.action_items_total, color: "text-blue-600" },
+          { label: t("traceability.open_actions"), value: summary.action_items_open,  color: "text-orange-600"},
         ].map(({ label, value, color }) => (
           <div key={label} className="bg-white rounded-2xl border border-gray-100 p-4 text-center">
             <p className={`text-2xl font-bold ${color}`}>{value}</p>
@@ -282,11 +287,11 @@ export default function TraceabilityPage() {
       {/* Filters */}
       <div className="flex gap-2 flex-wrap">
         {([
-          { key: "all",      label: "All Controls",  count: matrix.rows.length },
-          { key: "gaps",     label: "With Gaps",     count: matrix.rows.filter(r => r.gap_id).length },
-          { key: "blockers", label: "🔴 Blockers",   count: matrix.rows.filter(r => r.is_certification_blocker).length },
-          { key: "actions",  label: "Has Actions",   count: matrix.rows.filter(r => r.action_items.length > 0).length },
-          { key: "compliant",label: "Compliant",     count: matrix.rows.filter(r => r.control_status === "implemented").length },
+          { key: "all",      label: t("traceability.all_controls"),  count: matrix.rows.length },
+          { key: "gaps",     label: t("traceability.with_gaps"),     count: matrix.rows.filter(r => r.gap_id).length },
+          { key: "blockers", label: `🔴 ${t("compliance.blockers")}`,   count: matrix.rows.filter(r => r.is_certification_blocker).length },
+          { key: "actions",  label: t("traceability.has_actions"),   count: matrix.rows.filter(r => r.action_items.length > 0).length },
+          { key: "compliant",label: t("compliance.filter_compliant"),     count: matrix.rows.filter(r => r.control_status === "implemented").length },
         ] as const).map(({ key, label, count }) => (
           <button
             key={key}
@@ -308,9 +313,9 @@ export default function TraceabilityPage() {
           <table className="w-full text-left">
             <thead>
               <tr className="bg-gray-50 border-b border-gray-100">
-                <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide w-2/5">Control</th>
-                <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide w-2/5">Gap</th>
-                <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide w-1/5">Action Items</th>
+                <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide w-2/5">{t("traceability.control")}</th>
+                <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide w-2/5">{t("traceability.gap")}</th>
+                <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide w-1/5">{t("traceability.action_items")}</th>
                 <th className="px-4 py-3 w-8" />
               </tr>
             </thead>
@@ -318,7 +323,7 @@ export default function TraceabilityPage() {
               <tbody>
                 <tr>
                   <td colSpan={4} className="py-12 text-center text-sm text-gray-400">
-                    No rows match the selected filter.
+                    {t("traceability.no_rows")}
                   </td>
                 </tr>
               </tbody>

@@ -30,6 +30,14 @@ import type {
 } from "../types";
 import ComplianceJourneyMap from "../components/features/compliance/ComplianceJourneyMap";
 import ReadinessScoreWidget from "../components/features/compliance/ReadinessScoreWidget";
+import appI18n from "@/i18n";
+
+/** Intl locale for the current UI language (Arabic keeps Latin digits). */
+function uiLocale(): string {
+  const l = appI18n.language || "en";
+  return l.startsWith("fr") ? "fr-FR" : l.startsWith("ar") ? "ar-u-nu-latn" : "en-US";
+}
+
 
 // ── Generic dashboard fallback ────────────────────────────────────────────────
 //
@@ -468,7 +476,7 @@ function DashboardToolbar() {
     const minutes = Math.floor(Math.max(0, now - dataUpdatedAt) / 60_000);
     if (minutes < 1) return t("dashctl.updated_just_now");
     if (minutes < 60) return t("dashctl.updated_minutes_ago", { count: minutes });
-    return t("dashctl.last_updated_at", { time: new Date(dataUpdatedAt).toLocaleTimeString() });
+    return t("dashctl.last_updated_at", { time: new Date(dataUpdatedAt).toLocaleTimeString(uiLocale()) });
   })();
 
   // Anything the server or localStorage held that is not on the menu would leave
@@ -485,7 +493,7 @@ function DashboardToolbar() {
     <div className="flex flex-wrap items-center gap-2">
       <span
         className="inline-flex items-center gap-1.5 text-xs text-gray-500"
-        title={dataUpdatedAt ? `${t("dashctl.last_updated")}: ${new Date(dataUpdatedAt).toLocaleString()}` : t("dashctl.never_updated")}
+        title={dataUpdatedAt ? `${t("dashctl.last_updated")}: ${new Date(dataUpdatedAt).toLocaleString(uiLocale())}` : t("dashctl.never_updated")}
       >
         <Timer className="w-3.5 h-3.5 text-gray-400" />
         {updatedLabel}
@@ -733,7 +741,7 @@ function ExecutiveSummarySection() {
             </span>
             {backlog && (
               <span className="text-xs text-gray-400">
-                {t("execdash.backlog_since", { date: new Date(backlog.from_date).toLocaleDateString() })}
+                {t("execdash.backlog_since", { date: new Date(backlog.from_date).toLocaleDateString(uiLocale()) })}
               </span>
             )}
           </div>
@@ -777,7 +785,7 @@ function ExecutiveSummarySection() {
           <ExecMetric label={t("analytics.metric_committees")} value={data.governance.committees_total} />
           <ExecMetric
             label={t("execdash.next_committee")}
-            value={nextMeeting ? new Date(nextMeeting.next_meeting_date).toLocaleDateString() : t("execdash.no_committee")}
+            value={nextMeeting ? new Date(nextMeeting.next_meeting_date).toLocaleDateString(uiLocale()) : t("execdash.no_committee")}
           />
         </ExecBlock>
 
@@ -1122,7 +1130,7 @@ function FrameworkDashboard({ data }: { data: any }) {
           <p className="text-gray-500 text-sm mt-0.5">
             {data.assessment_name}
             {data.last_analyzed && (
-              <span className="ml-2 text-gray-400">· {t("dashboard.last_analyzed")} {new Date(data.last_analyzed).toLocaleDateString()}</span>
+              <span className="ml-2 text-gray-400">· {t("dashboard.last_analyzed")} {new Date(data.last_analyzed).toLocaleDateString(uiLocale())}</span>
             )}
           </p>
         </div>
@@ -1244,7 +1252,7 @@ function GenericDashboard({ d, unavailable, pending }: {
   /** Still in flight. A number that is not known yet is an em dash, not a 0. */
   pending: boolean;
 }) {
-  const { t, i18n } = useTranslation();
+  const { t } = useTranslation();
   // One helper for every KPI on this card row: nothing may render a figure the
   // server has not actually returned.
   const kv = (v: string | number) => (pending || unavailable ? "—" : v);
@@ -1270,7 +1278,7 @@ function GenericDashboard({ d, unavailable, pending }: {
     const [y, m] = period.split("-").map(Number);
     if (!y || !m) return period;
     try {
-      return new Intl.DateTimeFormat(i18n.language, { month: "short" }).format(new Date(y, m - 1, 1));
+      return new Intl.DateTimeFormat(uiLocale(), { month: "short" }).format(new Date(y, m - 1, 1));
     } catch {
       return period;
     }
@@ -1305,7 +1313,7 @@ function GenericDashboard({ d, unavailable, pending }: {
       // conversion — swallowing that would look like a silent success.
       const ok = await exportChartAsPng(trendChartRef.current, safeFileName(t("dashboard.risk_trend")), {
         title: t("dashboard.risk_trend"),
-        subtitle: new Date().toLocaleDateString(),
+        subtitle: new Date().toLocaleDateString(uiLocale()),
         rtl: document.documentElement.dir === "rtl",
       });
       if (!ok) setChartExportError(t("errors.load_failed"));
@@ -1636,7 +1644,7 @@ function AuditFollowUpSection() {
   async function exportBars(title: string, entries: BarChartEntry[]) {
     await exportBarChartAsPng(title, entries, safeFileName(title), {
       rtl: document.documentElement.dir === "rtl",
-      subtitle: new Date().toLocaleDateString(),
+      subtitle: new Date().toLocaleDateString(uiLocale()),
     });
   }
 
@@ -2037,7 +2045,7 @@ function FrameworkManagementModal({
                   >
                     <p className="text-xs font-mono font-bold text-gray-600">{fw.short_name}</p>
                     <p className="text-sm font-medium text-gray-800 mt-0.5">{fw.name}</p>
-                    <p className="text-xs text-gray-400 mt-1">{t("dashboard.controls_count", { count: fw.control_count ?? 0, defaultValue: t("framework_editor.controls_count", { count: fw.control_count ?? 0 }) })}</p>
+                    <p className="text-xs text-gray-400 mt-1">{t("dashboard.controls_count", { count: fw.control_count ?? 0 })}</p>
                   </button>
                 ))}
               </div>
@@ -2050,7 +2058,7 @@ function FrameworkManagementModal({
               <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
                 <p className="text-xs text-blue-600 font-medium mb-1">{t("dashboard.selected_label")}</p>
                 <p className="text-sm font-semibold text-blue-900">{selectedFramework.name}</p>
-                <p className="text-xs text-blue-700 mt-1">{t("dashboard.controls_count", { count: selectedFramework.control_count ?? 0, defaultValue: t("framework_editor.controls_count", { count: selectedFramework.control_count ?? 0 }) })}</p>
+                <p className="text-xs text-blue-700 mt-1">{t("dashboard.controls_count", { count: selectedFramework.control_count ?? 0 })}</p>
               </div>
             </div>
           )}
@@ -2575,7 +2583,7 @@ function DashboardStages() {
         ) : (
           <div className="bg-blue-50 border border-blue-200 rounded-2xl p-10 text-center">
             <Shield className="w-10 h-10 text-blue-400 mx-auto mb-3" />
-            <h2 className="font-semibold text-blue-900 mb-1">{t("dashboard.no_assessment_for_fw", { name: fwInfo?.framework_name, defaultValue: t("dashboard.no_assessment_yet") })}</h2>
+            <h2 className="font-semibold text-blue-900 mb-1">{(fwInfo?.framework_name ? t("dashboard.no_assessment_for_fw", { name: fwInfo.framework_name }) : t("dashboard.no_assessment_yet"))}</h2>
             <p className="text-blue-700 text-sm mb-4">{t("dashboard.create_assessment_desc")}</p>
             <button
               disabled={creatingAssessment}

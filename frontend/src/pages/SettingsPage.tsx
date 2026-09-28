@@ -330,6 +330,8 @@ function FrameworkTab() {
 // profile needs a backend route first (see needs_integration).
 function ProfileTab() {
   const { t } = useTranslation();
+  const roleLabel = (role: string) => String(t(`company_admin.roles.${role}_label` as never, role));
+  const planLabel = (plan: PlanTier) => String(t(`plan.${plan}` as never, PLAN_FEATURES[plan].label));
   const user = useAuthStore(u => u);
   const nameParts = (user?.name ?? "").trim().split(/\s+/).filter(Boolean);
   const form = {
@@ -352,10 +354,10 @@ function ProfileTab() {
         </div>
         <div>
           <p className="text-sm font-semibold text-gray-800">{form.firstName} {form.lastName}</p>
-          <p className="text-xs text-gray-500 capitalize">{user?.role ?? "viewer"} · {PLAN_FEATURES[user?.plan ?? "free_trial"].label} · {user?.org}</p>
+          <p className="text-xs text-gray-500">{roleLabel(user?.role ?? "viewer")} · {planLabel(user?.plan ?? "free_trial")} · {user?.org}</p>
         </div>
-        <span className="ml-auto px-2.5 py-1 text-xs font-semibold rounded-full bg-blue-100 text-blue-700 capitalize">
-          {user?.role ?? "viewer"}
+        <span className="ml-auto px-2.5 py-1 text-xs font-semibold rounded-full bg-blue-100 text-blue-700">
+          {roleLabel(user?.role ?? "viewer")}
         </span>
       </div>
 
@@ -556,7 +558,7 @@ function SecurityTab() {
       setTimeout(() => setSaved(false), 2500);
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
-      setPwError(msg || "Failed to update password. Please try again.");
+      setPwError(msg || t("settings.err_password_update"));
     } finally {
       setSaving(false);
     }
@@ -658,7 +660,7 @@ function SecurityTab() {
                   <div key={s.id} className="flex items-center justify-between py-2 border-b border-gray-100 last:border-0">
                     <div className="min-w-0">
                       <p className="text-sm font-medium text-gray-800">
-                        {s.device || "Session"}{" "}
+                        {s.device || t("settings.session_fallback")}{" "}
                         {s.current && <span className="ml-2 px-1.5 py-0.5 bg-green-100 text-green-700 text-xs rounded-full">{t("settings.current_session")}</span>}
                       </p>
                       <p className="text-xs text-gray-400 mt-0.5">
@@ -706,7 +708,7 @@ function AiAccessTab() {
   // bare literal: the keys do not exist in en/fr/ar yet (locale files are not
   // this lane's), so the fallback keeps today's wording and the tab becomes
   // translatable the moment the keys land. See needs_integration.
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const [showRequestDialog, setShowRequestDialog] = useState(false);
 
   const { data: usage, isLoading: usageLoading } = useQuery({
@@ -782,7 +784,7 @@ function AiAccessTab() {
               </div>
             </div>
             <p className="text-xs text-gray-500 mt-4">
-              {t("ai_access.resets_on", "Resets on {{date}}", { date: new Date(usage.reset_at).toLocaleDateString() })}
+              {t("ai_access.resets_on", "Resets on {{date}}", { date: new Date(usage.reset_at).toLocaleDateString(i18n.language === "ar" ? "ar-u-nu-latn" : i18n.language === "fr" ? "fr-FR" : "en-US") })}
             </p>
           </div>
         </div>
@@ -808,7 +810,7 @@ function AiAccessTab() {
                       : "bg-yellow-100 text-yellow-700"
                   }`}
                 >
-                  {String(t(`vocab.${req.status}` as never, req.status))}
+                  {req.status === "denied" ? t("ai_access.status_denied") : String(t(`vocab.${req.status}` as never, req.status))}
                 </span>
               </div>
             ))}
@@ -1286,7 +1288,7 @@ function AppearanceTab() {
           ))}
         </div>
         <p className="text-xs text-gray-400">
-          {t("settings.accent_current")} <span className="font-medium text-gray-600 dark:text-gray-300 capitalize">{ap.accent}</span>
+          {t("settings.accent_current")} <span className="font-medium text-gray-600 dark:text-gray-300">{String(t(`settings.accent_${ap.accent}` as never, ap.accent))}</span>
         </p>
       </SectionCard>
 
@@ -1301,7 +1303,7 @@ function AppearanceTab() {
             <OptionCard key={value} selected={ap.fontSize === value} onClick={() => handleSet({ fontSize: value })}>
               <div className="flex flex-col items-center gap-1 py-1">
                 <span className={`${preview} font-semibold text-gray-700 dark:text-gray-300`}>Aa</span>
-                <span className="text-xs text-gray-500">{String(t(`settings.sidebar_${value}` as never, label))}</span>
+                <span className="text-xs text-gray-500">{label}</span>
               </div>
             </OptionCard>
           ))}
@@ -1347,7 +1349,7 @@ function AppearanceTab() {
                     <div className="h-1.5 rounded bg-gray-200 dark:bg-gray-600 w-2/3" />
                   </div>
                 </div>
-                <span className="text-xs text-gray-500">{label}</span>
+                <span className="text-xs text-gray-500">{String(t(`settings.sidebar_styles.${value}` as never, label))}</span>
               </div>
             </OptionCard>
           ))}
@@ -1618,7 +1620,7 @@ export default function SettingsPage() {
     if (tab === "admin") return <AdminTab />;
     const required = TAB_MIN_PLAN[tab];
     if (required && !isAdmin && !planAllows(plan, required)) {
-      return <LockedOverlay requiredPlan={PLAN_FEATURES[required].label} />;
+      return <LockedOverlay requiredPlan={String(t(`plan.${required}` as never, PLAN_FEATURES[required].label))} />;
     }
     if (tab === "profile")       return <ProfileTab />;
     if (tab === "framework")     return <FrameworkTab />;
@@ -1669,12 +1671,12 @@ export default function SettingsPage() {
           {/* Plan info chip at bottom of settings nav */}
           <div className="mt-6 p-3 bg-gray-50 border border-gray-200 rounded-xl">
             <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">{t("settings.current_plan_label")}</p>
-            <p className="text-sm font-bold text-gray-800 mt-1">{isAdmin ? `${t("roles.admin")} (${PLAN_FEATURES.enterprise.label})` : PLAN_FEATURES[plan].label}</p>
+            <p className="text-sm font-bold text-gray-800 mt-1">{isAdmin ? `${t("roles.admin")} (${t("plan.enterprise")})` : String(t(`plan.${plan}` as never, PLAN_FEATURES[plan].label))}</p>
             {plan === "free_trial" && !isAdmin && (
               <p className="text-xs text-orange-500 mt-0.5">{t("settings.days_remaining", { days: user?.daysRemaining ?? 14 })}</p>
             )}
             {!isAdmin && plan !== "enterprise" && (
-              <p className="mt-2 text-xs text-gray-400">{PLAN_FEATURES[plan].label}</p>
+              <p className="mt-2 text-xs text-gray-400">{String(t(`plan.${plan}` as never, PLAN_FEATURES[plan].label))}</p>
             )}
             {canManageLicense && (
               <button type="button" onClick={() => setLicenseOpen(true)}

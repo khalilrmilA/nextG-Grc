@@ -9,6 +9,42 @@ import { apiClient } from "@/api/client";
 import { MultiSelect, type MultiSelectOption } from "@/components/common/MultiSelect";
 import ModuleDashboard from "@/components/dashboards/ModuleDashboard";
 import { useBucketLabel } from "@/components/common/Breakdown";
+import i18n from "@/i18n";
+
+// Dates follow the UI language (Arabic keeps Latin digits).
+const uiLocale = () => { const l = i18n.language || "en"; return l.startsWith("fr") ? "fr-FR" : l.startsWith("ar") ? "ar-u-nu-latn" : "en-US"; };
+
+// EASM connector settings as edited in the form (server shape: see
+// backend app/services/easm_connector.py normalize_config).
+type EasmForm = {
+  auth_style: string;
+  auth_header: string;
+  auth_query_param: string;
+  findings_path: string;
+  assets_path: string;
+  results_key: string;
+  discover_assets: boolean;
+  field_map: Record<string, string>;
+  showAdvanced?: boolean;
+};
+const EMPTY_EASM: EasmForm = {
+  auth_style: "bearer", auth_header: "X-API-Key", auth_query_param: "api_key",
+  findings_path: "", assets_path: "", results_key: "", discover_assets: true, field_map: {},
+};
+function easmConfigPayload(f: EasmForm): Record<string, unknown> {
+  const field_map: Record<string, string> = {};
+  Object.entries(f.field_map).forEach(([k, v]) => { if (v && v.trim()) field_map[k] = v.trim(); });
+  return {
+    auth_style: f.auth_style,
+    auth_header: f.auth_style === "header" ? (f.auth_header.trim() || "X-API-Key") : null,
+    auth_query_param: f.auth_style === "query" ? (f.auth_query_param.trim() || "api_key") : null,
+    findings_path: f.findings_path.trim(),
+    assets_path: f.assets_path.trim() || null,
+    results_key: f.results_key.trim() || null,
+    discover_assets: f.discover_assets,
+    field_map,
+  };
+}
 
 const SEV_BADGE: Record<string, string> = {
   critical: "bg-red-100 text-red-700 border-red-200",
@@ -375,7 +411,7 @@ Weak SSH ciphers,Low,3.7,,Backup Storage Array,Restrict to strong ciphers`;
       setLoading(true);
       load(); loadStats();
     } catch (err: any) {
-      setImportResult({ status: "failed", error: err?.response?.data?.detail || "Import failed" });
+      setImportResult({ status: "failed", error: err?.response?.data?.detail || t("vulns_ui.import_failed") });
     } finally {
       setImporting(false);
     }
@@ -390,8 +426,13 @@ Weak SSH ciphers,Low,3.7,,Backup Storage Array,Restrict to strong ciphers`;
   const [addingConn, setAddingConn] = useState(false);
   const emptyConn = { name: "", tool: "demo", base_url: "", api_key: "", api_secret: "", schedule_enabled: false, interval_hours: 168 };
   const [connForm, setConnForm] = useState({ ...emptyConn });
+  // EASM connector settings (non-secret; stored server-side as `config`).
+  const [easmForm, setEasmForm] = useState<EasmForm>({ ...EMPTY_EASM, field_map: {} });
+  // Inline edit of an existing EASM connector's settings (+ optional key rotation).
+  const [easmEdit, setEasmEdit] = useState<{ id: string; base_url: string; api_key: string; api_secret: string; form: EasmForm } | null>(null);
+  const [connPreview, setConnPreview] = useState<any[] | null>(null);
   // Tools the backend can pull from on its own; OpenVAS (GMP, not HTTP) is file-import only.
-  const PULL_TOOLS = ["demo", "tenable", "nessus", "qualys"];
+  const PULL_TOOLS = ["demo", "tenable", "nessus", "qualys", "easm"];
   const SYNC_INTERVALS = [
     { hours: 24, label: t("vulnerabilities.interval_daily", "Daily") },
     { hours: 168, label: t("vulnerabilities.interval_weekly", "Weekly") },
@@ -402,6 +443,7 @@ Weak SSH ciphers,Low,3.7,,Backup Storage Array,Restrict to strong ciphers`;
   const connCanPull = PULL_TOOLS.includes(connForm.tool);
   const connNeedsUrl = connForm.tool !== "demo" && connForm.tool !== "openvas";
   const connNeedsKeys = ["tenable", "nessus", "qualys"].includes(connForm.tool);
+  const connIsEasm = connForm.tool === "easm";
 
   async function loadConnectors() {
     setConnLoading(true);
@@ -410,33 +452,46 @@ Weak SSH ciphers,Low,3.7,,Backup Storage Array,Restrict to strong ciphers`;
   async function addConnector(e: React.FormEvent) {
     e.preventDefault();
     if (!connForm.name.trim()) return;
-    setAddingConn(true); setConnMsg("");
+    if (connIsEasm && !easmForm.findings_path.trim()) {
+      setConnMsg(t("vulnerabilities.easm_findings_path_required", "Enter the findings endpoint path (e.g. /api/v1/findings)."));
+      return;
+    }
+    setAddingConn(true); setConnMsg(""); setConnPreview(null);
     try {
       await scannerConnectorsApi.create({
         name: connForm.name, tool: connForm.tool,
-        base_url: connForm.base_url || null, api_key: connForm.api_key || null, api_secret: connForm.api_secret || null,
+        base_url: connForm.base_url || null, api_key: connForm.api_key || null,
+        api_secret: (!connIsEasm || easmForm.auth_style === "basic") ? (connForm.api_secret || null) : null,
         schedule_enabled: connCanPull && connForm.schedule_enabled, interval_hours: connForm.interval_hours,
+        ...(connIsEasm ? { config: easmConfigPayload(easmForm) } : {}),
       });
       setConnForm({ ...emptyConn });
+      setEasmForm({ ...EMPTY_EASM, field_map: {} });
       loadConnectors();
     } catch (err: any) {
-      setConnMsg(err?.response?.data?.detail || "Could not add connector");
+      setConnMsg(err?.response?.data?.detail || t("vulns_ui.conn_add_failed"));
     } finally { setAddingConn(false); }
   }
   async function testConn(id: string) {
-    setConnBusy(id + ":test"); setConnMsg("");
-    try { const r = await scannerConnectorsApi.test(id); setConnMsg((r.ok ? "✓ " : "✗ ") + r.message); }
-    catch { setConnMsg("Test failed"); } finally { setConnBusy(""); }
+    setConnBusy(id + ":test"); setConnMsg(""); setConnPreview(null);
+    try {
+      const r = await scannerConnectorsApi.test(id);
+      setConnMsg((r.ok ? "✓ " : "✗ ") + r.message);
+      setConnPreview(Array.isArray(r.preview) && r.preview.length ? r.preview : null);
+    }
+    catch { setConnMsg(t("vulns_ui.conn_test_failed")); } finally { setConnBusy(""); }
   }
   async function syncConn(id: string) {
-    setConnBusy(id + ":sync"); setConnMsg("");
+    setConnBusy(id + ":sync"); setConnMsg(""); setConnPreview(null);
     try {
       const j = await scannerConnectorsApi.sync(id);
       setConnMsg(j.status === "completed"
-        ? `✓ Synced: ${j.imported_count} imported, ${j.matched_count} matched, ${j.skipped_count} skipped`
-        : `✗ ${j.error || "sync failed"}`);
+        ? `✓ ${t("vulns_ui.sync_done", { imported: j.imported_count, matched: j.matched_count, skipped: j.skipped_count })}`
+          + (j.discovered_assets ? ` · ${t("vulnerabilities.easm_assets_discovered", "{{count}} new asset(s) discovered", { count: j.discovered_assets })}` : "")
+          + (j.error ? ` · ${j.error}` : "")
+        : `✗ ${j.error || t("vulns_ui.sync_failed")}`);
       loadConnectors(); setLoading(true); load(); loadStats();
-    } catch { setConnMsg("Sync failed"); } finally { setConnBusy(""); }
+    } catch { setConnMsg(t("vulns_ui.sync_failed")); } finally { setConnBusy(""); }
   }
   async function updateConn(id: string, patch: Record<string, unknown>) {
     setConnBusy(id + ":upd"); setConnMsg("");
@@ -447,6 +502,124 @@ Weak SSH ciphers,Low,3.7,,Backup Storage Array,Restrict to strong ciphers`;
       setConnMsg(err?.response?.data?.detail || t("vulnerabilities.conn_update_failed", "Could not update connector"));
     } finally { setConnBusy(""); }
   }
+  function startEasmEdit(cn: any) {
+    const c = cn.config || {};
+    setConnMsg(""); setConnPreview(null);
+    setEasmEdit({
+      id: cn.id, base_url: cn.base_url || "", api_key: "", api_secret: "",
+      form: {
+        auth_style: c.auth_style || "bearer", auth_header: c.auth_header || "X-API-Key",
+        auth_query_param: c.auth_query_param || "api_key", findings_path: c.findings_path || "",
+        assets_path: c.assets_path || "", results_key: c.results_key || "",
+        discover_assets: c.discover_assets !== false, field_map: { ...(c.field_map || {}) },
+        showAdvanced: !!(c.results_key || Object.keys(c.field_map || {}).length),
+      },
+    });
+  }
+  type EasmEditState = { id: string; base_url: string; api_key: string; api_secret: string; form: EasmForm };
+  function patchEasmEdit(p: Partial<EasmEditState>) {
+    setEasmEdit((ed) => (ed ? { ...ed, ...p } : ed));
+  }
+  async function saveEasmEdit() {
+    if (!easmEdit) return;
+    if (!easmEdit.form.findings_path.trim()) {
+      setConnMsg(t("vulnerabilities.easm_findings_path_required", "Enter the findings endpoint path (e.g. /api/v1/findings)."));
+      return;
+    }
+    const patch: Record<string, unknown> = { base_url: easmEdit.base_url || null, config: easmConfigPayload(easmEdit.form) };
+    // Blank = keep the stored key; the server never sends secrets back.
+    if (easmEdit.api_key) patch.api_key = easmEdit.api_key;
+    if (easmEdit.api_secret) patch.api_secret = easmEdit.api_secret;
+    setConnBusy(easmEdit.id + ":upd"); setConnMsg("");
+    try {
+      const updated = await scannerConnectorsApi.update(easmEdit.id, patch);
+      setConnectors((cs) => cs.map((c) => (c.id === easmEdit.id ? updated : c)));
+      setEasmEdit(null);
+      setConnMsg("✓ " + t("vulnerabilities.easm_saved", "EASM settings saved. Use Test to check the mapping."));
+    } catch (err: any) {
+      setConnMsg(err?.response?.data?.detail || t("vulnerabilities.conn_update_failed", "Could not update connector"));
+    } finally { setConnBusy(""); }
+  }
+
+  const inputCls = "border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500";
+  const EASM_FIELDS: { key: string; label: string; ph: string }[] = [
+    { key: "title", label: t("vulnerabilities.easm_fm_title", "Title"), ph: "name" },
+    { key: "severity", label: t("vulnerabilities.easm_fm_severity", "Severity"), ph: "risk_level" },
+    { key: "ref_id", label: t("vulnerabilities.easm_fm_ref_id", "Reference / CVE"), ph: "cve" },
+    { key: "cvss", label: t("vulnerabilities.easm_fm_cvss", "CVSS score"), ph: "cvss_score" },
+    { key: "host", label: t("vulnerabilities.easm_fm_host", "Host / domain"), ph: "asset.hostname" },
+    { key: "ip", label: t("vulnerabilities.easm_fm_ip", "IP address"), ph: "ip_address" },
+    { key: "description", label: t("vulnerabilities.easm_fm_description", "Description"), ph: "description" },
+    { key: "solution", label: t("vulnerabilities.easm_fm_solution", "Remediation"), ph: "remediation" },
+    { key: "references", label: t("vulnerabilities.easm_fm_references", "References / URL"), ph: "references" },
+  ];
+  function renderEasmFields(f: EasmForm, set: (next: EasmForm) => void) {
+    return (
+      <div className="space-y-3 rounded-xl border border-blue-100 bg-blue-50/40 p-3">
+        <div className="grid grid-cols-2 gap-3">
+          <label className="text-xs text-gray-600 space-y-1">
+            <span>{t("vulnerabilities.easm_auth_style", "Authentication")}</span>
+            <select value={f.auth_style} onChange={(e) => set({ ...f, auth_style: e.target.value })} className={inputCls + " w-full"}>
+              <option value="bearer">{t("vulnerabilities.easm_auth_bearer", "Bearer token (Authorization header)")}</option>
+              <option value="header">{t("vulnerabilities.easm_auth_header", "API key in a header")}</option>
+              <option value="basic">{t("vulnerabilities.easm_auth_basic", "Basic (username + password)")}</option>
+              <option value="query">{t("vulnerabilities.easm_auth_query", "API key as a query parameter")}</option>
+            </select>
+          </label>
+          {f.auth_style === "header" && (
+            <label className="text-xs text-gray-600 space-y-1">
+              <span>{t("vulnerabilities.easm_header_name", "Header name")}</span>
+              <input value={f.auth_header} onChange={(e) => set({ ...f, auth_header: e.target.value })} placeholder="X-API-Key" className={inputCls + " w-full"} />
+            </label>
+          )}
+          {f.auth_style === "query" && (
+            <label className="text-xs text-gray-600 space-y-1">
+              <span>{t("vulnerabilities.easm_query_param", "Parameter name")}</span>
+              <input value={f.auth_query_param} onChange={(e) => set({ ...f, auth_query_param: e.target.value })} placeholder="api_key" className={inputCls + " w-full"} />
+            </label>
+          )}
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <label className="text-xs text-gray-600 space-y-1">
+            <span>{t("vulnerabilities.easm_findings_path", "Findings endpoint path")} *</span>
+            <input value={f.findings_path} onChange={(e) => set({ ...f, findings_path: e.target.value })} placeholder="/api/v1/findings" className={inputCls + " w-full"} />
+          </label>
+          <label className="text-xs text-gray-600 space-y-1">
+            <span>{t("vulnerabilities.easm_assets_path", "Assets endpoint path (optional)")}</span>
+            <input value={f.assets_path} onChange={(e) => set({ ...f, assets_path: e.target.value })} placeholder="/api/v1/assets" className={inputCls + " w-full"} />
+          </label>
+        </div>
+        <label className="inline-flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
+          <input type="checkbox" checked={f.discover_assets} onChange={(e) => set({ ...f, discover_assets: e.target.checked })} className="rounded border-gray-300 text-blue-600 focus:ring-blue-500" />
+          {t("vulnerabilities.easm_discover_assets", "Create assets for newly discovered domains/IPs")}
+        </label>
+        <div>
+          <button type="button" onClick={() => set({ ...f, showAdvanced: !f.showAdvanced })} className="inline-flex items-center gap-1 text-xs font-medium text-blue-700 hover:text-blue-800">
+            {f.showAdvanced ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5 rtl:rotate-180" />}
+            {t("vulnerabilities.easm_advanced", "Advanced field mapping")}
+          </button>
+          {f.showAdvanced && (
+            <div className="mt-2 space-y-2">
+              <p className="text-xs text-gray-500">{t("vulnerabilities.easm_advanced_help", "Leave blank to auto-detect. Use the key name from the platform's JSON; dotted paths like asset.hostname or cves[0] are allowed.")}</p>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                <label className="text-xs text-gray-600 space-y-1">
+                  <span>{t("vulnerabilities.easm_results_key", "Results key (list location)")}</span>
+                  <input value={f.results_key} onChange={(e) => set({ ...f, results_key: e.target.value })} placeholder="data.items" className={inputCls + " w-full"} />
+                </label>
+                {EASM_FIELDS.map((fd) => (
+                  <label key={fd.key} className="text-xs text-gray-600 space-y-1">
+                    <span>{fd.label}</span>
+                    <input value={f.field_map[fd.key] || ""} onChange={(e) => set({ ...f, field_map: { ...f.field_map, [fd.key]: e.target.value } })} placeholder={fd.ph} className={inputCls + " w-full"} />
+                  </label>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
   async function deleteConn(id: string) {
     setConnBusy(id + ":del");
     try { await scannerConnectorsApi.remove(id); loadConnectors(); } catch {} finally { setConnBusy(""); }
@@ -873,7 +1046,7 @@ Weak SSH ciphers,Low,3.7,,Backup Storage Array,Restrict to strong ciphers`;
                       {item.status ? label(item.status) : "—"}
                     </span>
                   </td>
-                  <td className="px-6 py-4 text-gray-500">{item.remediation_due_date ? new Date(item.remediation_due_date).toLocaleDateString() : "-"}</td>
+                  <td className="px-6 py-4 text-gray-500">{item.remediation_due_date ? new Date(item.remediation_due_date).toLocaleDateString(uiLocale()) : "-"}</td>
                   <td className="px-6 py-4 text-right"><ChevronRight className="w-4 h-4 text-gray-300 group-hover:text-blue-400 inline" /></td>
                 </tr>
               ))}
@@ -1081,7 +1254,7 @@ Weak SSH ciphers,Low,3.7,,Backup Storage Array,Restrict to strong ciphers`;
                                 </p>
                               )}
                             </div>
-                            <span className="text-[11px] text-gray-400 whitespace-nowrap">{h.created_at ? new Date(h.created_at).toLocaleString() : ""}</span>
+                            <span className="text-[11px] text-gray-400 whitespace-nowrap">{h.created_at ? new Date(h.created_at).toLocaleString(uiLocale()) : ""}</span>
                           </div>
                         ))
                       )}
@@ -1185,7 +1358,7 @@ Weak SSH ciphers,Low,3.7,,Backup Storage Array,Restrict to strong ciphers`;
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">{t("vulnerabilities.scanner", "Scanner")}</label>
                   <select value={importTool} onChange={(e) => setImportTool(e.target.value)} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-                    <option value="csv">Generic CSV</option>
+                    <option value="csv">{t("vulns_ui.tool_generic_csv")}</option>
                     <option value="openvas">OpenVAS</option>
                     <option value="qualys">Qualys</option>
                     <option value="nessus">Nessus / Tenable</option>
@@ -1202,8 +1375,8 @@ Weak SSH ciphers,Low,3.7,,Backup Storage Array,Restrict to strong ciphers`;
               {importResult && (
                 <div className={`p-3 rounded-xl text-sm ${importResult.status === "completed" ? "bg-green-50 text-green-700" : "bg-red-50 text-red-700"}`}>
                   {importResult.status === "completed"
-                    ? `Imported ${importResult.imported_count} findings (${importResult.matched_count} matched to assets, ${importResult.skipped_count} duplicates skipped) from ${importResult.parsed_count} parsed.`
-                    : `Import failed: ${importResult.error || "unknown error"}`}
+                    ? t("vulns_ui.import_done", { imported: importResult.imported_count, matched: importResult.matched_count, skipped: importResult.skipped_count, parsed: importResult.parsed_count })
+                    : `${t("vulns_ui.import_failed")}: ${importResult.error || t("vulns_ui.unknown_error")}`}
                 </div>
               )}
               <div className="flex justify-end gap-3 pt-1">
@@ -1230,7 +1403,28 @@ Weak SSH ciphers,Low,3.7,,Backup Storage Array,Restrict to strong ciphers`;
             </div>
             <p className="text-sm text-gray-500 mb-4">{t("vulnerabilities.connectors_help", "Connect to Nessus/Tenable, Qualys or OpenVAS to pull findings automatically. Sync on demand or on a schedule; every run is journaled.")}</p>
 
-            {connMsg && <div className="mb-4 p-3 rounded-xl text-sm bg-blue-50 text-blue-700">{connMsg}</div>}
+            {connMsg && (
+              <div className={`mb-4 p-3 rounded-xl text-sm whitespace-pre-line break-words ${connMsg.startsWith("✗") ? "bg-red-50 text-red-700" : "bg-blue-50 text-blue-700"}`}>
+                {connMsg}
+                {connPreview && (
+                  <div className="mt-2 overflow-x-auto">
+                    <p className="text-xs font-semibold mb-1">{t("vulnerabilities.easm_preview", "Preview of the first mapped findings")}</p>
+                    <table className="text-xs w-full">
+                      <tbody>
+                        {connPreview.map((p, i) => (
+                          <tr key={i} className="border-t border-blue-100">
+                            <td className="py-1 pe-2 font-medium">{p.title}</td>
+                            <td className="py-1 pe-2 capitalize">{p.severity}</td>
+                            <td className="py-1 pe-2 font-mono">{p.ref_id || "—"}</td>
+                            <td className="py-1 font-mono" dir="ltr">{p.host || p.ip || "—"}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            )}
 
             <div className="space-y-2 mb-6">
               {connLoading ? (
@@ -1247,13 +1441,19 @@ Weak SSH ciphers,Low,3.7,,Backup Storage Array,Restrict to strong ciphers`;
                       {" · "}
                       {cn.last_sync_at
                         ? <>
-                            {t("vulnerabilities.last_sync", "Last sync")}: {new Date(cn.last_sync_at + (String(cn.last_sync_at).endsWith("Z") ? "" : "Z")).toLocaleString()}
+                            {t("vulnerabilities.last_sync", "Last sync")}: {new Date(cn.last_sync_at + (String(cn.last_sync_at).endsWith("Z") ? "" : "Z")).toLocaleString(uiLocale())}
                             {cn.last_status && (
                               <span className={`ms-1.5 rounded-full px-2 py-0.5 text-[10px] font-semibold ${cn.last_status === "failed" ? "bg-red-50 text-red-600" : "bg-green-50 text-green-700"}`}>{cn.last_status}</span>
                             )}
                           </>
                         : t("vulnerabilities.never_synced", "Never synced")}
                     </p>
+                    {cn.tool === "easm" && cn.config?.findings_path && (
+                      <p className="text-xs text-gray-500 truncate mt-0.5" dir="ltr">
+                        {t("vulnerabilities.easm_findings_path", "Findings endpoint path")}: <span className="font-mono">{cn.config.findings_path}</span>
+                        {cn.config.discover_assets === false ? "" : ` · ${t("vulnerabilities.easm_discovery_on", "asset discovery on")}`}
+                      </p>
+                    )}
                     {PULL_TOOLS.includes(cn.tool) ? (
                       <div className="flex items-center gap-2 mt-1.5">
                         <label className="inline-flex items-center gap-1.5 text-xs text-gray-600 cursor-pointer">
@@ -1285,6 +1485,11 @@ Weak SSH ciphers,Low,3.7,,Backup Storage Array,Restrict to strong ciphers`;
                       <p className="text-xs text-amber-600 mt-1">{t("vulnerabilities.file_import_only", "File import only — export the report and use Import.")}</p>
                     )}
                   </div>
+                  {cn.tool === "easm" && (
+                    <button onClick={() => (easmEdit?.id === cn.id ? setEasmEdit(null) : startEasmEdit(cn))} disabled={!!connBusy} className="text-xs px-3 py-1.5 rounded-lg border border-gray-200 hover:bg-gray-50 disabled:opacity-50">
+                      {easmEdit?.id === cn.id ? t("vulnerabilities.easm_cancel_edit", "Cancel") : t("vulnerabilities.easm_edit", "Edit")}
+                    </button>
+                  )}
                   <button onClick={() => testConn(cn.id)} disabled={!!connBusy} className="text-xs px-3 py-1.5 rounded-lg border border-gray-200 hover:bg-gray-50 disabled:opacity-50">
                     {connBusy === cn.id + ":test" ? "…" : t("vulnerabilities.test", "Test")}
                   </button>
@@ -1292,6 +1497,23 @@ Weak SSH ciphers,Low,3.7,,Backup Storage Array,Restrict to strong ciphers`;
                     {connBusy === cn.id + ":sync" ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />} {t("vulnerabilities.sync_now", "Sync now")}
                   </button>
                   <button onClick={() => deleteConn(cn.id)} disabled={!!connBusy} className="text-gray-400 hover:text-red-500 disabled:opacity-50"><Trash2 className="w-4 h-4" /></button>
+                  {easmEdit && easmEdit.id === cn.id && (
+                    <div className="basis-full space-y-3 pt-2">
+                      <input value={easmEdit.base_url} onChange={(e) => patchEasmEdit({ base_url: e.target.value })} placeholder="https://easm.example.com" className={inputCls + " w-full"} />
+                      <div className="grid grid-cols-2 gap-3">
+                        <input value={easmEdit.api_key} onChange={(e) => patchEasmEdit({ api_key: e.target.value })} placeholder={t("vulnerabilities.easm_key_keep", "New API key (blank = keep current)")} type="password" autoComplete="new-password" className={inputCls} />
+                        {easmEdit.form.auth_style === "basic" && (
+                          <input value={easmEdit.api_secret} onChange={(e) => patchEasmEdit({ api_secret: e.target.value })} placeholder={t("vulnerabilities.easm_secret_keep", "New password (blank = keep current)")} type="password" autoComplete="new-password" className={inputCls} />
+                        )}
+                      </div>
+                      {renderEasmFields(easmEdit.form, (form) => patchEasmEdit({ form }))}
+                      <div className="flex justify-end">
+                        <button type="button" onClick={saveEasmEdit} disabled={!!connBusy} className="inline-flex items-center gap-2 bg-blue-600 text-white px-4 py-1.5 rounded-xl text-sm font-medium hover:bg-blue-700 disabled:opacity-50">
+                          {connBusy === cn.id + ":upd" && <Loader2 className="w-4 h-4 animate-spin" />} {t("vulnerabilities.easm_save", "Save settings")}
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
@@ -1306,6 +1528,7 @@ Weak SSH ciphers,Low,3.7,,Backup Storage Array,Restrict to strong ciphers`;
                     <option value="tenable">Tenable.io</option>
                     <option value="nessus">Nessus (Professional / Manager)</option>
                     <option value="qualys">Qualys VM</option>
+                    <option value="easm">{t("vulnerabilities.easm_tool", "EASM (External Attack Surface)")}</option>
                   </optgroup>
                   <optgroup label={t("vulnerabilities.tools_file_only", "File import only")}>
                     <option value="openvas">{t("vulnerabilities.tool_openvas_file", "OpenVAS / Greenbone (file import only)")}</option>
@@ -1313,7 +1536,7 @@ Weak SSH ciphers,Low,3.7,,Backup Storage Array,Restrict to strong ciphers`;
                 </select>
               </div>
               {connNeedsUrl && (
-                <input value={connForm.base_url} onChange={(e) => setConnForm({ ...connForm, base_url: e.target.value })} placeholder={connForm.tool === "tenable" ? "https://cloud.tenable.com" : connForm.tool === "qualys" ? "https://qualysapi.qualys.com" : "https://nessus.host:8834"} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                <input value={connForm.base_url} onChange={(e) => setConnForm({ ...connForm, base_url: e.target.value })} placeholder={connForm.tool === "tenable" ? "https://cloud.tenable.com" : connForm.tool === "qualys" ? "https://qualysapi.qualys.com" : connIsEasm ? t("vulnerabilities.easm_base_url", "Base URL, e.g. https://api.easm-vendor.com") : "https://nessus.host:8834"} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
               )}
               {connNeedsKeys && (
                 <div className="grid grid-cols-2 gap-3">
@@ -1321,6 +1544,15 @@ Weak SSH ciphers,Low,3.7,,Backup Storage Array,Restrict to strong ciphers`;
                   <input value={connForm.api_secret} onChange={(e) => setConnForm({ ...connForm, api_secret: e.target.value })} placeholder={connForm.tool === "qualys" ? t("vulnerabilities.api_password", "API password") : t("vulnerabilities.secret_key", "Secret key")} type="password" autoComplete="new-password" className="border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
                 </div>
               )}
+              {connIsEasm && (
+                <div className="grid grid-cols-2 gap-3">
+                  <input value={connForm.api_key} onChange={(e) => setConnForm({ ...connForm, api_key: e.target.value })} placeholder={easmForm.auth_style === "basic" ? t("vulnerabilities.api_username", "API username") : t("vulnerabilities.easm_api_key", "API key / token")} type={easmForm.auth_style === "basic" ? "text" : "password"} autoComplete="off" className={inputCls} />
+                  {easmForm.auth_style === "basic" && (
+                    <input value={connForm.api_secret} onChange={(e) => setConnForm({ ...connForm, api_secret: e.target.value })} placeholder={t("vulnerabilities.api_password", "API password")} type="password" autoComplete="new-password" className={inputCls} />
+                  )}
+                </div>
+              )}
+              {connIsEasm && renderEasmFields(easmForm, setEasmForm)}
               {connCanPull && (
                 <div className="flex items-center gap-3">
                   <label className="inline-flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
@@ -1335,7 +1567,7 @@ Weak SSH ciphers,Low,3.7,,Backup Storage Array,Restrict to strong ciphers`;
                 </div>
               )}
               <div className="flex items-center justify-between gap-3">
-                <p className="text-xs text-gray-400">{connForm.tool === "demo" ? t("vulnerabilities.demo_note", "Demo connector simulates a pull that matches your assets.") : connForm.tool === "openvas" ? t("vulnerabilities.openvas_note", "OpenVAS speaks GMP, not HTTP — it cannot be pulled. Export the report (XML or CSV) and use Import.") : t("vulnerabilities.live_note", "Live pull needs a reachable scanner + valid credentials.")}</p>
+                <p className="text-xs text-gray-400">{connForm.tool === "demo" ? t("vulnerabilities.demo_note", "Demo connector simulates a pull that matches your assets.") : connForm.tool === "openvas" ? t("vulnerabilities.openvas_note", "OpenVAS speaks GMP, not HTTP — it cannot be pulled. Export the report (XML or CSV) and use Import.") : connIsEasm ? t("vulnerabilities.easm_note", "Add, then click Test: it shows how the platform's fields were mapped.") : t("vulnerabilities.live_note", "Live pull needs a reachable scanner + valid credentials.")}</p>
                 <button type="submit" disabled={addingConn} className="inline-flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-xl text-sm font-medium hover:bg-blue-700 disabled:opacity-50">
                   {addingConn && <Loader2 className="w-4 h-4 animate-spin" />} {t("vulnerabilities.add", "Add")}
                 </button>

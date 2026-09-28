@@ -1008,22 +1008,14 @@ async def forgot_password(request: Request, body: ForgotPasswordRequest, db: Asy
     base = (getattr(settings, "FRONTEND_BASE_URL", "") or "https://grceye.com/app").rstrip("/")
     reset_link = f"{base}/reset-password?token={raw_token}"
 
-    from app.services.email_service import send_email
-    await send_email(
-        to_email=user_email,
-        subject="Reset your password — GRCEye",
-        template_name="notification.html",
-        context={
-            "title": "Password Reset Requested",
-            "message": (
-                "We received a request to reset your GRCEye password. "
-                f'Click the link below to choose a new one (valid for 1 hour):<br><br>'
-                f'<a href="{reset_link}">Reset my password</a><br><br>'
-                "If you did not request this, you can safely ignore this email — "
-                "your password has not been changed."
-            ),
-        },
-    )
+    # In the language the reset was requested in (the login page's language
+    # switcher sends it as Accept-Language), else the user's remembered UI
+    # language, else the tenant's, else English.
+    from app.services.email_service import send_password_reset_email
+    from app.services.user_language import header_language, recipient_language
+    mail_lang = header_language(request) or await recipient_language(
+        db, user.id, tenant_id=user.tenant_id)
+    await send_password_reset_email(to_email=user_email, reset_link=reset_link, lang=mail_lang)
     logger.info("forgot-password: reset link emailed to %s", _hash_email_for_log(user_email))
     return None
 

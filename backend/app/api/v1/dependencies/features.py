@@ -14,7 +14,8 @@ Usage in an endpoint::
 `require_feature` returns the authenticated ``User`` (like ``get_current_user``),
 so it composes as a drop-in replacement for the auth dependency on gated routes.
 Platform super admins bypass gating; a tenant unlocks a feature via the ELITE
-tier or an explicit ``custom_limits`` override on its subscription.
+tier or an explicit ``custom_limits`` override on its subscription, and a single
+user can be granted the whole Elite Pack by a super admin (``User.elite_access``).
 """
 from fastapi import Depends, HTTPException, status
 from sqlalchemy import select
@@ -33,6 +34,11 @@ async def _tenant_subscription(tenant_id: str, db: AsyncSession) -> Subscription
     return result.scalar_one_or_none()
 
 
+def user_has_elite(user: User) -> bool:
+    """True if this user individually holds the Elite Pack (super admin grant)."""
+    return bool(getattr(user, "elite_access", False))
+
+
 async def get_tenant_features(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
@@ -42,7 +48,7 @@ async def get_tenant_features(
     Super admins implicitly get the full Elite map; tenants with no subscription
     row fall back to Starter defaults.
     """
-    if current_user.role == UserRole.SUPER_ADMIN:
+    if current_user.role == UserRole.SUPER_ADMIN or user_has_elite(current_user):
         return dict(TIER_LIMITS[SubscriptionTier.ELITE])
     sub = await _tenant_subscription(current_user.tenant_id, db)
     if sub is None:
@@ -57,7 +63,7 @@ def require_feature(feature: str):
         current_user: User = Depends(get_current_user),
         db: AsyncSession = Depends(get_db),
     ) -> User:
-        if current_user.role == UserRole.SUPER_ADMIN:
+        if current_user.role == UserRole.SUPER_ADMIN or user_has_elite(current_user):
             return current_user
         sub = await _tenant_subscription(current_user.tenant_id, db)
         if not (sub and sub.has_feature(feature)):

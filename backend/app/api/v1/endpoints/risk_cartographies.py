@@ -16,7 +16,7 @@ from reportlab.lib.units import inch
 from reportlab.platypus import (
     SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, HRFlowable,
 )
-from reportlab.lib.enums import TA_CENTER, TA_LEFT
+from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
 
 from app.core.database import get_db
 from app.api.v1.dependencies.auth import get_current_user, get_tenant_id, require_roles
@@ -25,6 +25,7 @@ from app.models.risk import Risk
 from app.models.risk_cartography import RiskCartography
 from app.models.tenant import Tenant
 from app.services import pdf_arabic
+from app.services.ai_locale import get_request_language
 
 router = APIRouter()
 
@@ -408,11 +409,70 @@ def _hex_to_rl(hex_color: str):
     return colors.Color(r / 255, g / 255, b / 255)
 
 
+# ── PDF wording (en/fr/ar) ────────────────────────────────────────────────────
+# The export used to be English whatever the UI language. The cartography's own
+# name/description and risk titles are tenant data and stay as written; the
+# default scale and zone names below are the platform's (DEFAULT_DEFINITION) and
+# are translated when a definition still uses them.
+_PDF_TEXT = {
+    "en": {"exported": "Exported {date}", "grid": "{rows}×{cols} grid", "zones": "Risk Zones",
+           "zone": "Zone", "range": "Score Range", "color": "Color", "register": "Risk Register",
+           "title": "Title", "likelihood": "Likelihood", "impact": "Impact", "score": "Score",
+           "severity": "Severity", "overridden": "Overridden", "map": "Risk Map",
+           "more": "+{n} more"},
+    "fr": {"exported": "Exporté le {date}", "grid": "grille {rows}×{cols}", "zones": "Zones de risque",
+           "zone": "Zone", "range": "Plage de score", "color": "Couleur", "register": "Registre des risques",
+           "title": "Intitulé", "likelihood": "Vraisemblance", "impact": "Impact", "score": "Score",
+           "severity": "Gravité", "overridden": "Ajusté", "map": "Cartographie des risques",
+           "more": "+{n} autre(s)"},
+    "ar": {"exported": "تاريخ التصدير {date}", "grid": "شبكة {rows}×{cols}", "zones": "مناطق المخاطر",
+           "zone": "المنطقة", "range": "نطاق الدرجة", "color": "اللون", "register": "سجل المخاطر",
+           "title": "العنوان", "likelihood": "الاحتمالية", "impact": "الأثر", "score": "الدرجة",
+           "severity": "الخطورة", "overridden": "معدَّل", "map": "خريطة المخاطر",
+           "more": "+{n} أخرى"},
+}
+_SCALE_WORDS = {
+    "rare": {"fr": "Rare", "ar": "نادر"},
+    "unlikely": {"fr": "Peu probable", "ar": "غير مرجح"},
+    "possible": {"fr": "Possible", "ar": "ممكن"},
+    "likely": {"fr": "Probable", "ar": "مرجح"},
+    "almost certain": {"fr": "Quasi certain", "ar": "شبه مؤكد"},
+    "negligible": {"fr": "Négligeable", "ar": "ضئيل"},
+    "minor": {"fr": "Mineur", "ar": "طفيف"},
+    "moderate": {"fr": "Modéré", "ar": "متوسط"},
+    "major": {"fr": "Majeur", "ar": "كبير"},
+    "catastrophic": {"fr": "Catastrophique", "ar": "كارثي"},
+    "very low": {"fr": "Très faible", "ar": "منخفض جداً"},
+    "low": {"fr": "Faible", "ar": "منخفض"},
+    "medium": {"fr": "Moyen", "ar": "متوسط"},
+    "high": {"fr": "Élevé", "ar": "مرتفع"},
+    "very high": {"fr": "Très élevé", "ar": "مرتفع جداً"},
+    "critical": {"fr": "Critique", "ar": "حرج"},
+}
+
+
+def _pdf_t(lang: str, key: str, **fmt) -> str:
+    return (_PDF_TEXT.get(lang) or _PDF_TEXT["en"])[key].format(**fmt)
+
+
+def _scale_word(lang: str, value) -> str:
+    raw = str(value or "")
+    if lang == "en":
+        return raw
+    entry = _SCALE_WORDS.get(raw.strip().lower().replace("_", " "))
+    return (entry or {}).get(lang) or raw
+
+
 def _build_cartography_pdf(
     cartography: RiskCartography,
     risks: list[CartographyRiskOut],
     tenant_name: str,
+    lang: str = "en",
 ) -> BytesIO:
+    from app.services.report_generator import _fmt_date
+    lang = lang if lang in _PDF_TEXT else "en"
+    rtl = lang == "ar"
+    M = pdf_arabic.paragraph_markup
     buf = BytesIO()
     doc = SimpleDocTemplate(
         buf,
@@ -431,10 +491,11 @@ def _build_cartography_pdf(
     WHITE = colors.white
 
     st = getSampleStyleSheet()
-    st.add(ParagraphStyle("RCH1", fontName="Helvetica-Bold", fontSize=16, textColor=NAVY, spaceAfter=2, leading=20))
-    st.add(ParagraphStyle("RCH2", fontName="Helvetica-Bold", fontSize=10, textColor=DARK_BLUE, spaceBefore=12, spaceAfter=4))
-    st.add(ParagraphStyle("RCBody", fontName="Helvetica", fontSize=8, textColor=GRAY_700, leading=11, spaceAfter=3))
-    st.add(ParagraphStyle("RCSmall", fontName="Helvetica", fontSize=7, textColor=GRAY_500, leading=9))
+    align = TA_RIGHT if rtl else TA_LEFT
+    st.add(ParagraphStyle("RCH1", fontName="Helvetica-Bold", fontSize=16, textColor=NAVY, spaceAfter=2, leading=20, alignment=align))
+    st.add(ParagraphStyle("RCH2", fontName="Helvetica-Bold", fontSize=10, textColor=DARK_BLUE, spaceBefore=12, spaceAfter=4, alignment=align))
+    st.add(ParagraphStyle("RCBody", fontName="Helvetica", fontSize=8, textColor=GRAY_700, leading=11, spaceAfter=3, alignment=align))
+    st.add(ParagraphStyle("RCSmall", fontName="Helvetica", fontSize=7, textColor=GRAY_500, leading=9, alignment=align))
     st.add(ParagraphStyle("RCCell", fontName="Helvetica", fontSize=6.5, textColor=GRAY_700, leading=8, alignment=TA_CENTER))
 
     defn = cartography.definition or DEFAULT_DEFINITION
@@ -447,11 +508,12 @@ def _build_cartography_pdf(
     story = []
 
     # ── Title block
-    now = datetime.now(timezone.utc).strftime("%d %b %Y")
+    now = _fmt_date(datetime.now(timezone.utc), lang)
     story.append(Paragraph(pdf_arabic.paragraph_markup(cartography.name, bold=True), st["RCH1"]))
     if cartography.description:
         story.append(Paragraph(pdf_arabic.paragraph_markup(cartography.description), st["RCBody"]))
-    story.append(Paragraph(f"{tenant_name}  ·  Exported {now}  ·  {rows}×{cols} grid", st["RCSmall"]))
+    story.append(Paragraph(M(f"{tenant_name}  ·  {_pdf_t(lang, 'exported', date=now)}  ·  "
+                             f"{_pdf_t(lang, 'grid', rows=rows, cols=cols)}"), st["RCSmall"]))
     story.append(HRFlowable(width="100%", thickness=1, color=colors.HexColor("#e5e7eb"), spaceAfter=10))
 
     # ── Build grid table  (rows+1 rows, cols+2 cols: y-axis label | header row + data rows)
@@ -470,7 +532,7 @@ def _build_cartography_pdf(
 
     # Header row: empty corner + impact labels
     header = [Paragraph("", st["RCCell"])] + [
-        Paragraph(il_labels[c] if c < len(il_labels) else str(c + 1), st["RCCell"])
+        Paragraph(M(_scale_word(lang, il_labels[c]) if c < len(il_labels) else str(c + 1)), st["RCCell"])
         for c in range(cols)
     ]
     grid_data = [header]
@@ -489,7 +551,7 @@ def _build_cartography_pdf(
 
     for row_i in range(rows, 0, -1):  # rows → 1 (high likelihood at top)
         row_label = Paragraph(
-            ll_labels[row_i - 1] if (row_i - 1) < len(ll_labels) else str(row_i),
+            M(_scale_word(lang, ll_labels[row_i - 1]) if (row_i - 1) < len(ll_labels) else str(row_i)),
             st["RCCell"]
         )
         row_data = [row_label]
@@ -498,10 +560,10 @@ def _build_cartography_pdf(
             bg_hex = _zone_color(score, risk_levels)
             bg_rl = _hex_to_rl(bg_hex)
             titles = cell_risks.get((row_i, col_j), [])
-            cell_text = "\n".join(t[:25] + "…" if len(t) > 25 else t for t in titles[:3])
+            lines = [M(t[:25] + "…" if len(t) > 25 else t) for t in titles[:3]]
             if len(titles) > 3:
-                cell_text += f"\n+{len(titles) - 3} more"
-            cell_p = Paragraph(cell_text or " ", st["RCCell"])
+                lines.append(M(_pdf_t(lang, "more", n=len(titles) - 3)))
+            cell_p = Paragraph("<br/>".join(lines) or " ", st["RCCell"])
             row_data.append(cell_p)
 
             # Color this cell
@@ -516,12 +578,12 @@ def _build_cartography_pdf(
     grid_table.setStyle(TableStyle(style_cmds))
 
     # ── Legend
-    story.append(Paragraph("Risk Zones", st["RCH2"]))
-    legend_data = [[
-        Paragraph("Zone", st["RCBody"]),
-        Paragraph("Score Range", st["RCBody"]),
-        Paragraph("Color", st["RCBody"]),
-    ]]
+    legend_head = [
+        Paragraph(M(_pdf_t(lang, "zone"), bold=True), st["RCBody"]),
+        Paragraph(M(_pdf_t(lang, "range"), bold=True), st["RCBody"]),
+        Paragraph(M(_pdf_t(lang, "color"), bold=True), st["RCBody"]),
+    ]
+    legend_data = [legend_head]
     legend_styles = [
         ("BACKGROUND", (0, 0), (-1, 0), GRAY_100),
         ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
@@ -532,28 +594,29 @@ def _build_cartography_pdf(
     ]
     for idx, lvl in enumerate(risk_levels):
         legend_data.append([
-            Paragraph(lvl["name"], st["RCBody"]),
+            Paragraph(M(_scale_word(lang, lvl["name"])), st["RCBody"]),
             Paragraph(f"{lvl['min_score']} – {lvl['max_score']}", st["RCBody"]),
             Paragraph(" ", st["RCBody"]),
         ])
+        swatch_col = 0 if rtl else 2
         legend_styles.append((
-            "BACKGROUND", (2, idx + 1), (2, idx + 1), _hex_to_rl(lvl["color"])
+            "BACKGROUND", (swatch_col, idx + 1), (swatch_col, idx + 1), _hex_to_rl(lvl["color"])
         ))
+    legend_widths = [1.4 * inch, 1.2 * inch, 0.5 * inch]
+    if rtl:
+        # Arabic reads right-to-left: the first column goes on the right.
+        legend_data = [list(reversed(r)) for r in legend_data]
+        legend_widths = list(reversed(legend_widths))
     legend_table = Table(
         legend_data,
-        colWidths=[1.4 * inch, 1.2 * inch, 0.5 * inch],
+        colWidths=legend_widths,
     )
     legend_table.setStyle(TableStyle(legend_styles))
 
     # ── Risk list
-    story.append(Paragraph("Risk Register", st["RCH2"]))
     risk_list_data = [[
-        Paragraph("Title", st["RCBody"]),
-        Paragraph("Likelihood", st["RCBody"]),
-        Paragraph("Impact", st["RCBody"]),
-        Paragraph("Score", st["RCBody"]),
-        Paragraph("Severity", st["RCBody"]),
-        Paragraph("Overridden", st["RCBody"]),
+        Paragraph(M(_pdf_t(lang, key), bold=True), st["RCBody"])
+        for key in ("title", "likelihood", "impact", "score", "severity", "overridden")
     ]]
     risk_list_styles = [
         ("BACKGROUND", (0, 0), (-1, 0), GRAY_100),
@@ -568,27 +631,38 @@ def _build_cartography_pdf(
     for r in sorted_risks:
         score = r.effective_likelihood * r.effective_impact
         risk_list_data.append([
-            Paragraph(r.title[:60] + ("…" if len(r.title) > 60 else ""), st["RCBody"]),
+            Paragraph(M(r.title[:60] + ("…" if len(r.title) > 60 else "")), st["RCBody"]),
             Paragraph(str(int(r.effective_likelihood)), st["RCBody"]),
             Paragraph(str(int(r.effective_impact)), st["RCBody"]),
             Paragraph(f"{score:.0f}", st["RCBody"]),
-            Paragraph(r.severity or "—", st["RCBody"]),
+            Paragraph(M(_scale_word(lang, r.severity) if r.severity else "—"), st["RCBody"]),
             Paragraph("✏" if r.is_overridden else "—", st["RCBody"]),
         ])
+    risk_widths = [None, 0.7 * inch, 0.7 * inch, 0.5 * inch, 0.7 * inch, 0.6 * inch]
+    if rtl:
+        risk_list_data = [list(reversed(r)) for r in risk_list_data]
+        risk_widths = list(reversed(risk_widths))
     risk_list_table = Table(
         risk_list_data,
-        colWidths=[None, 0.7 * inch, 0.7 * inch, 0.5 * inch, 0.7 * inch, 0.6 * inch],
+        colWidths=risk_widths,
     )
     risk_list_table.setStyle(TableStyle(risk_list_styles))
 
     # Side-by-side: grid left, legend+risk list right
-    story.append(Paragraph("Risk Map", st["RCH2"]))
+    story.append(Paragraph(M(_pdf_t(lang, "map"), bold=True), st["RCH2"]))
     story.append(grid_table)
     story.append(Spacer(1, 12))
 
-    side_by_side = Table(
-        [[legend_table, Spacer(0.3 * inch, 1), risk_list_table]],
-    )
+    # Section headings for the two side-by-side tables (they used to be appended
+    # to the story before the map, so they printed above it, detached from
+    # their tables).
+    legend_block = [Paragraph(M(_pdf_t(lang, "zones"), bold=True), st["RCH2"]), legend_table]
+    register_block = [Paragraph(M(_pdf_t(lang, "register"), bold=True), st["RCH2"]), risk_list_table]
+    cells = [legend_block, Spacer(0.3 * inch, 1), register_block]
+    if rtl:
+        cells = list(reversed(cells))
+    side_by_side = Table([cells])
+    side_by_side.setStyle(TableStyle([("VALIGN", (0, 0), (-1, -1), "TOP")]))
     story.append(side_by_side)
 
     doc.build(story)
@@ -599,6 +673,7 @@ def _build_cartography_pdf(
 @router.get("/{cid}/pdf")
 async def export_cartography_pdf(
     cid: str,
+    lang: str = Depends(get_request_language),
     db: AsyncSession = Depends(get_db),
     _: User = Depends(get_current_user),
     tenant_id: str = Depends(get_tenant_id),
@@ -622,7 +697,7 @@ async def export_cartography_pdf(
     # request this worker is serving until the document is finished. The three
     # attributes the builder reads off `c` are already loaded, so the thread
     # never touches the session.
-    pdf_buf = await asyncio.to_thread(_build_cartography_pdf, c, risks, tenant_name)
+    pdf_buf = await asyncio.to_thread(_build_cartography_pdf, c, risks, tenant_name, lang)
 
     safe_name = "".join(ch if ch.isalnum() or ch in " _-" else "_" for ch in c.name)
     filename = f"cartography_{safe_name}_{datetime.now(timezone.utc).strftime('%Y%m%d')}.pdf"

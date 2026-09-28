@@ -38,8 +38,9 @@ def _is_super_admin(user: User) -> bool:
 
 
 async def _assert_feature(db: AsyncSession, tenant_id: str, user: User, flag: str) -> None:
-    """Raise 402 (Elite upsell) unless the tenant's plan unlocks `flag`. Super admins bypass."""
-    if _is_super_admin(user):
+    """Raise 402 (Elite upsell) unless the tenant's plan unlocks `flag`. Super admins
+    and users individually granted the Elite Pack bypass."""
+    if _is_super_admin(user) or getattr(user, "elite_access", False):
         return
     sub = (await db.execute(select(Subscription).where(Subscription.tenant_id == tenant_id))).scalar_one_or_none()
     if not sub or not sub.has_feature(flag):

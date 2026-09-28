@@ -12,6 +12,14 @@ import ColumnsMenu from "../components/common/ColumnsMenu";
 import ModuleDashboard from "../components/dashboards/ModuleDashboard";
 import { useBucketLabel } from "../components/common/Breakdown";
 import { useEntitlements } from "../context/EntitlementsContext";
+import appI18n from "@/i18n";
+
+/** Intl locale for the current UI language (Arabic keeps Latin digits). */
+function uiLocale(): string {
+  const l = appI18n.language || "en";
+  return l.startsWith("fr") ? "fr-FR" : l.startsWith("ar") ? "ar-u-nu-latn" : "en-US";
+}
+
 
 const SEV_BADGE: Record<RiskSeverity, string> = {
   critical: "bg-red-100 text-red-700 border-red-200",
@@ -180,7 +188,7 @@ function AddRiskModal({ onClose, onSaved }: { readonly onClose: () => void; read
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!form.title.trim()) { setError("Title is required."); return; }
+    if (!form.title.trim()) { setError(t("risks_ui.error_title_required")); return; }
     setSaving(true); setError("");
     try {
       await risksApi.create({
@@ -196,7 +204,7 @@ function AddRiskModal({ onClose, onSaved }: { readonly onClose: () => void; read
       onClose();
     } catch (err: unknown) {
       const e = err as { response?: { data?: { detail?: string } } };
-      setError(e.response?.data?.detail ?? "Failed to save risk.");
+      setError(e.response?.data?.detail ?? t("risks_ui.error_save_failed"));
       setSaving(false);
     }
   }
@@ -214,7 +222,7 @@ function AddRiskModal({ onClose, onSaved }: { readonly onClose: () => void; read
           <div>
             <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">{t("risks.risk_title")} *</label>
             <input className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-              placeholder="e.g. Unpatched production servers"
+              placeholder={t("risks_ui.title_placeholder")}
               value={form.title} onChange={e => setForm(f => ({ ...f, title: e.target.value }))} />
           </div>
 
@@ -245,7 +253,7 @@ function AddRiskModal({ onClose, onSaved }: { readonly onClose: () => void; read
           <div className="bg-gray-50 rounded-xl p-4 space-y-3">
             <div className="flex items-center justify-between mb-1">
               <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">{t("risks.risk_score")}</span>
-              <span className={`text-sm font-bold ${sevColor}`}>{score} — {sev}</span>
+              <span className={`text-sm font-bold ${sevColor}`}>{score} — {t(`compliance.severities.${sev.toLowerCase()}`).toUpperCase()}</span>
             </div>
             {(["likelihood","impact"] as const).map(field => (
               <div key={field}>
@@ -266,7 +274,7 @@ function AddRiskModal({ onClose, onSaved }: { readonly onClose: () => void; read
           <div>
             <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">{t("risks.tags_label")}</label>
             <input className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-              placeholder="e.g. cloud, infrastructure, patch-management"
+              placeholder={t("risks_ui.tags_placeholder")}
               value={form.tags} onChange={e => setForm(f => ({ ...f, tags: e.target.value }))} />
           </div>
 
@@ -479,7 +487,7 @@ function RiskDetailModal({ risk, onClose, onUpdated }: { readonly risk: Risk; re
                     <ShieldCheck className="w-4 h-4 text-emerald-600 mt-0.5 flex-shrink-0" />
                     <div className="flex-1 min-w-0">
                       <p className="text-xs font-semibold text-emerald-700">
-                        {t("risks.target_validated")} — {new Date(risk.target_validated_at).toLocaleString()}
+                        {t("risks.target_validated")} — {new Date(risk.target_validated_at).toLocaleString(uiLocale())}
                       </p>
                       {risk.target_calculation_notes && (
                         <p className="text-xs text-emerald-700/80 mt-1 leading-relaxed">{risk.target_calculation_notes}</p>
@@ -557,11 +565,11 @@ function RiskDetailModal({ risk, onClose, onUpdated }: { readonly risk: Risk; re
           <div className="grid grid-cols-2 gap-3 pt-2 border-t border-gray-50">
             <div>
               <p className="text-xs text-gray-400">{t("common.created_at")}</p>
-              <p className="text-sm text-gray-600 mt-0.5">{new Date(risk.created_at).toLocaleDateString()}</p>
+              <p className="text-sm text-gray-600 mt-0.5">{new Date(risk.created_at).toLocaleDateString(uiLocale())}</p>
             </div>
             <div>
               <p className="text-xs text-gray-400">{t("common.updated_at")}</p>
-              <p className="text-sm text-gray-600 mt-0.5">{new Date(risk.updated_at).toLocaleDateString()}</p>
+              <p className="text-sm text-gray-600 mt-0.5">{new Date(risk.updated_at).toLocaleDateString(uiLocale())}</p>
             </div>
           </div>
 

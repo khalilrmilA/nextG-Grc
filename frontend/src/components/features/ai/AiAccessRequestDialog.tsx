@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { AlertCircle, Loader2, X, CheckCircle } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { authApi } from "@/api/endpoints";
 
 export default function AiAccessRequestDialog({
@@ -11,6 +12,7 @@ export default function AiAccessRequestDialog({
   onClose: () => void;
   feature?: "document-generation" | "ai-analysis" | "all";
 }) {
+  const { t } = useTranslation();
   const [reason, setReason] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
@@ -19,7 +21,7 @@ export default function AiAccessRequestDialog({
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!reason.trim()) {
-      setError("Please provide a reason for your request");
+      setError(t("ai_access.err_reason_required"));
       return;
     }
 
@@ -34,7 +36,7 @@ export default function AiAccessRequestDialog({
         setReason("");
       }, 2000);
     } catch (err) {
-      setError("Failed to submit request. Please try again.");
+      setError(t("ai_access.err_submit"));
     } finally {
       setSubmitting(false);
     }
@@ -46,10 +48,11 @@ export default function AiAccessRequestDialog({
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md">
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
-          <h2 className="text-lg font-semibold text-gray-900">Request AI Access</h2>
+          <h2 className="text-lg font-semibold text-gray-900">{t("ai_access.request_cta")}</h2>
           <button
             type="button"
             onClick={onClose}
+            aria-label={t("common.close")}
             className="p-1 rounded-lg hover:bg-gray-100 text-gray-400 transition-colors"
           >
             <X className="w-5 h-5" />
@@ -60,38 +63,38 @@ export default function AiAccessRequestDialog({
           {submitted ? (
             <div className="py-8 text-center">
               <CheckCircle className="w-12 h-12 text-green-500 mx-auto mb-3" />
-              <p className="font-semibold text-gray-900 mb-1">Request Submitted!</p>
+              <p className="font-semibold text-gray-900 mb-1">{t("ai_access.submitted_title")}</p>
               <p className="text-sm text-gray-600">
-                Your admin will review your request and notify you shortly.
+                {t("ai_access.submitted_desc")}
               </p>
             </div>
           ) : (
             <>
               <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
                 <p className="text-xs text-blue-700">
-                  <strong>Why request access?</strong> AI features help generate policies, analyze documents, and provide intelligent insights.
+                  <strong>{t("ai_access.why_title")}</strong> {t("ai_access.why_desc")}
                 </p>
               </div>
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Feature Type
+                  {t("ai_access.feature_type")}
                 </label>
                 <div className="p-3 bg-gray-50 border border-gray-200 rounded-lg text-sm font-medium text-gray-700">
-                  {feature === "all" && "All AI Features"}
-                  {feature === "document-generation" && "Document Generation"}
-                  {feature === "ai-analysis" && "AI Analysis"}
+                  {feature === "all" && t("ai_access.feature_all")}
+                  {feature === "document-generation" && t("ai_access.feature_docgen")}
+                  {feature === "ai-analysis" && t("ai_access.feature_analysis")}
                 </div>
               </div>
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Reason for Request *
+                  {t("ai_access.reason_label")} *
                 </label>
                 <textarea
                   value={reason}
                   onChange={(e) => setReason(e.target.value)}
-                  placeholder="Explain why you need access to AI features (e.g., need to generate compliance policies for ISO 27001 certification)"
+                  placeholder={t("ai_access.reason_placeholder")}
                   rows={4}
                   className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
                 />
@@ -110,7 +113,7 @@ export default function AiAccessRequestDialog({
                   onClick={onClose}
                   className="flex-1 py-2.5 border border-gray-200 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors"
                 >
-                  Cancel
+                  {t("common.cancel")}
                 </button>
                 <button
                   type="submit"
@@ -119,10 +122,10 @@ export default function AiAccessRequestDialog({
                 >
                   {submitting ? (
                     <>
-                      <Loader2 className="w-4 h-4 animate-spin" /> Submitting…
+                      <Loader2 className="w-4 h-4 animate-spin" /> {t("ai_access.submitting")}
                     </>
                   ) : (
-                    "Submit Request"
+                    t("ai_access.submit")
                   )}
                 </button>
               </div>

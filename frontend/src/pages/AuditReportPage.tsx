@@ -10,6 +10,10 @@ import { useAuthStore, hasAnyRole } from "@/store/auth";
 import FileHistoryModal from "@/components/features/compliance/FileHistoryModal";
 import type { Audit, AuditReportDistribution } from "@/types";
 
+/** Display locale for dates: Latin digits in Arabic, French day-month order in French. */
+const dateLocale = (lang: string) => (lang?.startsWith("fr") ? "fr-FR" : lang?.startsWith("ar") ? "ar-u-nu-latn" : "en-US");
+
+
 // Who may do what to the deliverable. Mirrors backend/app/api/v1/endpoints/audits.py:
 // AUDIT_WRITE_ROLES produce and submit it, AUDIT_MANAGE_ROLES validate and release
 // it — and the backend additionally refuses an approval by the person who produced it.
@@ -99,7 +103,7 @@ export default function AuditReportPage() {
   function fmt(value?: string | null) {
     if (!value) return "—";
     const d = new Date(value);
-    return Number.isNaN(d.getTime()) ? value : d.toLocaleString(i18n.language);
+    return Number.isNaN(d.getTime()) ? value : d.toLocaleString(dateLocale(i18n.language));
   }
 
   // `separationOfDuties` marks the one action whose 403 means "you produced this

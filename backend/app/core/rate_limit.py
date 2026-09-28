@@ -55,8 +55,10 @@ limiter = Limiter(key_func=_key_func, default_limits=[], storage_uri=_storage_ur
 
 
 async def rate_limit_exceeded_handler(request: Request, exc: RateLimitExceeded):  # noqa: ARG001
-    """Generic, no-leakage 429 response."""
+    """Generic, no-leakage 429 response (text localised to the UI language)."""
+    from app.core.i18n_messages import request_language, translate_text
     return JSONResponse(
         status_code=429,
-        content={"detail": "Too many requests. Please slow down and try again."},
+        content={"detail": translate_text("Too many requests. Please slow down and try again.",
+                                          request_language(request))},
     )

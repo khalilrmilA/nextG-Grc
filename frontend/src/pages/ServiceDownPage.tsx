@@ -1,9 +1,11 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { WifiOff, RefreshCw, Clock } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 export default function ServiceDownPage() {
   const navigate = useNavigate();
+  const { t } = useTranslation();
   const [checking, setChecking] = useState(false);
   const [dots, setDots] = useState("");
 
@@ -48,18 +50,18 @@ export default function ServiceDownPage() {
 
         {/* Title */}
         <h1 className="text-3xl font-bold text-white mb-2">
-          We'll be back soon
+          {t("service_down.title")}
         </h1>
         <p className="text-slate-400 mb-8 text-sm leading-relaxed">
-          The server is temporarily unreachable. Our team is on it.
+          {t("service_down.message")}
           <br />
-          Please try again in a few moments{dots}
+          {t("service_down.retry_hint")}{dots}
         </p>
 
         {/* Status pill */}
         <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-red-500/10 border border-red-500/20 text-red-400 text-sm mb-8">
           <Clock className="w-3.5 h-3.5" />
-          Service unavailable
+          {t("service_down.status")}
         </div>
 
         {/* Retry button */}
@@ -70,11 +72,11 @@ export default function ServiceDownPage() {
             className="inline-flex items-center gap-2 px-6 py-3 bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white text-sm font-medium rounded-xl transition-colors"
           >
             <RefreshCw className={`w-4 h-4 ${checking ? "animate-spin" : ""}`} />
-            {checking ? "Checking…" : "Try again"}
+            {checking ? t("service_down.checking") : t("service_down.try_again")}
           </button>
         </div>
 
-        <p className="mt-8 text-xs text-slate-600">GRCEye · Error 503</p>
+        <p className="mt-8 text-xs text-slate-600">{t("service_down.footer")}</p>
       </div>
     </div>
   );

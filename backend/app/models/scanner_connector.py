@@ -9,7 +9,7 @@ encryption-at-rest is a documented follow-up (see MULTI_DB/security notes).
 """
 from datetime import datetime
 from sqlalchemy.orm import Mapped, mapped_column
-from sqlalchemy import String, Boolean, Integer, DateTime, ForeignKey
+from sqlalchemy import String, Boolean, Integer, DateTime, ForeignKey, JSON
 from app.core.database import Base
 
 
@@ -30,3 +30,26 @@ class ScannerConnector(Base):
     interval_hours: Mapped[int] = mapped_column(Integer, default=168, nullable=False)  # weekly
     last_sync_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     last_status: Mapped[str | None] = mapped_column(String(50), nullable=True)
+
+
+class ScannerConnectorSettings(Base):
+    """Tool-specific, NON-secret configuration for a connector (one row each).
+
+    A separate table rather than new columns on ``scanner_connectors``: the live
+    database takes new columns only by a hand-written ALTER, while a new table is
+    created by ``create_all()`` at startup. Used by the configurable EASM
+    connector (auth style, endpoint paths, field mapping — see
+    app/services/easm_connector.py). Credentials never go here; they stay in
+    ``ScannerConnector.api_key`` / ``api_secret``. Deleted with its connector
+    (explicitly, in the delete endpoint — SQLite does not enforce the FK).
+    """
+    __tablename__ = "scanner_connector_settings"
+
+    tenant_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("tenants.id"), nullable=False, index=True
+    )
+    connector_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("scanner_connectors.id", ondelete="CASCADE"),
+        nullable=False, unique=True, index=True,
+    )
+    config: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)

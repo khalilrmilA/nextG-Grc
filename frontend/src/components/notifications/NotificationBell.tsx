@@ -5,6 +5,8 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { Bell, Check, Trash2, AlertTriangle, Shield, FileText, TrendingDown, RefreshCw, Link2, Upload } from "lucide-react";
+import { useTranslation } from "react-i18next";
+import type { TFunction } from "i18next";
 import { notificationsApi } from "@/api/endpoints";
 
 interface Notification {
@@ -46,7 +48,9 @@ function getIcon(type: string) {
   return Bell;
 }
 
-function getTimeAgo(dateStr: string): string {
+const dateLocale = (lang: string) => (lang?.startsWith("fr") ? "fr-FR" : lang?.startsWith("ar") ? "ar-u-nu-latn" : "en-US");
+
+function getTimeAgo(dateStr: string, t: TFunction, lang: string): string {
   const date = new Date(dateStr);
   const now = new Date();
   const diffMs = now.getTime() - date.getTime();
@@ -54,15 +58,16 @@ function getTimeAgo(dateStr: string): string {
   const diffHours = Math.floor(diffMs / 3600000);
   const diffDays = Math.floor(diffMs / 86400000);
 
-  if (diffMins < 1) return "just now";
-  if (diffMins < 60) return `${diffMins}m ago`;
-  if (diffHours < 24) return `${diffHours}h ago`;
-  if (diffDays < 30) return `${diffDays}d ago`;
-  return date.toLocaleDateString();
+  if (diffMins < 1) return t("layout_ui.just_now");
+  if (diffMins < 60) return t("layout_ui.minutes_ago", { count: diffMins });
+  if (diffHours < 24) return t("layout_ui.hours_ago", { count: diffHours });
+  if (diffDays < 30) return t("layout_ui.days_ago", { count: diffDays });
+  return date.toLocaleDateString(dateLocale(lang));
 }
 
 export default function NotificationBell() {
   const navigate = useNavigate();
+  const { t, i18n } = useTranslation();
   const [open, setOpen] = useState(false);
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
@@ -178,7 +183,7 @@ export default function NotificationBell() {
       <button
         onClick={() => { setOpen(prev => { if (!prev) { loadNotifications(); } return !prev; }); }}
         className="relative p-2 rounded-lg hover:bg-gray-100 transition-colors"
-        aria-label="Notifications"
+        aria-label={t("nav.notifications")}
       >
         <Bell className="w-5 h-5 text-gray-600" />
         {unreadCount > 0 && (
@@ -193,15 +198,15 @@ export default function NotificationBell() {
           {/* Header */}
           <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
             <div>
-              <h3 className="text-sm font-semibold text-gray-900">Notifications</h3>
-              <p className="text-xs text-gray-500">{unreadCount} unread</p>
+              <h3 className="text-sm font-semibold text-gray-900">{t("nav.notifications")}</h3>
+              <p className="text-xs text-gray-500">{t("notif_bell.unread_count", { count: unreadCount })}</p>
             </div>
             <div className="flex items-center gap-1">
               <button
                 onClick={handleCheckDeadlines}
                 disabled={checking}
                 className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors disabled:opacity-50"
-                title="Check deadlines now"
+                title={t("layout_ui.check_deadlines")}
               >
                 <RefreshCw className={`w-4 h-4 text-gray-500 ${checking ? "animate-spin" : ""}`} />
               </button>
@@ -209,9 +214,9 @@ export default function NotificationBell() {
                 <button
                   onClick={handleMarkAllRead}
                   className="text-xs text-blue-600 hover:text-blue-700 font-medium px-2 py-1 rounded hover:bg-blue-50"
-                  title="Mark all as read"
+                  title={t("notif_bell.mark_all_as_read")}
                 >
-                  Mark all read
+                  {t("nav.mark_all_read")}
                 </button>
               )}
             </div>
@@ -220,12 +225,12 @@ export default function NotificationBell() {
           {/* List */}
           <div className="flex-1 overflow-y-auto">
             {loading && notifications.length === 0 ? (
-              <div className="p-6 text-center text-sm text-gray-500">Loading...</div>
+              <div className="p-6 text-center text-sm text-gray-500">{t("common.loading")}</div>
             ) : notifications.length === 0 ? (
               <div className="p-8 text-center">
                 <Bell className="w-8 h-8 text-gray-300 mx-auto mb-2" />
-                <p className="text-sm text-gray-500">No notifications yet</p>
-                <p className="text-xs text-gray-400 mt-1">Click refresh to check deadlines</p>
+                <p className="text-sm text-gray-500">{t("notif_bell.empty")}</p>
+                <p className="text-xs text-gray-400 mt-1">{t("notif_bell.empty_hint")}</p>
               </div>
             ) : (
               notifications.map((notif) => {
@@ -254,13 +259,13 @@ export default function NotificationBell() {
                         </div>
                         <p className="text-xs text-gray-500 mt-0.5 line-clamp-2">{notif.message}</p>
                         <div className="flex items-center justify-between mt-1.5">
-                          <span className="text-[10px] text-gray-400">{getTimeAgo(notif.created_at)}</span>
+                          <span className="text-[10px] text-gray-400">{getTimeAgo(notif.created_at, t, i18n.language)}</span>
                           <div className="flex items-center gap-1">
                             {isUnread && (
                               <button
                                 onClick={(e) => handleMarkRead(notif.id, e)}
                                 className="p-0.5 hover:bg-gray-100 rounded"
-                                title="Mark as read"
+                                title={t("notif_bell.mark_as_read")}
                               >
                                 <Check className="w-3 h-3 text-gray-400" />
                               </button>
@@ -268,7 +273,7 @@ export default function NotificationBell() {
                             <button
                               onClick={(e) => handleDelete(notif.id, e)}
                               className="p-0.5 hover:bg-gray-100 rounded"
-                              title="Delete"
+                              title={t("common.delete")}
                             >
                               <Trash2 className="w-3 h-3 text-gray-400" />
                             </button>
@@ -292,7 +297,7 @@ export default function NotificationBell() {
                 }}
                 className="text-xs text-gray-500 hover:text-gray-700"
               >
-                Notification settings
+                {t("notif_bell.settings")}
               </button>
             </div>
           )}

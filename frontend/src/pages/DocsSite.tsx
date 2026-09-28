@@ -15,6 +15,7 @@ import {
   Search, Menu, X, ChevronRight, ChevronLeft, ArrowLeft, ArrowRight, Moon, Sun,
   Lightbulb, BookOpen, Rocket, GraduationCap, FileText, UserCog, ExternalLink,
   LayoutDashboard, Boxes, Bug, CheckSquare, ClipboardList, Building2, Scale, ClipboardCheck,
+  Target, Radar, Siren, ShieldCheck,
 } from "lucide-react";
 import LanguageSwitcher from "../components/LanguageSwitcher";
 import { useAuthStore } from "../store/auth";
@@ -50,9 +51,13 @@ type NavNode =
 
 const USER_GROUPS: { id: string; Icon: React.ElementType }[] = [
   { id: "overview", Icon: LayoutDashboard },
-  { id: "asset_risk", Icon: Boxes },
-  { id: "security", Icon: Bug },
+  { id: "assets", Icon: Boxes },
+  { id: "risk", Icon: Target },
+  { id: "vulnerability", Icon: Bug },
+  { id: "threat", Icon: Radar },
+  { id: "incident", Icon: Siren },
   { id: "compliance", Icon: CheckSquare },
+  { id: "controls", Icon: ShieldCheck },
   { id: "audit", Icon: ClipboardList },
   { id: "documents", Icon: FileText },
   { id: "third_parties", Icon: Building2 },
@@ -276,6 +281,7 @@ function SearchDialog({ pages, onClose }: { pages: Record<string, DocPage>; onCl
 // ── Screenshot figure (browser-framed, click to enlarge) ──────────────────────
 
 function Screenshot({ src, alt, route }: { src: string; alt: string; route?: string }) {
+  const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const [failed, setFailed] = useState(false);
   useEffect(() => { setFailed(false); }, [src]);
@@ -302,7 +308,7 @@ function Screenshot({ src, alt, route }: { src: string; alt: string; route?: str
       {open && (
         <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 sm:p-8 cursor-zoom-out" onClick={() => setOpen(false)}>
           <img src={src} alt={alt} className="max-w-full max-h-full rounded-lg shadow-2xl" />
-          <button type="button" aria-label="Close" className="absolute top-4 end-4 p-2 rounded-full bg-white/10 text-white hover:bg-white/20"><X className="w-5 h-5" /></button>
+          <button type="button" aria-label={t("common.close")} className="absolute top-4 end-4 p-2 rounded-full bg-white/10 text-white hover:bg-white/20"><X className="w-5 h-5" /></button>
         </div>
       )}
     </>
@@ -312,6 +318,7 @@ function Screenshot({ src, alt, route }: { src: string; alt: string; route?: str
 // ── Left navigation tree ──────────────────────────────────────────────────────
 
 function SideNav({ nav, current, onNavigate }: { nav: NavNode[]; current: string; onNavigate: () => void }) {
+  const { t } = useTranslation();
   const holder = nav.find(n => n.kind === "group" && (n.id === current || n.children.some(c => c.id === current)));
   const [open, setOpen] = useState<Record<string, boolean>>({});
   useEffect(() => { if (holder && holder.kind === "group") setOpen(o => ({ ...o, [holder.id]: true })); }, [holder]);
@@ -341,7 +348,7 @@ function SideNav({ nav, current, onNavigate }: { nav: NavNode[]; current: string
           <div key={n.id}>
             <div className={`${itemCls(current === n.id)} !pe-1`}>
               <Link to={`/docs/${n.id}`} onClick={() => { setOpen(o => ({ ...o, [n.id]: true })); onNavigate(); }} className="flex-1 truncate">{n.title}</Link>
-              <button type="button" aria-label="toggle" aria-expanded={isOpen} onClick={() => setOpen(o => ({ ...o, [n.id]: !o[n.id] }))}
+              <button type="button" aria-label={t("docsite.toggle_section")} aria-expanded={isOpen} onClick={() => setOpen(o => ({ ...o, [n.id]: !o[n.id] }))}
                 className="p-1 rounded-md hover:bg-gray-200/60 dark:hover:bg-slate-700">
                 <ChevronRight className={`w-3.5 h-3.5 transition-transform rtl:rotate-180 ${isOpen ? "rotate-90 rtl:rotate-90" : ""}`} />
               </button>
@@ -400,9 +407,9 @@ export default function DocsSite() {
   useEffect(() => {
     if (!page) return;
     const prev = document.title;
-    document.title = `${page.title} · GRCeye Docs`;
+    document.title = `${page.title} · GRCeye ${t("docsite.docs", "Docs")}`;
     return () => { document.title = prev; };
-  }, [page]);
+  }, [page, t]);
 
   // Scroll: to the #anchor if any, else to the top on page change.
   useEffect(() => {
@@ -444,7 +451,7 @@ export default function DocsSite() {
         {/* ── Top bar ── */}
         <header className="sticky top-0 z-40 h-16 border-b border-gray-200 dark:border-slate-800 bg-white/90 dark:bg-slate-950/90 backdrop-blur">
           <div className="h-full max-w-[90rem] mx-auto px-4 lg:px-6 flex items-center gap-3">
-            <button type="button" onClick={() => setDrawer(true)} className="lg:hidden p-2 -ms-2 rounded-lg text-gray-500 hover:bg-gray-100 dark:hover:bg-slate-800" aria-label="Menu">
+            <button type="button" onClick={() => setDrawer(true)} className="lg:hidden p-2 -ms-2 rounded-lg text-gray-500 hover:bg-gray-100 dark:hover:bg-slate-800" aria-label={t("docsite.menu")}>
               <Menu className="w-5 h-5" />
             </button>
             <Link to="/docs/introduction" className="flex items-center gap-2 flex-shrink-0">
@@ -453,7 +460,7 @@ export default function DocsSite() {
               <span className="text-gray-400 dark:text-slate-500 font-medium hidden sm:inline">{t("docsite.docs", "Docs")}</span>
             </Link>
 
-            <button type="button" onClick={() => setSearchOpen(true)} aria-label="Search"
+            <button type="button" onClick={() => setSearchOpen(true)} aria-label={t("common.search")}
               className="sm:hidden ms-auto p-2 rounded-lg text-gray-500 dark:text-slate-400 hover:bg-gray-100 dark:hover:bg-slate-800">
               <Search className="w-5 h-5" />
             </button>
@@ -466,7 +473,7 @@ export default function DocsSite() {
 
             <div className="sm:ms-auto flex items-center gap-1.5">
               <LanguageSwitcher />
-              <button type="button" onClick={() => setDark(d => !d)} className="p-2 rounded-lg text-gray-500 dark:text-slate-400 hover:bg-gray-100 dark:hover:bg-slate-800" aria-label="Theme">
+              <button type="button" onClick={() => setDark(d => !d)} className="p-2 rounded-lg text-gray-500 dark:text-slate-400 hover:bg-gray-100 dark:hover:bg-slate-800" aria-label={t("docsite.theme")}>
                 {dark ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
               </button>
               <Link to={appHref} className="hidden sm:inline-flex items-center gap-1.5 ms-1 px-3 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700">

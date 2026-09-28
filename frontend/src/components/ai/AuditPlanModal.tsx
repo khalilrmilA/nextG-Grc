@@ -209,7 +209,7 @@ export default function AuditPlanModal({
                 <h2 className="font-semibold text-gray-900 text-sm">{t("audit_detail.plan_title")}</h2>
                 <p className="text-xs text-gray-400">
                   {frameworkName || t("audit_detail.select_framework")}
-                  {resolved.length > 0 && ` · ${t("framework_editor.controls_count", { count: resolved.length })}`}
+                  {resolved.length > 0 && ` · ${t("audit_plan_ui.controls_count", { count: resolved.length })}`}
                 </p>
               </div>
             </div>

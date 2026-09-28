@@ -2,6 +2,14 @@ import { useState, useEffect } from "react";
 import { Plus, Search, X, Loader2, ShieldOff, CheckCircle, XCircle, AlertTriangle } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { securityApi, usersApi } from "@/api/endpoints";
+import appI18n from "@/i18n";
+
+/** Intl locale for the current UI language (Arabic keeps Latin digits). */
+function uiLocale(): string {
+  const l = appI18n.language || "en";
+  return l.startsWith("fr") ? "fr-FR" : l.startsWith("ar") ? "ar-u-nu-latn" : "en-US";
+}
+
 
 const EXCEPTION_STATUS_BADGE: Record<string, string> = {
   draft: "bg-gray-100 text-gray-600 border-gray-200",
@@ -297,7 +305,7 @@ export default function SecurityExceptionsPage() {
                         )}
                       </td>
                       <td className="px-6 py-4 text-gray-600">{item.exception_type ? String(t(`vocab.${item.exception_type}` as never, humanise(item.exception_type))) : "-"}</td>
-                      <td className="px-6 py-4 text-gray-500">{item.expiration_date ? new Date(item.expiration_date).toLocaleDateString() : "-"}</td>
+                      <td className="px-6 py-4 text-gray-500">{item.expiration_date ? new Date(item.expiration_date).toLocaleDateString(uiLocale()) : "-"}</td>
                       <td className="px-6 py-4 text-gray-500">{item.requested_by_id ? (userNames[item.requested_by_id] || item.requested_by_id) : "-"}</td>
                       <td className="px-6 py-4 text-right">
                         {/* The backend accepts a decision only on
@@ -359,7 +367,7 @@ export default function SecurityExceptionsPage() {
                       )}
                     </td>
                     <td className="px-6 py-4 text-gray-600 max-w-xs truncate">{item.justification || "-"}</td>
-                    <td className="px-6 py-4 text-gray-500">{item.expiration_date ? new Date(item.expiration_date).toLocaleDateString() : "-"}</td>
+                    <td className="px-6 py-4 text-gray-500">{item.expiration_date ? new Date(item.expiration_date).toLocaleDateString(uiLocale()) : "-"}</td>
                     <td className="px-6 py-4 text-right">
                       {item.status === "pending" && !item.is_expired && (
                         <button onClick={() => handleApproveAcceptance(item.id)} className="inline-flex items-center gap-1 text-green-600 hover:text-green-700 text-xs font-medium">

@@ -88,9 +88,10 @@ class SupportMessage(BaseModel):
 
 class SupportChatRequest(BaseModel):
     messages: list[SupportMessage]
-    # Additive: "en" | "fr" | "ar". The widget does not send this today — when
-    # absent, the language is guessed from the visitor's latest message and
-    # otherwise taken from Accept-Language (see public_support_chat).
+    # "en" | "fr" | "ar": the site language the visitor picked. The marketing
+    # widget sends it (and the same value as Accept-Language); when absent, the
+    # language is guessed from the visitor's latest message and otherwise taken
+    # from Accept-Language (see public_support_chat).
     language: str | None = None
 
 

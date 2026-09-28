@@ -9,9 +9,9 @@ export const menuEn = {
     group_start: "Getting started", group_account: "Account & settings", help_for_page: "Help for this page",
   },
   navgroup: {
-    overview: "Overview", asset_risk: "Asset & Risk Management", security: "Vulnerability & Threats",
-    compliance: "Compliance & Controls", audit: "Audit", documents: "Policies & Documents",
-    third_parties: "Third Parties", governance: "Governance", reporting: "Reports & Support",
+    overview: "Overview", assets: "Asset Management", risk: "Risk Management", vulnerability: "Vulnerability Management",
+    threat: "Threat Management", incident: "Incident Management", compliance: "Compliance Management", controls: "Control Management",
+    audit: "Audit Management", documents: "Policies & Documents", third_parties: "Third-Party Management", governance: "Governance", reporting: "Reports & Support",
   },
 };
 export const menuFr = {
@@ -35,9 +35,9 @@ export const menuFr = {
     group_start: "Premiers pas", group_account: "Compte et paramètres", help_for_page: "Aide pour cette page",
   },
   navgroup: {
-    overview: "Vue d'ensemble", asset_risk: "Gestion des actifs et des risques", security: "Vulnérabilités et menaces",
-    compliance: "Conformité et contrôles", audit: "Audit", documents: "Politiques et documents",
-    third_parties: "Tiers", governance: "Gouvernance", reporting: "Rapports et support",
+    overview: "Vue d'ensemble", assets: "Gestion des actifs", risk: "Gestion des risques", vulnerability: "Gestion des vulnérabilités",
+    threat: "Gestion des menaces", incident: "Gestion des incidents", compliance: "Gestion de la conformité", controls: "Gestion des contrôles",
+    audit: "Gestion des audits", documents: "Politiques et documents", third_parties: "Gestion des tiers", governance: "Gouvernance", reporting: "Rapports et support",
   },
 };
 export const menuAr = {
@@ -61,8 +61,8 @@ export const menuAr = {
     group_start: "البدء", group_account: "الحساب والإعدادات", help_for_page: "مساعدة لهذه الصفحة",
   },
   navgroup: {
-    overview: "نظرة عامة", asset_risk: "إدارة الأصول والمخاطر", security: "الثغرات والتهديدات",
-    compliance: "الامتثال والضوابط", audit: "التدقيق", documents: "السياسات والوثائق",
-    third_parties: "الأطراف الثالثة", governance: "الحوكمة", reporting: "التقارير والدعم",
+    overview: "نظرة عامة", assets: "إدارة الأصول", risk: "إدارة المخاطر", vulnerability: "إدارة الثغرات",
+    threat: "إدارة التهديدات", incident: "إدارة الحوادث", compliance: "إدارة الامتثال", controls: "إدارة الضوابط",
+    audit: "إدارة التدقيق", documents: "السياسات والوثائق", third_parties: "إدارة الأطراف الثالثة", governance: "الحوكمة", reporting: "التقارير والدعم",
   },
 };

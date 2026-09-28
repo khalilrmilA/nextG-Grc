@@ -18,6 +18,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useNavigate, useParams, useLocation } from "react-router-dom";
 import { useTranslation } from "react-i18next";
+import type { TFunction } from "i18next";
 import {
   ArrowLeft, Plus, Save, Trash2, Pencil, X, Loader2,
   AlertCircle, CheckCircle, BookOpen, Search, Copy, History, User as UserIcon,
@@ -44,6 +45,12 @@ const DOMAINS = [
 const REQUIREMENT_TYPES = ["exigence", "recommandation", "mesure"];
 const SOURCE_TYPES = ["norme", "reglementation", "loi", "politique_interne"];
 const TRANSLATION_LANGS = ["fr", "ar"];
+
+/** Display label for a controlled-vocabulary value (domain/category); the
+ *  value itself is what the API stores, only the label is translated. */
+function vocab(t: TFunction, group: string, value: string): string {
+  return t(`fw_options.${group}.${value.toLowerCase().replace(/[^a-z0-9]+/g, "_")}`, { defaultValue: value });
+}
 
 type Toast = { kind: "ok" | "err"; msg: string } | null;
 
@@ -135,9 +142,12 @@ export default function EditFrameworkPage() {
     setLoading(true);
     setError("");
     try {
+      // `original: 1`: this screen EDITS the stored text. Without it a FR/AR
+      // reader would get machine translations here and saving would write them
+      // over the originals.
       const [fwData, ctrlData] = await Promise.all([
-        frameworksApi.get(id),
-        frameworksApi.getControls(id),
+        frameworksApi.get(id, { original: 1 }),
+        frameworksApi.getControls(id, { original: 1 }),
       ]);
       setFw(fwData);
       setName(fwData.name);
@@ -752,7 +762,7 @@ function ControlRow({
               className="w-full border border-gray-200 rounded-lg px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
             >
               <option value="">{t("requirements.domain_unclassified")}</option>
-              {DOMAINS.map(d => <option key={d} value={d}>{d}</option>)}
+              {DOMAINS.map(d => <option key={d} value={d}>{vocab(t, "domain", d)}</option>)}
             </select>
           </div>
           <div>
@@ -780,7 +790,7 @@ function ControlRow({
               className="w-full border border-gray-200 rounded-lg px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
             >
               <option value="">{t("common.none")}</option>
-              {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+              {CATEGORIES.map(c => <option key={c} value={c}>{vocab(t, "domain", c)}</option>)}
             </select>
           </div>
         </div>
@@ -849,7 +859,7 @@ function ControlRow({
         <div className="flex flex-wrap items-center gap-1 mt-1.5">
           {control.domain && (
             <span className="rounded-full px-2.5 py-0.5 text-xs font-semibold bg-gray-100 text-gray-600">
-              {control.domain}
+              {vocab(t, "domain", control.domain)}
             </span>
           )}
           {control.requirement_type && (
@@ -953,7 +963,8 @@ function AddControlModal({
     setFwLoading(true);
     setSelectedCtrl(null);
     setSearch("");
-    frameworksApi.getControls(selectedFwId)
+    // Stored text: the picked control is copied into a new control.
+    frameworksApi.getControls(selectedFwId, { original: 1 })
       .then(setFwControls)
       .catch(() => setFwControls([]))
       .finally(() => setFwLoading(false));
@@ -1166,7 +1177,7 @@ function AddControlModal({
                 className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
               >
                 <option value="">{t("requirements.domain_unclassified")}</option>
-                {DOMAINS.map(d => <option key={d} value={d}>{d}</option>)}
+                {DOMAINS.map(d => <option key={d} value={d}>{vocab(t, "domain", d)}</option>)}
               </select>
             </div>
             <div>
@@ -1196,7 +1207,7 @@ function AddControlModal({
                 className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
               >
                 <option value="">{t("common.none")}</option>
-                {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+                {CATEGORIES.map(c => <option key={c} value={c}>{vocab(t, "domain", c)}</option>)}
               </select>
             </div>
           </div>
@@ -1412,7 +1423,7 @@ function ControlHistoryModal({
   readonly userNames: Record<string, string>;
   readonly onClose: () => void;
 }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const [versions, setVersions] = useState<FrameworkControlVersion[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -1473,14 +1484,14 @@ function ControlHistoryModal({
                       {t("framework_editor.history_version", { n: v.version_number })}
                     </span>
                     <span className="text-xs text-gray-400">
-                      {new Date(v.created_at).toLocaleString()}
+                      {new Date(v.created_at).toLocaleString(i18n.language?.startsWith("fr") ? "fr-FR" : i18n.language?.startsWith("ar") ? "ar-u-nu-latn" : "en-GB")}
                     </span>
                   </div>
                   <p className="text-sm font-medium text-gray-800">{v.title}</p>
                   {v.description && <p className="text-xs text-gray-500 mt-1">{v.description}</p>}
                   {v.guidance && <p className="text-xs text-gray-400 mt-1 italic">{v.guidance}</p>}
                   <div className="flex items-center gap-3 mt-2 text-xs text-gray-400">
-                    {v.category && <span className="bg-gray-50 border border-gray-100 rounded px-1.5 py-0.5">{v.category}</span>}
+                    {v.category && <span className="bg-gray-50 border border-gray-100 rounded px-1.5 py-0.5">{vocab(t, "domain", v.category)}</span>}
                     {v.changed_by_id && (
                       <span className="flex items-center gap-1">
                         <UserIcon className="w-3 h-3" /> {userNames[v.changed_by_id] ?? v.changed_by_id}

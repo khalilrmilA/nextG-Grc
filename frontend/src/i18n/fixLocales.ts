@@ -5,6 +5,8 @@
  * existing translation in the main locale files always wins.
  */
 export const fixFr = {
+  common: { auto_translated: "Traduit automatiquement", auto_translated_hint: "Traduction automatique du texte original", show_original: "Voir l’original", show_translation: "Voir la traduction", original_text: "Original" },
+  threats: { auto_translated: "Traduit automatiquement", auto_translated_hint: "Traduction automatique du texte original", show_original: "Voir l’original", show_translation: "Voir la traduction" },
   vulnerabilities: {
     interval_daily: "Quotidienne", interval_weekly: "Hebdomadaire", interval_monthly: "Mensuelle", interval_hours: "Toutes les {{count}} h",
     conn_update_failed: "Impossible de mettre à jour le connecteur", last_sync: "Dernière synchronisation", never_synced: "Jamais synchronisé",
@@ -12,6 +14,20 @@ export const fixFr = {
     tool_demo: "Démo (simulée)", tools_auto_pull: "Récupère les vulnérabilités automatiquement", tools_file_only: "Import de fichier uniquement",
     tool_openvas_file: "OpenVAS / Greenbone (import de fichier uniquement)", api_username: "Nom d’utilisateur API", api_password: "Mot de passe API",
     openvas_note: "OpenVAS utilise le protocole GMP, pas HTTP : il ne peut pas être interrogé. Exportez le rapport (XML ou CSV) et utilisez Importer.",
+    easm_tool: "EASM (surface d’attaque externe)", easm_base_url: "URL de base, ex. https://api.easm-editeur.com", easm_api_key: "Clé API / jeton",
+    easm_auth_style: "Authentification", easm_auth_bearer: "Jeton Bearer (en-tête Authorization)", easm_auth_header: "Clé API dans un en-tête",
+    easm_auth_basic: "Basique (utilisateur + mot de passe)", easm_auth_query: "Clé API en paramètre d’URL", easm_header_name: "Nom de l’en-tête",
+    easm_query_param: "Nom du paramètre", easm_findings_path: "Chemin de l’endpoint des vulnérabilités", easm_assets_path: "Chemin de l’endpoint des actifs (facultatif)",
+    easm_findings_path_required: "Saisissez le chemin de l’endpoint des vulnérabilités (ex. /api/v1/findings).",
+    easm_discover_assets: "Créer des actifs pour les domaines/IP nouvellement découverts", easm_discovery_on: "découverte d’actifs activée",
+    easm_advanced: "Correspondance avancée des champs",
+    easm_advanced_help: "Laissez vide pour la détection automatique. Utilisez le nom de clé du JSON de la plateforme ; les chemins pointés comme asset.hostname ou cves[0] sont acceptés.",
+    easm_results_key: "Clé des résultats (emplacement de la liste)", easm_fm_title: "Titre", easm_fm_severity: "Sévérité", easm_fm_ref_id: "Référence / CVE",
+    easm_fm_cvss: "Score CVSS", easm_fm_host: "Hôte / domaine", easm_fm_ip: "Adresse IP", easm_fm_description: "Description", easm_fm_solution: "Remédiation",
+    easm_fm_references: "Références / URL", easm_edit: "Modifier", easm_cancel_edit: "Annuler", easm_save: "Enregistrer les paramètres",
+    easm_saved: "Paramètres EASM enregistrés. Utilisez Tester pour vérifier la correspondance.", easm_key_keep: "Nouvelle clé API (vide = conserver l’actuelle)",
+    easm_secret_keep: "Nouveau mot de passe (vide = conserver l’actuel)", easm_preview: "Aperçu des premières vulnérabilités mappées",
+    easm_note: "Ajoutez, puis cliquez sur Tester : la correspondance des champs de la plateforme s’affiche.", easm_assets_discovered: "{{count}} nouvel(s) actif(s) découvert(s)",
   },
   frameworks: { create_from_scratch: "Créer de zéro" },
   mfa: {
@@ -37,6 +53,8 @@ export const fixFr = {
 };
 
 export const fixAr = {
+  common: { auto_translated: "مترجم آليًا", auto_translated_hint: "ترجمة آلية من النص الأصلي", show_original: "عرض النص الأصلي", show_translation: "عرض الترجمة", original_text: "النص الأصلي" },
+  threats: { auto_translated: "مترجم آليًا", auto_translated_hint: "ترجمة آلية من النص الأصلي", show_original: "عرض النص الأصلي", show_translation: "عرض الترجمة" },
   vulnerabilities: {
     interval_daily: "يوميًا", interval_weekly: "أسبوعيًا", interval_monthly: "شهريًا", interval_hours: "كل {{count}} ساعة",
     conn_update_failed: "تعذّر تحديث الموصل", last_sync: "آخر مزامنة", never_synced: "لم تتم المزامنة بعد",
@@ -44,6 +62,20 @@ export const fixAr = {
     tool_demo: "تجريبي (محاكاة)", tools_auto_pull: "يجلب النتائج تلقائيًا", tools_file_only: "استيراد الملفات فقط",
     tool_openvas_file: "OpenVAS / Greenbone (استيراد الملفات فقط)", api_username: "اسم مستخدم API", api_password: "كلمة مرور API",
     openvas_note: "يستخدم OpenVAS بروتوكول GMP وليس HTTP، لذا لا يمكن جلب نتائجه. صدّر التقرير (XML أو CSV) واستخدم الاستيراد.",
+    easm_tool: "EASM (سطح الهجوم الخارجي)", easm_base_url: "عنوان URL الأساسي، مثال https://api.easm-vendor.com", easm_api_key: "مفتاح API / رمز",
+    easm_auth_style: "المصادقة", easm_auth_bearer: "رمز Bearer (ترويسة Authorization)", easm_auth_header: "مفتاح API في ترويسة",
+    easm_auth_basic: "أساسية (اسم مستخدم + كلمة مرور)", easm_auth_query: "مفتاح API كمعامل في الرابط", easm_header_name: "اسم الترويسة",
+    easm_query_param: "اسم المعامل", easm_findings_path: "مسار نقطة نهاية الثغرات", easm_assets_path: "مسار نقطة نهاية الأصول (اختياري)",
+    easm_findings_path_required: "أدخل مسار نقطة نهاية الثغرات (مثال /api/v1/findings).",
+    easm_discover_assets: "إنشاء أصول للنطاقات وعناوين IP المكتشفة حديثًا", easm_discovery_on: "اكتشاف الأصول مفعّل",
+    easm_advanced: "مطابقة الحقول المتقدمة",
+    easm_advanced_help: "اتركه فارغًا للاكتشاف التلقائي. استخدم اسم المفتاح من JSON المنصة؛ المسارات المنقّطة مثل asset.hostname أو cves[0] مقبولة.",
+    easm_results_key: "مفتاح النتائج (موقع القائمة)", easm_fm_title: "العنوان", easm_fm_severity: "الخطورة", easm_fm_ref_id: "المرجع / CVE",
+    easm_fm_cvss: "درجة CVSS", easm_fm_host: "المضيف / النطاق", easm_fm_ip: "عنوان IP", easm_fm_description: "الوصف", easm_fm_solution: "المعالجة",
+    easm_fm_references: "المراجع / الرابط", easm_edit: "تعديل", easm_cancel_edit: "إلغاء", easm_save: "حفظ الإعدادات",
+    easm_saved: "تم حفظ إعدادات EASM. استخدم الاختبار للتحقق من المطابقة.", easm_key_keep: "مفتاح API جديد (فارغ = الإبقاء على الحالي)",
+    easm_secret_keep: "كلمة مرور جديدة (فارغ = الإبقاء على الحالية)", easm_preview: "معاينة أولى الثغرات المطابَقة",
+    easm_note: "أضف ثم انقر على اختبار: ستظهر طريقة مطابقة حقول المنصة.", easm_assets_discovered: "تم اكتشاف {{count}} أصل جديد",
   },
   frameworks: { create_from_scratch: "إنشاء من الصفر" },
   mfa: {

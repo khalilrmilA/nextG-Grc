@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
+import { useTranslation } from "react-i18next";
 import { FileText, Download, X, Loader2, AlertCircle, Shield, BookOpen, ChevronRight } from "lucide-react";
 
 export interface ViewableDoc {
@@ -210,11 +211,12 @@ function TableOfContents({ blocks, onJump }: { blocks: Block[]; onJump: (i: numb
     .map((b, i) => ({ b, i }))
     .filter(({ b }) => b.type === "h1" || b.type === "h2");
 
+  const { t } = useTranslation();
   if (sections.length < 3) return null;
 
   return (
     <div className="w-56 flex-shrink-0 bg-gray-50 border-r border-gray-100 overflow-y-auto p-4 hidden lg:block">
-      <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-3">Contents</p>
+      <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-3">{t("doc_viewer.contents")}</p>
       <nav className="space-y-0.5">
         {sections.map(({ b, i }) => (
           <button
@@ -243,6 +245,7 @@ export default function DocumentViewerModal({
   readonly doc: ViewableDoc;
   readonly onClose: () => void;
 }) {
+  const { t } = useTranslation();
   const [blobUrl, setBlobUrl]         = useState<string | null>(null);
   const [textContent, setTextContent] = useState<string | null>(null);
   const [loading, setLoading]         = useState(true);
@@ -270,14 +273,12 @@ export default function DocumentViewerModal({
           // "not found", and an auditor has to be told which one it is —
           // showing the same generic line for both hides a tampered file.
           if (res.status === 409) {
-            const detail = await res.json().catch(() => null);
-            setFetchError(
-              detail?.detail ??
-                "This file no longer matches the checksum recorded when it was uploaded and may have been altered."
-            );
+            // The backend's 409 detail is English-only; the translated line
+            // says the same thing in the viewer's language.
+            setFetchError(t("doc_viewer.integrity_failed"));
             return;
           }
-          setFetchError("Could not load document.");
+          setFetchError(t("doc_viewer.load_failed"));
           return;
         }
         const blob = await res.blob();
@@ -295,7 +296,7 @@ export default function DocumentViewerModal({
           setBlobUrl(objectUrl);
         }
       })
-      .catch(() => setFetchError("Failed to fetch document."))
+      .catch(() => setFetchError(t("doc_viewer.fetch_failed")))
       .finally(() => setLoading(false));
 
     return () => { if (objectUrl) URL.revokeObjectURL(objectUrl); };
@@ -356,7 +357,7 @@ export default function DocumentViewerModal({
               </span>
             </div>
             <p className="text-xs text-gray-400 mt-0.5">
-              {doc.subtitle ?? "Document preview"}
+              {doc.subtitle ?? t("doc_viewer.preview")}
               {doc.fileSizeBytes ? ` · ${(doc.fileSizeBytes / 1024).toFixed(1)} KB` : ""}
             </p>
           </div>
@@ -369,13 +370,13 @@ export default function DocumentViewerModal({
               className="flex items-center gap-1.5 text-xs font-medium text-blue-600 hover:text-blue-800 bg-blue-50 hover:bg-blue-100 px-3 py-1.5 rounded-lg transition-colors border border-blue-100"
             >
               <Download className="w-3.5 h-3.5" />
-              Download
+              {t("common.download")}
             </a>
           )}
           <button
             onClick={onClose}
             className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-700 transition-colors"
-            title="Close (Esc)"
+            title={t("doc_viewer.close_esc")}
           >
             <X className="w-5 h-5" />
           </button>
@@ -391,7 +392,7 @@ export default function DocumentViewerModal({
                 <div className="w-12 h-12 rounded-2xl bg-blue-50 flex items-center justify-center mx-auto mb-4">
                   <Loader2 className="w-6 h-6 animate-spin text-blue-400" />
                 </div>
-                <p className="text-sm text-gray-400">Loading document…</p>
+                <p className="text-sm text-gray-400">{t("doc_viewer.loading")}</p>
               </div>
             </div>
           )}
@@ -403,7 +404,7 @@ export default function DocumentViewerModal({
                 <div className="w-12 h-12 rounded-2xl bg-red-50 flex items-center justify-center mx-auto mb-4">
                   <AlertCircle className="w-6 h-6 text-red-400" />
                 </div>
-                <p className="text-sm font-medium text-red-600 mb-1">Could not load document</p>
+                <p className="text-sm font-medium text-red-600 mb-1">{t("doc_viewer.load_failed_title")}</p>
                 <p className="text-xs text-gray-400">{fetchError}</p>
               </div>
             </div>
@@ -425,13 +426,13 @@ export default function DocumentViewerModal({
                       <div className="flex items-center gap-2 mb-1">
                         <Shield className="w-4 h-4 text-blue-200" />
                         <span className="text-blue-200 text-xs font-medium uppercase tracking-widest">
-                          Security Document
+                          {t("doc_viewer.security_document")}
                         </span>
                       </div>
                       <p className="text-white font-bold text-lg leading-tight truncate">{doc.fileName}</p>
                       {doc.fileSizeBytes && (
                         <p className="text-blue-300 text-xs mt-1">
-                          {(doc.fileSizeBytes / 1024).toFixed(1)} KB · {ext} document
+                          {(doc.fileSizeBytes / 1024).toFixed(1)} KB · {t("doc_viewer.ext_document", { ext })}
                         </p>
                       )}
                     </div>
@@ -482,8 +483,8 @@ export default function DocumentViewerModal({
                 <FileText className="w-10 h-10 text-gray-300" />
               </div>
               <div className="text-center">
-                <p className="text-sm font-semibold text-gray-700 mb-1">Preview not available</p>
-                <p className="text-xs text-gray-400">This file type cannot be previewed in the browser.</p>
+                <p className="text-sm font-semibold text-gray-700 mb-1">{t("doc_viewer.no_preview")}</p>
+                <p className="text-xs text-gray-400">{t("doc_viewer.no_preview_hint")}</p>
               </div>
               <a
                 href={blobUrl}
@@ -491,7 +492,7 @@ export default function DocumentViewerModal({
                 className="flex items-center gap-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 px-6 py-2.5 rounded-xl transition-colors shadow-sm"
               >
                 <Download className="w-4 h-4" />
-                Download to view
+                {t("doc_viewer.download_to_view")}
               </a>
             </div>
           )}

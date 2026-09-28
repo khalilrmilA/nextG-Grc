@@ -39,7 +39,7 @@ export default function EliteUpsellListener() {
         type="button"
         onClick={() => setMessage(null)}
         className="ml-1 text-white/70 hover:text-white flex-shrink-0"
-        aria-label="Dismiss"
+        aria-label={t("common.close")}
       >
         <X className="w-4 h-4" />
       </button>

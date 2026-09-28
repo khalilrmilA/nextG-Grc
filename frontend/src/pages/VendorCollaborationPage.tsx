@@ -5,6 +5,9 @@
  */
 import { useEffect, useRef, useState, useCallback } from "react";
 import { useParams } from "react-router-dom";
+import { useTranslation } from "react-i18next";
+import i18next from "i18next";
+import LanguageSwitcher from "@/components/LanguageSwitcher";
 import {
   Send, Check, CheckCircle2, Loader2, MessageSquare,
   ClipboardList, AlertTriangle, Info, AlertCircle,
@@ -32,6 +35,12 @@ interface ActionItem {
   done: boolean;
 }
 
+/** Display locale for dates/times, following the interface language. */
+const uiLocale = () => {
+  const l = i18next.language || "en";
+  return l.startsWith("fr") ? "fr-FR" : l.startsWith("ar") ? "ar-u-nu-latn" : "en-US";
+};
+
 function fmtDate(iso: string | undefined): string {
   if (!iso) return "—";
   try {
@@ -39,7 +48,7 @@ function fmtDate(iso: string | undefined): string {
     const normalized = /^\d{4}-\d{2}-\d{2}$/.test(iso) ? `${iso}T12:00:00` : iso;
     const d = new Date(normalized);
     if (isNaN(d.getTime())) return iso; // Return raw string if not a real date
-    return d.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
+    return d.toLocaleDateString(uiLocale(), { year: "numeric", month: "short", day: "numeric" });
   } catch { return iso; }
 }
 
@@ -65,9 +74,12 @@ function JoinScreen({
   readonly collab: CollabData;
   readonly onJoin: (name: string) => void;
 }) {
+  const { t } = useTranslation();
   const [name, setName] = useState("");
   return (
     <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
+      {/* Public page (vendors arrive via share link, no app shell): own language picker */}
+      <div className="fixed top-4 end-4 z-40"><LanguageSwitcher compact /></div>
       <div className="bg-white rounded-2xl shadow-xl border border-gray-200 p-8 max-w-md w-full">
         {/* Brand */}
         <div className="flex items-center gap-3 mb-6">
@@ -75,28 +87,28 @@ function JoinScreen({
             <Building2 className="w-5 h-5 text-white" />
           </div>
           <div>
-            <h1 className="font-bold text-gray-900 text-base">Contract Negotiation Portal</h1>
-            <p className="text-xs text-gray-500">Secure vendor collaboration</p>
+            <h1 className="font-bold text-gray-900 text-base">{t("vendor_collab.portal_title")}</h1>
+            <p className="text-xs text-gray-500">{t("vendor_collab.portal_subtitle")}</p>
           </div>
         </div>
 
         {/* Info card */}
         <div className="bg-blue-50 border border-blue-100 rounded-xl p-4 mb-6 text-sm text-gray-700">
-          You have been invited to review and negotiate a contract with{" "}
+          {t("vendor_collab.invited")}{" "}
           <strong className="text-blue-700">{collab.vendor_name}</strong>.
           {collab.status === "agreed" && (
             <p className="mt-2 text-green-700 font-medium flex items-center gap-1">
-              <CheckCircle2 className="w-4 h-4" /> This contract has already been agreed by both parties.
+              <CheckCircle2 className="w-4 h-4" /> {t("vendor_collab.already_agreed")}
             </p>
           )}
         </div>
 
         <label className="block text-sm font-medium text-gray-700 mb-1.5">
-          Your name
+          {t("vendor_collab.your_name")}
         </label>
         <input
           className="w-full border border-gray-300 rounded-lg px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 mb-4"
-          placeholder="e.g. Sophie Laurent, Legal Counsel"
+          placeholder={t("vendor_collab.name_placeholder")}
           value={name}
           onChange={e => setName(e.target.value)}
           onKeyDown={e => e.key === "Enter" && name.trim() && onJoin(name.trim())}
@@ -106,7 +118,7 @@ function JoinScreen({
           onClick={() => name.trim() && onJoin(name.trim())}
           disabled={!name.trim()}
           className="w-full py-2.5 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 disabled:opacity-40 transition-colors text-sm">
-          Enter Collaboration Room →
+          {t("vendor_collab.enter_room")} <span className="inline-block rtl:rotate-180">→</span>
         </button>
       </div>
     </div>
@@ -116,6 +128,7 @@ function JoinScreen({
 // ── Main Component ─────────────────────────────────────────────────────────────
 
 export default function VendorCollaborationPage() {
+  const { t } = useTranslation();
   const { shareToken } = useParams<{ shareToken: string }>();
 
   const [collab, setCollab]   = useState<CollabData | null>(null);
@@ -166,7 +179,7 @@ export default function VendorCollaborationPage() {
         try { setActionPlan(JSON.parse(data.action_plan)); } catch { /* */ }
       }
     } catch (e: unknown) {
-      setError((e as Error)?.message || "Could not load collaboration");
+      setError((e as Error)?.message || t("vendor_collab.load_failed"));
     } finally {
       setLoading(false);
     }
@@ -268,6 +281,7 @@ export default function VendorCollaborationPage() {
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-gray-50">
+        <div className="fixed top-4 end-4 z-40"><LanguageSwitcher compact /></div>
         <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
       </div>
     );
@@ -276,8 +290,9 @@ export default function VendorCollaborationPage() {
   if (error || !collab) {
     return (
       <div className="flex flex-col items-center justify-center min-h-screen bg-gray-50 gap-3 text-center p-8">
+        <div className="fixed top-4 end-4 z-40"><LanguageSwitcher compact /></div>
         <AlertTriangle className="w-10 h-10 text-red-400" />
-        <p className="text-gray-700 font-medium">Collaboration not found or link has expired</p>
+        <p className="text-gray-700 font-medium">{t("vendor_collab.not_found")}</p>
         <p className="text-sm text-gray-500">{error}</p>
       </div>
     );
@@ -303,10 +318,10 @@ export default function VendorCollaborationPage() {
         </div>
         <div className="flex-1">
           <h1 className="font-semibold text-gray-900 text-sm">
-            Contract Negotiation — <span className="text-blue-700">{collab.vendor_name}</span>
+            {t("vendor_collab.negotiation_title")} — <span className="text-blue-700">{collab.vendor_name}</span>
           </h1>
           <p className="text-xs text-gray-500">
-            Joined as <strong>{vendorName}</strong>
+            {t("vendor_collab.joined_as")} <strong>{vendorName}</strong>
           </p>
         </div>
 
@@ -314,16 +329,16 @@ export default function VendorCollaborationPage() {
         <span className={`px-2.5 py-1 rounded-full text-xs font-semibold ${
           isAgreed ? "bg-green-100 text-green-800" : "bg-yellow-100 text-yellow-800"
         }`}>
-          {isAgreed ? "✓ Agreed" : "In Negotiation"}
+          {isAgreed ? `✓ ${t("contract_collab.agreed")}` : t("contract_collab.in_negotiation")}
         </span>
 
         {/* Agreement indicators */}
         <div className="flex items-center gap-2 text-xs text-gray-500">
           <span className={`flex items-center gap-1 ${collab.agreed_by_internal ? "text-green-600" : ""}`}>
-            {collab.agreed_by_internal ? <Check className="w-3.5 h-3.5" /> : "○"} Client
+            {collab.agreed_by_internal ? <Check className="w-3.5 h-3.5" /> : "○"} {t("vendor_collab.client")}
           </span>
           <span className={`flex items-center gap-1 ${collab.agreed_by_vendor ? "text-green-600" : ""}`}>
-            {collab.agreed_by_vendor ? <Check className="w-3.5 h-3.5" /> : "○"} You
+            {collab.agreed_by_vendor ? <Check className="w-3.5 h-3.5" /> : "○"} {t("vendor_collab.you")}
           </span>
         </div>
 
@@ -335,13 +350,15 @@ export default function VendorCollaborationPage() {
         <button onClick={copyLink}
           className="flex items-center gap-1 text-xs bg-gray-200 text-gray-700 px-2.5 py-1.5 rounded hover:bg-gray-300">
           {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
-          {copied ? "Copied!" : "Copy Link"}
+          {copied ? t("contract_collab.copied") : t("contract_collab.copy_link")}
         </button>
+
+        <LanguageSwitcher compact />
 
         {!isAgreed && (
           <button onClick={markAgreed}
             className="flex items-center gap-1.5 text-xs bg-green-600 text-white px-3 py-1.5 rounded-lg hover:bg-green-700 font-medium">
-            <CheckCircle2 className="w-3.5 h-3.5" /> I Agree to This Contract
+            <CheckCircle2 className="w-3.5 h-3.5" /> {t("vendor_collab.i_agree")}
           </button>
         )}
       </div>
@@ -353,21 +370,21 @@ export default function VendorCollaborationPage() {
         <div className="flex flex-col w-[55%] border-r bg-white">
           <div className="flex items-center justify-between px-4 py-2 border-b bg-gray-50">
             <span className="text-xs font-semibold text-gray-600 uppercase tracking-wide">
-              Working Contract Draft
+              {t("contract_collab.working_draft")}
             </span>
             <button
               onClick={saveText}
               disabled={!textDirty || saving || isAgreed}
               className="flex items-center gap-1 text-xs px-2.5 py-1 rounded bg-blue-600 text-white disabled:opacity-40 hover:bg-blue-700">
               {saving && <Loader2 className="w-3 h-3 animate-spin" />}
-              {saving ? "Saving…" : "Save Changes"}
+              {saving ? t("common.saving") : t("contract_collab.save_changes")}
             </button>
           </div>
           <textarea
             className="flex-1 p-4 font-mono text-xs resize-none focus:outline-none text-gray-800 leading-relaxed bg-white"
             value={contractText}
             onChange={e => { setContractText(e.target.value); setTextDirty(true); }}
-            placeholder="Contract text will appear here…"
+            placeholder={t("contract_collab.text_placeholder")}
             readOnly={isAgreed}
           />
         </div>
@@ -390,10 +407,10 @@ export default function VendorCollaborationPage() {
                 {tab === "chat"        && <MessageSquare className="w-3.5 h-3.5" />}
                 {tab === "plan"        && <ClipboardList className="w-3.5 h-3.5" />}
                 {tab === "agreement"   && <FileSignature className="w-3.5 h-3.5" />}
-                {tab === "suggestions" && `Issues (${suggestions.length})`}
-                {tab === "chat"        && `Chat (${messages.length})`}
-                {tab === "plan"        && `Action Plan (${donePlan}/${actionPlan.length})`}
-                {tab === "agreement"   && (bothSigned ? "Signed ✓" : "Sign")}
+                {tab === "suggestions" && t("contract_collab.tab_issues", { count: suggestions.length })}
+                {tab === "chat"        && t("contract_collab.tab_chat", { count: messages.length })}
+                {tab === "plan"        && t("vendor_collab.tab_action_plan", { done: donePlan, total: actionPlan.length })}
+                {tab === "agreement"   && (bothSigned ? `${t("contract_collab.signed")} ✓` : t("contract_collab.sign"))}
               </button>
             ))}
           </div>
@@ -404,13 +421,13 @@ export default function VendorCollaborationPage() {
               {suggestions.length === 0 ? (
                 <div className="text-center py-12 text-gray-400 text-sm">
                   <AlertTriangle className="w-8 h-8 mx-auto mb-2 opacity-30" />
-                  <p>No issues identified yet.</p>
-                  <p className="text-xs mt-1">The client will generate these — check back shortly.</p>
+                  <p>{t("vendor_collab.no_issues")}</p>
+                  <p className="text-xs mt-1">{t("vendor_collab.no_issues_hint")}</p>
                 </div>
               ) : (
                 <>
                   <p className="text-xs text-gray-500 mb-1">
-                    Issues identified by AI. Please review and address them in the contract draft.
+                    {t("vendor_collab.issues_intro")}
                   </p>
                   {suggestions.map(s => (
                     <div key={s.id}
@@ -419,18 +436,18 @@ export default function VendorCollaborationPage() {
                       }`}>
                       <div className="flex items-center gap-1.5 text-xs font-semibold mb-1">
                         {SEV_ICON(s.severity)}
-                        <span className="uppercase">{s.severity}</span>
+                        <span className="uppercase">{t(`vocab.${s.severity}`, { defaultValue: s.severity })}</span>
                         <span className="font-normal text-gray-600">— {s.clause}</span>
                         {s.status !== "open" && (
-                          <span className={`ml-auto text-[10px] px-1.5 py-0.5 rounded-full ${
+                          <span className={`ms-auto text-[10px] px-1.5 py-0.5 rounded-full ${
                             s.status === "accepted" ? "bg-green-200 text-green-800" : "bg-gray-200 text-gray-500"
-                          }`}>{s.status}</span>
+                          }`}>{t(`vocab.${s.status}`, { defaultValue: s.status })}</span>
                         )}
                       </div>
                       <p className="text-xs text-gray-700 mb-1.5">{s.issue}</p>
                       <div className="bg-white/70 rounded p-2 text-xs text-gray-800 font-mono leading-relaxed">
-                        <span className="text-gray-400 text-[10px] uppercase font-semibold mr-1">
-                          Suggested fix:
+                        <span className="text-gray-400 text-[10px] uppercase font-semibold me-1">
+                          {t("vendor_collab.suggested_fix")}
                         </span>
                         {s.fix}
                       </div>
@@ -448,7 +465,7 @@ export default function VendorCollaborationPage() {
                 {messages.length === 0 && (
                   <div className="text-center py-8 text-gray-400 text-sm">
                     <MessageSquare className="w-8 h-8 mx-auto mb-2 opacity-30" />
-                    No messages yet. Start the conversation.
+                    {t("contract_collab.no_messages")}
                   </div>
                 )}
                 {messages.map(m => (
@@ -463,7 +480,7 @@ export default function VendorCollaborationPage() {
                       {m.message}
                     </div>
                     <span className="text-[10px] text-gray-300 mt-0.5 px-1">
-                      {new Date(m.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                      {new Date(m.created_at).toLocaleTimeString(uiLocale(), { hour: "2-digit", minute: "2-digit" })}
                     </span>
                   </div>
                 ))}
@@ -472,7 +489,7 @@ export default function VendorCollaborationPage() {
               <div className="border-t p-3 flex gap-2 bg-white">
                 <input
                   className="flex-1 text-sm border rounded-full px-3.5 py-2 focus:outline-none focus:ring-2 focus:ring-blue-400"
-                  placeholder={isAgreed ? "Agreement finalised" : "Type a message…"}
+                  placeholder={isAgreed ? t("contract_collab.agreement_finalised") : t("contract_collab.type_message")}
                   value={newMsg}
                   disabled={isAgreed}
                   onChange={e => setNewMsg(e.target.value)}
@@ -493,11 +510,11 @@ export default function VendorCollaborationPage() {
             <div className="flex flex-col flex-1 overflow-hidden">
               <div className="px-4 py-2 border-b bg-gray-50 flex items-center justify-between">
                 <span className="text-xs text-gray-500">
-                  Your action items · {donePlan}/{actionPlan.length} completed
+                  {t("vendor_collab.your_items", { done: donePlan, total: actionPlan.length })}
                 </span>
                 {collab.plan_finalized_at && (
                   <span className="flex items-center gap-1 text-[10px] text-green-700 bg-green-100 px-1.5 py-0.5 rounded-full font-semibold">
-                    <Lock className="w-2.5 h-2.5" /> Deadlines set by client
+                    <Lock className="w-2.5 h-2.5" /> {t("vendor_collab.deadlines_set")}
                   </span>
                 )}
               </div>
@@ -523,8 +540,8 @@ export default function VendorCollaborationPage() {
                 {actionPlan.length === 0 ? (
                   <div className="text-center py-12 text-gray-400 text-sm">
                     <ClipboardList className="w-8 h-8 mx-auto mb-2 opacity-30" />
-                    <p>No action plan yet.</p>
-                    <p className="text-xs mt-1">The client will generate one — check back shortly.</p>
+                    <p>{t("vendor_collab.no_plan")}</p>
+                    <p className="text-xs mt-1">{t("vendor_collab.no_plan_hint")}</p>
                   </div>
                 ) : (
                   <>
@@ -553,7 +570,7 @@ export default function VendorCollaborationPage() {
                           </p>
                           <div className="flex flex-wrap items-center gap-2 mt-1">
                             <span className={`text-[10px] uppercase font-semibold px-1.5 py-0.5 rounded-full ${SEV_COLOR[a.priority]}`}>
-                              {a.priority}
+                              {t(`vocab.${a.priority}`, { defaultValue: a.priority })}
                             </span>
                             <span className="text-[10px] text-gray-500">👤 {a.responsible}</span>
                             {a.deadline && (
@@ -568,15 +585,14 @@ export default function VendorCollaborationPage() {
                         </div>
                         {a.done && (
                           <span className="text-[10px] text-green-700 bg-green-100 px-1.5 py-0.5 rounded-full font-semibold shrink-0">
-                            Done ✓
+                            {t("contract_collab.done")} ✓
                           </span>
                         )}
                       </div>
                     ))}
                     {!isAgreed && (
                       <div className="mt-2 p-3 bg-blue-50 border border-blue-200 rounded-lg text-xs text-blue-700">
-                        Check each item when completed. Once all critical issues are resolved,
-                        click <strong>"I Agree to This Contract"</strong> at the top.
+                        {t("vendor_collab.plan_hint_before")} <strong>«{t("vendor_collab.i_agree")}»</strong> {t("vendor_collab.plan_hint_after")}
                       </div>
                     )}
                   </>
@@ -592,7 +608,7 @@ export default function VendorCollaborationPage() {
               {bothSigned && (
                 <div className="flex items-center gap-2 px-4 py-2 bg-emerald-50 border-b border-emerald-200 text-xs font-semibold text-emerald-800 shrink-0">
                   <CheckCircle2 className="w-4 h-4" />
-                  Fully Executed — both parties have signed. The agreement is now binding.
+                  {t("vendor_collab.fully_executed")}
                 </div>
               )}
 
@@ -600,15 +616,15 @@ export default function VendorCollaborationPage() {
               <div className="flex items-center gap-4 px-4 py-2 border-b bg-gray-50 text-xs shrink-0">
                 <div className={`flex items-center gap-1.5 ${collab.ciso_signed_at ? "text-green-700" : "text-amber-600"}`}>
                   {collab.ciso_signed_at
-                    ? <><Check className="w-3.5 h-3.5" /> Client signed as <strong>{collab.ciso_signature}</strong></>
-                    : <><Loader2 className="w-3.5 h-3.5" /> Awaiting client signature</>
+                    ? <><Check className="w-3.5 h-3.5" /> {t("vendor_collab.client_signed_as")} <strong>{collab.ciso_signature}</strong></>
+                    : <><Loader2 className="w-3.5 h-3.5" /> {t("vendor_collab.awaiting_client_signature")}</>
                   }
                 </div>
                 <span className="text-gray-300">|</span>
                 <div className={`flex items-center gap-1.5 ${collab.vendor_signed_at ? "text-green-700" : "text-gray-400"}`}>
                   {collab.vendor_signed_at
-                    ? <><Check className="w-3.5 h-3.5" /> You signed as <strong>{collab.vendor_signature}</strong></>
-                    : <><X className="w-3.5 h-3.5" /> Awaiting your signature</>
+                    ? <><Check className="w-3.5 h-3.5" /> {t("contract_collab.you_signed_as")} <strong>{collab.vendor_signature}</strong></>
+                    : <><X className="w-3.5 h-3.5" /> {t("contract_collab.awaiting_your_signature")}</>
                   }
                 </div>
               </div>
@@ -616,11 +632,11 @@ export default function VendorCollaborationPage() {
               {/* Vendor sign panel */}
               {!collab.vendor_signed_at && (
                 <div className="px-4 py-3 border-b bg-blue-50 shrink-0">
-                  <p className="text-xs font-semibold text-blue-900 mb-2">Sign this agreement</p>
+                  <p className="text-xs font-semibold text-blue-900 mb-2">{t("contract_collab.sign_this")}</p>
                   <div className="flex gap-2">
                     <input
                       className="flex-1 text-sm border rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-400"
-                      placeholder="Type your full name to sign…"
+                      placeholder={t("contract_collab.sign_placeholder")}
                       value={sigName}
                       onChange={e => setSigName(e.target.value)}
                       onKeyDown={e => e.key === "Enter" && handleVendorSign()}
@@ -630,7 +646,7 @@ export default function VendorCollaborationPage() {
                       disabled={!sigName.trim() || signing}
                       className="flex items-center gap-1.5 px-3 py-2 bg-blue-600 text-white text-sm rounded hover:bg-blue-700 disabled:opacity-40">
                       {signing ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileSignature className="w-4 h-4" />}
-                      {signing ? "Signing…" : "Sign Agreement"}
+                      {signing ? t("contract_collab.signing") : t("contract_collab.sign_agreement")}
                     </button>
                   </div>
                 </div>
@@ -645,7 +661,7 @@ export default function VendorCollaborationPage() {
                 ) : (
                   <div className="text-center py-12 text-gray-400 text-sm">
                     <FileSignature className="w-8 h-8 mx-auto mb-2 opacity-30" />
-                    Agreement document will appear here once both parties agree.
+                    {t("contract_collab.agreement_empty")}
                   </div>
                 )}
               </div>

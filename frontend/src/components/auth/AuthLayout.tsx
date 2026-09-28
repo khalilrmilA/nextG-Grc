@@ -35,7 +35,7 @@ export default function AuthLayout({ children, maxWidth = "max-w-sm" }: { childr
           <div>
             <img
               src="/logo-vertical.png"
-              alt="GRCEye — Governance, Risk & Compliance Platform"
+              alt={t("auth_layout.logo_alt")}
               className="h-16 w-auto object-contain bg-white/95 rounded-xl p-2.5 shadow-lg shadow-black/30 mb-14"
             />
 
@@ -83,7 +83,7 @@ export default function AuthLayout({ children, maxWidth = "max-w-sm" }: { childr
           <div className="absolute inset-0 bg-gradient-to-br from-blue-950/50 via-slate-950/80 to-slate-950" />
           <img
             src="/logo-vertical.png"
-            alt="GRCEye — Governance, Risk & Compliance Platform"
+            alt={t("auth_layout.logo_alt")}
             className="relative z-10 h-14 w-auto object-contain bg-white/95 rounded-xl p-2 shadow-lg"
           />
         </div>

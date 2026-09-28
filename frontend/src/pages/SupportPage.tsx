@@ -8,6 +8,7 @@ import {
   type TicketStatus,
   type TicketPriority,
 } from "../api/endpoints";
+import i18n from "@/i18n";
 import {
   Headphones, Plus, ChevronRight, MessageSquare, Clock,
   Loader2, Send, Video, PhoneOff, RefreshCw, X, Bell,
@@ -49,7 +50,9 @@ function PriorityBadge({ priority }: { priority: TicketPriority }) {
 }
 
 function fmtDate(iso: string) {
-  return new Date(iso).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
+  const lang = i18n.language || "en";
+  const loc = lang.startsWith("fr") ? "fr-FR" : lang.startsWith("ar") ? "ar-u-nu-latn" : "en-US";
+  return new Date(iso).toLocaleString(loc, { dateStyle: "medium", timeStyle: "short" });
 }
 
 function playBeep() {
@@ -202,7 +205,7 @@ function ChatPanel({
         const data = JSON.parse(e.data);
         if (data.type === "message") {
           setMsgs(prev => [...prev, data]);
-          if (data.is_support) fireNotification("Support replied", data.content);
+          if (data.is_support) fireNotification(t("support_ui.support_replied"), data.content);
         } else if (data.type === "chat_ended") {
           onChatUpdate({ ...chatSession, status: "ended" });
         }
@@ -236,7 +239,7 @@ function ChatPanel({
         {wsReady
           ? <span className="flex items-center gap-1 text-xs text-blue-200"><span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />{t("support.connected")}</span>
           : <span className="text-xs text-blue-300">{t("support.connecting")}</span>}
-        <button onClick={endChat} className="ml-2 p-1 rounded-lg hover:bg-blue-700 transition-colors" title="End chat">
+        <button onClick={endChat} className="ml-2 p-1 rounded-lg hover:bg-blue-700 transition-colors" title={t("support_ui.end_chat")} aria-label={t("support_ui.end_chat")}>
           <PhoneOff className="w-4 h-4" />
         </button>
       </div>
@@ -306,7 +309,7 @@ function TicketDetail({
         if (latestId && latestId !== lastMsgIdRef.current) {
           const newOnes = msgs.filter(m => !ticket.messages.find(x => x.id === m.id));
           newOnes.filter(m => m.is_support).forEach(m => {
-            fireNotification("Support replied", m.content);
+            fireNotification(t("support_ui.support_replied"), m.content);
           });
           lastMsgIdRef.current = latestId;
           setTicket(prev => ({ ...prev, messages: msgs }));
@@ -373,7 +376,7 @@ function TicketDetail({
             <span className="text-xs text-gray-400">{fmtDate(ticket.created_at)}</span>
           </div>
         </div>
-        <button onClick={reload} className="p-2 rounded-xl hover:bg-gray-100" title="Refresh">
+        <button onClick={reload} className="p-2 rounded-xl hover:bg-gray-100" title={t("common.refresh")} aria-label={t("common.refresh")}>
           <RefreshCw className="w-4 h-4 text-gray-400" />
         </button>
       </div>
@@ -408,7 +411,7 @@ function TicketDetail({
           <div key={msg.id} className={`flex ${msg.is_support ? "justify-start" : "justify-end"}`}>
             <div className={`max-w-[80%] rounded-2xl px-4 py-3 ${msg.is_support ? "bg-white border border-gray-200" : "bg-blue-600 text-white"}`}>
               <div className={`text-xs font-semibold mb-1 ${msg.is_support ? "text-blue-600" : "text-blue-200"}`}>
-                {msg.is_support ? `Support — ${msg.sender.first_name} ${msg.sender.last_name}` : t("support.you")} · {fmtDate(msg.created_at)}
+                {msg.is_support ? t("support_ui.support_sender", { name: `${msg.sender.first_name} ${msg.sender.last_name}` }) : t("support.you")} · {fmtDate(msg.created_at)}
               </div>
               <p className="text-sm whitespace-pre-wrap">{msg.content}</p>
             </div>
@@ -469,7 +472,7 @@ export default function SupportPage() {
           const ticketId = data.ticket_id as string;
           if (selectedIdRef.current !== ticketId) {
             setUnread(prev => new Set([...prev, ticketId]));
-            fireNotification("Support replied", `"${data.ticket_title}" — ${data.content}`);
+            fireNotification(t("support_ui.support_replied"), `"${data.ticket_title}" — ${data.content}`);
           }
           // Refresh the ticket list count
           setTickets(prev => prev.map(t =>
@@ -611,7 +614,7 @@ export default function SupportPage() {
                       )}
                       {ticket.has_chat && (
                         <span className="flex items-center gap-1 text-xs text-blue-600 font-semibold">
-                          <Video className="w-3 h-3" />Chat
+                          <Video className="w-3 h-3" />{t("support_ui.chat_badge")}
                         </span>
                       )}
                     </div>

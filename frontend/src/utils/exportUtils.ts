@@ -1,7 +1,39 @@
 /**
  * Export utilities — generates CSV and printable HTML reports
  * No external dependencies needed (uses browser APIs only)
+ *
+ * Every user-visible string goes through i18n.t() and is resolved at CALL time,
+ * so an export is written in whatever language the UI is in when the button is
+ * pressed (keys: export.*, report_pdf.*, dda.* in i18n/sweep/g7_exports.ts).
  */
+import i18n from "@/i18n";
+
+// ─── i18n helpers ─────────────────────────────────────────────────────────────
+
+type ExportLang = "en" | "fr" | "ar";
+
+function currentLang(): ExportLang {
+  const raw = (i18n.language || "en").toLowerCase();
+  if (raw.startsWith("fr")) return "fr";
+  if (raw.startsWith("ar")) return "ar";
+  return "en";
+}
+
+function tr(key: string, options?: Record<string, unknown>): string {
+  return String(i18n.t(key, options as never));
+}
+
+/** Translate a raw enum value (e.g. "in_progress") with a readable fallback. */
+function trEnum(key: string, raw: string | null | undefined): string {
+  if (!raw) return "";
+  return tr(key, { defaultValue: raw.replaceAll("_", " ") });
+}
+
+/** Keeps letters of any script (French accents, Arabic) — strips only what a
+ *  filesystem or the download attribute cannot take. */
+function fileSafe(s: string): string {
+  return (s || "").replace(/[^\p{L}\p{N}_-]+/gu, "_");
+}
 
 // ─── CSV helpers ──────────────────────────────────────────────────────────────
 
@@ -18,7 +50,9 @@ function buildCsv(headers: string[], rows: unknown[][]): string {
     headers.map(csvEscape).join(","),
     ...rows.map((r) => r.map(csvEscape).join(",")),
   ];
-  return lines.join("\r\n");
+  // UTF-8 BOM: without it Excel opens the file as ANSI and mangles accented
+  // French and all Arabic text.
+  return "﻿" + lines.join("\r\n");
 }
 
 function downloadFile(content: string, filename: string, mimeType: string) {
@@ -45,23 +79,29 @@ export interface GapExportRow {
   recommendation_status?: string;
 }
 
+function severityLabel(s: string | null | undefined): string {
+  if (!s) return "";
+  return trEnum(`compliance.severities.${s}`, s).toLocaleUpperCase(currentLang());
+}
+
 export function exportGapsCSV(gaps: GapExportRow[], assessmentName: string) {
   const headers = [
-    "Control ID", "Control Title", "Severity", "Certification Blocker",
-    "Gap Description", "Remediation Steps", "Status",
+    tr("export.col.control_id"), tr("export.col.control_title"), tr("export.col.severity"),
+    tr("export.col.certification_blocker"), tr("export.col.gap_description"),
+    tr("export.col.remediation_steps"), tr("export.col.status"),
   ];
   const rows = gaps.map((g) => [
     g.control_identifier,
     g.control_title,
-    g.severity.toUpperCase(),
-    g.is_certification_blocker === true ? "YES" : "NO",
+    severityLabel(g.severity),
+    g.is_certification_blocker === true ? tr("export.yes") : tr("export.no"),
     g.gap_description,
     g.remediation_steps ?? "",
-    g.recommendation_status ?? "pending",
+    trEnum(`export.rec_status.${g.recommendation_status ?? "pending"}`, g.recommendation_status ?? "pending"),
   ]);
   const csv = buildCsv(headers, rows);
-  const safe = assessmentName.replace(/[^a-z0-9]/gi, "_");
-  downloadFile(csv, `gap_report_${safe}.csv`, "text/csv;charset=utf-8;");
+  const safe = fileSafe(assessmentName);
+  downloadFile(csv, `${fileSafe(tr("export.file.gap_report"))}_${safe}.csv`, "text/csv;charset=utf-8;");
 }
 
 // ─── Risk Register export ─────────────────────────────────────────────────────
@@ -81,15 +121,15 @@ export interface RiskExportRow {
 
 export function exportRisksCSV(risks: RiskExportRow[]) {
   const headers = [
-    "Title", "Category", "Status", "Severity",
-    "Likelihood (1-5)", "Impact (1-5)", "Inherent Score", "Residual Score",
-    "Tags", "Description",
+    tr("export.col.title"), tr("export.col.category"), tr("export.col.status"), tr("export.col.severity"),
+    tr("export.col.likelihood"), tr("export.col.impact"), tr("export.col.inherent_score"),
+    tr("export.col.residual_score"), tr("export.col.tags"), tr("export.col.description"),
   ];
   const rows = risks.map((r) => [
     r.title,
-    r.risk_category ?? "",
-    r.status.replaceAll("_", " "),
-    (r.severity ?? "").toUpperCase(),
+    trEnum(`risks.categories.${r.risk_category}`, r.risk_category),
+    trEnum(`risks.statuses.${r.status}`, r.status),
+    severityLabel(r.severity),
     r.likelihood ?? "",
     r.impact ?? "",
     r.inherent_risk_score ?? "",
@@ -98,7 +138,7 @@ export function exportRisksCSV(risks: RiskExportRow[]) {
     r.description ?? "",
   ]);
   const csv = buildCsv(headers, rows);
-  downloadFile(csv, `risk_register_${new Date().toISOString().slice(0,10)}.csv`, "text/csv;charset=utf-8;");
+  downloadFile(csv, `${fileSafe(tr("export.file.risk_register"))}_${new Date().toISOString().slice(0,10)}.csv`, "text/csv;charset=utf-8;");
 }
 
 // ─── Compliance Summary export ────────────────────────────────────────────────
@@ -118,21 +158,22 @@ export function exportComplianceCSV(
   frameworkName: string
 ) {
   const headers = [
-    "Framework", "Control ID", "Control Title", "Category",
-    "Status", "Notes", "Implementation Notes",
+    tr("export.col.framework"), tr("export.col.control_id"), tr("export.col.control_title"),
+    tr("export.col.category"), tr("export.col.status"), tr("export.col.notes"),
+    tr("export.col.implementation_notes"),
   ];
   const rows = controls.map((c) => [
     frameworkName,
     c.control_identifier,
     c.control_title,
     c.control_category ?? "",
-    c.status.replaceAll("_", " "),
+    trEnum(`compliance.statuses.${c.status}`, c.status),
     c.notes ?? "",
     c.implementation_notes ?? "",
   ]);
   const csv = buildCsv(headers, rows);
-  const safe = assessmentName.replace(/[^a-z0-9]/gi, "_");
-  downloadFile(csv, `compliance_assessment_${safe}.csv`, "text/csv;charset=utf-8;");
+  const safe = fileSafe(assessmentName);
+  downloadFile(csv, `${fileSafe(tr("export.file.compliance_assessment"))}_${safe}.csv`, "text/csv;charset=utf-8;");
 }
 
 // ─── Full HTML Report (print-to-PDF) ─────────────────────────────────────────
@@ -168,7 +209,10 @@ function severityColor(s: string) {
   return "#374151";
 }
 
-export function exportComplianceReport(data: ReportData) {
+/** Builds the printable compliance report as a standalone HTML document. */
+export function buildComplianceReportHtml(data: ReportData): string {
+  const lang = currentLang();
+  const dir = lang === "ar" ? "rtl" : "ltr";
   const scoreColor = data.complianceScore == null ? "#6b7280"
     : data.complianceScore >= 80 ? "#166534"
     : data.complianceScore >= 60 ? "#854d0e"
@@ -189,6 +233,17 @@ export function exportComplianceReport(data: ReportData) {
   // Progress bar percentage
   const pct = data.complianceScore ?? 0;
   const barFill = Math.max(0, Math.min(100, pct));
+
+  // Column headers
+  const hId = tr("report_pdf.col_control_id");
+  const hTitle = tr("report_pdf.col_title");
+  const hCat = tr("report_pdf.col_category");
+  const hNotes = tr("report_pdf.col_notes");
+  const hImpl = tr("report_pdf.col_impl_notes");
+  const hGap = tr("report_pdf.col_gap");
+  const hRem = tr("report_pdf.col_remediation");
+  const hSev = tr("report_pdf.col_severity");
+  const hJust = tr("report_pdf.col_justification");
 
   // ── Reusable row renderers ──────────────────────────────────────────────────
 
@@ -223,13 +278,13 @@ export function exportComplianceReport(data: ReportData) {
       <tr>
         <td style="font-family:monospace;font-size:11px;white-space:nowrap;color:#991b1b;font-weight:600">
           ${c.control_identifier}
-          ${blocker ? `<br/><span style="background:#fee2e2;color:#991b1b;padding:1px 5px;border-radius:3px;font-size:9px;font-weight:700;text-transform:uppercase">BLOCKER</span>` : ""}
+          ${blocker ? `<br/><span style="background:#fee2e2;color:#991b1b;padding:1px 5px;border-radius:3px;font-size:9px;font-weight:700;text-transform:uppercase">${tr("report_pdf.blocker")}</span>` : ""}
         </td>
         <td style="font-size:12px;font-weight:500">${c.control_title}</td>
         <td style="font-size:11px;color:#6b7280">${c.control_category ?? "—"}</td>
         <td>
           <span style="background:${severityBg(sev)};color:${severityColor(sev)};padding:2px 7px;border-radius:4px;font-size:10px;font-weight:700;text-transform:uppercase">
-            ${sev}
+            ${trEnum(`compliance.severities.${sev}`, sev)}
           </span>
         </td>
         <td style="font-size:11px;color:#374151">${gap?.gap_description ?? c.notes ?? "—"}</td>
@@ -249,11 +304,11 @@ export function exportComplianceReport(data: ReportData) {
 
   function sectionHeader(color: string, bg: string, title: string, count: number, icon: string) {
     return `
-      <div style="display:flex;align-items:center;gap:10px;margin:32px 0 10px;padding:10px 16px;background:${bg};border-left:4px solid ${color};border-radius:0 8px 8px 0">
+      <div style="display:flex;align-items:center;gap:10px;margin:32px 0 10px;padding:10px 16px;background:${bg};border-inline-start:4px solid ${color};border-start-end-radius:8px;border-end-end-radius:8px">
         <span style="font-size:18px">${icon}</span>
         <div>
           <div style="font-size:15px;font-weight:700;color:${color}">${title}</div>
-          <div style="font-size:11px;color:#6b7280;margin-top:1px">${count} control${count !== 1 ? "s" : ""}</div>
+          <div style="font-size:11px;color:#6b7280;margin-top:1px">${tr("report_pdf.controls_count", { count })}</div>
         </div>
       </div>`;
   }
@@ -266,38 +321,38 @@ export function exportComplianceReport(data: ReportData) {
 
   const s1 = compliant.length > 0
     ? compliant.map(renderCompliantRow).join("")
-    : emptyRow(4, "No compliant controls");
+    : emptyRow(4, tr("report_pdf.empty_compliant"));
 
   const s2 = partial.length > 0
     ? partial.map(renderPartialRow).join("")
-    : emptyRow(6, "No partially implemented controls");
+    : emptyRow(6, tr("report_pdf.empty_partial"));
 
   const s3 = nonCompliant.length > 0
     ? nonCompliant.map(renderGapRow).join("")
-    : emptyRow(6, "No gaps identified");
+    : emptyRow(6, tr("report_pdf.empty_gaps"));
 
   const s4 = notApplicable.length > 0
     ? notApplicable.map(renderNaRow).join("")
-    : emptyRow(4, "No controls marked as Not Applicable");
+    : emptyRow(4, tr("report_pdf.empty_na"));
 
   const s5html = notAssessed.length > 0
-    ? `${sectionHeader("#6b7280","#f9fafb","Not Yet Assessed", notAssessed.length, "⏳")}
+    ? `${sectionHeader("#6b7280","#f9fafb",tr("report_pdf.sec_not_assessed"), notAssessed.length, "⏳")}
        <table>
          <thead><tr>
-           <th>Control ID</th><th>Title</th><th>Category</th><th>Notes</th>
+           <th>${hId}</th><th>${hTitle}</th><th>${hCat}</th><th>${hNotes}</th>
          </tr></thead>
          <tbody>${notAssessed.map(renderNaRow).join("")}</tbody>
        </table>`
     : "";
 
-  const html = `<!DOCTYPE html>
-<html lang="en">
+  return `<!DOCTYPE html>
+<html lang="${lang}" dir="${dir}">
 <head>
   <meta charset="UTF-8" />
-  <title>Compliance Report — ${data.assessmentName}</title>
+  <title>${tr("report_pdf.doc_title", { name: data.assessmentName })}</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; color: #111827; background: #fff; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Tahoma, sans-serif; color: #111827; background: #fff; }
     .page { max-width: 1100px; margin: 0 auto; padding: 40px 32px; }
     h1 { font-size: 26px; font-weight: 700; color: #1e3a5f; }
     .meta { color: #6b7280; font-size: 13px; margin-top: 4px; }
@@ -307,10 +362,10 @@ export function exportComplianceReport(data: ReportData) {
     .card .lbl { font-size: 11px; color: #6b7280; margin-top: 3px; }
     .progress-wrap { margin: 8px 0 24px; }
     .progress-bar-bg { height: 12px; background: #f3f4f6; border-radius: 6px; overflow: hidden; }
-    .progress-bar-fill { height: 100%; border-radius: 6px; background: linear-gradient(to right, #22c55e, #86efac); width: ${barFill}%; }
-    .progress-label { font-size: 11px; color: #6b7280; margin-top: 4px; text-align: right; }
+    .progress-bar-fill { height: 100%; border-radius: 6px; background: linear-gradient(to ${dir === "rtl" ? "left" : "right"}, #22c55e, #86efac); width: ${barFill}%; }
+    .progress-label { font-size: 11px; color: #6b7280; margin-top: 4px; text-align: end; }
     table { width: 100%; border-collapse: collapse; font-size: 13px; }
-    th { background: #f3f4f6; text-align: left; padding: 8px 10px; font-size: 10px; font-weight: 700; text-transform: uppercase; color: #6b7280; letter-spacing: .05em; }
+    th { background: #f3f4f6; text-align: start; padding: 8px 10px; font-size: 10px; font-weight: 700; text-transform: uppercase; color: #6b7280; letter-spacing: ${lang === "ar" ? "0" : ".05em"}; }
     td { padding: 8px 10px; border-bottom: 1px solid #f3f4f6; vertical-align: top; }
     tr:last-child td { border-bottom: none; }
     tr:hover td { background: #fafafa; }
@@ -327,11 +382,11 @@ export function exportComplianceReport(data: ReportData) {
   <!-- Header -->
   <div style="display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid #1e3a5f;padding-bottom:16px;margin-bottom:20px">
     <div>
-      <h1>Compliance Assessment Report</h1>
+      <h1>${tr("report_pdf.heading")}</h1>
       <p class="meta">${data.assessmentName} &nbsp;·&nbsp; ${data.frameworkName}</p>
     </div>
-    <div style="text-align:right">
-      <div style="font-size:11px;color:#9ca3af">Generated</div>
+    <div style="text-align:end">
+      <div style="font-size:11px;color:#9ca3af">${tr("report_pdf.generated")}</div>
       <div style="font-size:13px;font-weight:600">${data.generatedAt}</div>
       ${data.org ? `<div style="font-size:12px;color:#6b7280;margin-top:2px">${data.org}</div>` : ""}
     </div>
@@ -341,84 +396,84 @@ export function exportComplianceReport(data: ReportData) {
   <div class="score-row">
     <div class="card" style="border-top:3px solid ${scoreColor}">
       <div class="num" style="color:${scoreColor}">${data.complianceScore != null ? data.complianceScore + "%" : "—"}</div>
-      <div class="lbl">Compliance Score</div>
+      <div class="lbl">${tr("report_pdf.compliance_score")}</div>
     </div>
     <div class="card" style="border-top:3px solid #166534">
       <div class="num" style="color:#166534">${data.statusCounts.implemented}</div>
-      <div class="lbl">✅ Compliant</div>
+      <div class="lbl">✅ ${tr("report_pdf.compliant")}</div>
     </div>
     <div class="card" style="border-top:3px solid #d97706">
       <div class="num" style="color:#d97706">${data.statusCounts.partially_implemented}</div>
-      <div class="lbl">⚠️ Partial</div>
+      <div class="lbl">⚠️ ${tr("report_pdf.partial")}</div>
     </div>
     <div class="card" style="border-top:3px solid #dc2626">
       <div class="num" style="color:#dc2626">${data.statusCounts.not_implemented}</div>
-      <div class="lbl">❌ Non-Compliant</div>
+      <div class="lbl">❌ ${tr("report_pdf.non_compliant")}</div>
     </div>
     <div class="card" style="border-top:3px solid #9ca3af">
       <div class="num" style="color:#6b7280">${data.statusCounts.not_applicable}</div>
-      <div class="lbl">N/A</div>
+      <div class="lbl">${tr("report_pdf.na")}</div>
     </div>
     <div class="card" style="border-top:3px solid #6366f1">
       <div class="num">${data.statusCounts.total}</div>
-      <div class="lbl">Total Controls</div>
+      <div class="lbl">${tr("report_pdf.total_controls")}</div>
     </div>
   </div>
 
   <!-- Progress bar -->
   <div class="progress-wrap">
     <div class="progress-bar-bg"><div class="progress-bar-fill"></div></div>
-    <div class="progress-label">${pct}% compliant</div>
+    <div class="progress-label">${tr("report_pdf.pct_compliant", { pct })}</div>
   </div>
 
   <!-- SECTION 1: Compliant -->
-  ${sectionHeader("#166534", "#f0fdf4", "Compliant Controls", compliant.length, "✅")}
+  ${sectionHeader("#166534", "#f0fdf4", tr("report_pdf.sec_compliant"), compliant.length, "✅")}
   <table>
     <thead><tr>
-      <th style="width:100px">Control ID</th>
-      <th>Title</th>
-      <th style="width:160px">Category</th>
-      <th>Implementation Notes</th>
+      <th style="width:100px">${hId}</th>
+      <th>${hTitle}</th>
+      <th style="width:160px">${hCat}</th>
+      <th>${hImpl}</th>
     </tr></thead>
     <tbody>${s1}</tbody>
   </table>
 
   <!-- SECTION 2: Partial -->
-  ${sectionHeader("#d97706", "#fffbeb", "Partially Implemented Controls", partial.length, "⚠️")}
+  ${sectionHeader("#d97706", "#fffbeb", tr("report_pdf.sec_partial"), partial.length, "⚠️")}
   <table>
     <thead><tr>
-      <th style="width:100px">Control ID</th>
-      <th>Title</th>
-      <th style="width:140px">Category</th>
-      <th>Notes</th>
-      <th>Gap Description</th>
-      <th>Remediation Steps</th>
+      <th style="width:100px">${hId}</th>
+      <th>${hTitle}</th>
+      <th style="width:140px">${hCat}</th>
+      <th>${hNotes}</th>
+      <th>${hGap}</th>
+      <th>${hRem}</th>
     </tr></thead>
     <tbody>${s2}</tbody>
   </table>
 
   <!-- SECTION 3: Non-Compliant / Gaps -->
-  ${sectionHeader("#dc2626", "#fef2f2", "Non-Compliant Controls (Gaps)", nonCompliant.length, "❌")}
+  ${sectionHeader("#dc2626", "#fef2f2", tr("report_pdf.sec_gaps"), nonCompliant.length, "❌")}
   <table>
     <thead><tr>
-      <th style="width:110px">Control ID</th>
-      <th>Title</th>
-      <th style="width:130px">Category</th>
-      <th style="width:90px">Severity</th>
-      <th>Gap Description</th>
-      <th>Remediation Steps</th>
+      <th style="width:110px">${hId}</th>
+      <th>${hTitle}</th>
+      <th style="width:130px">${hCat}</th>
+      <th style="width:90px">${hSev}</th>
+      <th>${hGap}</th>
+      <th>${hRem}</th>
     </tr></thead>
     <tbody>${s3}</tbody>
   </table>
 
   <!-- SECTION 4: Not Applicable -->
-  ${sectionHeader("#6b7280", "#f9fafb", "Not Applicable", notApplicable.length, "➖")}
+  ${sectionHeader("#6b7280", "#f9fafb", tr("report_pdf.sec_na"), notApplicable.length, "➖")}
   <table>
     <thead><tr>
-      <th style="width:100px">Control ID</th>
-      <th>Title</th>
-      <th style="width:160px">Category</th>
-      <th>Justification</th>
+      <th style="width:100px">${hId}</th>
+      <th>${hTitle}</th>
+      <th style="width:160px">${hCat}</th>
+      <th>${hJust}</th>
     </tr></thead>
     <tbody>${s4}</tbody>
   </table>
@@ -427,18 +482,24 @@ export function exportComplianceReport(data: ReportData) {
   ${s5html}
 
   <div class="footer">
-    GRCEye &nbsp;·&nbsp; ${data.frameworkShortName} Compliance Report &nbsp;·&nbsp; ${data.generatedAt}
-    &nbsp;·&nbsp; ${data.statusCounts.total} controls total
+    GRCEye &nbsp;·&nbsp; ${tr("report_pdf.footer_report", { fw: data.frameworkShortName })} &nbsp;·&nbsp; ${data.generatedAt}
+    &nbsp;·&nbsp; ${tr("report_pdf.footer_total", { count: data.statusCounts.total })}
   </div>
 </div>
 </body>
 </html>`;
+}
 
-  const safe = data.assessmentName.replace(/[^a-z0-9]/gi, "_");
-  downloadFile(html, `compliance_report_${safe}.html`, "text/html;charset=utf-8;");
+export function exportComplianceReport(data: ReportData) {
+  const html = buildComplianceReportHtml(data);
+  const safe = fileSafe(data.assessmentName);
+  downloadFile(html, `${fileSafe(tr("export.file.compliance_report"))}_${safe}.html`, "text/html;charset=utf-8;");
 }
 
 // ─── Déclaration d'Applicabilité (DdA / SoA) ─────────────────────────────────
+//
+// Originally a French-only regulatory document. It now follows the UI language
+// (keys dda.*); in French the output is the same wording as before.
 
 export interface DdAControl {
   control_identifier: string;
@@ -462,7 +523,21 @@ export interface DdAData {
   controls: DdAControl[];
 }
 
-export function exportDdA(data: DdAData) {
+const DATE_LOCALE: Record<ExportLang, string> = { en: "en-US", fr: "fr-FR", ar: "ar-u-nu-latn" };
+
+/** Builds the Statement of Applicability as a standalone HTML document. */
+export function buildDdAHtml(data: DdAData): string {
+  const lang = currentLang();
+  const dir = lang === "ar" ? "rtl" : "ltr";
+  // The only caller formats "today" in fr-FR regardless of the UI language
+  // (the document used to be French-only). When that is what we received and
+  // the UI is not French, re-render today's date in the UI locale.
+  const longDate = { day: "2-digit", month: "long", year: "numeric" } as const;
+  const generatedAt =
+    lang !== "fr" && data.generatedAt === new Date().toLocaleDateString("fr-FR", longDate)
+      ? new Date().toLocaleDateString(DATE_LOCALE[lang], longDate)
+      : data.generatedAt;
+
   const applicable   = data.controls.filter((c) => c.status !== "not_applicable");
   const notApplicable= data.controls.filter((c) => c.status === "not_applicable");
   const total        = data.controls.length;
@@ -470,12 +545,12 @@ export function exportDdA(data: DdAData) {
   const scoreColor   = pct == null ? "#6b7280" : pct >= 80 ? "#166534" : pct >= 60 ? "#d97706" : "#dc2626";
 
   function statusLabel(s: string): string {
-    if (s === "implemented")           return "Implémenté";
-    if (s === "partially_implemented") return "Partiel";
-    if (s === "not_implemented")       return "Non implémenté";
-    if (s === "in_progress")           return "En cours";
-    if (s === "not_applicable")        return "Non applicable";
-    return "Non évalué";
+    if (s === "implemented")           return tr("dda.st_implemented");
+    if (s === "partially_implemented") return tr("dda.st_partial");
+    if (s === "not_implemented")       return tr("dda.st_not_implemented");
+    if (s === "in_progress")           return tr("dda.st_in_progress");
+    if (s === "not_applicable")        return tr("dda.st_not_applicable");
+    return tr("dda.st_not_assessed");
   }
   function statusIcon(s: string): string {
     if (s === "implemented")           return "✅";
@@ -498,7 +573,7 @@ export function exportDdA(data: DdAData) {
       : "background:#eff6ff;color:#1d4ed8";
   }
   function applicableLabel(s: string): string {
-    return s === "not_applicable" ? "Non" : "Oui";
+    return s === "not_applicable" ? tr("dda.no") : tr("dda.yes");
   }
   function justification(c: DdAControl): string {
     if (c.status === "not_applicable") return c.not_applicable_justification || c.notes || "—";
@@ -506,15 +581,16 @@ export function exportDdA(data: DdAData) {
   }
 
   // Group controls by category
-  const categories = [...new Set(data.controls.map((c) => c.control_category || "Général"))];
+  const general = tr("dda.general");
+  const categories = [...new Set(data.controls.map((c) => c.control_category || general))];
 
   const categorySections = categories.map((cat) => {
-    const catControls = data.controls.filter((c) => (c.control_category || "Général") === cat);
+    const catControls = data.controls.filter((c) => (c.control_category || general) === cat);
     const rows = catControls.map((c) => `
       <tr>
         <td style="font-family:monospace;font-size:11px;font-weight:700;white-space:nowrap;color:#1e3a5f">${c.control_identifier}</td>
         <td style="font-size:12px">${c.control_title}
-          ${c.is_mandatory ? `<span style="background:#fef3c7;color:#92400e;font-size:9px;font-weight:700;padding:1px 5px;border-radius:3px;margin-left:4px;vertical-align:middle">OBLIGATOIRE</span>` : ""}
+          ${c.is_mandatory ? `<span style="background:#fef3c7;color:#92400e;font-size:9px;font-weight:700;padding:1px 5px;border-radius:3px;margin-inline-start:4px;vertical-align:middle;text-transform:uppercase">${tr("dda.mandatory")}</span>` : ""}
           ${c.control_description ? `<div style="font-size:10px;color:#9ca3af;margin-top:2px;max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${c.control_description.slice(0,120)}${c.control_description.length > 120 ? "…" : ""}</div>` : ""}
         </td>
         <td style="text-align:center">
@@ -529,24 +605,24 @@ export function exportDdA(data: DdAData) {
     return `
       <tr>
         <td colspan="5" style="padding:10px 12px 4px;background:#f8fafc;border-top:2px solid #e2e8f0">
-          <span style="font-size:12px;font-weight:700;color:#1e3a5f;text-transform:uppercase;letter-spacing:.05em">${cat}</span>
-          <span style="font-size:11px;color:#94a3b8;margin-left:6px">(${catControls.length} contrôles)</span>
+          <span style="font-size:12px;font-weight:700;color:#1e3a5f;text-transform:uppercase;letter-spacing:${lang === "ar" ? "0" : ".05em"}">${cat}</span>
+          <span style="font-size:11px;color:#94a3b8;margin-inline-start:6px">${tr("dda.controls_count", { count: catControls.length })}</span>
         </td>
       </tr>
       ${rows}`;
   }).join("");
 
-  const html = `<!DOCTYPE html>
-<html lang="fr">
+  return `<!DOCTYPE html>
+<html lang="${lang}" dir="${dir}">
 <head>
   <meta charset="UTF-8"/>
-  <title>Déclaration d'Applicabilité — ${data.assessmentName}</title>
+  <title>${tr("dda.doc_title", { name: data.assessmentName })}</title>
   <style>
     * { box-sizing:border-box; margin:0; padding:0; }
-    body { font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; color:#0f172a; background:#fff; }
+    body { font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Tahoma,sans-serif; color:#0f172a; background:#fff; }
     .page { max-width:1150px; margin:0 auto; padding:40px 32px; }
     table { width:100%; border-collapse:collapse; }
-    th { background:#1e3a5f; color:#fff; text-align:left; padding:9px 12px; font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.06em; }
+    th { background:#1e3a5f; color:#fff; text-align:start; padding:9px 12px; font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:${lang === "ar" ? "0" : ".06em"}; }
     td { padding:9px 12px; border-bottom:1px solid #f1f5f9; vertical-align:top; }
     tr:hover td { background:#fafbff; }
     .footer { margin-top:40px; border-top:2px solid #e2e8f0; padding-top:14px; font-size:11px; color:#94a3b8; display:flex; justify-content:space-between; }
@@ -564,22 +640,22 @@ export function exportDdA(data: DdAData) {
   <div style="border:2px solid #1e3a5f;border-radius:8px;padding:20px 24px;margin-bottom:28px">
     <div style="display:flex;justify-content:space-between;align-items:flex-start">
       <div>
-        <div style="font-size:11px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.08em;margin-bottom:4px">
-          Document officiel de conformité
+        <div style="font-size:11px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:${lang === "ar" ? "0" : ".08em"};margin-bottom:4px">
+          ${tr("dda.kicker")}
         </div>
         <h1 style="font-size:24px;font-weight:800;color:#1e3a5f;line-height:1.2">
-          Déclaration d'Applicabilité
+          ${tr("dda.heading")}
         </h1>
         <div style="font-size:13px;color:#475569;margin-top:3px">
-          Statement of Applicability (SoA) — ${data.frameworkName}
+          ${tr("dda.subtitle", { fw: data.frameworkName })}
         </div>
       </div>
-      <div style="text-align:right;min-width:200px">
+      <div style="text-align:end;min-width:200px">
         <div style="font-size:20px;font-weight:800;color:${scoreColor}">${pct != null ? pct+"%" : "—"}</div>
-        <div style="font-size:10px;color:#94a3b8;margin-bottom:8px">Score de conformité</div>
-        <div style="font-size:12px;color:#374151"><b>Organisation :</b> ${data.org || "—"}</div>
-        <div style="font-size:12px;color:#374151"><b>Date :</b> ${data.generatedAt}</div>
-        <div style="font-size:12px;color:#374151"><b>Assessment :</b> ${data.assessmentName}</div>
+        <div style="font-size:10px;color:#94a3b8;margin-bottom:8px">${tr("dda.compliance_score")}</div>
+        <div style="font-size:12px;color:#374151"><b>${tr("dda.organisation")}</b> ${data.org || "—"}</div>
+        <div style="font-size:12px;color:#374151"><b>${tr("dda.date")}</b> ${generatedAt}</div>
+        <div style="font-size:12px;color:#374151"><b>${tr("dda.assessment")}</b> ${data.assessmentName}</div>
       </div>
     </div>
 
@@ -587,44 +663,41 @@ export function exportDdA(data: DdAData) {
     <div style="display:flex;gap:10px;margin-top:16px;flex-wrap:wrap">
       <div style="flex:1;min-width:90px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:10px;text-align:center">
         <div style="font-size:20px;font-weight:800;color:#166534">${applicable.filter(c=>c.status==="implemented").length}</div>
-        <div style="font-size:10px;color:#166534;font-weight:600">✅ Implémenté</div>
+        <div style="font-size:10px;color:#166534;font-weight:600">✅ ${tr("dda.st_implemented")}</div>
       </div>
       <div style="flex:1;min-width:90px;background:#fefce8;border:1px solid #fde68a;border-radius:8px;padding:10px;text-align:center">
         <div style="font-size:20px;font-weight:800;color:#854d0e">${applicable.filter(c=>c.status==="partially_implemented").length}</div>
-        <div style="font-size:10px;color:#854d0e;font-weight:600">⚠️ Partiel</div>
+        <div style="font-size:10px;color:#854d0e;font-weight:600">⚠️ ${tr("dda.st_partial")}</div>
       </div>
       <div style="flex:1;min-width:90px;background:#fef2f2;border:1px solid #fecaca;border-radius:8px;padding:10px;text-align:center">
         <div style="font-size:20px;font-weight:800;color:#dc2626">${applicable.filter(c=>c.status==="not_implemented").length}</div>
-        <div style="font-size:10px;color:#dc2626;font-weight:600">❌ Non implémenté</div>
+        <div style="font-size:10px;color:#dc2626;font-weight:600">❌ ${tr("dda.st_not_implemented")}</div>
       </div>
       <div style="flex:1;min-width:90px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:10px;text-align:center">
         <div style="font-size:20px;font-weight:800;color:#6b7280">${notApplicable.length}</div>
-        <div style="font-size:10px;color:#6b7280;font-weight:600">➖ Non applicable</div>
+        <div style="font-size:10px;color:#6b7280;font-weight:600">➖ ${tr("dda.st_not_applicable")}</div>
       </div>
       <div style="flex:1;min-width:90px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:10px;text-align:center">
         <div style="font-size:20px;font-weight:800;color:#1e3a5f">${total}</div>
-        <div style="font-size:10px;color:#475569;font-weight:600">Total contrôles</div>
+        <div style="font-size:10px;color:#475569;font-weight:600">${tr("dda.total_controls")}</div>
       </div>
     </div>
   </div>
 
   <!-- Intro paragraph (ISO 27001 standard wording) -->
-  <div style="background:#f8fafc;border-left:4px solid #1e3a5f;padding:12px 16px;margin-bottom:24px;font-size:12px;color:#374151;line-height:1.6">
-    <b>Objet :</b> Ce document constitue la Déclaration d'Applicabilité (DdA) de l'organisation conformément aux exigences du référentiel
-    <b>${data.frameworkName}</b>. Il liste l'ensemble des contrôles du référentiel, indique pour chacun s'il est applicable ou non,
-    son état d'implémentation, et fournit la justification correspondante. Ce document est généré automatiquement depuis les données
-    de l'assessment <b>${data.assessmentName}</b> à la date du <b>${data.generatedAt}</b>.
+  <div style="background:#f8fafc;border-inline-start:4px solid #1e3a5f;padding:12px 16px;margin-bottom:24px;font-size:12px;color:#374151;line-height:1.6">
+    <b>${tr("dda.intro_label")}</b> ${tr("dda.intro", { fw: data.frameworkName, assessment: data.assessmentName, date: generatedAt })}
   </div>
 
   <!-- Main table (grouped by category) -->
   <table>
     <thead>
       <tr>
-        <th style="width:100px">Contrôle</th>
-        <th>Titre &amp; Description</th>
-        <th style="width:80px;text-align:center">Applicable</th>
-        <th style="width:130px;text-align:center">Statut</th>
-        <th style="width:280px">Justification / Notes d'implémentation</th>
+        <th style="width:100px">${tr("dda.col_control")}</th>
+        <th>${tr("dda.col_title_desc")}</th>
+        <th style="width:80px;text-align:center">${tr("dda.col_applicable")}</th>
+        <th style="width:130px;text-align:center">${tr("dda.col_status")}</th>
+        <th style="width:280px">${tr("dda.col_justification")}</th>
       </tr>
     </thead>
     <tbody>
@@ -635,34 +708,37 @@ export function exportDdA(data: DdAData) {
   <!-- Signature block -->
   <div style="margin-top:40px;display:flex;gap:32px">
     <div style="flex:1;border:1px solid #e2e8f0;border-radius:8px;padding:16px">
-      <div style="font-size:11px;font-weight:700;color:#6b7280;text-transform:uppercase;margin-bottom:12px">Approuvé par (CISO / DG)</div>
+      <div style="font-size:11px;font-weight:700;color:#6b7280;text-transform:uppercase;margin-bottom:12px">${tr("dda.approved_by")}</div>
       <div style="border-bottom:1px solid #94a3b8;margin-bottom:6px;height:32px"></div>
-      <div style="font-size:11px;color:#94a3b8">Signature &nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Date : ___/___/______</div>
+      <div style="font-size:11px;color:#94a3b8">${tr("dda.signature")} &nbsp;&nbsp;&nbsp;&nbsp;&nbsp; ${tr("dda.date_line")}</div>
     </div>
     <div style="flex:1;border:1px solid #e2e8f0;border-radius:8px;padding:16px">
-      <div style="font-size:11px;font-weight:700;color:#6b7280;text-transform:uppercase;margin-bottom:12px">Validé par (Responsable SSI)</div>
+      <div style="font-size:11px;font-weight:700;color:#6b7280;text-transform:uppercase;margin-bottom:12px">${tr("dda.validated_by")}</div>
       <div style="border-bottom:1px solid #94a3b8;margin-bottom:6px;height:32px"></div>
-      <div style="font-size:11px;color:#94a3b8">Signature &nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Date : ___/___/______</div>
+      <div style="font-size:11px;color:#94a3b8">${tr("dda.signature")} &nbsp;&nbsp;&nbsp;&nbsp;&nbsp; ${tr("dda.date_line")}</div>
     </div>
     <div style="flex:1;border:1px solid #e2e8f0;border-radius:8px;padding:16px">
-      <div style="font-size:11px;font-weight:700;color:#6b7280;text-transform:uppercase;margin-bottom:12px">Version du document</div>
-      <div style="font-size:13px;color:#374151;margin-top:4px">Version : 1.0</div>
-      <div style="font-size:12px;color:#374151">Date d'émission : ${data.generatedAt}</div>
-      <div style="font-size:12px;color:#374151">Référentiel : ${data.frameworkShortName}</div>
+      <div style="font-size:11px;font-weight:700;color:#6b7280;text-transform:uppercase;margin-bottom:12px">${tr("dda.doc_version")}</div>
+      <div style="font-size:13px;color:#374151;margin-top:4px">${tr("dda.version")}</div>
+      <div style="font-size:12px;color:#374151">${tr("dda.issue_date", { date: generatedAt })}</div>
+      <div style="font-size:12px;color:#374151">${tr("dda.framework", { fw: data.frameworkShortName })}</div>
     </div>
   </div>
 
   <div class="footer">
-    <span>GRCEye — Déclaration d'Applicabilité (DdA)</span>
+    <span>${tr("dda.footer_title")}</span>
     <span>${data.frameworkShortName} · ${data.assessmentName}</span>
-    <span>Généré le ${data.generatedAt}</span>
+    <span>${tr("dda.generated_on", { date: generatedAt })}</span>
   </div>
 </div>
 </body>
 </html>`;
+}
 
-  const safe = data.assessmentName.replace(/[^a-z0-9]/gi, "_");
-  downloadFile(html, `DdA_${data.frameworkShortName}_${safe}.html`, "text/html;charset=utf-8;");
+export function exportDdA(data: DdAData) {
+  const html = buildDdAHtml(data);
+  const safe = fileSafe(data.assessmentName);
+  downloadFile(html, `${fileSafe(tr("export.file.dda"))}_${fileSafe(data.frameworkShortName)}_${safe}.html`, "text/html;charset=utf-8;");
 }
 
 // ─── Chart image export (PNG) — dependency-free ───────────────────────────────
@@ -726,8 +802,10 @@ function downloadBlob(blob: Blob, filename: string): void {
   URL.revokeObjectURL(url);
 }
 
+/** Filesystem-safe name. Letters of any script are kept, so a translated title
+ *  (French accents, Arabic) survives instead of collapsing to "chart". */
 export function safeFileName(name: string): string {
-  return (name || "chart").replace(/[^a-z0-9_-]+/gi, "_").replace(/^_+|_+$/g, "").slice(0, 80) || "chart";
+  return (name || "chart").replace(/[^\p{L}\p{N}_-]+/gu, "_").replace(/^_+|_+$/g, "").slice(0, 80) || "chart";
 }
 
 /** Rasterise a standalone SVG document string and download it as a PNG. */

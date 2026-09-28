@@ -10,6 +10,7 @@ from sqlalchemy.exc import IntegrityError, OperationalError, ProgrammingError
 from typing import Annotated
 
 from app.core.database import get_db
+from app.services.content_translation import get_display_language, localize_fields
 from app.models.risk import Risk, RiskStatus, RiskSeverity
 from app.models.compliance import ComplianceAssessment, ControlAssessment, ControlStatus, ComplianceGap, UploadedDocument, AssessmentStatus
 from app.models.audit import Audit, AuditFinding, FindingStatus
@@ -312,6 +313,7 @@ async def get_frameworks_overview(
     tenant_id: Annotated[str, Depends(get_tenant_id)],
     db: Annotated[AsyncSession, Depends(get_db)],
     _: Annotated[User, Depends(get_current_user)],
+    lang: Annotated[str, Depends(get_display_language)] = "",
 ):
     """
     Returns a lightweight overview of ALL selected frameworks for the overview dashboard.
@@ -432,6 +434,7 @@ async def get_frameworks_overview(
 
     # Put primary first, then sort by name
     cards.sort(key=lambda c: (not c["is_primary"], c["framework_name"]))
+    await localize_fields(db, lang, [(c, {"framework_name": c.get("framework_name") or ""}) for c in cards])
     return {"frameworks": cards, "has_framework": True}
 
 
@@ -441,6 +444,7 @@ async def get_framework_summary(
     db: Annotated[AsyncSession, Depends(get_db)],
     _: Annotated[User, Depends(get_current_user)],
     framework_id: str | None = None,
+    lang: Annotated[str, Depends(get_display_language)] = "",
 ):
     """
     Framework-specific compliance dashboard data.
@@ -550,10 +554,15 @@ async def get_framework_summary(
     cert_readiness = _cert_readiness(compliance_score, docs_uploaded, docs_required,
                                      open_blockers, total_blockers)
 
+    # Display text in the reader's language (cached machine translations).
+    await localize_fields(db, lang, [(g, {"control_title": g.get("control_title") or ""}) for g in top_gaps_data])
+    await localize_fields(db, lang, [(f, {"name": f["name"]}) for f in selected_fws_info])
+    fw_label = {"framework_name": fw.name}
+    await localize_fields(db, lang, [(fw_label, {"framework_name": fw.name})])
     return {
         "has_framework": True,
         "has_assessment": True,
-        "framework_name": fw.name,
+        "framework_name": fw_label["framework_name"],
         "framework_short_name": fw.short_name,
         "assessment_id": assessment.id,
         "assessment_name": assessment.name,

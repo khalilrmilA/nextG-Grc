@@ -15,7 +15,7 @@ const STATUS_BADGES: Record<LicenseStatus["status"], string> = {
 };
 
 export default function LicenseActivationPage() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const user = useAuthStore((u) => u);
   const navigate = useNavigate();
 
@@ -69,7 +69,7 @@ export default function LicenseActivationPage() {
 
         {/* Logo */}
         <div className="flex flex-col items-center mb-8">
-          <img src="/logo-vertical.png" alt="GRCEye — Governance, Risk & Compliance Platform" className="h-44 w-auto object-contain mb-4 drop-shadow-2xl bg-white/95 rounded-2xl p-3" />
+          <img src="/logo-vertical.png" alt={t("auth_layout.logo_alt")} className="h-44 w-auto object-contain mb-4 drop-shadow-2xl bg-white/95 rounded-2xl p-3" />
           <div className="mt-3"><LanguageSwitcher /></div>
         </div>
 
@@ -115,7 +115,7 @@ export default function LicenseActivationPage() {
                   {expiry && (
                     <div className="flex items-center justify-between">
                       <span className="text-xs font-medium text-gray-500">{t("license.expires")}</span>
-                      <span className="text-xs font-semibold text-gray-800">{expiry.toLocaleDateString()}</span>
+                      <span className="text-xs font-semibold text-gray-800">{expiry.toLocaleDateString(i18n.language === "ar" ? "ar-u-nu-latn" : i18n.language === "fr" ? "fr-FR" : "en-US")}</span>
                     </div>
                   )}
                   {status.days_remaining !== null && (

@@ -3,6 +3,8 @@
  * Uses React Query for caching and state management.
  */
 import { apiClient } from "./client";
+import i18n from "../i18n";
+import { aiLanguageHeaders, readSseStream, withUiLanguage } from "@/lib/sse";
 import type {
   StoredFileVersionItem,
   AuthTokens,
@@ -249,10 +251,14 @@ export const frameworksApi = {
    *  (norme | reglementation | loi | politique_interne) and `q` matches on
    *  name / short_name / issuing_body. Both are optional, so `list()` keeps
    *  behaving exactly as it always did. */
-  list: (params?: { source_type?: string; q?: string }) =>
+  /** `original: 1` returns the stored text instead of a machine translation into
+   *  the UI language — REQUIRED wherever the result feeds an edit form or is
+   *  copied into a new record, or a translation would be saved as the original. */
+  list: (params?: { source_type?: string; q?: string; original?: 1 }) =>
     apiClient.get<Framework[]>("/frameworks", { params }).then((r) => r.data),
 
-  get: (id: string) => apiClient.get<Framework>(`/frameworks/${id}`).then((r) => r.data),
+  get: (id: string, params?: { original?: 1 }) =>
+    apiClient.get<Framework>(`/frameworks/${id}`, { params }).then((r) => r.data),
 
   delete: (id: string) => apiClient.delete(`/frameworks/${id}`),
 
@@ -268,6 +274,8 @@ export const frameworksApi = {
       is_mandatory?: boolean;
       applicability?: string;
       q?: string;
+      /** Stored text, no machine translation — for edit forms and copies. */
+      original?: 1;
     },
   ) =>
     apiClient.get<FrameworkControl[]>(`/frameworks/${frameworkId}/controls`, { params }).then((r) => r.data),
@@ -875,13 +883,16 @@ async function _streamAi(
       // fetch and was the single hole in the origin classification, so AI
       // generation showed in the audit trail as an unidentified caller.
       "X-GRC-Client": "web-ui",
+      // The UI language, not the browser's: raw fetch bypasses the axios
+      // interceptor that sets it, and every AI answer follows this header
+      // (or the explicit `language` body field added below, which wins).
+      ...aiLanguageHeaders(),
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
     },
-    body: JSON.stringify(body),
+    body: JSON.stringify(withUiLanguage(body)),
     signal,
   });
-  if (!resp.ok) throw new Error(`AI error: ${resp.status}`);
-  const { readSseStream } = await import("@/lib/sse");
+  if (!resp.ok) throw new Error(String(i18n.t("api_client.ai_error", { status: resp.status, defaultValue: `AI error: ${resp.status}` })));
   await readSseStream(resp, onToken, onDone);
 }
 

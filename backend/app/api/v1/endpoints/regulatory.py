@@ -41,6 +41,7 @@ from app.models.framework import Framework, FrameworkControl
 from app.services.activity_chain import chain_and_add
 from app.services import ai_prompts, ai_provider
 from app.services.ai_chunking import MapFailure, chunk_items, estimate_tokens, map_reduce
+from app.services.content_translation import get_display_language
 from app.services.ai_locale import failure_message, get_request_language, normalize_language
 from app.services.ai_structured import AiResult, ai_structured, coerce_shape, extract_json, validate_against
 
@@ -877,14 +878,32 @@ class RegUpdateOut(BaseModel):
     affected_frameworks: list; affected_controls: list; action_items: list
     assigned_to_id: str | None; notes: str | None
     created_at: datetime; updated_at: datetime
+    # Feed-fetched items only: machine translation of title/description into the
+    # reader's language (content_translations), stored text kept in original_*.
+    # A manually entered update is never translated. ``?original=1`` switches it off.
+    translated: bool = False
+    original_title: str | None = None
+    original_description: str | None = None
     model_config = {"from_attributes": True}
 
 
+async def _localized_updates(db: AsyncSession, updates, lang: str) -> list[RegUpdateOut]:
+    from app.services.content_translation import localize_fields
+    from app.services.translation_sources import is_system_regulatory, regulatory_feed_names
+    out = [RegUpdateOut.model_validate(u) for u in updates]
+    if lang and out:
+        names = await regulatory_feed_names(db)
+        await localize_fields(db, lang, [
+            (o, {"title": u.title, "description": u.description or ""})
+            for u, o in zip(updates, out) if is_system_regulatory(u, names)])
+    return out
+
+
 @router.get("", response_model=list[RegUpdateOut])
-async def list_updates(status_filter: str | None = None, db: AsyncSession = Depends(get_db), _: User = Depends(get_current_user), tenant_id: str = Depends(get_tenant_id)):
+async def list_updates(status_filter: str | None = None, db: AsyncSession = Depends(get_db), _: User = Depends(get_current_user), tenant_id: str = Depends(get_tenant_id), lang: str = Depends(get_display_language)):
     q = select(RegulatoryUpdate).where(RegulatoryUpdate.tenant_id == tenant_id)
     if status_filter: q = q.where(RegulatoryUpdate.status == status_filter)
-    return [RegUpdateOut.model_validate(u) for u in (await db.execute(q.order_by(RegulatoryUpdate.created_at.desc()))).scalars().all()]
+    return await _localized_updates(db, (await db.execute(q.order_by(RegulatoryUpdate.created_at.desc()))).scalars().all(), lang)
 
 @router.post("", response_model=RegUpdateOut, status_code=201)
 async def create_update(body: RegUpdateCreate, db: AsyncSession = Depends(get_db), _: User = Depends(require_roles(UserRole.COMPLIANCE_MANAGER, UserRole.CISO)), tenant_id: str = Depends(get_tenant_id)):
@@ -1108,11 +1127,11 @@ async def test_feed(
 
 
 @router.get("/{uid}", response_model=RegUpdateOut)
-async def get_update(uid: str, db: AsyncSession = Depends(get_db), _: User = Depends(get_current_user), tenant_id: str = Depends(get_tenant_id)):
+async def get_update(uid: str, db: AsyncSession = Depends(get_db), _: User = Depends(get_current_user), tenant_id: str = Depends(get_tenant_id), lang: str = Depends(get_display_language)):
     r = await db.execute(select(RegulatoryUpdate).where(RegulatoryUpdate.id == uid, RegulatoryUpdate.tenant_id == tenant_id))
     u = r.scalar_one_or_none()
     if not u: raise HTTPException(404, "Update not found")
-    return RegUpdateOut.model_validate(u)
+    return (await _localized_updates(db, [u], lang))[0]
 
 
 # ── « …avec historique » + what an approval must actually set in motion ────────

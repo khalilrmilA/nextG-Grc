@@ -34,7 +34,6 @@ import TraceabilityPage from "./pages/TraceabilityPage";
 import FrameworksPage from "./pages/FrameworksPage";
 import CustomFrameworkPage from "./pages/CustomFrameworkPage";
 import EditFrameworkPage from "./pages/EditFrameworkPage";
-import ActivityLogPage from "./pages/ActivityLogPage";
 import AuditsPage from "./pages/AuditsPage";
 import AuditDetailPage from "./pages/AuditDetailPage";
 import RecommendationsPage from "./pages/RecommendationsPage";
@@ -66,6 +65,7 @@ import SupportPage from "./pages/SupportPage";
 import LicenseActivationPage from "./pages/LicenseActivationPage";
 
 function PrivateRoute({ children, requiredModule }: { readonly children: React.ReactNode; requiredModule?: string }) {
+  const { t } = useTranslation();
   const user = useAuthStore((u) => u);
   if (!user) return <Navigate to="/login" replace />;
   if (user.role === "auditor") return <Navigate to="/auditor/portal" replace />;
@@ -78,10 +78,10 @@ function PrivateRoute({ children, requiredModule }: { readonly children: React.R
           <div className="w-16 h-16 bg-amber-100 rounded-full flex items-center justify-center mx-auto mb-4">
             <Lock className="w-8 h-8 text-amber-600" />
           </div>
-          <h1 className="text-2xl font-bold text-gray-900 mb-2">Access Restricted</h1>
-          <p className="text-gray-600 mb-6">This module is not enabled for your organization. Contact your administrator to request access.</p>
+          <h1 className="text-2xl font-bold text-gray-900 mb-2">{t("common.access_restricted")}</h1>
+          <p className="text-gray-600 mb-6">{t("app.module_not_enabled")}</p>
           <Link to="/dashboard" className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
-            Return to Dashboard
+            {t("common.return_to_dashboard")}
           </Link>
         </div>
       </div>
@@ -142,7 +142,6 @@ const ROUTE_ROLES: Record<string, string[]> = {
   // These two had NO entry, and RoleRoute treats a missing entry as "allow everyone" —
   // so the audit trail and the archive were open to every role. They now match the
   // backend's AUDIT_READERS / _archive_access. Purge itself stays tenant_admin-only.
-  "/activity-log":        [...CISO_AND_ADMIN, "compliance_manager", "auditor", "risk_manager"],
   "/archiving":           [...CISO_AND_ADMIN, "compliance_manager", "auditor", "risk_manager"],
   "/policies":            [...CISO_AND_ADMIN, "compliance_manager", "policy_manager", "viewer", "executive"],
   "/policy-generator":    [...CISO_AND_ADMIN, "policy_manager", "viewer", "executive"],
@@ -279,7 +278,6 @@ export default function App() {
         {/* Was a redirect to /super-admin, which made the tenant-facing audit trail
             unreachable for everyone except a platform admin — objectif 8 asks a tenant to
             consult its own traceability. The page itself was complete and translated. */}
-        <Route path="activity-log" element={<RoleRoute path="/activity-log"><ActivityLogPage /></RoleRoute>} />
         <Route path="webhooks" element={<RoleRoute path="/webhooks"><WebhooksPage /></RoleRoute>} />
         <Route path="support" element={<SupportPage />} />
         <Route path="company-admin" element={<CompanyAdminPage />} />

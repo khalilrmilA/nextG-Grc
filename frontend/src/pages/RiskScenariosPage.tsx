@@ -4,6 +4,14 @@ import { Plus, Search, X, Loader2, Filter, History, GitCommitHorizontal, AlertTr
 import { useTranslation } from "react-i18next";
 import { riskScenariosApi, scenarioVersionsApi, scenarioPriorityApi, assetsApi, vulnerabilitiesApi, threatsApi, appliedControlsApi, incidentsApi } from "@/api/endpoints";
 import { MultiSelect, type MultiSelectOption as Option } from "@/components/common/MultiSelect";
+import appI18n from "@/i18n";
+
+/** Intl locale for the current UI language (Arabic keeps Latin digits). */
+function uiLocale(): string {
+  const l = appI18n.language || "en";
+  return l.startsWith("fr") ? "fr-FR" : l.startsWith("ar") ? "ar-u-nu-latn" : "en-US";
+}
+
 
 // ─── Version timeline modal (RFP mod 5.2) ──────────────────────────────────────
 
@@ -27,6 +35,8 @@ function useFmtVal() {
         ? String(t("risk_scenarios.diff_n_linked", "{{count}} linked", { count: v.length }))
         : String(t("common.none", "none"));
     }
+    // Enum values (treatment, risk levels) get their display label; free text stays verbatim.
+    if (typeof v === "string" && /^[a-z][a-z_]*$/.test(v)) return String(t(`vocab.${v}` as never, v));
     return String(v);
   };
 }
@@ -163,7 +173,7 @@ function VersionTimelineModal({ scenarioId, scenarioName, onClose }: { scenarioI
                   <div className="pb-4 flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="text-sm font-semibold text-gray-800">v{v.version_number}</span>
-                      <span className="text-xs text-gray-400">{v.created_at ? new Date(v.created_at).toLocaleString() : ""}</span>
+                      <span className="text-xs text-gray-400">{v.created_at ? new Date(v.created_at).toLocaleString(uiLocale()) : ""}</span>
                     </div>
                     {v.change_reason && <p className="text-xs text-gray-600 mt-0.5">{v.change_reason}</p>}
                   </div>
@@ -565,7 +575,7 @@ export default function RiskScenariosPage() {
                     <td className="px-6 py-4 text-gray-600">
                       {item.next_review_date ? (
                         <span className="inline-flex items-center gap-1.5 whitespace-nowrap">
-                          {new Date(item.next_review_date).toLocaleDateString()}
+                          {new Date(item.next_review_date).toLocaleDateString(uiLocale())}
                           {isOverdue(item.next_review_date) && (
                             <span
                               title={t("risk_scenarios.overdue", "Overdue")}

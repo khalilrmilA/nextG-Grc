@@ -113,6 +113,32 @@ const DOC_KEY_MAP: Record<string, string> = {
   "Risk Assessment & Treatment Plan": "doc_risk_assessment_plan",
 };
 
+/** Industry VALUES are sent to the AI as-is (English); only the display label is translated. */
+const INDUSTRY_LABEL_KEYS: Record<string, string> = {
+  "Technology / SaaS": "doc_generator.industries.technology",
+  "Financial Services": "doc_generator.industries.financial",
+  "Healthcare": "doc_generator.industries.healthcare",
+  "Retail & E-commerce": "doc_generator.industries.retail",
+  "Manufacturing": "doc_generator.industries.manufacturing",
+  "Professional Services": "doc_generator.industries.professional",
+  "Government": "doc_generator.industries.government",
+  "Education": "doc_generator.industries.education",
+  "Energy & Utilities": "doc_generator.industries.energy",
+  "Telecommunications": "doc_generator.industries.telecom",
+  "Other": "doc_generator.industries.other",
+};
+
+/** Short tab label per document category. */
+const CATEGORY_SHORT_KEYS: Record<string, string> = {
+  foundation: "doc_generator.cat_short.foundation",
+  policies:   "doc_generator.cat_short.policies",
+  procedures: "doc_generator.cat_short.procedures",
+  plans:      "doc_generator.cat_short.plans",
+};
+
+/** Display locale for dates: Latin digits in Arabic, French day-month order in French. */
+const dateLocale = (lang: string) => (lang?.startsWith("fr") ? "fr-FR" : lang?.startsWith("ar") ? "ar-u-nu-latn" : "en-US");
+
 const INDUSTRIES = [
   "Technology / SaaS", "Financial Services", "Healthcare", "Retail & E-commerce",
   "Manufacturing", "Professional Services", "Government", "Education",
@@ -120,10 +146,10 @@ const INDUSTRIES = [
 ];
 
 const SIZES = [
-  { value: "startup",    label: "Startup",     sub: "1–50 employees" },
-  { value: "smb",        label: "SMB",          sub: "51–500 employees" },
-  { value: "midmarket",  label: "Mid-Market",   sub: "501–5,000 employees" },
-  { value: "enterprise", label: "Enterprise",   sub: "5,000+ employees" },
+  { value: "startup",    labelKey: "doc_generator.sizes.startup",    subKey: "doc_generator.sizes.startup_sub" },
+  { value: "smb",        labelKey: "doc_generator.sizes.smb",        subKey: "doc_generator.sizes.smb_sub" },
+  { value: "midmarket",  labelKey: "doc_generator.sizes.midmarket",  subKey: "doc_generator.sizes.midmarket_sub" },
+  { value: "enterprise", labelKey: "doc_generator.sizes.enterprise", subKey: "doc_generator.sizes.enterprise_sub" },
 ];
 
 const FRAMEWORKS = ["ISO 27001:2022", "SOC 2", "NIST CSF 2.0", "GDPR", "HIPAA", "PCI DSS 4.0", "NIST 800-53"];
@@ -235,7 +261,7 @@ function ControlPickerModal({
 
   const groups: Record<string, FrameworkControl[]> = {};
   for (const c of filtered) {
-    const g = c.category || "General";
+    const g = c.category || t("doc_generator.general_group");
     if (!groups[g]) groups[g] = [];
     groups[g].push(c);
   }
@@ -408,7 +434,7 @@ function ControlPickerModal({
 // ── Main page ──────────────────────────────────────────────────────────────────
 
 export default function PolicyGeneratorPage() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const user = useAuthStore((u) => u);
   const orgName = user?.org ?? "";
   const { refreshAiTokens } = useAiTokenRefresh();
@@ -486,7 +512,12 @@ export default function PolicyGeneratorPage() {
     const category = DOCUMENT_CATEGORIES.find(c => c.docs.some(d => d === selectedDoc))?.label || "General";
     return {
       title: selectedDoc ?? "",
-      description: `AI-generated ${selectedDoc} for ${form.org_name}. Industry: ${form.industry}. Frameworks: ${form.frameworks.join(", ") || "None"}.`,
+      description: t("doc_generator.policy_description", {
+        doc: selectedDoc ? tDoc(selectedDoc) : "",
+        org: form.org_name,
+        industry: INDUSTRY_LABEL_KEYS[form.industry] ? t(INDUSTRY_LABEL_KEYS[form.industry]) : form.industry,
+        frameworks: form.frameworks.join(", ") || t("common.none"),
+      }),
       category,
       linked_controls: preselectedControls.map(c => c.control_id),
     };
@@ -548,7 +579,7 @@ export default function PolicyGeneratorPage() {
         setDone(false);
       }
     } catch (err: any) {
-      alert(`Delete failed: ${err?.response?.status} ${err?.response?.data?.detail ?? err?.message}`);
+      alert(t("doc_generator.delete_failed", { detail: `${err?.response?.status ?? ""} ${err?.response?.data?.detail ?? err?.message ?? ""}`.trim() }));
       console.error("Failed to delete policy:", err);
     }
   };
@@ -610,7 +641,7 @@ export default function PolicyGeneratorPage() {
           await refreshAiTokens();
           if (selectedDoc && outputRef.current.trim()) {
             const content = outputRef.current;
-            const summary = policyIdRef.current ? "Regenerated with AI" : "Initial version";
+            const summary = policyIdRef.current ? t("doc_generator.summary_regenerated") : t("doc_generator.summary_initial");
             autoSaveRef.current = (async () => {
               try {
                 await persistContent(content, summary);
@@ -651,7 +682,7 @@ export default function PolicyGeneratorPage() {
 <html>
 <head>
   <meta charset="utf-8">
-  <title>${selectedDoc}</title>
+  <title>${tDoc(selectedDoc)}</title>
   <style>
     body { font-family: Arial, sans-serif; font-size: 12pt; line-height: 1.6; margin: 40px; color: #1a1a1a; }
     h1 { font-size: 20pt; font-weight: bold; margin-top: 24px; margin-bottom: 8px; }
@@ -696,7 +727,7 @@ ${currentContent
       if (autoSaveRef.current) await autoSaveRef.current;
       const content = currentContent;
       if (policyIdRef.current && content === persistedRef.current) return; // already saved
-      await persistContent(content, "Edited in Doc Generator");
+      await persistContent(content, t("doc_generator.summary_edited"));
       await refetchPolicies();
     } catch (err) {
       console.error("Failed to save policy:", err);
@@ -714,7 +745,7 @@ ${currentContent
       const content = currentContent;
       let versionId: string | null = null;
       if (!policyIdRef.current || content !== persistedRef.current) {
-        versionId = await persistContent(content, "Approved in Doc Generator");
+        versionId = await persistContent(content, t("doc_generator.summary_approved"));
       }
       const id = policyIdRef.current;
       if (!id) throw new Error("No policy to approve");
@@ -746,7 +777,7 @@ ${currentContent
   }
 
   return (
-    <AiGate featureLabel="Document Generator">
+    <AiGate featureLabel={t("docgen.header")}>
     <div className="flex h-[calc(100vh-64px)] overflow-hidden">
 
       {/* ── LEFT PANEL ────────────────────────────────────────────────────── */}
@@ -778,7 +809,7 @@ ${currentContent
                 }`}
               >
                 <Icon className="w-3.5 h-3.5" />
-                {label.split(" ")[0]}
+                {CATEGORY_SHORT_KEYS[cat.id] ? t(CATEGORY_SHORT_KEYS[cat.id]) : label.split(" ")[0]}
               </button>
             );
           })}
@@ -824,7 +855,7 @@ ${currentContent
               type="text"
               value={form.org_name}
               onChange={(e) => setForm((f) => ({ ...f, org_name: e.target.value }))}
-              placeholder="Acme Corp"
+              placeholder={t("doc_generator.org_placeholder")}
               className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
           </div>
@@ -838,7 +869,7 @@ ${currentContent
                 className="w-full border border-gray-200 rounded-lg px-2 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
               >
                 <option value="">{t("docgen.select_industry")}</option>
-                {INDUSTRIES.map((i) => <option key={i} value={i}>{i}</option>)}
+                {INDUSTRIES.map((i) => <option key={i} value={i}>{INDUSTRY_LABEL_KEYS[i] ? t(INDUSTRY_LABEL_KEYS[i]) : i}</option>)}
               </select>
             </div>
             <div>
@@ -848,7 +879,7 @@ ${currentContent
                 onChange={(e) => setForm((f) => ({ ...f, size: e.target.value }))}
                 className="w-full border border-gray-200 rounded-lg px-2 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
               >
-                {SIZES.map((s) => <option key={s.value} value={s.value}>{s.label} ({s.sub})</option>)}
+                {SIZES.map((s) => <option key={s.value} value={s.value}>{t(s.labelKey)} ({t(s.subKey)})</option>)}
               </select>
             </div>
           </div>
@@ -859,7 +890,7 @@ ${currentContent
               type="text"
               value={form.country}
               onChange={(e) => setForm((f) => ({ ...f, country: e.target.value }))}
-              placeholder="US, France, UK…"
+              placeholder={t("doc_generator.country_placeholder")}
               className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
           </div>
@@ -964,7 +995,7 @@ ${currentContent
               rows={2}
               value={form.specific_requirements}
               onChange={(e) => setForm((f) => ({ ...f, specific_requirements: e.target.value }))}
-              placeholder="e.g. We process EU personal data (GDPR), we have PCI scope for card payments…"
+              placeholder={t("doc_generator.requirements_placeholder")}
               className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
             />
           </div>
@@ -1212,12 +1243,12 @@ ${currentContent
                         try {
                           const versions = await policiesApi.getVersions(String(policy.id));
                           const current = versions.find(v => v.is_current) ?? versions[0];
-                          const shown = current?.content ?? "No content found for this document.";
+                          const shown = current?.content ?? t("doc_generator.no_content");
                           setOutput(shown);
                           policyIdRef.current = String(policy.id);
                           markPersisted(shown);
                         } catch {
-                          setOutput("Failed to load document content.");
+                          setOutput(t("doc_generator.load_failed"));
                           setDone(false);
                         }
                       }}
@@ -1231,10 +1262,10 @@ ${currentContent
                         <FileText className="w-3.5 h-3.5 text-purple-500 flex-shrink-0 mt-1" />
                         <div className="flex-1 min-w-0">
                           <p className={`text-xs font-medium truncate ${isSelected ? "text-blue-900" : "text-gray-900"}`}>
-                            {policy.title}
+                            {tDoc(policy.title)}
                           </p>
                           <p className={`text-[11px] mt-0.5 ${isSelected ? "text-blue-600" : "text-gray-400"}`}>
-                            {new Date(policy.created_at).toLocaleDateString()}
+                            {new Date(policy.created_at).toLocaleDateString(dateLocale(i18n.language))}
                           </p>
                         </div>
                       </div>
@@ -1256,7 +1287,7 @@ ${currentContent
                         <button
                           onClick={(e) => handleDeletePolicy(String(policy.id), e)}
                           className="p-1 hover:bg-red-50 text-gray-300 hover:text-red-600 rounded transition-all"
-                          title="Delete"
+                          title={t("common.delete")} aria-label={t("common.delete")}
                         >
                           <Trash2 className="w-3 h-3" />
                         </button>

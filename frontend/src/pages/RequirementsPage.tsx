@@ -1,3 +1,4 @@
+import { TranslatedText } from "@/components/common/AutoTranslatedBadge";
 /**
  * RequirementsPage — le référentiel centralisé (STB objectif 1).
  *
@@ -244,7 +245,7 @@ function RequirementDetailModal({
                 {t(`requirements.source_kind.${requirement.source_kind}`, { defaultValue: requirement.source_kind })}
               </span>
             </div>
-            <h2 className="font-bold text-gray-900 text-base leading-snug mt-1.5">{requirement.title}</h2>
+            <h2 className="font-bold text-gray-900 text-base leading-snug mt-1.5"><TranslatedText item={requirement} field="title" /></h2>
             <p className="text-xs text-gray-400 mt-0.5">
               {requirement.source_name ?? t("requirements.source_unknown")}
             </p>
@@ -833,7 +834,7 @@ export default function RequirementsPage() {
                           </div>
                           <div className="min-w-0">
                             <p className="text-sm font-medium text-gray-900 group-hover:text-blue-700 transition-colors line-clamp-2">
-                              {r.title}
+                              <TranslatedText item={r} field="title" />
                             </p>
                             <p className="text-xs text-gray-400">{kindLabel(r.source_kind)}</p>
                           </div>

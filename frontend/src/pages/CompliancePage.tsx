@@ -11,86 +11,9 @@ import {
   dashboardApi, dashboardExportApi, parseDashboardExportError,
 } from "@/api/endpoints";
 import ModuleDashboard from "@/components/dashboards/ModuleDashboard";
-import i18n from "@/i18n";
 
-/* ── French and Arabic for the compliance strings with no locale entry ───────
- * Each of these t() calls carries an English `defaultValue`, which i18next uses
- * for EVERY language — including the truncation notice, which is precisely the
- * sentence that stops a reader trusting a figure that covers only part of the
- * register. Registered exactly as i18n/index.ts registers eliteLocales and
- * gapfills, and NON-DESTRUCTIVELY: locales/*.ts belong to another lane in this
- * wave, and a real key there always wins over this fallback. */
-const COMPLIANCE_I18N: Record<string, Record<string, Record<string, string>>> = {
-  en: {
-    compliance: {
-      assessments_truncated: "{{n}} further assessment(s) are held but not loaded here; the figures above cover the ones listed only.",
-      register_failed: "The assessment register could not be read. Nothing is missing from it — it simply could not be loaded.",
-      delete_draft_confirm: "Delete?",
-      delete_draft_title: "Delete this draft assessment",
-      delete_draft_yes: "Yes, delete",
-      delete_failed: "The assessment could not be deleted. Nothing was changed.",
-      dash_title: "Compliance dashboard",
-      dash_subtitle: "Score, gaps and certification readiness for every framework in scope",
-      dash_empty: "No framework is in scope yet. Pick the frameworks that apply to you, then open an assessment — the dashboard fills in from there.",
-      dash_frameworks: "Frameworks in scope",
-      dash_avg_score: "Average compliance score",
-      dash_scored_of: "over the {{scored}} of {{total}} framework(s) that have been assessed",
-      dash_open_gaps: "Open gaps",
-      dash_blockers: "Open certification blockers",
-      dash_readiness: "Certification readiness",
-      dash_no_assessment: "No assessment yet",
-      primary_framework: "Primary",
-    },
-    compliance_scope: { coverage_rolled_up: "Consolidated" },
-  },
-  fr: {
-    compliance: {
-      assessments_truncated: "{{n}} évaluation(s) supplémentaire(s) existent mais ne sont pas chargées ici ; les chiffres ci-dessus ne portent que sur celles qui sont listées.",
-      register_failed: "Le registre des évaluations n'a pas pu être lu. Rien n'y manque — il n'a simplement pas pu être chargé.",
-      delete_draft_confirm: "Supprimer ?",
-      delete_draft_title: "Supprimer ce brouillon d'évaluation",
-      delete_draft_yes: "Oui, supprimer",
-      delete_failed: "L'évaluation n'a pas pu être supprimée. Rien n'a été modifié.",
-      dash_title: "Tableau de bord de la conformité",
-      dash_subtitle: "Score, écarts et niveau de préparation à la certification pour chaque référentiel du périmètre",
-      dash_empty: "Aucun référentiel n'est encore dans le périmètre. Sélectionnez les référentiels applicables, puis ouvrez une évaluation — le tableau de bord se remplit à partir de là.",
-      dash_frameworks: "Référentiels du périmètre",
-      dash_avg_score: "Score de conformité moyen",
-      dash_scored_of: "sur les {{scored}} référentiels évalués parmi {{total}}",
-      dash_open_gaps: "Écarts ouverts",
-      dash_blockers: "Bloquants de certification ouverts",
-      dash_readiness: "Préparation à la certification",
-      dash_no_assessment: "Aucune évaluation",
-      primary_framework: "Principal",
-    },
-    compliance_scope: { coverage_rolled_up: "Consolidé" },
-  },
-  ar: {
-    compliance: {
-      assessments_truncated: "توجد {{n}} تقييمات إضافية غير محمّلة هنا؛ الأرقام أعلاه تخص المدرجة فقط.",
-      register_failed: "تعذّرت قراءة سجل التقييمات. لا ينقصه شيء — لكنه لم يُحمَّل فحسب.",
-      delete_draft_confirm: "حذف؟",
-      delete_draft_title: "حذف مسودة التقييم هذه",
-      delete_draft_yes: "نعم، احذف",
-      delete_failed: "تعذّر حذف التقييم. لم يتغيّر شيء.",
-      dash_title: "لوحة الامتثال",
-      dash_subtitle: "الدرجة والفجوات وجاهزية الاعتماد لكل إطار مرجعي ضمن النطاق",
-      dash_empty: "لا يوجد إطار مرجعي ضمن النطاق بعد. اختر الأطر المنطبقة عليك ثم افتح تقييماً — وتُملأ اللوحة انطلاقاً من ذلك.",
-      dash_frameworks: "الأطر المرجعية ضمن النطاق",
-      dash_avg_score: "متوسط درجة الامتثال",
-      dash_scored_of: "على {{scored}} إطاراً مُقيَّماً من أصل {{total}}",
-      dash_open_gaps: "الفجوات المفتوحة",
-      dash_blockers: "معوّقات الاعتماد المفتوحة",
-      dash_readiness: "جاهزية الاعتماد",
-      dash_no_assessment: "لا يوجد تقييم بعد",
-      primary_framework: "أساسي",
-    },
-    compliance_scope: { coverage_rolled_up: "مُجمَّع" },
-  },
-};
-for (const lng of ["en", "fr", "ar"]) {
-  i18n.addResourceBundle(lng, "translation", COMPLIANCE_I18N[lng], true, false);
-}
+/* The compliance strings this page used to register inline now live in
+ * i18n/sweep/g3_compliance.ts (merged non-destructively in i18n/index.ts). */
 import type {
   AssessmentListItem, Framework, ComplianceScale, ScopeCoverage, ScopeCoverageItem,
 } from "@/types";
@@ -1100,7 +1023,7 @@ function ComplianceDashboard() {
 // ─── Main Page ─────────────────────────────────────────────────────────────────
 
 export default function CompliancePage() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const navigate = useNavigate();
   const [assessments, setAssessments] = useState<ScopedAssessment[]>([]);
   const [frameworks, setFrameworks] = useState<Framework[]>([]);
@@ -1457,7 +1380,7 @@ export default function CompliancePage() {
                         </span>
                       )}
                       <span className="text-gray-400">
-                        {t("common.created_at")} {new Date(a.created_at).toLocaleDateString()}
+                        {t("common.created_at")} {new Date(a.created_at).toLocaleDateString(i18n.language?.startsWith("fr") ? "fr-FR" : i18n.language?.startsWith("ar") ? "ar-u-nu-latn" : "en-GB")}
                       </span>
                     </div>
                   </div>

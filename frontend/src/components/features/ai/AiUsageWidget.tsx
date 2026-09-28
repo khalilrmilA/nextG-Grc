@@ -1,8 +1,11 @@
 import { useQuery } from "@tanstack/react-query";
 import { Sparkles, AlertCircle } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { authApi } from "@/api/endpoints";
 
 export default function AiUsageWidget() {
+  const { t, i18n } = useTranslation();
+  const loc = i18n.language === "ar" ? "ar-u-nu-latn" : i18n.language === "fr" ? "fr-FR" : "en-US";
   const { data: usage, isLoading, error } = useQuery({
     queryKey: ["auth", "ai-usage"],
     queryFn: authApi.getAiUsage,
@@ -22,16 +25,16 @@ export default function AiUsageWidget() {
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
           <Sparkles className="w-4 h-4 text-purple-600" />
-          <p className="text-sm font-semibold text-gray-900">AI Usage This Month</p>
+          <p className="text-sm font-semibold text-gray-900">{t("ai_access.widget_title")}</p>
         </div>
         {isAtLimit && (
           <span className="inline-flex items-center gap-1 px-2 py-1 bg-red-100 text-red-700 rounded-full text-xs font-medium">
-            <AlertCircle className="w-3 h-3" /> Limit Reached
+            <AlertCircle className="w-3 h-3" /> {t("ai_access.limit_reached")}
           </span>
         )}
         {isNearLimit && !isAtLimit && (
           <span className="inline-flex items-center gap-1 px-2 py-1 bg-amber-100 text-amber-700 rounded-full text-xs font-medium">
-            <AlertCircle className="w-3 h-3" /> Near Limit
+            <AlertCircle className="w-3 h-3" /> {t("ai_access.near_limit")}
           </span>
         )}
       </div>
@@ -40,9 +43,9 @@ export default function AiUsageWidget() {
         {/* Token usage */}
         <div>
           <div className="flex items-center justify-between mb-1">
-            <p className="text-xs text-gray-600">Tokens Used</p>
+            <p className="text-xs text-gray-600">{t("ai_access.tokens_used")}</p>
             <p className="text-xs font-mono font-semibold text-gray-800">
-              {usage.tokens_used.toLocaleString()} / {usage.tokens_limit.toLocaleString()}
+              {usage.tokens_used.toLocaleString(loc)} / {usage.tokens_limit.toLocaleString(loc)}
             </p>
           </div>
           <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
@@ -58,9 +61,9 @@ export default function AiUsageWidget() {
         {/* Requests usage */}
         <div>
           <div className="flex items-center justify-between mb-1">
-            <p className="text-xs text-gray-600">Requests Made</p>
+            <p className="text-xs text-gray-600">{t("ai_access.requests_made")}</p>
             <p className="text-xs font-mono font-semibold text-gray-800">
-              {usage.requests_made.toLocaleString()} / {usage.requests_limit.toLocaleString()}
+              {usage.requests_made.toLocaleString(loc)} / {usage.requests_limit.toLocaleString(loc)}
             </p>
           </div>
           <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
@@ -73,7 +76,7 @@ export default function AiUsageWidget() {
       </div>
 
       <p className="text-xs text-gray-400 mt-3">
-        Resets on <strong>{new Date(usage.reset_at).toLocaleDateString()}</strong>
+        {t("ai_access.resets_on_label")} <strong>{new Date(usage.reset_at).toLocaleDateString(loc)}</strong>
       </p>
     </div>
   );

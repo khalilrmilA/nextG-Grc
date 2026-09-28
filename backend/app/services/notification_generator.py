@@ -41,9 +41,11 @@ run_all_checks is driven automatically by start_notification_scheduler() at the
 bottom of this file — it needs one asyncio.create_task in app.main's lifespan,
 because until now its only caller was the "Check deadlines" button.
 
-Every notification written here carries title_key / message_key / params so the
-client renders it in French or Arabic; title/message stay populated as the
-fallback for old clients and for the e-mail body. Escalation notifications are
+Every notification written here carries title_key / message_key / params; the
+notification feed (endpoints/notifications.py via services/notification_i18n)
+renders them in the reader's Accept-Language, and the e-mail leg renders the
+same catalog in the recipient's language (services/user_language). The stored
+title/message stay English — the fallback, and what webhooks/other consumers see. Escalation notifications are
 also delivered by e-mail over the configured SMTP relay ("la relance doit
 atteindre le responsable hors application"), honouring each user's EMAIL
 notification preference and capped per run so a backlog cannot become a blast.
@@ -338,172 +340,31 @@ async def create_notification(
 
 
 # ── i18n for the e-mail leg ──────────────────────────────────────────────────
-# The in-app notification is localised by the client from title_key/message_key.
-# An e-mail has no client, so the FR/AR/EN wording lives here, keyed by the same
-# message_key and formatted with the same params. A key that is absent falls
-# back to the stored English title/message rather than failing to send — a
-# relance that arrives in English still arrives.
-EMAIL_LANGS = ("en", "fr", "ar")
-
-EMAIL_I18N: dict[str, dict[str, str]] = {
-    "notifications.action_item_relance.title": {
-        "en": "Reminder {stage}: action '{title}' is {days} day(s) overdue",
-        "fr": "Relance {stage} : l'action « {title} » accuse {days} jour(s) de retard",
-        "ar": "تذكير {stage}: الإجراء «{title}» متأخر بـ {days} يوم/أيام",
-    },
-    "notifications.action_item_relance.message": {
-        "en": ("The corrective/preventive action '{title}' was due on {due} and is not "
-               "closed. Update its progress or record why it cannot be closed."),
-        "fr": ("L'action corrective/préventive « {title} » était due le {due} et n'est pas "
-               "clôturée. Mettez à jour son avancement ou justifiez son maintien."),
-        "ar": ("كان من المقرر إنجاز الإجراء «{title}» بتاريخ {due} ولم يُغلق بعد. "
-               "يرجى تحديث التقدم أو تبرير عدم الإغلاق."),
-    },
-    "notifications.action_item_relance_escalation.title": {
-        "en": "Escalation: action '{title}' is {days} day(s) overdue",
-        "fr": "Escalade : l'action « {title} » accuse {days} jour(s) de retard",
-        "ar": "تصعيد: الإجراء «{title}» متأخر بـ {days} يوم/أيام",
-    },
-    "notifications.action_item_relance_escalation.message": {
-        "en": ("Action '{title}' (owner: {owner}) was due on {due} and has not moved after "
-               "{reminders} reminder(s). It is escalated to you as the responsible authority."),
-        "fr": ("L'action « {title} » (responsable : {owner}) était due le {due} et n'a pas "
-               "progressé après {reminders} relance(s). Elle vous est remontée."),
-        "ar": ("الإجراء «{title}» (المسؤول: {owner}) كان مستحقاً في {due} ولم يتقدم بعد "
-               "{reminders} تذكير/تذكيرات. تمت إحالته إليكم."),
-    },
-    "notifications.audit_schedule.title": {
-        "en": "Audit '{audit}' starts in {days} day(s)",
-        "fr": "L'audit « {audit} » démarre dans {days} jour(s)",
-        "ar": "تبدأ مهمة التدقيق «{audit}» خلال {days} يوم/أيام",
-    },
-    "notifications.audit_schedule.message": {
-        "en": ("Audit '{audit}' is planned to start on {start}. Confirm the scope, the "
-               "auditors and the availability of the audited teams."),
-        "fr": ("L'audit « {audit} » est planifié pour le {start}. Confirmez le périmètre, "
-               "les auditeurs et la disponibilité des équipes auditées."),
-        "ar": ("من المقرر أن تبدأ مهمة التدقيق «{audit}» في {start}. يرجى تأكيد النطاق "
-               "والمدققين وجاهزية الفرق المعنية."),
-    },
-    "notifications.audit_starting_today.title": {
-        "en": "Audit '{audit}' starts today",
-        "fr": "L'audit « {audit} » démarre aujourd'hui",
-        "ar": "تبدأ مهمة التدقيق «{audit}» اليوم",
-    },
-    "notifications.audit_starting_today.message": {
-        "en": "Audit '{audit}' is planned to start today ({start}).",
-        "fr": "L'audit « {audit} » est planifié pour aujourd'hui ({start}).",
-        "ar": "من المقرر أن تبدأ مهمة التدقيق «{audit}» اليوم ({start}).",
-    },
-    "notifications.audit_start_overdue.title": {
-        "en": "Audit '{audit}' has not started ({days} day(s) late)",
-        "fr": "L'audit « {audit} » n'a pas démarré ({days} jour(s) de retard)",
-        "ar": "لم تبدأ مهمة التدقيق «{audit}» ({days} يوم/أيام تأخير)",
-    },
-    "notifications.audit_start_overdue.message": {
-        "en": ("Audit '{audit}' was planned to start on {start} and is still in planning. "
-               "Re-plan it or start the fieldwork."),
-        "fr": ("L'audit « {audit} » devait démarrer le {start} et reste en planification. "
-               "Replanifiez-le ou lancez les travaux."),
-        "ar": ("كان من المقرر بدء مهمة التدقيق «{audit}» في {start} ولا تزال في مرحلة "
-               "التخطيط. يرجى إعادة التخطيط أو بدء الأعمال."),
-    },
-    # Reuses audits.py's key and params so the client needs a single entry.
-    "notifications.audit_finding_assigned.title": {
-        "en": "A finding was assigned to you",
-        "fr": "Un constat vous a été affecté",
-        "ar": "تم إسناد ملاحظة إليكم",
-    },
-    "notifications.audit_finding_assigned.message": {
-        "en": "'{finding}' was raised in the audit '{audit}'.",
-        "fr": "« {finding} » a été relevé lors de l'audit « {audit} ».",
-        "ar": "تم تسجيل «{finding}» ضمن مهمة التدقيق «{audit}».",
-    },
-    # Three separate keys rather than one key with an interpolated "when"
-    # fragment: a half-translated sentence is the classic i18n trap, and the
-    # client renders these with the same t() call the e-mail leg formats here.
-    "notifications.recommendation_due.title": {
-        "en": "Recommendation {ref} is due in {days} day(s)",
-        "fr": "La recommandation {ref} est due dans {days} jour(s)",
-        "ar": "التوصية {ref} مستحقة خلال {days} يوم/أيام",
-    },
-    "notifications.recommendation_due.message": {
-        "en": ("Recommendation '{title}' from audit '{audit}' is due on {due} and is "
-               "{progress}% complete. Track it through to effective closure."),
-        "fr": ("La recommandation « {title} » de l'audit « {audit} » est due le {due} et "
-               "avance à {progress}%. Suivez-la jusqu'à sa clôture effective."),
-        "ar": ("التوصية «{title}» الصادرة عن مهمة التدقيق «{audit}» مستحقة في {due} وبلغت "
-               "نسبة إنجازها {progress}%. يرجى متابعتها حتى الإغلاق الفعلي."),
-    },
-    "notifications.recommendation_due_today.title": {
-        "en": "Recommendation {ref} is due today",
-        "fr": "La recommandation {ref} est due aujourd'hui",
-        "ar": "التوصية {ref} مستحقة اليوم",
-    },
-    "notifications.recommendation_due_today.message": {
-        "en": ("Recommendation '{title}' from audit '{audit}' is due today ({due}) and is "
-               "{progress}% complete."),
-        "fr": ("La recommandation « {title} » de l'audit « {audit} » est due aujourd'hui "
-               "({due}) et avance à {progress}%."),
-        "ar": ("التوصية «{title}» الصادرة عن مهمة التدقيق «{audit}» مستحقة اليوم ({due}) "
-               "وبلغت نسبة إنجازها {progress}%."),
-    },
-    "notifications.recommendation_overdue.title": {
-        "en": "Recommendation {ref} is {days} day(s) overdue",
-        "fr": "La recommandation {ref} accuse {days} jour(s) de retard",
-        "ar": "التوصية {ref} متأخرة بـ {days} يوم/أيام",
-    },
-    "notifications.recommendation_overdue.message": {
-        "en": ("Recommendation '{title}' from audit '{audit}' was due on {due} and is still "
-               "only {progress}% complete. It remains open until effective closure."),
-        "fr": ("La recommandation « {title} » de l'audit « {audit} » était due le {due} et "
-               "n'avance qu'à {progress}%. Elle reste ouverte jusqu'à sa clôture effective."),
-        "ar": ("التوصية «{title}» الصادرة عن مهمة التدقيق «{audit}» كانت مستحقة في {due} "
-               "ولم تتجاوز نسبة إنجازها {progress}%. تبقى مفتوحة حتى الإغلاق الفعلي."),
-    },
-}
+# The FR/AR/EN wording of every notification key lives in
+# app.services.notification_i18n.CATALOG — the same catalog the notification
+# feed renders the bell from, so an e-mail and its in-app twin always read the
+# same. A key that is absent (or whose params do not fit) falls back to the
+# stored English title/message rather than failing to send — a relance that
+# arrives in English still arrives.
+from app.services.notification_i18n import render_key  # noqa: E402
+from app.services.user_language import recipient_language  # noqa: E402
+from app.services.user_language import tenant_language as _tenant_language_or_none  # noqa: E402
 
 
 def render_i18n(key: str | None, lang: str, params: dict, fallback: str) -> str:
     """Render an i18n key in `lang`, falling back to the stored English text.
 
-    A missing key or a params mismatch must never stop the mail going out: an
-    unlocalised relance still reaches the responsible person, which is the
-    requirement. Only the wording degrades.
+    English returns `fallback` itself: the stored English IS the English
+    rendering (and keeps the writer's own truncation and wording).
     """
-    entry = EMAIL_I18N.get(key or "")
-    if not entry:
+    if lang == "en":
         return fallback
-    template = entry.get(lang) or entry.get("en") or fallback
-    try:
-        return template.format(**(params or {}))
-    except (KeyError, IndexError, ValueError):
-        return fallback
+    return render_key(key, lang, params or {}, fallback)
 
 
 def tenant_language(tenant: Tenant | None) -> str:
-    """The language a tenant's e-mails are written in.
-
-    Read from the tenant settings blob, whose `locale` and `notifications`
-    sub-keys are already writable through PATCH /tenants/settings — no new
-    mechanism, no migration. Accepts `locale: "fr"`, `locale: {"language": "fr"}`
-    and `notifications: {"language": "fr"}`. Defaults to English so nothing
-    changes for a tenant that has expressed no preference.
-    """
-    raw = getattr(tenant, "settings", None) or {}
-    candidates: list = []
-    locale = raw.get("locale")
-    if isinstance(locale, str):
-        candidates.append(locale)
-    elif isinstance(locale, dict):
-        candidates.extend([locale.get("language"), locale.get("lang"), locale.get("default")])
-    notif_cfg = raw.get("notifications")
-    if isinstance(notif_cfg, dict):
-        candidates.extend([notif_cfg.get("language"), notif_cfg.get("lang")])
-    for candidate in candidates:
-        if isinstance(candidate, str) and candidate[:2].lower() in EMAIL_LANGS:
-            return candidate[:2].lower()
-    return "en"
+    """The tenant's configured language (settings.locale / settings.notifications.language), else en."""
+    return _tenant_language_or_none(tenant) or "en"
 
 
 def tenant_emails_enabled(tenant: Tenant | None) -> bool:
@@ -571,7 +432,9 @@ async def flush_email_outbox(db: AsyncSession, outbox: list[dict]) -> int:
             if not await user_wants_email(db, item["user_id"], item["type"]):
                 continue
 
-            lang = tenant_language(tenant)
+            # The recipient's own UI language first (user_locales, recorded from
+            # the feed they poll), then the tenant's, then English.
+            lang = await recipient_language(db, item["user_id"], tenant)
             subject = render_i18n(item.get("title_key"), lang, item.get("params") or {}, item["title"])
             body = render_i18n(item.get("message_key"), lang, item.get("params") or {}, item["message"])
             link = item.get("link")

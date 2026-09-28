@@ -16,6 +16,7 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
+import { AutoTranslatedBadge, TranslatedText, pickText } from "../components/common/AutoTranslatedBadge";
 import {
   Globe, BookOpen, Search, ArrowRight, Plus,
   Loader2, Trash2, AlertCircle, RefreshCw, Filter,
@@ -101,6 +102,9 @@ function FrameworkDrawer({
   const [crosswalkFor, setCrosswalkFor] = useState<string | null>(null);
   const [crosswalk, setCrosswalk] = useState<Array<{ framework?: string; control?: string }>>([]);
   const [crosswalkLoading, setCrosswalkLoading] = useState(false);
+  // Built-in framework text is machine-translated into the UI language by the
+  // API; this shows the stored text instead, for the whole drawer.
+  const [showOriginal, setShowOriginal] = useState(false);
 
   const load = useCallback(async () => {
     if (!fw) return;
@@ -214,7 +218,7 @@ function FrameworkDrawer({
             <Icon className={`w-5 h-5 ${style.color}`} />
           </div>
           <div className="flex-1 min-w-0">
-            <h2 className="font-bold text-gray-900 text-base leading-tight">{fw.name}</h2>
+            <h2 className="font-bold text-gray-900 text-base leading-tight">{pickText(fw, "name", showOriginal)}</h2>
             <p className="text-xs text-gray-400 mt-0.5">
               {fw.short_name}{fw.version ? ` · v${fw.version}` : ""} · {controls.length} {t("frameworks.controls")}
             </p>
@@ -247,7 +251,10 @@ function FrameworkDrawer({
             ))}
           </div>
           {fw.description && (
-            <p className="text-xs text-gray-500 leading-relaxed">{fw.description}</p>
+            <p className="text-xs text-gray-500 leading-relaxed">{pickText(fw, "description", showOriginal)}</p>
+          )}
+          {(fw.translated || controls.some(c => c.translated)) && (
+            <AutoTranslatedBadge showingOriginal={showOriginal} onToggle={() => setShowOriginal(v => !v)} />
           )}
         </div>
 
@@ -339,10 +346,10 @@ function FrameworkDrawer({
                               <span className="text-xs font-mono font-bold text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded flex-shrink-0">
                                 {ctrl.control_id}
                               </span>
-                              <span className="text-sm font-medium text-gray-800 leading-snug">{ctrl.title}</span>
+                              <span className="text-sm font-medium text-gray-800 leading-snug">{pickText(ctrl, "title", showOriginal)}</span>
                             </div>
                             {ctrl.description && (
-                              <p className="text-xs text-gray-400 mt-1 line-clamp-2">{ctrl.description}</p>
+                              <p className="text-xs text-gray-400 mt-1 line-clamp-2">{pickText(ctrl, "description", showOriginal)}</p>
                             )}
                             <div className="flex flex-wrap items-center gap-1 mt-1.5">
                               {ctrl.requirement_type && (
@@ -704,7 +711,9 @@ function FrameworkCard({
               <Icon className={`w-5 h-5 ${style.color}`} />
             </div>
             <div className="min-w-0">
-              <h3 className="font-semibold text-gray-900 text-sm leading-tight line-clamp-2">{fw.name}</h3>
+              <h3 className="font-semibold text-gray-900 text-sm leading-tight line-clamp-2">
+                <TranslatedText item={fw} field="name" />
+              </h3>
               <div className="flex items-center gap-1.5 mt-1 flex-wrap">
                 <span className="text-xs font-mono bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded font-bold">{fw.short_name}</span>
                 {fw.version && <span className="text-xs text-gray-400">v{fw.version}</span>}
@@ -739,7 +748,7 @@ function FrameworkCard({
 
         {/* Description */}
         <p className="text-xs text-gray-500 leading-relaxed line-clamp-2 mb-3">
-          {fw.description ?? ""}
+          <TranslatedText item={fw} field="description">{fw.description ?? ""}</TranslatedText>
         </p>
 
         {/* Fork lineage — which built-in this copy came from */}
@@ -892,6 +901,7 @@ export default function FrameworksPage() {
     const tokens = search.toLowerCase().split(/\s+/).filter(Boolean);
     const searchFields = [
       fw.name,
+      fw.original_name ?? "",   // a machine-translated name still matches its original
       fw.short_name,
       fw.description ?? "",
       fw.issuing_body ?? "",

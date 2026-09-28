@@ -8,6 +8,7 @@ import { aiApi } from "@/api/endpoints";
 import { useAiTokenRefresh } from "@/hooks/useAiTokenRefresh";
 import AiGate from "@/components/features/ai/AiGate";
 import { safeMarkdown } from "@/lib/safeMarkdown";
+import { useTranslation } from "react-i18next";
 
 interface Props {
   title: string;
@@ -16,6 +17,7 @@ interface Props {
 }
 
 export default function RiskAIPanel({ title, description, category }: Props) {
+  const { t } = useTranslation();
   const { refreshAiTokens } = useAiTokenRefresh();
   const [open, setOpen]       = useState(false);
   const [output, setOutput]   = useState("");
@@ -60,7 +62,7 @@ export default function RiskAIPanel({ title, description, category }: Props) {
   }
 
   return (
-    <AiGate featureLabel="Risk Analysis">
+    <AiGate featureLabel={t("risk_ai_panel.feature_label")}>
       <div className="border border-blue-100 rounded-xl overflow-hidden">
         {/* Toggle header */}
         <button
@@ -70,9 +72,9 @@ export default function RiskAIPanel({ title, description, category }: Props) {
         >
           <div className="flex items-center gap-2">
             <Sparkles className="w-4 h-4 text-blue-600" />
-            <span className="text-sm font-semibold text-blue-800">AI Risk Analysis</span>
-            {loading && <span className="text-xs text-blue-500 animate-pulse">Analyzing…</span>}
-            {done && <span className="text-xs text-green-600 font-medium">Ready</span>}
+            <span className="text-sm font-semibold text-blue-800">{t("risk_ai_panel.title")}</span>
+            {loading && <span className="text-xs text-blue-500 animate-pulse">{t("risk_ai_panel.analyzing")}</span>}
+            {done && <span className="text-xs text-green-600 font-medium">{t("risk_ai_panel.ready")}</span>}
           </div>
           {open ? <ChevronUp className="w-4 h-4 text-blue-400" /> : <ChevronDown className="w-4 h-4 text-blue-400" />}
         </button>
@@ -88,28 +90,28 @@ export default function RiskAIPanel({ title, description, category }: Props) {
                 className="flex items-center gap-1 text-xs px-2.5 py-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-40 transition-colors"
               >
                 <RefreshCw className={`w-3 h-3 ${loading ? "animate-spin" : ""}`} />
-                {loading ? "Analyzing…" : "Regenerate"}
+                {loading ? t("risk_ai_panel.analyzing") : t("ai.regenerate")}
               </button>
               {loading && (
                 <button type="button" onClick={stop}
                   className="flex items-center gap-1 text-xs px-2.5 py-1.5 bg-gray-100 text-gray-600 rounded-lg hover:bg-gray-200 transition-colors">
-                  <X className="w-3 h-3" /> Stop
+                  <X className="w-3 h-3" /> {t("policies.ai_stop")}
                 </button>
               )}
               {done && (
                 <button type="button" onClick={copyToClipboard}
                   className="flex items-center gap-1 text-xs px-2.5 py-1.5 bg-gray-100 text-gray-600 rounded-lg hover:bg-gray-200 transition-colors">
-                  <Copy className="w-3 h-3" /> Copy
+                  <Copy className="w-3 h-3" /> {t("ai.copy")}
                 </button>
               )}
-              <span className="text-xs text-gray-400 ml-auto">Powered by Ollama · {category}</span>
+              <span className="text-xs text-gray-400 ml-auto">{t("risk_ai_panel.powered_by")} · {category}</span>
             </div>
 
             {/* Output */}
             <div className="max-h-80 overflow-y-auto px-4 py-3 text-xs text-gray-700 leading-relaxed">
               {!output && !loading && (
                 <p className="text-gray-400 italic text-center py-4">
-                  {title.trim() ? "Click Regenerate to analyze this risk." : "Enter a risk title first."}
+                  {title.trim() ? t("risk_ai_panel.click_regenerate") : t("risk_ai_panel.enter_title_first")}
                 </p>
               )}
               {output && (

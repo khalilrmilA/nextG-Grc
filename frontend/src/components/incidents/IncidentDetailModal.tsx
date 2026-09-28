@@ -3,6 +3,10 @@ import { useTranslation } from "react-i18next";
 import { X, Loader2, Trash2, Save, GitCommitHorizontal, Lock, ChevronRight } from "lucide-react";
 import { incidentsApi } from "@/api/endpoints";
 import { MultiSelect } from "@/components/common/MultiSelect";
+import i18n from "@/i18n";
+
+// Dates follow the UI language (Arabic keeps Latin digits).
+const uiLocale = () => { const l = i18n.language || "en"; return l.startsWith("fr") ? "fr-FR" : l.startsWith("ar") ? "ar-u-nu-latn" : "en-US"; };
 
 /**
  * Incident detail / edit modal.
@@ -61,7 +65,7 @@ function toLocalInput(v: string | null | undefined): string {
 
 function fmtTs(v: string | null | undefined): string {
   const d = parseTs(v);
-  return d ? d.toLocaleString() : (v ? String(v) : "-");
+  return d ? d.toLocaleString(uiLocale()) : (v ? String(v) : "-");
 }
 
 const listToText = (v: unknown) => (Array.isArray(v) ? v.join(", ") : "");

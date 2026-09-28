@@ -14,9 +14,10 @@ type OcrStatus = {
   pdf_text_layer: boolean; pdf_scanned: boolean; max_upload_mb: number; max_pages: number;
 };
 
-const LANG_LABELS: Record<string, string> = {
-  "fra+eng": "Français + English", fra: "Français", eng: "English",
-  "ara+fra": "العربية + Français", "ara+eng": "العربية + English", ara: "العربية",
+/** OCR language packs → i18n key of their display name (the value sent to the API stays the pack code). */
+const LANG_LABEL_KEYS: Record<string, string> = {
+  "fra+eng": "ocr_ui.lang_fra_eng", fra: "ocr_ui.lang_fra", eng: "ocr_ui.lang_eng",
+  "ara+fra": "ocr_ui.lang_ara_fra", "ara+eng": "ocr_ui.lang_ara_eng", ara: "ocr_ui.lang_ara",
 };
 
 /**
@@ -211,7 +212,7 @@ export default function OcrCapturePage() {
               value={lang} onChange={(e) => setLang(e.target.value)}
               className="flex-1 border border-gray-200 rounded-xl text-sm px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
-              {langOptions.map((l) => <option key={l} value={l}>{LANG_LABELS[l] || l}</option>)}
+              {langOptions.map((l) => <option key={l} value={l}>{LANG_LABEL_KEYS[l] ? t(LANG_LABEL_KEYS[l]) : l}</option>)}
             </select>
             <button
               onClick={run} disabled={!file || busy || (status ? !status.ocr_available : false)}

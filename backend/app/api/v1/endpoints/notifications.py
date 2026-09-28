@@ -2,7 +2,7 @@
 from datetime import datetime, timezone
 from typing import Literal
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel
 from sqlalchemy import select, and_, func, update, delete
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -14,8 +14,25 @@ from app.models.notification import (
     Notification, NotificationPreference,
     NotificationType, NotificationChannel, NotificationStatus,
 )
+from app.services.ai_locale import get_request_language
+from app.services.notification_i18n import localize_notification
+from app.services.user_language import remember_request_language
 
 router = APIRouter()
+
+
+def _out(notif: Notification, lang: str) -> "NotificationOut":
+    """A feed item with title/message in the reader's language.
+
+    The SPA displays `title` / `message` as served, so this is where a French or
+    Arabic reader gets French or Arabic: rendered from the i18n key when the row
+    has one, else from its stored English matched back to the template it was
+    written from (notification_i18n). The stored row is never modified — the
+    English text stays what webhooks and the activity trail saw.
+    """
+    out = NotificationOut.model_validate(notif)
+    out.title, out.message = localize_notification(notif, lang)
+    return out
 
 
 # ── Schemas ───────────────────────────────────────────────────────────────────
@@ -71,16 +88,24 @@ class PreferenceOut(BaseModel):
 
 @router.get("", response_model=NotificationListOut)
 async def list_notifications(
+    request: Request,
     status_filter: Literal["all", "unread"] = "all",
     # Bounded server-side: an unbounded limit lets a caller pull the whole feed
     # in one request, and a negative offset is a database error (SQLite tolerates
     # it, PostgreSQL does not) rather than a 422.
     limit: int = Query(25, ge=1, le=200),
     offset: int = Query(0, ge=0),
+    lang: str = Depends(get_request_language),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """Get the authenticated user's in-app notification feed."""
+    """Get the authenticated user's in-app notification feed.
+
+    Titles and messages are rendered in the Accept-Language the SPA sends. The
+    feed is polled, which also makes it the place the server learns the user's
+    UI language for the mail it sends later (user_language).
+    """
+    await remember_request_language(db, current_user.id, request)
     conditions = [Notification.user_id == current_user.id]
     if status_filter == "unread":
         conditions.append(Notification.status == NotificationStatus.UNREAD)
@@ -110,7 +135,7 @@ async def list_notifications(
     items = items_result.scalars().all()
 
     return NotificationListOut(
-        items=[NotificationOut.model_validate(n) for n in items],
+        items=[_out(n, lang) for n in items],
         unread_count=unread_count,
         total=total,
     )
@@ -119,6 +144,7 @@ async def list_notifications(
 @router.patch("/{notification_id}/read", response_model=NotificationOut)
 async def mark_as_read(
     notification_id: str,
+    lang: str = Depends(get_request_language),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -142,7 +168,7 @@ async def mark_as_read(
     # ActivityLogMiddleware, which opens its own connection for the audit
     # entry and would wait on the write lock this session still holds.
     await db.commit()
-    return NotificationOut.model_validate(notif)
+    return _out(notif, lang)
 
 
 @router.patch("/read-all", status_code=status.HTTP_204_NO_CONTENT)

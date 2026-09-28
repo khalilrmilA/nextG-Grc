@@ -62,6 +62,7 @@ from app.workers.tasks.notifications import notify_framework_new, notify_framewo
 from app.services import ai_chunking, ai_prompts, ai_provider
 from app.services.activity_chain import chain_and_add
 from app.services.ai_locale import failure_message, get_request_language
+from app.services.content_translation import get_display_language, localize_fields
 from app.services.ai_structured import AiResult, ai_structured
 
 # ── Controlled vocabularies (STB objectif 1) ─────────────────────────────────
@@ -377,6 +378,12 @@ class FrameworkResponse(BaseModel):
     # Lineage of a tenant fork, so /upstream-diff can tell a customised copy from the
     # built-in it was cloned from.
     cloned_from_framework_id: str | None = None
+    # Machine translation of a built-in framework's name/description into the
+    # caller's language (content_translations). Additive: the stored text is kept
+    # in original_*; ``?original=1`` (edit screens) switches the overlay off.
+    translated: bool = False
+    original_name: str | None = None
+    original_description: str | None = None
 
     model_config = {"from_attributes": True}
 
@@ -415,6 +422,12 @@ class ControlResponse(BaseModel):
     # auditor is entitled to know.
     lang: str | None = None
     translation_source: str | None = None
+    # Machine translation (content_translations) for the fields no human translation
+    # covered. original_* carry the stored text; ``?original=1`` switches it off.
+    translated: bool = False
+    original_title: str | None = None
+    original_description: str | None = None
+    original_guidance: str | None = None
 
     model_config = {"from_attributes": True}
 
@@ -453,6 +466,29 @@ def _control_response(
     return resp
 
 
+async def _machine_localize_controls(db: AsyncSession, lang: str, pairs) -> None:
+    """Overlay machine translations on ControlResponse objects (or their dumps) for
+    each field still showing the stored text — a human ControlTranslation always wins.
+    ``pairs`` are (response, FrameworkControl). No-op for "" (``?original=1``)."""
+    entries = []
+    for resp, control in pairs:
+        fields = {}
+        for f in ("title", "description", "guidance"):
+            stored = getattr(control, f, None)
+            current = resp.get(f) if isinstance(resp, dict) else getattr(resp, f, None)
+            if stored and current == stored:
+                fields[f] = stored
+        if fields:
+            entries.append((resp, fields))
+    await localize_fields(db, lang, entries)
+
+
+async def _localize_frameworks(db: AsyncSession, lang: str, pairs) -> None:
+    """(FrameworkResponse, Framework) pairs: name/description in the caller's language."""
+    await localize_fields(db, lang, [
+        (resp, {"name": fw.name, "description": fw.description or ""}) for resp, fw in pairs])
+
+
 class ControlVersionResponse(BaseModel):
     """A past snapshot of a control's editable fields (RFP: suivi des modifications
     réglementaires avec historique — see FrameworkControlVersion's docstring)."""
@@ -477,6 +513,7 @@ async def list_frameworks(
     tenant_id: Annotated[str | None, Depends(get_tenant_id_optional)],
     source_type: Annotated[str | None, Query(description="norme | reglementation | loi | politique_interne | unclassified")] = None,
     q: Annotated[str | None, Query(description="Free-text match on name / short_name / issuing_body")] = None,
+    lang: Annotated[str, Depends(get_display_language)] = "en",
 ):
     """List all available frameworks (built-in + tenant custom). Public for registration step.
 
@@ -524,6 +561,7 @@ async def list_frameworks(
         resp = FrameworkResponse.model_validate(fw)
         resp.control_count = counts.get(fw.id, 0)
         responses.append(resp)
+    await _localize_frameworks(db, lang, zip(responses, frameworks))
 
     return responses
 
@@ -866,6 +904,7 @@ async def get_framework(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
     tenant_id: str = Depends(get_tenant_id),
+    lang: str = Depends(get_display_language),
 ):
     fw = await _get_visible_framework(db, framework_id, tenant_id, current_user)
     count_result = await db.execute(
@@ -873,6 +912,7 @@ async def get_framework(
     )
     resp = FrameworkResponse.model_validate(fw)
     resp.control_count = count_result.scalar_one()
+    await _localize_frameworks(db, lang, [(resp, fw)])
     return resp
 
 
@@ -887,7 +927,7 @@ async def get_framework_controls(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
     tenant_id: str = Depends(get_tenant_id),
-    lang: str = Depends(get_request_language),
+    lang: str = Depends(get_display_language),
 ):
     """Get all controls for a framework, classified and in the caller's language.
 
@@ -931,6 +971,9 @@ async def get_framework_controls(
         _control_response(c, fw, translations.get(c.id), decisions.get(c.id))
         for c in controls
     ]
+    # Fields no human translation covered: the machine translation, if cached.
+    # The edit screen calls this with ?original=1 (lang == "") and gets stored text.
+    await _machine_localize_controls(db, lang, zip(rows, controls))
     if applicability:
         wanted = applicability.strip().lower()
         rows = [r for r in rows if (r.applicability or "") == wanted]
@@ -944,6 +987,7 @@ async def get_control_crosswalk(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
     tenant_id: str = Depends(get_tenant_id),
+    lang: str = Depends(get_display_language),
 ):
     """
     Get cross-framework mappings for a control.
@@ -967,6 +1011,7 @@ async def get_control_crosswalk(
 
     mappings = list(control.mapped_controls or [])
     resolved: list[dict] = []
+    resolved_rows: list[FrameworkControl] = []
     if mappings:
         wanted_fw = {str(m.get("framework") or "").strip().lower() for m in mappings if isinstance(m, dict)}
         wanted_ctrl = {str(m.get("control") or "").strip().lower() for m in mappings if isinstance(m, dict)}
@@ -993,9 +1038,12 @@ async def get_control_crosswalk(
                 hit = index.get(key)
                 if hit:
                     resolved.append(_control_response(hit[0], hit[1]).model_dump())
+                    resolved_rows.append(hit[0])
 
+    main = _control_response(control, fw)
+    await _machine_localize_controls(db, lang, [(main, control), *zip(resolved, resolved_rows)])
     return {
-        "control": _control_response(control, fw),
+        "control": main,
         "mapped_to": mappings,
         "resolved": resolved,
     }
@@ -2366,7 +2414,7 @@ async def search_controls(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
     tenant_id: str = Depends(get_tenant_id),
-    lang: str = Depends(get_request_language),
+    lang: str = Depends(get_display_language),
 ):
     """Search every requirement this tenant can see, across all of its frameworks.
 
@@ -2450,14 +2498,16 @@ async def search_controls(
     # there. Perimeter-scoped rows are left out for the same reason as in the list view.
     decisions = await _applicability_for_controls(db, page_ids, tenant_id)
 
+    items = [
+        _control_response(c, fw, translations.get(c.id), decisions.get(c.id))
+        for c, fw in rows
+    ]
+    await _machine_localize_controls(db, lang, [(item, c) for item, (c, _fw) in zip(items, rows)])
     return ControlSearchResponse(
         total=total,
         limit=limit,
         offset=offset,
-        items=[
-            _control_response(c, fw, translations.get(c.id), decisions.get(c.id))
-            for c, fw in rows
-        ],
+        items=items,
         facets=facets,
     )
 

@@ -149,8 +149,16 @@ async def _notify_tenant_admins(
     title: str,
     message: str,
     link: str | None = None,
+    *,
+    title_key: str | None = None,
+    message_key: str | None = None,
+    params: dict | None = None,
 ) -> None:
-    """Create an in-app notification for every admin/CISO in the tenant."""
+    """Create an in-app notification for every admin/CISO in the tenant.
+
+    title/message are the stored English; the key triple lets the feed render
+    the row in each reader's language (services/notification_i18n).
+    """
     result = await db.execute(
         select(User).where(
             User.tenant_id == tenant_id,
@@ -166,6 +174,9 @@ async def _notify_tenant_admins(
             status=NotificationStatus.UNREAD,
             title=title,
             message=message,
+            title_key=title_key,
+            message_key=message_key,
+            params=params,
             data={"link": link} if link else {},
         ))
 
@@ -245,6 +256,10 @@ async def get_share_link_info(
                 NotificationType.SHARE_LINK_VIEWED,
                 title="Stakeholder opened upload link",
                 message=f'The share link "{link_label}"{ctrl_display} was opened by an external stakeholder.',
+                title_key="notifications.share_link_viewed.title",
+                message_key="notifications.share_link_viewed.message",
+                params={"link": link_label, "control_id": ctrl_id or None,
+                        "control_title": ctrl_title if ctrl_id else None},
             )
             await db.commit()
         except Exception:
@@ -400,6 +415,11 @@ async def upload_evidence_via_token(
                 f'A stakeholder uploaded "{safe_display_name}" ({size_kb} KB){ctrl_display} '
                 f'via share link "{link_label}".'
             ),
+            title_key="notifications.share_link_upload.title",
+            message_key="notifications.share_link_upload.message",
+            params={"file": safe_display_name, "size_kb": size_kb, "link": link_label,
+                    "control_id": ctrl_id or None,
+                    "control_title": ctrl_title if ctrl_id else None},
         )
         await db.commit()
     except Exception:

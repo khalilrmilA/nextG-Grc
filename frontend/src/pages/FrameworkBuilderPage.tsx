@@ -8,6 +8,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
+import type { TFunction } from "i18next";
 import {
   BookOpen, Sparkles, Plus, Check, ChevronRight, ChevronDown, Trash2,
   Search, Loader2, Save, ArrowLeft, AlertCircle, Lightbulb, Library, Wand2, Copy,
@@ -49,6 +50,14 @@ interface SelectedControl {
 
 const STEPS = ["info", "browse", "ai", "review"] as const;
 type Step = typeof STEPS[number];
+
+// Values sent to the API as-is; only the displayed label is translated.
+const BUILDER_INDUSTRIES = ["Technology", "Financial Services", "Healthcare", "Retail", "Manufacturing", "Government", "Education", "Telecommunications", "Energy"];
+const BUILDER_REGIONS = ["Global", "USA", "European Union", "UK", "Asia Pacific", "MENA", "Latin America", "Africa"];
+
+function vocab(t: TFunction, group: string, value: string): string {
+  return t(`fw_options.${group}.${value.toLowerCase().replace(/[^a-z0-9]+/g, "_")}`, { defaultValue: value });
+}
 
 export default function FrameworkBuilderPage() {
   const navigate = useNavigate();
@@ -116,7 +125,9 @@ export default function FrameworkBuilderPage() {
     setImportFwLoading(true);
     setImportSelected(null);
     setImportSearch("");
-    frameworksApi.getControls(importFwId)
+    // Stored text, not a machine translation: the picked control is copied
+    // into the new framework.
+    frameworksApi.getControls(importFwId, { original: 1 })
       .then(ctrls => setImportFwControls(ctrls as Control[]))
       .catch(() => setImportFwControls([]))
       .finally(() => setImportFwLoading(false));
@@ -299,8 +310,8 @@ export default function FrameworkBuilderPage() {
       });
       navigate("/framework");
     } catch (err) {
-      const msg = err instanceof Error ? err.message : "Unknown error";
-      setError(`Failed to save: ${msg}`);
+      const msg = err instanceof Error ? err.message : t("framework_builder.unknown_error");
+      setError(t("framework_builder.save_failed", { msg }));
     } finally {
       setSaving(false);
     }
@@ -411,7 +422,7 @@ export default function FrameworkBuilderPage() {
                 type="text"
                 value={name}
                 onChange={e => setName(e.target.value)}
-                placeholder="My Custom Compliance Framework"
+                placeholder={t("framework_builder.name_placeholder")}
                 className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
             </div>
@@ -445,15 +456,7 @@ export default function FrameworkBuilderPage() {
                 onChange={e => setIndustry(e.target.value)}
                 className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
               >
-                <option>Technology</option>
-                <option>Financial Services</option>
-                <option>Healthcare</option>
-                <option>Retail</option>
-                <option>Manufacturing</option>
-                <option>Government</option>
-                <option>Education</option>
-                <option>Telecommunications</option>
-                <option>Energy</option>
+                {BUILDER_INDUSTRIES.map(v => <option key={v} value={v}>{vocab(t, "industry", v)}</option>)}
               </select>
             </div>
             <div>
@@ -463,14 +466,7 @@ export default function FrameworkBuilderPage() {
                 onChange={e => setRegion(e.target.value)}
                 className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
               >
-                <option>Global</option>
-                <option>USA</option>
-                <option>European Union</option>
-                <option>UK</option>
-                <option>Asia Pacific</option>
-                <option>MENA</option>
-                <option>Latin America</option>
-                <option>Africa</option>
+                {BUILDER_REGIONS.map(v => <option key={v} value={v}>{vocab(t, "region", v)}</option>)}
               </select>
             </div>
           </div>
@@ -635,7 +631,7 @@ export default function FrameworkBuilderPage() {
               <Lightbulb className="w-10 h-10 text-blue-600 mx-auto mb-3" />
               <p className="text-sm font-semibold text-blue-900">{t("frameworks.builder.ai_empty_title")}</p>
               <p className="text-xs text-blue-700 mt-1">
-                {t("frameworks.builder.ai_empty_sub", { industry, region })}
+                {t("frameworks.builder.ai_empty_sub", { industry: vocab(t, "industry", industry), region: vocab(t, "region", region) })}
               </p>
             </div>
           )}
@@ -689,7 +685,7 @@ export default function FrameworkBuilderPage() {
                       <button
                         type="button"
                         onClick={(e) => { e.stopPropagation(); setEditingCategoryIdx(i); }}
-                        title="Click to edit category"
+                        title={t("framework_builder.edit_category")}
                         className="text-[10px] text-gray-500 bg-gray-100 hover:bg-gray-200 px-1.5 py-0.5 rounded transition-colors"
                       >
                         {sug.category}
@@ -769,7 +765,7 @@ export default function FrameworkBuilderPage() {
                           type="text"
                           value={importSearch}
                           onChange={e => setImportSearch(e.target.value)}
-                          placeholder="Search controls…"
+                          placeholder={t("framework_editor.search_controls")}
                           className="w-full border border-gray-200 rounded-lg pl-8 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                         />
                       </div>
@@ -847,7 +843,7 @@ export default function FrameworkBuilderPage() {
                       type="text"
                       value={customCtrl.category}
                       onChange={e => setCustomCtrl(p => ({ ...p, category: e.target.value }))}
-                      placeholder="e.g. Access Control"
+                      placeholder={t("framework_builder.category_placeholder")}
                       className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                     />
                   </div>
@@ -858,7 +854,7 @@ export default function FrameworkBuilderPage() {
                     type="text"
                     value={customCtrl.title}
                     onChange={e => setCustomCtrl(p => ({ ...p, title: e.target.value }))}
-                    placeholder="Control title..."
+                    placeholder={t("framework_builder.title_placeholder")}
                     className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                   />
                 </div>
@@ -868,7 +864,7 @@ export default function FrameworkBuilderPage() {
                     rows={2}
                     value={customCtrl.description}
                     onChange={e => setCustomCtrl(p => ({ ...p, description: e.target.value }))}
-                    placeholder="What this control requires..."
+                    placeholder={t("framework_editor.control_description_placeholder")}
                     className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
                   />
                 </div>
@@ -911,11 +907,11 @@ export default function FrameworkBuilderPage() {
             </div>
             <div>
               <p className="text-xs text-gray-500 uppercase">{t("frameworks.builder.lbl_industry")}</p>
-              <p className="text-sm font-semibold text-gray-900">{industry}</p>
+              <p className="text-sm font-semibold text-gray-900">{vocab(t, "industry", industry)}</p>
             </div>
             <div>
               <p className="text-xs text-gray-500 uppercase">{t("frameworks.builder.lbl_region")}</p>
-              <p className="text-sm font-semibold text-gray-900">{region}</p>
+              <p className="text-sm font-semibold text-gray-900">{vocab(t, "region", region)}</p>
             </div>
           </div>
 
@@ -936,7 +932,9 @@ export default function FrameworkBuilderPage() {
                             c.source_framework === "Custom" ? "bg-green-100 text-green-700"   :
                             "bg-blue-100 text-blue-700"
                           }`}>
-                            {c.source_framework}
+                            {c.source_framework === "AI" || c.source_framework === "Custom" || c.source_framework === "Imported"
+                              ? t(`framework_builder.source.${c.source_framework.toLowerCase()}`)
+                              : c.source_framework}
                           </span>
                         )}
                         {c.category && (

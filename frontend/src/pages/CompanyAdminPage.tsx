@@ -644,17 +644,17 @@ const ENTITY_FILTER_LIST = ["risk","vendor","audit","policy","compliance","asset
 const ACTION_FILTER_LIST  = ["create","update","delete","login","export","import","view","download","approve","close","distribute"];
 const CATEGORY_FILTER_LIST = ["access","validation","change","other"];
 
-function fmtTimeAgo(dateStr: string, justNow: string): string {
+function fmtTimeAgo(dateStr: string, t: (key: string, opts?: Record<string, unknown>) => string, lang: string): string {
   const diff = Math.max(0, Date.now() - new Date(dateStr).getTime());
   const s = Math.floor(diff / 1000);
-  if (s < 60)   return justNow;
+  if (s < 60)   return t("activity_log.time_just_now");
   const m = Math.floor(s / 60);
-  if (m < 60)   return `${m}m`;
+  if (m < 60)   return t("company_admin.ago_minutes_short", { count: m });
   const h = Math.floor(m / 60);
-  if (h < 24)   return `${h}h`;
+  if (h < 24)   return t("company_admin.ago_hours_short", { count: h });
   const d = Math.floor(h / 24);
-  if (d < 30)   return `${d}d`;
-  return new Date(dateStr).toLocaleDateString();
+  if (d < 30)   return t("company_admin.ago_days_short", { count: d });
+  return new Date(dateStr).toLocaleDateString(lang === "ar" ? "ar-u-nu-latn" : lang === "fr" ? "fr-FR" : "en-US");
 }
 
 function avatarColor(email: string): string {
@@ -668,7 +668,8 @@ function avatarColor(email: string): string {
 }
 
 function ActivityLogPanel({ users, initialUserId }: { users: TenantUser[]; initialUserId?: string }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const tStr = (key: string, opts?: Record<string, unknown>): string => { return String(t(key, opts as never)); };
   const [items, setItems]             = useState<any[]>([]);
   const [loading, setLoading]         = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -796,7 +797,7 @@ function ActivityLogPanel({ users, initialUserId }: { users: TenantUser[]; initi
 
           <div className="flex items-center gap-2">
             <label className="text-xs text-gray-500" htmlFor="company-log-from">
-              {t("activity_log.date_from", { defaultValue: t("audit_campaign.period_start") })}
+              {t("company_admin.log_date_from")}
             </label>
             <input
               id="company-log-from"
@@ -808,7 +809,7 @@ function ActivityLogPanel({ users, initialUserId }: { users: TenantUser[]; initi
           </div>
           <div className="flex items-center gap-2">
             <label className="text-xs text-gray-500" htmlFor="company-log-to">
-              {t("activity_log.date_to", { defaultValue: t("audit_campaign.period_end") })}
+              {t("company_admin.log_date_to")}
             </label>
             <input
               id="company-log-to"
@@ -864,7 +865,7 @@ function ActivityLogPanel({ users, initialUserId }: { users: TenantUser[]; initi
 
                 const actionLabel  = t(`activity_log.actions.${entry.action}`,  { defaultValue: entry.action });
                 const entityLabel  = t(`activity_log.entities.${entry.entity_type}`, { defaultValue: entry.entity_type });
-                const timeLabel    = entry.created_at ? fmtTimeAgo(entry.created_at, t("activity_log.time_just_now")) : "–";
+                const timeLabel    = entry.created_at ? fmtTimeAgo(entry.created_at, tStr, i18n.language) : "–";
 
                 return (
                   <div key={entry.id || idx} className="flex items-start gap-4 px-5 py-4 hover:bg-gray-50/60 transition-colors">

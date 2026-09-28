@@ -1,3 +1,4 @@
+import { TranslatedText } from "@/components/common/AutoTranslatedBadge";
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
@@ -543,6 +544,7 @@ function CardContent({
   onDelete?: (item: ActionPlanItem) => void;
   onAttachments?: (item: ActionPlanItem) => void;
 }) {
+  const { i18n } = useTranslation();
   const pStyle  = PRIORITY_STYLE[item.priority as keyof typeof PRIORITY_STYLE] ?? PRIORITY_STYLE.medium;
   const overdue = isOverdue(item.due_date) && item.status !== "completed";
 
@@ -636,9 +638,7 @@ function CardContent({
           </span>
         )}
         {item.control_title && (
-          <span className="text-gray-400 truncate max-w-[160px]" title={item.control_title}>
-            {item.control_title}
-          </span>
+          <TranslatedText item={item} field="control_title" className="text-gray-400 truncate max-w-[160px]" />
         )}
       </div>
 
@@ -655,7 +655,7 @@ function CardContent({
             <span className={`flex items-center gap-1 ${overdue ? "text-red-500 font-semibold" : ""}`}>
               {overdue && <AlertTriangle className="w-3 h-3" />}
               <Calendar className="w-3 h-3" />
-              {new Date(item.due_date).toLocaleDateString()}
+              {new Date(item.due_date).toLocaleDateString(i18n.language?.startsWith("fr") ? "fr-FR" : i18n.language?.startsWith("ar") ? "ar-u-nu-latn" : "en-GB")}
               {overdue && ` ${t("action_plan.overdue_label", "(Overdue)")}`}
             </span>
           )}

@@ -3,10 +3,19 @@ import { useParams } from "react-router-dom";
 import { Upload, CheckCircle, AlertCircle, FileText, Loader2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { shareLinksApi, type ShareLinkInfo } from "@/api/endpoints";
+import LanguageSwitcher from "@/components/LanguageSwitcher";
+
+// Public page (external stakeholders, no app shell): give it its own language picker.
+const LangCorner = () => (
+  <div className="fixed top-4 end-4 z-40"><LanguageSwitcher compact /></div>
+);
+
+/** Display locale for dates, following the interface language. */
+const dateLocale = (lang: string) => (lang.startsWith("fr") ? "fr-FR" : lang.startsWith("ar") ? "ar-u-nu-latn" : "en-US");
 
 export default function EvidenceUploadPage() {
   const { token } = useParams<{ token: string }>();
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const [info, setInfo]             = useState<ShareLinkInfo | null>(null);
   const [loading, setLoading]       = useState(true);
   const [uploading, setUploading]   = useState(false);
@@ -40,6 +49,7 @@ export default function EvidenceUploadPage() {
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <LangCorner />
         <Loader2 className="w-8 h-8 animate-spin text-blue-500" />
       </div>
     );
@@ -48,6 +58,7 @@ export default function EvidenceUploadPage() {
   if (error && !info) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
+        <LangCorner />
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-8 max-w-md w-full text-center">
           <AlertCircle className="w-12 h-12 text-red-400 mx-auto mb-4" />
           <h1 className="text-lg font-semibold text-gray-900 mb-2">{t("share_link.link_unavailable")}</h1>
@@ -60,6 +71,7 @@ export default function EvidenceUploadPage() {
   if (info && !info.is_valid) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
+        <LangCorner />
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-8 max-w-md w-full text-center">
           <AlertCircle className="w-12 h-12 text-orange-400 mx-auto mb-4" />
           <h1 className="text-lg font-semibold text-gray-900 mb-2">{t("share_link.link_expired_title")}</h1>
@@ -71,6 +83,7 @@ export default function EvidenceUploadPage() {
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-4">
+      <LangCorner />
       <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-8 max-w-lg w-full space-y-6">
         {/* Header */}
         <div className="text-center">
@@ -151,7 +164,7 @@ export default function EvidenceUploadPage() {
         )}
         {info?.expires_at && (
           <p className="text-center text-xs text-gray-400">
-            {t("share_link.link_expires")} {new Date(info.expires_at).toLocaleDateString()}
+            {t("share_link.link_expires")} {new Date(info.expires_at).toLocaleDateString(dateLocale(i18n.language))}
           </p>
         )}
       </div>

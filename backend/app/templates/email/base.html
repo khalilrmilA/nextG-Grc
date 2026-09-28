@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="{{ lang | default('en') }}" dir="{{ dir | default('ltr') }}">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -32,10 +32,13 @@
     .footer { padding: 20px 32px; background: #f8fafc; border-top: 1px solid #e2e8f0; }
     .footer p { font-size: 12px; color: #94a3b8; margin: 0; text-align: center; }
     .footer a { color: #64748b; }
+    /* Arabic: the whole card reads right-to-left. Set on the elements too
+       (inline dir), because some clients drop the <html> attributes. */
+    [dir="rtl"] .body, [dir="rtl"] h2, [dir="rtl"] p { text-align: right; }
   </style>
 </head>
-<body>
-  <div class="wrapper">
+<body dir="{{ dir | default('ltr') }}">
+  <div class="wrapper" dir="{{ dir | default('ltr') }}" style="direction: {{ dir | default('ltr') }};">
     <div class="card">
       <div class="header">
         <div class="header-logo">
@@ -44,20 +47,20 @@
           </div>
           <div>
             <h1>GRC Platform</h1>
-            <p>Governance, Risk &amp; Compliance</p>
+            <p>{{ L.strapline if L else 'Governance, Risk & Compliance' }}</p>
           </div>
         </div>
       </div>
       <div class="body">
         {% block content %}{% endblock %}
         {% if action_url %}
-        <a href="{{ action_url }}" class="cta">{{ action_label | default('View in GRC Platform') }}</a>
+        <a href="{{ action_url }}" class="cta">{{ action_label | default(L.default_cta if L else 'View in GRC Platform') }}</a>
         {% endif %}
       </div>
       <div class="footer">
         <p>
-          This notification was sent to <strong>{{ recipient_email }}</strong> because you have alerts enabled.<br/>
-          <a href="{{ unsubscribe_url | default('#') }}">Manage notification preferences</a> &middot;
+          {{ L.sent_to_before if L else 'This notification was sent to' }} <strong dir="ltr">{{ recipient_email }}</strong> {{ L.sent_to_after if L else 'because you have alerts enabled.' }}<br/>
+          <a href="{{ unsubscribe_url | default('#') }}">{{ L.manage if L else 'Manage notification preferences' }}</a> &middot;
           <a href="https://grcplatform.com">GRC Platform</a>
         </p>
       </div>

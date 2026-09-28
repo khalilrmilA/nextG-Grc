@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { Outlet, NavLink, useNavigate, useLocation } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
+import type { TFunction } from "i18next";
 import { useAuthStore, authSession, PLAN_FEATURES, getUserRoles, type PlanTier } from "../../store/auth";
 import AIAssistant from "../ai/AIAssistant";
 import LanguageSwitcher from "../LanguageSwitcher";
@@ -20,7 +21,7 @@ import {
   AlertCircle, Info, ShieldAlert, ClipboardCheck, RefreshCw,
   Eye, Users, Headphones, Map, ListTodo, Boxes, BarChart3, Gauge, Bug, Radar, Scale, Archive, Database, ScanLine, Network,
   Target, Workflow, Siren, ShieldCheck, ShieldOff, Landmark, Webhook,
-  Library, ListChecks, Grid3x3, ScrollText,
+  Library, ListChecks, Grid3x3,
 } from "lucide-react";
 import { kbArticleForPath } from "../../kb";
 
@@ -61,10 +62,15 @@ const NAV_GROUPS = [
     ],
   },
   {
-    id: "asset_risk", label: "Asset & Risk Management", icon: Boxes,
+    id: "assets", label: "Asset Management", icon: Boxes,
     items: [
       { to: "/assets",     icon: Boxes,           label: "Assets",        module: "assets",     roles: null },
       { to: "/asset-graph", icon: Network,     label: "Asset Cartography", module: "asset-graph", roles: ["tenant_admin","ciso","risk_manager","compliance_manager","control_owner","business_owner","security_analyst","viewer","executive"] },
+    ],
+  },
+  {
+    id: "risk", label: "Risk Management", icon: Target,
+    items: [
       { to: "/risks",          icon: Target,          label: "Risk Register",  module: "risks",          roles: ["tenant_admin","ciso","risk_manager","compliance_manager","control_owner","business_owner","security_analyst","viewer","executive"] },
       { to: "/risk-scenarios", icon: Workflow,        label: "Risk Scenarios", module: "risk-scenarios", roles: ["tenant_admin","ciso","risk_manager","compliance_manager","control_owner","business_owner","security_analyst","viewer","executive"] },
       { to: "/risk-cartography", icon: Map,           label: "Risk Cartography", module: "risk-cartography", roles: ["tenant_admin","ciso","risk_manager","compliance_manager","control_owner","business_owner","security_analyst","viewer","executive"] },
@@ -72,28 +78,43 @@ const NAV_GROUPS = [
     ],
   },
   {
-    id: "security", label: "Vulnerability & Threats", icon: Bug,
+    id: "vulnerability", label: "Vulnerability Management", icon: Bug,
     items: [
       { to: "/vulnerabilities", icon: Bug,      label: "Vulnerabilities",   module: "vulnerabilities", roles: null },
       { to: "/cve",             icon: Database,  label: "CVE Knowledge Base", module: "cve",            roles: null },
+    ],
+  },
+  {
+    id: "threat", label: "Threat Management", icon: Radar,
+    items: [
       { to: "/threats",         icon: Radar,    label: "Threat Library",    module: "threats",         roles: ["tenant_admin","ciso","risk_manager","compliance_manager","control_owner","business_owner","security_analyst","viewer","executive"] },
+    ],
+  },
+  {
+    id: "incident", label: "Incident Management", icon: Siren,
+    items: [
       { to: "/incidents",       icon: Siren,     label: "Incidents",          module: "incidents",         roles: ["tenant_admin","ciso","risk_manager","compliance_manager","control_owner","business_owner","security_analyst","viewer","executive"] },
     ],
   },
   {
-    id: "compliance", label: "Compliance & Controls", icon: CheckSquare,
+    id: "compliance", label: "Compliance Management", icon: CheckSquare,
     items: [
       { to: "/compliance", icon: CheckSquare,     label: "Compliance",    module: "compliance", roles: ["tenant_admin","ciso","risk_manager","compliance_manager","policy_manager","control_owner","business_owner","security_analyst","viewer","executive"] },
       { to: "/framework",  icon: BookOpen,        label: "Frameworks",    module: "frameworks", roles: ["tenant_admin","ciso","compliance_manager","policy_manager","viewer","executive"] },
       { to: "/requirements", icon: Library,   label: "Requirements Referential", module: "requirements", roles: ["tenant_admin","ciso","compliance_manager","policy_manager","viewer","executive"] },
       { to: "/action-plan", icon: ListTodo,       label: "Action Plan",   module: "action-plan", roles: ["tenant_admin","ciso","risk_manager","compliance_manager","control_owner","business_owner","security_analyst","viewer","executive"] },
-      { to: "/control-effectiveness", icon: Gauge, label: "Control Effectiveness", module: "control-effectiveness", roles: ["tenant_admin","ciso","risk_manager","control_owner","business_owner","security_analyst","viewer","executive"] },
+    ],
+  },
+  {
+    id: "controls", label: "Control Management", icon: ShieldCheck,
+    items: [
       { to: "/applied-controls",    icon: ShieldCheck, label: "Applied Controls",     module: "applied-controls",    roles: ["tenant_admin","ciso","risk_manager","compliance_manager","control_owner","business_owner","security_analyst","viewer","executive"] },
+      { to: "/control-effectiveness", icon: Gauge, label: "Control Effectiveness", module: "control-effectiveness", roles: ["tenant_admin","ciso","risk_manager","control_owner","business_owner","security_analyst","viewer","executive"] },
       { to: "/security-exceptions", icon: ShieldOff,   label: "Exceptions & Waivers", module: "security-exceptions", roles: ["tenant_admin","ciso","risk_manager","compliance_manager","control_owner","business_owner","security_analyst","viewer","executive"] },
     ],
   },
   {
-    id: "audit", label: "Audit", icon: ClipboardList,
+    id: "audit", label: "Audit Management", icon: ClipboardList,
     items: [
       { to: "/audits",           icon: ClipboardList,  label: "Audits",             module: "audits",           roles: ["tenant_admin","ciso","compliance_manager","viewer","executive"] },
       { to: "/recommendations", icon: ListChecks,     label: "Recommendation Tracking", module: "recommendations", roles: ["tenant_admin","ciso","compliance_manager","risk_manager","auditor","control_owner","business_owner","viewer","executive"] },
@@ -109,7 +130,7 @@ const NAV_GROUPS = [
     ],
   },
   {
-    id: "third_parties", label: "Third Parties", icon: Building2,
+    id: "third_parties", label: "Third-Party Management", icon: Building2,
     items: [
       { to: "/vendors",          icon: Building2,      label: "3rd Parties (TPRM)", module: "vendors",          roles: ["tenant_admin","ciso","vendor_manager","viewer","executive"] },
     ],
@@ -119,7 +140,6 @@ const NAV_GROUPS = [
     items: [
       { to: "/governance", icon: Scale,   label: "Governance", module: "governance", roles: ["tenant_admin","ciso","compliance_manager","policy_manager","viewer","executive"] },
       { to: "/regulatory",          icon: Landmark,   label: "Regulatory Updates",  module: "regulatory",          roles: ["tenant_admin","ciso","compliance_manager","policy_manager","viewer","executive"] },
-      { to: "/activity-log", icon: ScrollText, label: "Activity Log", module: "activity_log", roles: ["tenant_admin","ciso","compliance_manager","auditor","risk_manager"] },
       { to: "/archiving",  icon: Archive, label: "Archiving",  module: "archiving",  roles: ["tenant_admin","ciso","compliance_manager","auditor","risk_manager"] },
       { to: "/webhooks",            icon: Webhook,     label: "Webhooks",            module: "webhooks",            roles: ["tenant_admin"] },
     ],
@@ -134,7 +154,7 @@ const NAV_GROUPS = [
 ];
 
 const AUDITOR_NAV = [
-  { to: "/auditor/portal", icon: ClipboardCheck, label: "My Assignments" },
+  { to: "/auditor/portal", icon: ClipboardCheck, labelKey: "nav.my_assignments" },
 ];
 
 const PAGE_LABELS: Record<string, string> = {
@@ -165,7 +185,6 @@ const PAGE_LABELS: Record<string, string> = {
   "applied-controls": "Applied Controls",
   "security-exceptions": "Exceptions & Waivers",
   regulatory: "Regulatory Updates",
-  "activity-log": "Activity Log",
   webhooks:   "Webhooks",
   settings:   "Settings",
   help:       "Help & Support",
@@ -196,14 +215,14 @@ function notifStyle(type: string) {
   return                                     { Icon: Info,           bg: "bg-gray-50",   icon: "text-gray-500"   };
 }
 
-function timeAgo(iso: string) {
+function timeAgo(iso: string, t: TFunction) {
   const diff = Date.now() - new Date(iso).getTime();
   const mins = Math.floor(diff / 60000);
-  if (mins < 1)   return "just now";
-  if (mins < 60)  return `${mins}m ago`;
+  if (mins < 1)   return t("layout_ui.just_now");
+  if (mins < 60)  return t("layout_ui.minutes_ago", { count: mins });
   const hrs = Math.floor(mins / 60);
-  if (hrs < 24)   return `${hrs}h ago`;
-  return `${Math.floor(hrs / 24)}d ago`;
+  if (hrs < 24)   return t("layout_ui.hours_ago", { count: hrs });
+  return t("layout_ui.days_ago", { count: Math.floor(hrs / 24) });
 }
 
 // ── Demo notifications shown when backend is unavailable ─────────────────────
@@ -282,7 +301,7 @@ function NotificationBell() {
             osc.start(ctx.currentTime); osc.stop(ctx.currentTime + 0.5);
           } catch { /* ignore */ }
           if (typeof Notification !== "undefined" && Notification.permission === "granted") {
-            new Notification("Support replied to your ticket", {
+            new Notification(t("nav.support_replied"), {
               body: `"${data.ticket_title}" — ${data.content}`,
               icon: "/favicon.ico",
             });
@@ -293,6 +312,7 @@ function NotificationBell() {
 
     es.onerror = () => {};
     return () => { es.close(); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Try to fetch real notifications; fall back to demo data on error
@@ -303,7 +323,15 @@ function NotificationBell() {
     refetchInterval: 30_000,
   });
 
-  const notifications: AppNotification[] = isError || !data ? DEMO_NOTIFICATIONS : data.items;
+  const usingDemo = isError || !data;
+  // Demo notifications are UI text (not backend data), so they follow the UI language.
+  const notifications: AppNotification[] = usingDemo
+    ? DEMO_NOTIFICATIONS.map(n => ({
+        ...n,
+        title: t(`layout_ui.demo.${n.id}_title` as never, n.title),
+        message: t(`layout_ui.demo.${n.id}_message` as never, n.message),
+      }))
+    : data.items;
   const backendUnread = isError || !data
     ? DEMO_NOTIFICATIONS.filter(n => n.status === "unread").length
     : data.unread_count;
@@ -350,7 +378,7 @@ function NotificationBell() {
         type="button"
         onClick={() => { setOpen(v => !v); if (!open && supportUnread.length > 0) setSupportUnread([]); }}
         className="relative w-8 h-8 rounded-lg flex items-center justify-center text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition-colors"
-        aria-label="Notifications"
+        aria-label={t("nav.notifications")}
       >
         <Bell className={`w-4 h-4 ${supportUnread.length > 0 ? "animate-bounce text-red-500" : ""}`} />
         {supportUnread.length > 0 && (
@@ -372,7 +400,7 @@ function NotificationBell() {
               <h3 className="font-semibold text-gray-900 text-sm">{t("nav.notifications")}</h3>
               {unreadCount > 0 && (
                 <span className="text-xs font-semibold px-1.5 py-0.5 bg-red-50 text-red-600 rounded-full">
-                  {unreadCount} new
+                  {t("layout_ui.unread_new", { count: unreadCount })}
                 </span>
               )}
             </div>
@@ -382,7 +410,8 @@ function NotificationBell() {
                 onClick={() => checkDeadlines.mutate()}
                 disabled={checkDeadlines.isPending}
                 className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors disabled:opacity-50"
-                title="Check deadlines now"
+                title={t("layout_ui.check_deadlines")}
+                aria-label={t("layout_ui.check_deadlines")}
               >
                 <RefreshCw className={`w-3.5 h-3.5 ${checkDeadlines.isPending ? "animate-spin" : ""}`} />
               </button>
@@ -398,6 +427,8 @@ function NotificationBell() {
               <button
                 type="button"
                 onClick={() => setOpen(false)}
+                aria-label={t("common.close")}
+                title={t("common.close")}
                 className="p-1 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors"
               >
                 <X className="w-3.5 h-3.5" />
@@ -419,7 +450,7 @@ function NotificationBell() {
                     <Bell className="w-4 h-4 text-blue-600" />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-xs font-bold text-blue-700">Support replied to your ticket</p>
+                    <p className="text-xs font-bold text-blue-700">{t("nav.support_replied")}</p>
                     <p className="text-xs font-semibold text-gray-800 mt-0.5 truncate">"{s.title}"</p>
                     <p className="text-xs text-gray-500 mt-0.5 line-clamp-2">{s.content}</p>
                   </div>
@@ -464,12 +495,14 @@ function NotificationBell() {
                         )}
                       </div>
                       <p className="text-xs text-gray-500 mt-0.5 line-clamp-2">{n.message}</p>
-                      <p className="text-xs text-gray-400 mt-1">{timeAgo(n.created_at)}</p>
+                      <p className="text-xs text-gray-400 mt-1">{timeAgo(n.created_at, t)}</p>
                     </div>
                     {!isError && (
                       <button
                         type="button"
                         onClick={e => { e.stopPropagation(); deleteNotif.mutate(n.id); }}
+                        title={t("common.delete")}
+                        aria-label={t("common.delete")}
                         className="flex-shrink-0 opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-gray-200 text-gray-400 hover:text-red-500 transition-all"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
@@ -546,7 +579,10 @@ export default function Layout() {
   const isRTL = i18n.language === "ar";
   const qc = useQueryClient();
   const segment  = location.pathname.split("/")[1] || "dashboard";
-  const pageLabel = t(`nav.${segment.replace(/-/g, "_")}` as never, PAGE_LABELS[segment] ?? segment);
+  const segKey = segment.replace(/-/g, "_");
+  const pageLabel = i18n.exists(`nav.${segKey}`)
+    ? t(`nav.${segKey}` as never)
+    : t(`layout_ui.pages.${segKey}` as never, PAGE_LABELS[segment] ?? segment);
   const [appearance] = useAppearance();
   const sc = sidebarTextClasses(appearance.sidebarStyle);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
@@ -660,12 +696,13 @@ export default function Layout() {
   const { Icon: RoleIcon, color: roleColor } = roleIcon(user?.role ?? "viewer");
   const initials = (user?.name ?? "U").charAt(0).toUpperCase();
   // Role label: super_admin → "Admin", everyone else → their company name
-  const planLabel = isSuperAdmin ? t("roles.admin") : (user?.org ?? PLAN_FEATURES[plan]?.label ?? "Elite Pack");
+  const planName = t(`layout_ui.plans.${plan}` as never, PLAN_FEATURES[plan]?.label ?? t("layout_ui.plans.elite"));
+  const planLabel = isSuperAdmin ? t("roles.admin") : (user?.org ?? planName);
   function resolvePlanSub() {
     if (isSuperAdmin) return t("nav.platform_owner");
     if (isAdmin) return t("nav.account_owner");
-    if (plan === "free_trial") return `${user?.daysRemaining ?? 14} days remaining`;
-    return PLAN_FEATURES[plan]?.label ?? "Elite Pack";
+    if (plan === "free_trial") return t("plan.days_remaining", { days: user?.daysRemaining ?? 14 });
+    return planName;
   }
   const planSub = resolvePlanSub();
 
@@ -691,12 +728,12 @@ export default function Layout() {
       >
         {/* Logo + mobile close */}
         <div className={`flex items-center justify-between px-4 py-4 border-b ${sc.divider}`}>
-          <img src="/logowhite.png" alt="GRCEye — Governance, Risk & Compliance Platform" className="h-20 w-auto object-contain" />
+          <img src="/logowhite.png" alt={t("layout_ui.logo_alt")} className="h-20 w-auto object-contain" />
           <button
             type="button"
             onClick={() => setMobileSidebarOpen(false)}
             className="md:hidden w-8 h-8 rounded-lg flex items-center justify-center text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition-colors"
-            aria-label="Close menu"
+            aria-label={t("layout_ui.close_menu")}
           >
             <X className="w-5 h-5" />
           </button>
@@ -726,7 +763,7 @@ export default function Layout() {
               onClick={() => navigate("/settings")}
               className={`mt-2 w-full text-xs font-medium ${badge.text} hover:opacity-80 text-left`}
             >
-              Upgrade →
+              {t("nav.upgrade_arrow")}
             </button>
           )}
         </div>
@@ -740,7 +777,7 @@ export default function Layout() {
                 {t("nav.audit_portal")}
               </p>
               <div className="space-y-0.5">
-                {AUDITOR_NAV.map(({ to, icon: Icon, label }) => (
+                {AUDITOR_NAV.map(({ to, icon: Icon, labelKey }) => (
                   <NavLink
                     key={to}
                     to={to}
@@ -753,7 +790,7 @@ export default function Layout() {
                     {({ isActive }) => (
                       <>
                         <Icon className={`w-4 h-4 flex-shrink-0 ${isActive ? sc.navIconActive : sc.navIcon}`} />
-                        <span className="flex-1">{label}</span>
+                        <span className="flex-1">{t(labelKey as never)}</span>
                       </>
                     )}
                   </NavLink>
@@ -772,17 +809,18 @@ export default function Layout() {
               const gatedBy = MODULE_FEATURES[module];
               const locked = gatedBy ? !hasAnyFeature(gatedBy) : false;
               const pad = nested ? "ps-9 pe-3 py-2" : "px-3 py-2.5";
+              const itemLabel = t(`nav.${module.replace(/-/g, "_")}` as never, label);
               if (locked) {
                 return (
                   <button
                     key={to}
                     type="button"
                     onClick={() => navigate("/settings")}
-                    title={`${label} is not enabled for your organisation`}
+                    title={t("layout_ui.module_not_enabled", { module: itemLabel })}
                     className={`flex items-center gap-3 ${pad} rounded-xl text-sm font-medium w-full transition-all group opacity-50 ${sc.navItem}`}
                   >
                     <Icon className="w-4 h-4 flex-shrink-0" />
-                    <span className="flex-1 text-left">{t(`nav.${module}` as never, label)}</span>
+                    <span className="flex-1 text-start">{itemLabel}</span>
                     <Lock className="w-3 h-3 group-hover:text-blue-400 transition-colors" />
                   </button>
                 );
@@ -800,7 +838,7 @@ export default function Layout() {
                   {({ isActive }) => (
                     <>
                       <Icon className={`w-4 h-4 flex-shrink-0 ${isActive ? sc.navIconActive : sc.navIcon}`} />
-                      <span className="flex-1">{t(`nav.${module.replace(/-/g, "_")}` as never, label)}</span>
+                      <span className="flex-1">{itemLabel}</span>
                     </>
                   )}
                 </NavLink>
@@ -902,7 +940,7 @@ export default function Layout() {
               type="button"
               onClick={() => setMobileSidebarOpen(true)}
               className="md:hidden w-8 h-8 rounded-lg flex items-center justify-center text-gray-500 hover:bg-gray-100 transition-colors"
-              aria-label="Open menu"
+              aria-label={t("layout_ui.open_menu")}
             >
               <Menu className="w-5 h-5" />
             </button>
@@ -944,9 +982,9 @@ export default function Layout() {
                 )}
               </div>
               <div className="hidden sm:block">
-                <p className="text-xs font-semibold text-gray-800 leading-none">{user?.name ?? "User"}</p>
+                <p className="text-xs font-semibold text-gray-800 leading-none">{user?.name ?? t("layout_ui.user")}</p>
                 <p className="text-xs text-gray-400 mt-0.5">
-                  {isSuperAdmin ? "Platform Admin" : isAdmin ? `${user?.org} · Owner` : user?.role === "viewer" ? `${user?.org ?? ""} · Read-only` : user?.org ?? ""}
+                  {isSuperAdmin ? t("layout_ui.platform_admin") : isAdmin ? `${user?.org} · ${t("layout_ui.owner")}` : user?.role === "viewer" ? `${user?.org ?? ""} · ${t("layout_ui.read_only")}` : user?.org ?? ""}
                 </p>
               </div>
             </div>
@@ -979,7 +1017,7 @@ export default function Layout() {
         <div className="fixed bottom-6 left-1/2 -translate-x-1/2 rtl:left-auto rtl:right-1/2 rtl:translate-x-1/2 z-[200] flex items-center gap-3 bg-gray-900 text-white text-sm font-medium px-5 py-3 rounded-2xl shadow-2xl">
           <Eye className="w-4 h-4 text-amber-400 flex-shrink-0" />
           <span>{t("nav.read_only_toast")}</span>
-          <button type="button" onClick={() => setShowDemoToast(false)} className="ml-1 text-gray-400 hover:text-white">
+          <button type="button" onClick={() => setShowDemoToast(false)} aria-label={t("common.close")} className="ml-1 text-gray-400 hover:text-white">
             <X className="w-4 h-4" />
           </button>
         </div>

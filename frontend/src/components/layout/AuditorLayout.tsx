@@ -28,13 +28,13 @@ export default function AuditorLayout() {
 
         {/* Logo */}
         <div className="flex flex-col items-center px-4 py-4 border-b border-slate-700/60">
-          <img src="/logo-vertical.png" alt="GRCEye — Governance, Risk & Compliance Platform" className="h-24 w-auto object-contain bg-white/95 rounded-xl p-2" />
+          <img src="/logo-vertical.png" alt={t("auditor_portal.logo_alt")} className="h-24 w-auto object-contain bg-white/95 rounded-xl p-2" />
         </div>
 
         {/* Company badge */}
         <div className="mx-4 mt-3 px-3 py-2.5 bg-gradient-to-r from-purple-500/10 to-violet-500/10 border border-purple-500/20 rounded-xl">
           <p className="text-xs font-semibold text-purple-300">{user?.org ?? t("auditor_portal.your_company")}</p>
-          <p className="text-xs text-purple-400/70 mt-0.5">Auditor</p>
+          <p className="text-xs text-purple-400/70 mt-0.5">{t("roles.auditor")}</p>
         </div>
 
         {/* Nav */}
@@ -96,7 +96,7 @@ export default function AuditorLayout() {
               </div>
               <div className="hidden sm:block">
                 <p className="text-xs font-semibold text-gray-800 leading-none">{user?.name ?? t("roles.auditor")}</p>
-                <p className="text-xs text-gray-400 mt-0.5">{user?.org} · Auditor</p>
+                <p className="text-xs text-gray-400 mt-0.5">{user?.org} · {t("roles.auditor")}</p>
               </div>
             </div>
           </div>

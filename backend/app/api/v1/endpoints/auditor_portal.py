@@ -58,6 +58,7 @@ from app.services import ai_prompts, ai_provider, file_integrity
 from app.services.activity_chain import chain_and_add
 from app.services.ai_chunking import chunk_text, estimate_tokens, input_budget
 from app.services.ai_locale import get_request_language
+from app.services.content_translation import get_display_language, localize_fields
 
 logger = logging.getLogger(__name__)
 
@@ -724,7 +725,7 @@ async def _grid_payload(db: AsyncSession, audit: Any) -> dict | None:
 
 
 async def _assessment_checklist_payload(
-    db: AsyncSession, assessment: Any,
+    db: AsyncSession, assessment: Any, lang: str = "",
 ) -> tuple[list[dict], list[dict], list]:
     """Today's checklist: one row per control assessment plus the auditor-visible
     document panel. Extracted verbatim from `get_audit_checklist` so the
@@ -749,6 +750,12 @@ async def _assessment_checklist_payload(
         _build_checklist_row(ca, ctrl_map.get(ca.control_id), clause_doc_map, ca_evidence_map.get(ca.id))
         for ca in cas
     ]
+    # Requirement text in the reader's language (cached machine translations of
+    # built-in requirements); stored text in original_control_*.
+    await localize_fields(db, lang, [
+        (row, {"control_title": row.get("control_title") or "",
+               "control_description": row.get("control_description") or ""})
+        for row in checklist])
     documents = [_build_document_row(d, md_map) for d in visible_docs]
     # Also surface evidence files in the top-level documents panel
     for ev in all_evidence:
@@ -863,6 +870,7 @@ async def get_audit_checklist(
     db: Annotated[AsyncSession, Depends(get_db)],
     current_user: Annotated[User, Depends(require_roles(UserRole.AUDITOR))],
     tenant_id: Annotated[str, Depends(get_tenant_id)],
+    lang: Annotated[str, Depends(get_display_language)] = "",
 ):
     """Return the audit checklist for an assigned assessment (auditor read-only view)."""
     # Verify auditor is assigned to this assessment
@@ -891,7 +899,7 @@ async def get_audit_checklist(
     if not assessment:
         raise HTTPException(status_code=404, detail="Assessment not found")
 
-    checklist, documents, _cas = await _assessment_checklist_payload(db, assessment)
+    checklist, documents, _cas = await _assessment_checklist_payload(db, assessment, lang)
 
     # If an engagement covering this assessment runs on a custom grid, ship the
     # grid alongside the control rows and validate verdicts against its levels.
@@ -1167,7 +1175,7 @@ async def generate_audit_report(
     framework_name = ai_provider.clean_field(fw.name, 200) if fw else "Unknown framework"
     framework_short_name = (ai_provider.clean_field(fw.short_name, 50) if fw else "") or framework_name
     framework_version = (ai_provider.clean_field(fw.version, 30) if fw else "") or "(edition not stated)"
-    auditor_name = ai_provider.clean_field(current_user.name, 150) or "the auditor"
+    auditor_name = ai_provider.clean_field(getattr(current_user, "full_name", "") or current_user.email, 150) or "the auditor"
 
     try:
         user_prompt = ai_prompts.render_user_prompt(
@@ -1387,6 +1395,7 @@ async def get_engagement_checklist(
     db: Annotated[AsyncSession, Depends(get_db)],
     current_user: Annotated[User, Depends(require_roles(UserRole.AUDITOR))],
     tenant_id: Annotated[str, Depends(get_tenant_id)],
+    lang: Annotated[str, Depends(get_display_language)] = "",
 ):
     """The engagement's checklist.
 
@@ -1410,7 +1419,7 @@ async def get_engagement_checklist(
     controls: list[dict] = []
     documents: list[dict] = []
     if assessment is not None:
-        controls, documents, _cas = await _assessment_checklist_payload(db, assessment)
+        controls, documents, _cas = await _assessment_checklist_payload(db, assessment, lang)
 
     return {
         "audit_id": audit.id,

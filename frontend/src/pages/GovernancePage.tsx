@@ -14,200 +14,10 @@ import { governanceApi, usersApi, policiesApi } from "@/api/endpoints";
 import { apiClient } from "@/api/client";
 import { MultiSelect } from "@/components/common/MultiSelect";
 import ModuleDashboard from "@/components/dashboards/ModuleDashboard";
-import i18n from "@/i18n";
 
-/* ── French and Arabic for the governance strings that have no locale entry ──
- * locales/{en,fr,ar}.ts contain NO `governance` section at all (verified: the
- * top-level keys are common, nav, auth, dashboard, compliance, … and there is
- * no governance one), so every string on this page came from the English
- * `defaultValue` of its own t() call — and a defaultValue is used for EVERY
- * language. The whole of objectif 6's page therefore rendered in English to a
- * French and to an Arabic reader: the RACI matrix, the document repository, the
- * committee editor, the access grants, the group picker and the role preview.
- * The full set of this page's own labels is supplied below, not just the ones
- * added with the dashboard. Registered the way
- * i18n/index.ts already registers eliteLocales and gapfills, and
- * NON-DESTRUCTIVELY (last argument false) because locales/*.ts belong to
- * another lane in this wave: the moment that lane defines one of these keys for
- * real, its value is already in the store and wins. See needs_integration. */
-const GOVERNANCE_I18N: Record<string, Record<string, string>> = {
-  en: {
-    add_group: "Add group",
-    access: "Access",
-    access_denied: "You don't have permission to manage access on this document.",
-    access_save_error: "Could not grant access.",
-    activity: "Activity / decision",
-    add: "Add",
-    by_role: "By role",
-    by_user: "User",
-    cadence: "Cadence",
-    committee_name: "Committee name",
-    committees: "Steering committees",
-    doc_title: "Title",
-    documents: "Document repository",
-    edit_committee: "Edit committee",
-    elite: "Elite Pack",
-    grant: "Grant",
-    linked_documents: "Linked documents",
-    linked_policies: "Linked policies",
-    manage_access: "Manage access",
-    module: "Module",
-    new_committee: "New committee",
-    new_doc: "New document",
-    next_meeting: "Next meeting",
-    no_committees: "No steering committees yet.",
-    no_docs: "No documents yet.",
-    no_grants: "No explicit grants yet — falls back to the document's default access level.",
-    no_policies: "No policies found",
-    no_raci: "No RACI assignments yet.",
-    raci: "RACI matrix",
-    responsible: "Responsible",
-    select_documents: "Select documents…",
-    select_policies: "Select policies…",
-    select_user: "Select a user…",
-    subtitle: "RACI responsibility matrix and the governance document repository",
-    title: "Governance",
-    typology: "Typology",
-    version: "Version",
-    by_group: "By group",
-    custom_role: "Custom role",
-    group_name: "Group name",
-    groups: "Groups",
-    users_directory: "User directory",
-    members: "Members",
-    no_assignments: "No assignments for this role yet.",
-    no_users: "No users found",
-    preview_of: "Responsibilities of",
-    preview_role: "Preview role",
-    select_group: "Select group…",
-    select_members: "Select members…",
-    unknown_group: "Unknown group",
-    load_failed: "These sections could not be read and are shown empty for that reason, not because they hold nothing: {{sections}}.",
-    // R / A / C / I were a hard-coded English map (RACI_LABEL) printed straight
-    // into the picker, so they never translated at all.
-    raci_r: "Responsible",
-    raci_a: "Accountable",
-    raci_c: "Consulted",
-    raci_i: "Informed",
-  },
-  fr: {
-    add_group: "Ajouter un groupe",
-    access: "Accès",
-    access_denied: "Votre profil n'est pas autorisé à gérer les accès de ce document.",
-    access_save_error: "L'accès n'a pas pu être accordé.",
-    activity: "Activité / décision",
-    add: "Ajouter",
-    by_role: "Par rôle",
-    by_user: "Utilisateur",
-    cadence: "Périodicité",
-    committee_name: "Nom du comité",
-    committees: "Comités de pilotage",
-    doc_title: "Titre",
-    documents: "Référentiel documentaire",
-    edit_committee: "Modifier le comité",
-    elite: "Pack Elite",
-    grant: "Accorder",
-    linked_documents: "Documents liés",
-    linked_policies: "Politiques liées",
-    manage_access: "Gérer les accès",
-    module: "Module",
-    new_committee: "Nouveau comité",
-    new_doc: "Nouveau document",
-    next_meeting: "Prochaine réunion",
-    no_committees: "Aucun comité de pilotage pour l'instant.",
-    no_docs: "Aucun document pour l'instant.",
-    no_grants: "Aucun accès explicite pour l'instant — le niveau d'accès par défaut du document s'applique.",
-    no_policies: "Aucune politique trouvée",
-    no_raci: "Aucune attribution RACI pour l'instant.",
-    raci: "Matrice RACI",
-    responsible: "Responsable",
-    select_documents: "Sélectionner des documents…",
-    select_policies: "Sélectionner des politiques…",
-    select_user: "Sélectionner un utilisateur…",
-    subtitle: "Matrice de responsabilités RACI et référentiel documentaire de gouvernance",
-    title: "Gouvernance",
-    typology: "Typologie",
-    version: "Version",
-    by_group: "Par groupe",
-    custom_role: "Rôle personnalisé",
-    group_name: "Nom du groupe",
-    groups: "Groupes",
-    users_directory: "Annuaire des utilisateurs",
-    members: "Membres",
-    no_assignments: "Aucune attribution pour ce rôle pour l'instant.",
-    no_users: "Aucun utilisateur trouvé",
-    preview_of: "Responsabilités de",
-    preview_role: "Aperçu du rôle",
-    select_group: "Sélectionner un groupe…",
-    select_members: "Sélectionner des membres…",
-    unknown_group: "Groupe inconnu",
-    load_failed: "Ces sections n'ont pas pu être lues et apparaissent vides pour cette raison, non parce qu'elles ne contiennent rien : {{sections}}.",
-    raci_r: "Réalise",
-    raci_a: "Approuve",
-    raci_c: "Consulté",
-    raci_i: "Informé",
-  },
-  ar: {
-    add_group: "إضافة مجموعة",
-    access: "الوصول",
-    access_denied: "ملفك الشخصي غير مخوَّل لإدارة صلاحيات الوصول لهذا المستند.",
-    access_save_error: "تعذّر منح الوصول.",
-    activity: "النشاط / القرار",
-    add: "إضافة",
-    by_role: "حسب الدور",
-    by_user: "المستخدم",
-    cadence: "الدورية",
-    committee_name: "اسم اللجنة",
-    committees: "لجان التسيير",
-    doc_title: "العنوان",
-    documents: "مرجعية المستندات",
-    edit_committee: "تعديل اللجنة",
-    elite: "حزمة Elite",
-    grant: "منح",
-    linked_documents: "المستندات المرتبطة",
-    linked_policies: "السياسات المرتبطة",
-    manage_access: "إدارة الوصول",
-    module: "الوحدة",
-    new_committee: "لجنة جديدة",
-    new_doc: "مستند جديد",
-    next_meeting: "الاجتماع القادم",
-    no_committees: "لا توجد لجان تسيير بعد.",
-    no_docs: "لا توجد مستندات بعد.",
-    no_grants: "لا توجد صلاحيات صريحة بعد — يُطبَّق مستوى الوصول الافتراضي للمستند.",
-    no_policies: "لم يُعثر على أي سياسة",
-    no_raci: "لا توجد إسنادات RACI بعد.",
-    raci: "مصفوفة RACI",
-    responsible: "المسؤول",
-    select_documents: "اختر مستندات…",
-    select_policies: "اختر سياسات…",
-    select_user: "اختر مستخدماً…",
-    subtitle: "مصفوفة مسؤوليات RACI ومرجعية مستندات الحوكمة",
-    title: "الحوكمة",
-    typology: "التصنيف",
-    version: "الإصدار",
-    by_group: "حسب المجموعة",
-    custom_role: "دور مخصص",
-    group_name: "اسم المجموعة",
-    groups: "المجموعات",
-    users_directory: "دليل المستخدمين",
-    members: "الأعضاء",
-    no_assignments: "لا توجد إسنادات لهذا الدور بعد.",
-    no_users: "لا يوجد مستخدمون",
-    preview_of: "مسؤوليات",
-    preview_role: "معاينة الدور",
-    select_group: "اختر مجموعة…",
-    select_members: "اختر الأعضاء…",
-    unknown_group: "مجموعة غير معروفة",
-    load_failed: "تعذّرت قراءة هذه الأقسام، ولذلك تظهر فارغة — لا لأنها لا تحتوي على شيء: {{sections}}.",
-    raci_r: "المنفّذ",
-    raci_a: "المعتمِد",
-    raci_c: "المُستشار",
-    raci_i: "المُبلَّغ",
-  },
-};
-for (const lng of ["en", "fr", "ar"]) {
-  i18n.addResourceBundle(lng, "translation", { governance: GOVERNANCE_I18N[lng] }, true, false);
-}
+/* EN/FR/AR for this page's governance.* labels (RACI, document repository,
+ * committees, access grants, groups, role preview) now live in
+ * i18n/sweep/g4_risk_gov.ts, merged non-destructively into i18n at startup. */
 
 /** Objectif 6 — « Accessible depuis la section gouvernance ».
  *  Remembered per browser; localStorage THROWS in some privacy modes, so the
@@ -388,6 +198,10 @@ const CADENCES = ["monthly", "quarterly", "annual", "ad_hoc"];
 
 export default function GovernancePage() {
   const { t } = useTranslation();
+  // Raw enum values (roles, typologies, access levels, cadences) are API values;
+  // only their display label is translated.
+  const roleLabel = (r: string) => t(`vocab.${r}`, { defaultValue: r.replace(/_/g, " ") });
+  const enumLabel = (ns: string, v: string) => t(`governance.${ns}_${v}`, { defaultValue: v.replace(/_/g, " ") });
   const [raci, setRaci] = useState<any[]>([]);
   const [docs, setDocs] = useState<any[]>([]);
   const [groups, setGroups] = useState<any[]>([]);
@@ -517,7 +331,7 @@ export default function GovernancePage() {
   function responsibleLabel(r: any): string {
     if (r.responsible_type === "group") return groups.find((g) => g.id === r.group_id)?.name || t("governance.unknown_group", "Unknown group");
     if (r.user_id) return users.find((u) => u.id === r.user_id)?.email || r.user_id;
-    return (r.role || "—").replace(/_/g, " ");
+    return r.role ? roleLabel(r.role) : "—";
   }
 
   async function addDoc(e: React.FormEvent) {
@@ -579,7 +393,7 @@ export default function GovernancePage() {
   }
   function accessSubjectLabel(g: any): string {
     if (g.user_id) return users.find((u) => u.id === g.user_id)?.email || g.user_id;
-    return (g.role || "—").replace(/_/g, " ");
+    return g.role ? roleLabel(g.role) : "—";
   }
 
   function openNewCommittee() { setCommitteeForm(emptyCommittee); setShowCommittee(true); }
@@ -725,7 +539,7 @@ export default function GovernancePage() {
                 onChange={(e) => { if (e.target.value === "__custom__") setUseCustomRole(true); else setRaciForm({ ...raciForm, role: e.target.value }); }}
                 className="border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
-                {knownRoles.map((r) => <option key={r} value={r}>{r.replace(/_/g, " ")}</option>)}
+                {knownRoles.map((r) => <option key={r} value={r}>{roleLabel(r)}</option>)}
                 <option value="__custom__">+ {t("governance.custom_role", "Custom role")}…</option>
               </select>
             )
@@ -806,8 +620,8 @@ export default function GovernancePage() {
                 {docs.map((d) => (
                   <tr key={d.id} className="border-b border-gray-50 hover:bg-gray-50/50">
                     <td className="px-4 py-2.5 font-medium text-gray-900">{d.title}</td>
-                    <td className="px-4 py-2.5 text-gray-600 capitalize">{d.typology}</td>
-                    <td className="px-4 py-2.5"><span className="inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold border bg-gray-100 text-gray-600 capitalize">{d.access_level}</span></td>
+                    <td className="px-4 py-2.5 text-gray-600 capitalize">{d.typology ? enumLabel("typology", d.typology) : "—"}</td>
+                    <td className="px-4 py-2.5"><span className="inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold border bg-gray-100 text-gray-600 capitalize">{d.access_level ? enumLabel("access", d.access_level) : "—"}</span></td>
                     <td className="px-4 py-2.5 text-gray-500 tabular-nums">v{d.current_version}</td>
                     <td className="px-4 py-2.5 text-right">
                       <span className="inline-flex items-center gap-2">
@@ -847,7 +661,7 @@ export default function GovernancePage() {
                     <div>
                       <div className="flex items-center gap-2">
                         <span className="font-medium text-gray-900">{c.name}</span>
-                        <span className="inline-flex rounded-full px-2 py-0.5 text-xs font-semibold border bg-indigo-50 text-indigo-700 border-indigo-200 capitalize">{(c.cadence || "").replace(/_/g, " ")}</span>
+                        <span className="inline-flex rounded-full px-2 py-0.5 text-xs font-semibold border bg-indigo-50 text-indigo-700 border-indigo-200 capitalize">{c.cadence ? enumLabel("cadence", c.cadence) : ""}</span>
                       </div>
                       {c.description && <p className="text-sm text-gray-500 mt-0.5">{c.description}</p>}
                     </div>
@@ -903,7 +717,7 @@ export default function GovernancePage() {
           <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setPreviewRole(null)} />
           <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-lg mx-4 p-6">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-semibold text-gray-900 capitalize">{t("governance.preview_of", "Responsibilities of")} {previewRole.replace(/_/g, " ")}</h2>
+              <h2 className="text-lg font-semibold text-gray-900 capitalize">{t("governance.preview_of", "Responsibilities of")} {roleLabel(previewRole)}</h2>
               <button onClick={() => setPreviewRole(null)} className="text-gray-400 hover:text-gray-600"><X className="w-5 h-5" /></button>
             </div>
             {previewLoading ? (
@@ -980,7 +794,7 @@ export default function GovernancePage() {
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">{t("governance.typology", "Typology")}</label>
                   <select value={docForm.typology} onChange={(e) => setDocForm({ ...docForm, typology: e.target.value })} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-                    {TYPOLOGIES.map((x) => <option key={x} value={x}>{x}</option>)}
+                    {TYPOLOGIES.map((x) => <option key={x} value={x}>{enumLabel("typology", x)}</option>)}
                   </select>
                 </div>
                 <div>
@@ -990,7 +804,7 @@ export default function GovernancePage() {
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">{t("governance.access", "Access")}</label>
                   <select value={docForm.access_level} onChange={(e) => setDocForm({ ...docForm, access_level: e.target.value })} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-                    {ACCESS.map((x) => <option key={x} value={x}>{x}</option>)}
+                    {ACCESS.map((x) => <option key={x} value={x}>{enumLabel("access", x)}</option>)}
                   </select>
                 </div>
               </div>
@@ -1034,7 +848,7 @@ export default function GovernancePage() {
                       <span className="flex items-center gap-2 text-gray-800 capitalize">
                         {g.user_id ? <Users className="w-3.5 h-3.5 text-gray-400" /> : <UserPlus className="w-3.5 h-3.5 text-gray-400" />}
                         {accessSubjectLabel(g)}
-                        <span className="inline-flex rounded-full px-2 py-0.5 text-xs font-semibold border bg-gray-100 text-gray-600">{g.permission}</span>
+                        <span className="inline-flex rounded-full px-2 py-0.5 text-xs font-semibold border bg-gray-100 text-gray-600">{g.permission ? enumLabel("perm", g.permission) : "—"}</span>
                       </span>
                       <button onClick={() => revokeAccess(g.id)} disabled={accessBusy === g.id} className="text-gray-400 hover:text-red-500 disabled:opacity-50"><Trash2 className="w-3.5 h-3.5" /></button>
                     </li>
@@ -1053,11 +867,11 @@ export default function GovernancePage() {
                     </select>
                   ) : (
                     <select value={accessForm.role} onChange={(e) => setAccessForm({ ...accessForm, role: e.target.value })} className="flex-1 min-w-[160px] border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-                      {knownRoles.map((r) => <option key={r} value={r}>{r.replace(/_/g, " ")}</option>)}
+                      {knownRoles.map((r) => <option key={r} value={r}>{roleLabel(r)}</option>)}
                     </select>
                   )}
                   <select value={accessForm.permission} onChange={(e) => setAccessForm({ ...accessForm, permission: e.target.value })} className="border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-                    {DOC_PERMISSIONS.map((x) => <option key={x} value={x}>{x}</option>)}
+                    {DOC_PERMISSIONS.map((x) => <option key={x} value={x}>{enumLabel("perm", x)}</option>)}
                   </select>
                   <button type="submit" disabled={savingAccess} className="inline-flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-xl text-sm font-medium hover:bg-blue-700 disabled:opacity-50">
                     {savingAccess ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />} {t("governance.grant", "Grant")}
@@ -1092,7 +906,7 @@ export default function GovernancePage() {
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">{t("governance.cadence", "Cadence")}</label>
                   <select value={committeeForm.cadence} onChange={(e) => setCommitteeForm({ ...committeeForm, cadence: e.target.value })} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-                    {CADENCES.map((x) => <option key={x} value={x}>{x.replace(/_/g, " ")}</option>)}
+                    {CADENCES.map((x) => <option key={x} value={x}>{enumLabel("cadence", x)}</option>)}
                   </select>
                 </div>
                 <div>

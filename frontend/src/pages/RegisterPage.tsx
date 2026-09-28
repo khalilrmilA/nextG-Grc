@@ -10,33 +10,36 @@ import AuthLayout from "../components/auth/AuthLayout";
 import SEO from "../components/seo/SEO";
 import type { Framework } from "@/types";
 
-const COUNTRIES = [
-  { code: "US", label: "United States" }, { code: "GB", label: "United Kingdom" },
-  { code: "FR", label: "France" }, { code: "DE", label: "Germany" },
-  { code: "CA", label: "Canada" }, { code: "AU", label: "Australia" },
-  { code: "SA", label: "Saudi Arabia" }, { code: "MA", label: "Morocco" },
-  { code: "DZ", label: "Algeria" }, { code: "TN", label: "Tunisia" },
-  { code: "AE", label: "UAE" }, { code: "SG", label: "Singapore" },
-];
+// Country display names are resolved at render time via Intl.DisplayNames in the UI language.
+const COUNTRIES = ["US", "GB", "FR", "DE", "CA", "AU", "SA", "MA", "DZ", "TN", "AE", "SG"];
 
+function countryName(code: string, lang: string): string {
+  try {
+    return new Intl.DisplayNames([lang], { type: "region" }).of(code) ?? code;
+  } catch {
+    return code;
+  }
+}
+
+// Labels are i18n keys, resolved with t() where rendered.
 const INDUSTRIES = [
-  { value: "technology", label: "Technology" },
-  { value: "financial", label: "Financial Services" },
-  { value: "healthcare", label: "Healthcare" },
-  { value: "government", label: "Government" },
-  { value: "retail", label: "Retail" },
-  { value: "manufacturing", label: "Manufacturing" },
-  { value: "telecom", label: "Telecommunications" },
-  { value: "energy", label: "Energy & Utilities" },
-  { value: "education", label: "Education" },
-  { value: "legal", label: "Legal Services" },
+  { value: "technology", label: "public.register.ind_technology" },
+  { value: "financial", label: "public.register.ind_financial" },
+  { value: "healthcare", label: "public.register.ind_healthcare" },
+  { value: "government", label: "public.register.ind_government" },
+  { value: "retail", label: "public.register.ind_retail" },
+  { value: "manufacturing", label: "public.register.ind_manufacturing" },
+  { value: "telecom", label: "public.register.ind_telecom" },
+  { value: "energy", label: "public.register.ind_energy" },
+  { value: "education", label: "public.register.ind_education" },
+  { value: "legal", label: "public.register.ind_legal" },
 ];
 
 const ORG_SIZES = [
-  { value: "1-50", label: "1–50", sub: "Startup / SMB" },
-  { value: "51-200", label: "51–200", sub: "Small company" },
-  { value: "201-1000", label: "201–1,000", sub: "Mid-market" },
-  { value: "1000+", label: "1,000+", sub: "Enterprise" },
+  { value: "1-50", label: "1–50", sub: "public.register.size_startup" },
+  { value: "51-200", label: "51–200", sub: "public.register.size_small" },
+  { value: "201-1000", label: "201–1,000", sub: "public.register.size_mid" },
+  { value: "1000+", label: "1,000+", sub: "public.register.size_enterprise" },
 ];
 
 function passwordStrength(pw: string): { score: number; label: string; color: string } {
@@ -46,14 +49,15 @@ function passwordStrength(pw: string): { score: number; label: string; color: st
   if (/[A-Z]/.test(pw)) score++;
   if (/[0-9]/.test(pw)) score++;
   if (/[^A-Za-z0-9]/.test(pw)) score++;
-  const labels = ["", "Weak", "Fair", "Good", "Strong", "Very strong"];
+  // i18n keys, resolved with t() where rendered
+  const labels = ["", "public.register.pw_weak", "public.register.pw_fair", "public.register.pw_good", "public.register.pw_strong", "public.register.pw_very_strong"];
   const colors = ["", "bg-red-400", "bg-orange-400", "bg-yellow-400", "bg-green-400", "bg-emerald-500"];
   return { score, label: labels[score] || "", color: colors[score] || "" };
 }
 
 export default function RegisterPage() {
   const navigate = useNavigate();
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const [step, setStep] = useState(1);
   const [showPw, setShowPw] = useState(false);
   const [error, setError] = useState("");
@@ -76,7 +80,7 @@ export default function RegisterPage() {
   const [secondaryFwIds, setSecondaryFwIds] = useState<string[]>([]);
 
   const set = (k: string) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
-    setTouched((t) => ({ ...t, [k]: true }));
+    setTouched((prev) => ({ ...prev, [k]: true }));
     setForm((f) => ({
       ...f,
       [k]: e.target.value,
@@ -88,13 +92,13 @@ export default function RegisterPage() {
 
   // Per-field inline validation — only shown after the field is touched
   const fieldErrors = {
-    first_name: touched.first_name && !form.first_name ? "First name is required." : "",
-    last_name: touched.last_name && !form.last_name ? "Last name is required." : "",
-    email: touched.email && !form.email ? "Work email is required."
-         : touched.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email) ? "Enter a valid email address." : "",
-    password: touched.password && form.password.length === 0 ? "Password is required."
-            : touched.password && form.password.length < 12 ? `Password is too short — ${form.password.length}/12 characters minimum.` : "",
-    organization_name: touched.organization_name && !form.organization_name ? "Organization name is required." : "",
+    first_name: touched.first_name && !form.first_name ? t("public.register.err_first_name") : "",
+    last_name: touched.last_name && !form.last_name ? t("public.register.err_last_name") : "",
+    email: touched.email && !form.email ? t("public.register.err_email_required")
+         : touched.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email) ? t("public.register.err_email_invalid") : "",
+    password: touched.password && form.password.length === 0 ? t("public.register.err_password_required")
+            : touched.password && form.password.length < 12 ? t("public.register.err_password_short", { count: form.password.length }) : "",
+    organization_name: touched.organization_name && !form.organization_name ? t("public.register.err_org_required") : "",
   };
 
   // Load frameworks (public endpoint) when entering step 2
@@ -194,17 +198,17 @@ export default function RegisterPage() {
         ? raw.map((e: any) => `[${(e.loc ?? []).slice(1).join(".")}] ${e.msg}`).join(" · ")
         : (typeof raw === "string" ? raw : "");
       if (detail.toLowerCase().includes("email")) {
-        setError("An account with this email already exists. Please sign in.");
+        setError(t("public.register.err_email_exists"));
       } else if (detail.toLowerCase().includes("password") || detail.toLowerCase().includes("min_length")) {
-        setError("Password must be at least 12 characters long.");
+        setError(t("public.register.err_password_min"));
       } else if (err?.response?.status === 429) {
-        setError("Too many attempts. Please wait a few minutes and try again.");
+        setError(t("public.register.err_rate_limited"));
       } else if (err?.response?.status >= 500) {
-        setError(`Server error (${err.response.status}). Please try again later.`);
+        setError(t("public.register.err_server", { status: err.response.status }));
       } else if (detail) {
         setError(detail);
       } else {
-        setError("Registration failed. Please check your details and try again.");
+        setError(t("public.register.err_generic"));
       }
     } finally {
       setLoading(false);
@@ -215,7 +219,7 @@ export default function RegisterPage() {
 
   return (
     <>
-      <SEO title="Get started" description="Create your free GRCEye account — 14-day trial, no credit card required." path="/register" noIndex />
+      <SEO title={t("public.register.seo_get_started")} description={t("public.register.seo_description")} path="/register" noIndex />
       <AuthLayout maxWidth="max-w-2xl">
         {/* Header */}
         <div className="mb-7">
@@ -273,7 +277,7 @@ export default function RegisterPage() {
               <Field label={t("public.register.password")} error={fieldErrors.password}>
                 <div className="relative">
                   <input type={showPw ? "text" : "password"} value={form.password} onChange={set("password")}
-                    required minLength={12} className={inputCls(!!fieldErrors.password) + " pr-10"} placeholder={t("public.register.password_placeholder")} />
+                    required minLength={12} className={inputCls(!!fieldErrors.password) + " pr-10"} placeholder={t("public.register.password_placeholder_min12")} />
                   <button type="button" onClick={() => setShowPw(!showPw)}
                     className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
                     {showPw ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
@@ -286,7 +290,7 @@ export default function RegisterPage() {
                         <div key={i} className={`h-1 flex-1 rounded-full ${i <= pw.score ? pw.color : "bg-gray-200"}`} />
                       ))}
                     </div>
-                    <span className="text-xs text-gray-500">{pw.label}</span>
+                    <span className="text-xs text-gray-500">{pw.label ? t(pw.label) : ""}</span>
                   </div>
                 )}
               </Field>
@@ -305,13 +309,13 @@ export default function RegisterPage() {
                 <Field label={t("public.register.country")}>
                   <select value={form.country} onChange={set("country")} className={SELECT}>
                     <option value="">{t("public.register.country_placeholder")}</option>
-                    {COUNTRIES.map((c) => <option key={c.code} value={c.code}>{c.label}</option>)}
+                    {COUNTRIES.map((c) => <option key={c} value={c}>{countryName(c, i18n.language)}</option>)}
                   </select>
                 </Field>
                 <Field label={t("public.register.industry")}>
                   <select value={form.industry} onChange={set("industry")} className={SELECT}>
                     <option value="">{t("public.register.industry_placeholder")}</option>
-                    {INDUSTRIES.map((i) => <option key={i.value} value={i.value}>{i.label}</option>)}
+                    {INDUSTRIES.map((i) => <option key={i.value} value={i.value}>{t(i.label)}</option>)}
                   </select>
                 </Field>
               </div>
@@ -326,7 +330,7 @@ export default function RegisterPage() {
                           : "border-gray-200 hover:border-gray-300 text-gray-700"
                       }`}>
                       <div className="font-semibold text-sm">{s.label}</div>
-                      <div className="text-xs text-gray-400 mt-0.5">{s.sub}</div>
+                      <div className="text-xs text-gray-400 mt-0.5">{t(s.sub)}</div>
                     </button>
                   ))}
                 </div>
@@ -425,7 +429,7 @@ export default function RegisterPage() {
                 <ReviewRow label={t("public.register.review_email")} value={form.email} />
                 <ReviewRow label={t("public.register.review_org")} value={form.organization_name} />
                 {form.industry && (
-                  <ReviewRow label={t("public.register.review_industry")} value={INDUSTRIES.find((i) => i.value === form.industry)?.label ?? form.industry} />
+                  <ReviewRow label={t("public.register.review_industry")} value={(() => { const ind = INDUSTRIES.find((i) => i.value === form.industry); return ind ? t(ind.label) : form.industry; })()} />
                 )}
                 {form.org_size && (
                   <ReviewRow label={t("public.register.review_size")} value={`${form.org_size} ${t("public.register.review_size_suffix")}`} />

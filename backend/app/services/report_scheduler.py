@@ -51,6 +51,7 @@ from app.services.report_generator import (
     REPORT_GENERATORS,
 )
 from app.services.email_service import send_report_email
+from app.services.user_language import stored_user_language
 
 logger = logging.getLogger(__name__)
 
@@ -147,6 +148,10 @@ def compute_next_run(schedule: ReportSchedule, now: datetime) -> datetime:
         year = candidate.year + (1 if candidate.month == 12 else 0)
         candidate = candidate.replace(year=year, month=month)
     return candidate
+
+
+def _tenant_has_locale(tenant: Tenant | None) -> bool:
+    return bool(normalize_language(tenant_locale(tenant))) if tenant is not None else False
 
 
 def _schedule_language(tenant: Tenant | None) -> str:
@@ -267,6 +272,11 @@ async def _deliver(db: AsyncSession, schedule: ReportSchedule) -> tuple[bool, st
     tenant = (await db.execute(select(Tenant).where(Tenant.id == tenant_id))).scalar_one_or_none()
     tenant_name = getattr(tenant, "name", None) or "Organization"
     lang = _schedule_language(tenant)
+    if not _tenant_has_locale(tenant) and created_by_id:
+        # No tenant-wide language set: write the report in the language of the
+        # person who scheduled it (their last-seen UI language) rather than
+        # defaulting to English.
+        lang = await stored_user_language(db, created_by_id) or lang
     stamp = datetime.utcnow().strftime("%Y-%m-%d")
 
     audit_id = engagement_id(report_type)
@@ -318,7 +328,7 @@ async def _deliver(db: AsyncSession, schedule: ReportSchedule) -> tuple[bool, st
     delivered_to: list[str] = []
     for email in recipients:
         if await send_report_email(to_email=email, subject=subject, pdf_bytes=pdf_bytes,
-                                   filename=filename, body_text=body):
+                                   filename=filename, body_text=body, lang=lang):
             sent += 1
             delivered_to.append(email)
 

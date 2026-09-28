@@ -30,6 +30,7 @@ from sqlalchemy.exc import IntegrityError, OperationalError, ProgrammingError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
+from app.core.i18n_messages import msg as i18n_msg
 from app.core.security_utils import assert_assets_in_tenant
 from app.api.v1.dependencies.auth import (
     get_current_user, get_tenant_id, require_roles, require_roles_strict,
@@ -46,6 +47,10 @@ from app.services.threat_watch_ingest import apply_kev_flags, ingest_for_tenant
 from app.services import threat_registry as registry
 from app.services.trend_snapshot_scheduler import snapshot_series, unavailable_series
 from app.services.ai_locale import get_request_language
+from app.services.content_translation import get_display_language
+from app.services.threat_translation import (
+    localize_threats, localize_watch, schedule_feed_translation,
+)
 
 router = APIRouter()
 
@@ -215,6 +220,15 @@ class ThreatOut(BaseModel):
     # profile. It has to be adopted first.
     can_profile: bool = False
 
+    # System threats only (built-in catalogue — MITRE in English, BQ-* in French —
+    # and feed imports): when a cached machine translation into the caller's
+    # language (Accept-Language) exists, name/description carry it and the stored
+    # text is kept here. A reader whose language is the text's own language, or a
+    # caller sending ?original=1, gets the stored text. Additive, optional fields.
+    translated: bool = False
+    original_name: str | None = None
+    original_description: str | None = None
+
     created_at: datetime
     model_config = {"from_attributes": True}
 
@@ -240,6 +254,13 @@ class FetchOut(BaseModel):
     skipped: int
     message: str
     names: list[str]
+
+
+async def _localized(db: AsyncSession, threats, lang: str) -> list[ThreatOut]:
+    """_view() for each threat, with feed text in the caller's language."""
+    pairs = [(t, _view(t)) for t in threats]
+    await localize_threats(db, pairs, lang)
+    return [out for _, out in pairs]
 
 
 def _view(threat: Threat) -> ThreatOut:
@@ -304,6 +325,7 @@ async def list_threats(
     review_overdue: bool | None = None,
     limit: int | None = Query(None, ge=1, le=5000),
     offset: int = Query(0, ge=0),
+    lang: Annotated[str, Depends(get_display_language)] = "en",
 ):
     """The register: built-in catalogue plus this tenant's own, validated threats.
 
@@ -338,7 +360,7 @@ async def list_threats(
             Threat.next_review_due.isnot(None),
             Threat.next_review_due < date.today().isoformat(),
         )
-    items = [_view(t) for t in (await db.execute(q.order_by(Threat.ref_id))).scalars().all()]
+    items = await _localized(db, (await db.execute(q.order_by(Threat.ref_id))).scalars().all(), lang)
     if threat_type:
         # Filtered after the query because a threat with no stated type still
         # belongs to the family its category implies — excluding those would
@@ -876,10 +898,21 @@ async def fetch_threat_news(
     summary = await ingest_for_tenant(db, tenant_id, raw)
     flagged = await apply_kev_flags(db, raw)
     await db.commit()
+    if summary["created"]:
+        # FR/AR translation of what just arrived, off the request path: the
+        # response must not wait on the model, and nothing here may fail it.
+        schedule_feed_translation(max_texts=60)
 
     parts = [_msg("feed_fetched", lang, total=len(raw), created=summary["created"])]
     if summary["by_kind"]:
-        parts.append("(" + ", ".join(f"{n} {k.replace('_', ' ')}" for k, n in sorted(summary["by_kind"].items())) + ")")
+        kind_label = {
+            "cve": i18n_msg("CVE", lang),
+            "malicious_package": i18n_msg("malicious package", lang),
+            "advisory": i18n_msg("advisory", lang),
+            "news": i18n_msg("news", lang),
+        }
+        parts.append("(" + ", ".join(f"{n} {kind_label.get(k) or k.replace('_', ' ')}"
+                                     for k, n in sorted(summary["by_kind"].items())) + ")")
     if flagged:
         parts.append(_msg("feed_kev_flagged", lang, flagged=flagged))
     return FetchOut(
@@ -901,6 +934,10 @@ class WatchItemOut(BaseModel):
     promoted_threat_id: str | None = None
     extra: dict = {}
     created_at: datetime
+    # Cached FR/AR machine translation of the feed text (see ThreatOut).
+    translated: bool = False
+    original_title: str | None = None
+    original_summary: str | None = None
     model_config = {"from_attributes": True}
 
 
@@ -920,6 +957,7 @@ async def list_watch(
     kind: str | None = None,
     status_filter: str | None = None,
     limit: int = 200,
+    lang: Annotated[str, Depends(get_display_language)] = "en",
 ):
     """What the watch has brought in, newest first.
 
@@ -935,7 +973,9 @@ async def list_watch(
         q = q.where(ThreatWatchItem.status == status_filter)
     q = q.order_by(ThreatWatchItem.published_at.desc().nullslast(),
                    ThreatWatchItem.created_at.desc()).limit(max(1, min(limit, 500)))
-    return [WatchItemOut.model_validate(w) for w in (await db.execute(q)).scalars().all()]
+    pairs = [(w, WatchItemOut.model_validate(w)) for w in (await db.execute(q)).scalars().all()]
+    await localize_watch(db, pairs, lang)
+    return [out for _, out in pairs]
 
 
 async def _get_watch_item(db: AsyncSession, wid: str, tenant_id: str) -> ThreatWatchItem:
@@ -1022,10 +1062,11 @@ async def list_pending(
     db: Annotated[AsyncSession, Depends(get_db)],
     _: Annotated[User, Depends(get_current_user)],
     tenant_id: Annotated[str, Depends(get_tenant_id)],
+    lang: Annotated[str, Depends(get_display_language)] = "en",
 ):
     """Return all threats pending approval for this tenant."""
     q = select(Threat).where(Threat.tenant_id == tenant_id, Threat.is_pending == True)  # noqa: E712
-    return [_view(t) for t in (await db.execute(q.order_by(Threat.created_at.desc()))).scalars().all()]
+    return await _localized(db, (await db.execute(q.order_by(Threat.created_at.desc()))).scalars().all(), lang)
 
 
 @router.post("/{tid}/approve", response_model=ThreatOut)

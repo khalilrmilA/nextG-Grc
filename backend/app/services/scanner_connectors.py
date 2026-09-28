@@ -12,6 +12,10 @@ the shared ingest pipeline (asset-match + dedup + ScanJournal). Adapters:
             with best-effort knowledgebase titles/CVEs.
 - openvas : Greenbone/GVM speaks GMP over a socket, not HTTP, so there is
             nothing to pull from here — export the report and use file import.
+- easm    : any External Attack Surface Management platform with a JSON REST
+            API — auth style, endpoint paths and field mapping are configured
+            per connector (ScannerConnectorSettings); see easm_connector.py.
+            Also creates assets for newly discovered hosts/domains/IPs.
 
 Sync never raises: fetch/import errors are recorded on the ScanJournal so the
 caller returns a clean summary.
@@ -33,7 +37,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.models.scan_journal import ScanJournal, SCAN_STATUS_FAILED
-from app.models.scanner_connector import ScannerConnector
+from sqlalchemy import select
+
+from app.models.scanner_connector import ScannerConnector, ScannerConnectorSettings
 from app.services.scanner_import import ParsedFinding, ingest_findings
 
 
@@ -43,7 +49,7 @@ def _utcnow() -> datetime:
 
 # Tools whose connector can actually pull on its own. Anything else is
 # file-import only, and must not be put on a schedule that can only ever fail.
-PULL_TOOLS = frozenset({"demo", "tenable", "nessus", "qualys"})
+PULL_TOOLS = frozenset({"demo", "tenable", "nessus", "qualys", "easm"})
 
 _OPENVAS_MESSAGE = (
     "OpenVAS/Greenbone is reached over GMP (a socket protocol), not HTTP, so it cannot be "
@@ -516,6 +522,30 @@ _ADAPTERS = {
 }
 
 
+async def load_settings(db: AsyncSession, conn: ScannerConnector) -> dict | None:
+    """The connector's stored non-secret config (EASM), or None."""
+    row = (await db.execute(
+        select(ScannerConnectorSettings.config).where(ScannerConnectorSettings.connector_id == conn.id)
+    )).first()
+    return dict(row[0] or {}) if row else None
+
+
+def _easm_config(conn: ScannerConnector, config: dict | None) -> dict:
+    from app.services.easm_connector import normalize_config
+    if not config:
+        raise ValueError("EASM connector is not configured: set the findings endpoint path.")
+    return normalize_config(config, conn.base_url)
+
+
+def _redact(text: str, conn: ScannerConnector) -> str:
+    """Strip the connector's secrets out of an error text (a query-string API
+    key would otherwise land in the journal via httpx's URL-bearing messages)."""
+    for secret in (conn.api_key, conn.api_secret):
+        if secret and len(secret) >= 4:
+            text = text.replace(secret, "***")
+    return text
+
+
 async def _fetch_findings(conn: ScannerConnector) -> list[ParsedFinding]:
     adapter = _ADAPTERS.get((conn.tool or "").lower())
     if adapter is None:
@@ -530,8 +560,14 @@ async def _fetch_findings(conn: ScannerConnector) -> list[ParsedFinding]:
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
-async def test_connector(conn: ScannerConnector) -> dict:
-    """Authenticated connectivity check — does not import anything."""
+async def test_connector(conn: ScannerConnector, config: dict | None = None, lang: str = "en") -> dict:
+    """Authenticated connectivity check — does not import anything.
+
+    ``config`` is the connector's stored settings (EASM only; the endpoint
+    loads it with ``load_settings``). ``lang`` localises the EASM summary, which is
+    composed from several sentences; the endpoint localises the other (single
+    sentence) messages with ``i18n_messages.translate_text``.
+    """
     tool = (conn.tool or "").lower()
     if tool == "demo":
         return {"ok": True, "message": "Demo connector ready (simulated pull)."}
@@ -561,21 +597,38 @@ async def test_connector(conn: ScannerConnector) -> dict:
                     {"action": "list", "truncation_limit": "1"},
                 )
             return {"ok": True, "message": "Connected to Qualys (host detection API authorised)."}
+        if tool == "easm":
+            from app.services import easm_connector
+            return await easm_connector.test(conn, _easm_config(conn, config), lang=lang)
         return {"ok": False, "message": f"Unknown scanner tool '{conn.tool}'."}
     except Exception as exc:  # noqa: BLE001
-        return {"ok": False, "message": _describe(exc)[:300]}
+        return {"ok": False, "message": _redact(_describe(exc), conn)[:400]}
 
 
 async def sync_connector(db: AsyncSession, conn: ScannerConnector, created_by_id: str | None = None) -> ScanJournal:
-    """Pull findings from the connector and ingest them; journal the run."""
+    """Pull findings from the connector and ingest them; journal the run.
+
+    For EASM connectors, hosts/domains/IPs that match no asset are created as
+    assets first (when ``discover_assets`` is on) so the findings link to them;
+    the count is recorded in the journal's filename line and returned on the
+    journal object as the transient attribute ``discovered_assets``.
+    """
+    tool = (conn.tool or "").lower()
+    asset_items: list[dict] = []
+    easm_cfg: dict | None = None
     try:
-        findings = await _fetch_findings(conn)
+        if tool == "easm":
+            from app.services import easm_connector
+            easm_cfg = _easm_config(conn, await load_settings(db, conn))
+            findings, asset_items = await easm_connector.fetch_findings(conn, easm_cfg)
+        else:
+            findings = await _fetch_findings(conn)
     except Exception as exc:  # noqa: BLE001 — record a failed journal
         journal = ScanJournal(
-            tenant_id=conn.tenant_id, tool=(conn.tool or "").lower(),
+            tenant_id=conn.tenant_id, tool=tool,
             filename=f"{conn.name} (connector sync)",
             started_at=_utcnow(), finished_at=_utcnow(),
-            status=SCAN_STATUS_FAILED, error=_describe(exc)[:2000],
+            status=SCAN_STATUS_FAILED, error=_redact(_describe(exc), conn)[:2000],
             created_by_id=created_by_id,
             parsed_count=0, imported_count=0, matched_count=0, skipped_count=0,
         )
@@ -587,11 +640,31 @@ async def sync_connector(db: AsyncSession, conn: ScannerConnector, created_by_id
         await db.commit()
         return journal
 
+    discovered = 0
+    discovery_error = None
+    if easm_cfg is not None and easm_cfg.get("discover_assets", True):
+        from app.services import easm_connector
+        try:
+            # Savepoint: a failed discovery must not take the findings with it.
+            async with db.begin_nested():
+                discovered = await easm_connector.discover_assets(db, conn, findings, asset_items)
+        except Exception as exc:  # noqa: BLE001
+            discovered = 0
+            discovery_error = _describe(exc)[:200]
+
+    filename = f"{conn.name} (connector sync)"
+    if discovered:
+        filename = f"{conn.name} (connector sync, {discovered} new asset(s) discovered)"
+    elif discovery_error:
+        filename = f"{conn.name} (connector sync, asset discovery failed)"
     journal = await ingest_findings(
-        db, tenant_id=conn.tenant_id, tool=(conn.tool or "").lower(),
-        findings=findings, filename=f"{conn.name} (connector sync)", created_by_id=created_by_id,
+        db, tenant_id=conn.tenant_id, tool=tool,
+        findings=findings, filename=filename[:255], created_by_id=created_by_id,
     )
+    if discovery_error and not journal.error:
+        journal.error = f"Asset discovery failed (findings were imported): {discovery_error}"
     conn.last_sync_at = _utcnow()
     conn.last_status = journal.status
     await db.commit()
+    journal.discovered_assets = discovered
     return journal

@@ -1,3 +1,4 @@
+import { TranslatedText } from "@/components/common/AutoTranslatedBadge";
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
@@ -16,6 +17,10 @@ import type {
   AuditFinding, AuditEvidence,
 } from "@/types";
 import DocumentViewerModal, { type ViewableDoc } from "@/components/features/compliance/DocumentViewerModal";
+
+/** Display locale for dates: Latin digits in Arabic, French day-month order in French. */
+const dateLocale = (lang: string) => (lang?.startsWith("fr") ? "fr-FR" : lang?.startsWith("ar") ? "ar-u-nu-latn" : "en-US");
+
 
 // ─── Vocabulary ───────────────────────────────────────────────────────────────
 
@@ -188,7 +193,7 @@ function CommentThread({ anchor }: { readonly anchor: CommentAnchor }) {
 
   function fmt(value: string) {
     const d = new Date(value);
-    return Number.isNaN(d.getTime()) ? value : d.toLocaleString(i18n.language);
+    return Number.isNaN(d.getTime()) ? value : d.toLocaleString(dateLocale(i18n.language));
   }
 
   return (
@@ -962,7 +967,7 @@ export default function AuditChecklistPage() {
                           {verdictLabel(draftVerdict[ctrl.control_assessment_id])}
                         </span>
                       </div>
-                      <p className="text-sm font-medium text-gray-800 group-hover:text-gray-900">{ctrl.control_title}</p>
+                      <p className="text-sm font-medium text-gray-800 group-hover:text-gray-900"><TranslatedText item={ctrl} field="control_title" /></p>
                     </div>
                     {open
                       ? <ChevronUp className="w-4 h-4 text-gray-400 flex-shrink-0 mt-0.5" />

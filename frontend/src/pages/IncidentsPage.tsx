@@ -6,6 +6,10 @@ import { incidentsApi, vulnerabilitiesApi, assetsApi, usersApi } from "@/api/end
 import { MultiSelect } from "@/components/common/MultiSelect";
 import IncidentDetailModal from "@/components/incidents/IncidentDetailModal";
 import { useAuthStore, hasAnyRole } from "@/store/auth";
+import i18n from "@/i18n";
+
+// Dates follow the UI language (Arabic keeps Latin digits).
+const uiLocale = () => { const l = i18n.language || "en"; return l.startsWith("fr") ? "fr-FR" : l.startsWith("ar") ? "ar-u-nu-latn" : "en-US"; };
 
 const SEV_BADGE: Record<string, string> = {
   critical: "bg-red-100 text-red-700 border-red-200",
@@ -266,7 +270,7 @@ export default function IncidentsPage() {
                       {String(t(`vocab.${item.status}` as never, humanise(item.status)))}
                     </span>
                   </td>
-                  <td className="px-6 py-4 text-gray-500">{item.detected_at ? new Date(item.detected_at).toLocaleDateString() : "-"}</td>
+                  <td className="px-6 py-4 text-gray-500">{item.detected_at ? new Date(item.detected_at).toLocaleDateString(uiLocale()) : "-"}</td>
                   <td className="px-6 py-4 text-gray-500">{item.assigned_to_id ? (userNames[item.assigned_to_id] || item.assigned_to_id) : "-"}</td>
                   <td className="px-6 py-4 text-right">
                     <button

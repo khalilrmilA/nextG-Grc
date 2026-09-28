@@ -1,3 +1,4 @@
+import { TranslatedText } from "@/components/common/AutoTranslatedBadge";
 import { useState, useRef, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
@@ -39,7 +40,7 @@ interface BulkActionResult {
 }
 
 export default function GapReportTab({ assessmentId, assessmentName = "Assessment", frameworkName = "", frameworkShortName = "", gaps, onGapUpdated }: Props) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const navigate = useNavigate();
   const [confirmGap, setConfirmGap] = useState<GapDetail | null>(null);
   const [rejectingId, setRejectingId] = useState<string | null>(null);
@@ -133,7 +134,7 @@ export default function GapReportTab({ assessmentId, assessmentName = "Assessmen
       frameworkName,
       frameworkShortName,
       complianceScore: null,
-      generatedAt: new Date().toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }),
+      generatedAt: new Date().toLocaleDateString(i18n.language?.startsWith("fr") ? "fr-FR" : i18n.language?.startsWith("ar") ? "ar-u-nu-latn" : "en-GB", { day: "2-digit", month: "short", year: "numeric" }),
       org: "",
       statusCounts,
       gaps: gaps.map((g) => ({
@@ -337,7 +338,7 @@ export default function GapReportTab({ assessmentId, assessmentName = "Assessmen
                         {gap.control_identifier}
                       </td>
                       <td className="px-4 py-3 max-w-xs">
-                        <p className="text-sm text-gray-800 font-medium truncate">{gap.control_title}</p>
+                        <p className="text-sm text-gray-800 font-medium truncate"><TranslatedText item={gap} field="control_title" /></p>
                         <p className="text-xs text-gray-400 mt-0.5 line-clamp-2">{gap.gap_description}</p>
                       </td>
                       <td className="px-4 py-3 text-center">

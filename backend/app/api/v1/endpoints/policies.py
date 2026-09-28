@@ -7,6 +7,7 @@ from pydantic import BaseModel
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.services.content_translation import get_display_language, localize_fields
 from app.core.database import get_db
 from app.core.security_utils import assert_user_in_tenant
 from app.api.v1.dependencies.auth import get_current_user, get_tenant_id, require_roles
@@ -16,6 +17,7 @@ from app.models.framework import Framework, FrameworkControl
 from app.models.tenant import Tenant
 from app.models.org_unit import OrgEntity, BusinessProcess
 from app.services import pdf_arabic
+from app.services.ai_locale import get_request_language
 from app.models.activity_log import ActivityLog
 from app.services.activity_chain import chain_and_add
 
@@ -94,6 +96,10 @@ class LinkedControlOut(BaseModel):
     framework_short_name: str | None = None
     domain: str | None = None
     requirement_type: str | None = None
+    # Machine translation for display (content_translations); stored text in original_*.
+    translated: bool = False
+    original_title: str | None = None
+    original_framework_name: str | None = None
 
 class CoveringPolicyOut(BaseModel):
     """One internal policy that covers a requirement."""
@@ -502,14 +508,16 @@ async def update_policy(pid: str, body: PolicyUpdate, db: AsyncSession = Depends
     return result
 
 @router.get("/{pid}/controls", response_model=list[LinkedControlOut])
-async def list_policy_controls(pid: str, db: AsyncSession = Depends(get_db), _: User = Depends(get_current_user), tenant_id: str = Depends(get_tenant_id)):
+async def list_policy_controls(pid: str, db: AsyncSession = Depends(get_db), _: User = Depends(get_current_user), tenant_id: str = Depends(get_tenant_id), lang: str = Depends(get_display_language)):
     """The requirements this policy claims to cover, resolved to titles and frameworks.
 
     ``linked_controls`` was only ever surfaced as a number ("3 linked controls"), which
     is not something a reviewer can check. Entries that no longer resolve are dropped
     rather than raising — a framework can be deleted after a policy linked to it."""
     p = await _policy(db, pid, tenant_id)
-    return await _resolve_controls(db, tenant_id, p.linked_controls or [])
+    out = await _resolve_controls(db, tenant_id, p.linked_controls or [])
+    await localize_fields(db, lang, [(o, {"title": o.title, "framework_name": o.framework_name or ""}) for o in out])
+    return out
 
 
 @router.delete("/{pid}", status_code=204)
@@ -717,13 +725,40 @@ async def acknowledge_attestation(pid: str, aid: str, db: AsyncSession = Depends
 
 # ── PDF Export ───────────────────────────────────────────────────────────
 
+_POLICY_PDF_TEXT = {
+    "en": {"number": "Policy No. {n}", "category": "Category", "status": "Status",
+           "cycle": "Review Cycle", "months": "{n} months", "next_review": "Next Review",
+           "version": "Version", "description": "Description",
+           "content": "Policy Content — v{v}", "change_summary": "Change summary: {text}"},
+    "fr": {"number": "Politique n° {n}", "category": "Catégorie", "status": "Statut",
+           "cycle": "Cycle de revue", "months": "{n} mois", "next_review": "Prochaine revue",
+           "version": "Version", "description": "Description",
+           "content": "Contenu de la politique — v{v}", "change_summary": "Résumé des modifications : {text}"},
+    "ar": {"number": "السياسة رقم {n}", "category": "الفئة", "status": "الحالة",
+           "cycle": "دورة المراجعة", "months": "{n} أشهر", "next_review": "المراجعة القادمة",
+           "version": "الإصدار", "description": "الوصف",
+           "content": "محتوى السياسة — الإصدار {v}", "change_summary": "ملخص التغييرات: {text}"},
+}
+
 @router.get("/{pid}/export-pdf")
-async def export_policy_pdf(pid: str, db: AsyncSession = Depends(get_db), _: User = Depends(get_current_user), tenant_id: str = Depends(get_tenant_id)):
+async def export_policy_pdf(pid: str, db: AsyncSession = Depends(get_db), _: User = Depends(get_current_user), tenant_id: str = Depends(get_tenant_id),
+                            lang: str = Depends(get_request_language)):
+    """The policy as a PDF, its labels in the caller's UI language (Accept-Language).
+
+    The policy's own text is the tenant's and is printed as written; Arabic text
+    is shaped and wrapped by pdf_arabic, and an Arabic export is laid out
+    right-to-left.
+    """
     from reportlab.lib import colors
     from reportlab.lib.pagesizes import A4
     from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
     from reportlab.lib.units import cm
-    from reportlab.lib.enums import TA_LEFT
+    from reportlab.lib.enums import TA_LEFT, TA_RIGHT
+    from app.services.report_generator import _label as _vocab_label, _category_label, _fmt_date
+    L = _POLICY_PDF_TEXT.get(lang) or _POLICY_PDF_TEXT["en"]
+    rtl = lang == "ar"
+    align = TA_RIGHT if rtl else TA_LEFT
+    M = pdf_arabic.paragraph_markup
     from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, HRFlowable
 
     p = await _policy(db, pid, tenant_id)
@@ -733,30 +768,37 @@ async def export_policy_pdf(pid: str, db: AsyncSession = Depends(get_db), _: Use
     doc = SimpleDocTemplate(buf, pagesize=A4, rightMargin=2*cm, leftMargin=2*cm, topMargin=2*cm, bottomMargin=2*cm)
     styles = getSampleStyleSheet()
 
-    h1 = ParagraphStyle("H1", parent=styles["Heading1"], fontSize=22, spaceAfter=8, textColor=colors.HexColor("#0f172a"))
-    h2 = ParagraphStyle("H2", parent=styles["Heading2"], fontSize=14, spaceBefore=14, spaceAfter=6, textColor=colors.HexColor("#1e3a5f"))
-    body = ParagraphStyle("Body", parent=styles["Normal"], fontSize=11, leading=16, textColor=colors.HexColor("#334155"))
-    label_style = ParagraphStyle("Label", parent=styles["Normal"], fontSize=9, textColor=colors.HexColor("#64748b"))
+    h1 = ParagraphStyle("H1", parent=styles["Heading1"], fontSize=22, spaceAfter=8, textColor=colors.HexColor("#0f172a"), alignment=align, leading=28)
+    h2 = ParagraphStyle("H2", parent=styles["Heading2"], fontSize=14, spaceBefore=14, spaceAfter=6, textColor=colors.HexColor("#1e3a5f"), alignment=align)
+    body = ParagraphStyle("Body", parent=styles["Normal"], fontSize=11, leading=16, textColor=colors.HexColor("#334155"), alignment=align)
+    label_style = ParagraphStyle("Label", parent=styles["Normal"], fontSize=9, textColor=colors.HexColor("#64748b"), alignment=align)
+    cell_style = ParagraphStyle("Cell", parent=styles["Normal"], fontSize=10, leading=13, textColor=colors.HexColor("#334155"), alignment=align)
+    width = A4[0] - 4 * cm
 
     story = []
-    story.append(Paragraph(pdf_arabic.paragraph_markup(p.title, bold=True), h1))
+    story.append(Paragraph(pdf_arabic.wrapped_markup(p.title, width, 22, bold=True), h1))
     if p.policy_number:
-        story.append(Paragraph(f"Policy No. {p.policy_number}", label_style))
+        story.append(Paragraph(M(L["number"].format(n=p.policy_number)), label_style))
     story.append(Spacer(1, 0.3*cm))
     story.append(HRFlowable(width="100%", thickness=1, color=colors.HexColor("#e2e8f0")))
     story.append(Spacer(1, 0.4*cm))
 
     meta = [
-        ["Category", p.category or "—"],
-        ["Status", p.status.replace("_", " ").title()],
-        ["Review Cycle", f"{p.review_frequency_months} months"],
-        ["Next Review", p.next_review_date or "—"],
-        ["Version", f"v{cv.version_number}" if cv else "—"],
+        [L["category"], _category_label(lang, p.category)],
+        [L["status"], _vocab_label(lang, p.status)],
+        [L["cycle"], L["months"].format(n=p.review_frequency_months)],
+        [L["next_review"], _fmt_date(p.next_review_date, lang) if p.next_review_date else "—"],
+        [L["version"], f"v{cv.version_number}" if cv else "—"],
     ]
-    tbl = Table(meta, colWidths=[4*cm, 13*cm])
+    meta = [[Paragraph(M(k, bold=True), cell_style), Paragraph(M(str(v)), cell_style)] for k, v in meta]
+    widths = [4*cm, 13*cm]
+    if rtl:
+        meta = [list(reversed(r)) for r in meta]
+        widths = list(reversed(widths))
+    tbl = Table(meta, colWidths=widths)
     tbl.setStyle(TableStyle([
-        ("BACKGROUND", (0, 0), (0, -1), colors.HexColor("#f8fafc")),
-        ("TEXTCOLOR", (0, 0), (0, -1), colors.HexColor("#64748b")),
+        ("BACKGROUND", (-1 if rtl else 0, 0), (-1 if rtl else 0, -1), colors.HexColor("#f8fafc")),
+        ("TEXTCOLOR", (-1 if rtl else 0, 0), (-1 if rtl else 0, -1), colors.HexColor("#64748b")),
         ("FONTSIZE", (0, 0), (-1, -1), 10),
         ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#e2e8f0")),
         ("PADDING", (0, 0), (-1, -1), 7),
@@ -765,17 +807,18 @@ async def export_policy_pdf(pid: str, db: AsyncSession = Depends(get_db), _: Use
     story.append(tbl)
 
     if p.description:
-        story.append(Paragraph("Description", h2))
-        story.append(Paragraph(pdf_arabic.paragraph_markup(p.description), body))
+        story.append(Paragraph(M(L["description"], bold=True), h2))
+        story.append(Paragraph(pdf_arabic.wrapped_markup(p.description, width, 11), body))
 
     if cv:
-        story.append(Paragraph(f"Policy Content — v{cv.version_number}", h2))
+        story.append(Paragraph(M(L["content"].format(v=cv.version_number), bold=True), h2))
         if cv.change_summary:
-            story.append(Paragraph("Change summary: " + pdf_arabic.paragraph_markup(cv.change_summary), label_style))
+            story.append(Paragraph(pdf_arabic.wrapped_markup(
+                L["change_summary"].format(text=cv.change_summary), width, 9), label_style))
         story.append(Spacer(1, 0.3*cm))
         for line in cv.content.split("\n"):
             if line.strip():
-                story.append(Paragraph(pdf_arabic.paragraph_markup(line), body))
+                story.append(Paragraph(pdf_arabic.wrapped_markup(line, width, 11), body))
             else:
                 story.append(Spacer(1, 0.25*cm))
 

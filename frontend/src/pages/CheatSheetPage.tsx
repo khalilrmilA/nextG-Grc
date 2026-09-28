@@ -9,6 +9,7 @@
  */
 import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import {
   AreaChart, Area, BarChart, Bar, XAxis, YAxis,
   CartesianGrid, Tooltip, ResponsiveContainer, Cell, PieChart, Pie,
@@ -63,15 +64,17 @@ function useLoad<T>(fetcher: () => Promise<T>): LoadState<T> & { reload: () => v
 function Spinner() { return <Loader2 className="w-4 h-4 animate-spin text-slate-400" />; }
 
 function SeverityBadge({ sev }: { readonly sev: string }) {
+  const { t } = useTranslation();
   const cls =
     sev === "CRITICAL" || sev === "critical" ? "bg-red-100 text-red-700" :
     sev === "HIGH"     || sev === "high"     ? "bg-orange-100 text-orange-700" :
     sev === "MEDIUM"   || sev === "medium"   ? "bg-yellow-100 text-yellow-700" :
                                                "bg-green-100 text-green-700";
-  return <span className={`text-xs font-semibold px-2 py-0.5 rounded-full uppercase ${cls}`}>{sev}</span>;
+  return <span className={`text-xs font-semibold px-2 py-0.5 rounded-full uppercase ${cls}`}>{t(`vocab.${sev.toLowerCase()}`, { defaultValue: sev })}</span>;
 }
 
 function StatusBadge({ status }: { readonly status: string }) {
+  const { t } = useTranslation();
   const s = status.toLowerCase().replace(/_/g, " ");
   const cls =
     s === "active" || s === "implemented" || s === "completed" ? "bg-green-100 text-green-700" :
@@ -79,7 +82,7 @@ function StatusBadge({ status }: { readonly status: string }) {
     s === "draft"                                              ? "bg-gray-100 text-gray-600"   :
     s === "identified" || s === "open"                        ? "bg-red-100 text-red-700"     :
                                                                 "bg-slate-100 text-slate-600";
-  return <span className={`text-xs font-medium px-2 py-0.5 rounded-full capitalize ${cls}`}>{s}</span>;
+  return <span className={`text-xs font-medium px-2 py-0.5 rounded-full capitalize ${cls}`}>{t(`vocab.${status.toLowerCase()}`, { defaultValue: s })}</span>;
 }
 
 function ScoreBadge({ score }: { readonly score: number | null }) {
@@ -160,14 +163,18 @@ const CustomTip = ({ active, payload, label }: { active?: boolean; payload?: { n
 };
 
 function OverviewTab({ dash }: { readonly dash: LoadState<DashSummary> & { reload: () => void } }) {
+  const { t, i18n } = useTranslation();
+  const locale = i18n.language.startsWith("fr") ? "fr-FR" : i18n.language.startsWith("ar") ? "ar-u-nu-latn" : "en-US";
+  // Simulated trend: Aug → Jan, month names follow the interface language.
+  const month = (m: number) => new Date(2025, m, 1).toLocaleString(locale, { month: "short" });
   const d = dash.data;
   const totalControls = d ? Object.values(d.compliance.controls_by_status).reduce((a, b) => a + b, 0) : 0;
   const implPct = totalControls > 0 && d ? Math.round((d.compliance.controls_by_status["implemented"] ?? 0) / totalControls * 100) : 0;
   const pieData = d ? [
-    { name: "Implemented", value: d.compliance.controls_by_status["implemented"] ?? 0 },
-    { name: "In Progress", value: d.compliance.controls_by_status["in_progress"] ?? 0 },
-    { name: "Not Started", value: d.compliance.controls_by_status["not_started"] ?? 0 },
-    { name: "N/A", value: d.compliance.controls_by_status["not_applicable"] ?? 0 },
+    { name: t("vocab.implemented"), value: d.compliance.controls_by_status["implemented"] ?? 0 },
+    { name: t("vocab.in_progress"), value: d.compliance.controls_by_status["in_progress"] ?? 0 },
+    { name: t("vocab.not_started"), value: d.compliance.controls_by_status["not_started"] ?? 0 },
+    { name: t("dashboard.na"), value: d.compliance.controls_by_status["not_applicable"] ?? 0 },
   ] : [];
 
   if (dash.loading) return (
@@ -176,8 +183,8 @@ function OverviewTab({ dash }: { readonly dash: LoadState<DashSummary> & { reloa
   if (dash.error || !d) return (
     <div className="py-16 text-center text-slate-400">
       <XCircle className="w-8 h-8 mx-auto mb-2 opacity-40" />
-      <p className="text-sm">{dash.error ?? "No data"}</p>
-      <button onClick={dash.reload} className="mt-3 text-xs text-blue-600 hover:underline">Retry</button>
+      <p className="text-sm">{dash.error ?? t("common.no_data")}</p>
+      <button onClick={dash.reload} className="mt-3 text-xs text-blue-600 hover:underline">{t("common.retry")}</button>
     </div>
   );
 
@@ -185,17 +192,17 @@ function OverviewTab({ dash }: { readonly dash: LoadState<DashSummary> & { reloa
     <div className="space-y-5">
       {/* KPI row */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <Kpi label="Open Risks" value={d.risk.total_open}
-          sub={`${d.risk.critical} critical · ${d.risk.high} high`}
+        <Kpi label={t("cheatsheet.kpi_open_risks")} value={d.risk.total_open}
+          sub={t("cheatsheet.kpi_open_risks_sub", { critical: d.risk.critical, high: d.risk.high })}
           icon={AlertTriangle} bg="bg-red-500" badge="-12%" badgePos={true} />
-        <Kpi label="Compliance Score" value={d.compliance.average_score != null ? `${d.compliance.average_score}%` : "—"}
-          sub={`${d.compliance.total_assessments} assessments`}
+        <Kpi label={t("cheatsheet.kpi_compliance_score")} value={d.compliance.average_score != null ? `${d.compliance.average_score}%` : "—"}
+          sub={t("cheatsheet.kpi_assessments_sub", { count: d.compliance.total_assessments })}
           icon={Shield} bg="bg-blue-500" badge="+4.2%" badgePos={true} />
-        <Kpi label="Open Findings" value={d.audit.open_findings}
-          sub="Requires remediation"
+        <Kpi label={t("cheatsheet.kpi_open_findings")} value={d.audit.open_findings}
+          sub={t("cheatsheet.kpi_open_findings_sub")}
           icon={ClipboardList} bg="bg-orange-500" badge="+2" badgePos={false} />
-        <Kpi label="Policy Attestation" value={`${d.policy.attestation_rate_percent}%`}
-          sub={`${d.policy.total_attestations} attestations`}
+        <Kpi label={t("cheatsheet.kpi_policy_attestation")} value={`${d.policy.attestation_rate_percent}%`}
+          sub={t("cheatsheet.kpi_attestations_sub", { count: d.policy.total_attestations })}
           icon={FileText} bg="bg-emerald-500" badge="+6.1%" badgePos={true} />
       </div>
 
@@ -203,24 +210,24 @@ function OverviewTab({ dash }: { readonly dash: LoadState<DashSummary> & { reloa
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         {/* Risk by severity bar */}
         <Card className="lg:col-span-2">
-          <CardHeader title="Risk Severity Breakdown" subtitle="Current open risks by severity level" />
+          <CardHeader title={t("cheatsheet.severity_breakdown")} subtitle={t("cheatsheet.severity_breakdown_sub")} />
           <div className="px-5 pb-5">
             <ResponsiveContainer width="100%" height={180}>
               <BarChart data={[{
-                name: "Now",
-                Critical: d.risk.by_severity["critical"] ?? 0,
-                High: d.risk.by_severity["high"] ?? 0,
-                Medium: d.risk.by_severity["medium"] ?? 0,
-                Low: d.risk.by_severity["low"] ?? 0,
+                name: t("cheatsheet.now"),
+                critical: d.risk.by_severity["critical"] ?? 0,
+                high: d.risk.by_severity["high"] ?? 0,
+                medium: d.risk.by_severity["medium"] ?? 0,
+                low: d.risk.by_severity["low"] ?? 0,
               }]} barSize={40}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" vertical={false} />
                 <XAxis dataKey="name" tick={{ fontSize: 11, fill: "#9ca3af" }} axisLine={false} tickLine={false} />
                 <YAxis tick={{ fontSize: 11, fill: "#9ca3af" }} axisLine={false} tickLine={false} />
                 <Tooltip content={<CustomTip />} />
-                <Bar dataKey="Critical" fill="#ef4444" radius={[4, 4, 0, 0]} />
-                <Bar dataKey="High" fill="#f97316" radius={[4, 4, 0, 0]} />
-                <Bar dataKey="Medium" fill="#eab308" radius={[4, 4, 0, 0]} />
-                <Bar dataKey="Low" fill="#22c55e" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="critical" name={t("vocab.critical")} fill="#ef4444" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="high" name={t("vocab.high")} fill="#f97316" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="medium" name={t("vocab.medium")} fill="#eab308" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="low" name={t("vocab.low")} fill="#22c55e" radius={[4, 4, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           </div>
@@ -228,7 +235,7 @@ function OverviewTab({ dash }: { readonly dash: LoadState<DashSummary> & { reloa
 
         {/* Control coverage donut */}
         <Card>
-          <CardHeader title="Control Coverage" subtitle="Across all assessments" />
+          <CardHeader title={t("cheatsheet.control_coverage")} subtitle={t("cheatsheet.control_coverage_sub")} />
           <div className="px-5 pb-5">
             <div className="flex justify-center mb-3">
               <div className="relative w-36 h-36">
@@ -242,7 +249,7 @@ function OverviewTab({ dash }: { readonly dash: LoadState<DashSummary> & { reloa
                 </ResponsiveContainer>
                 <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
                   <span className="text-xl font-bold text-gray-900">{implPct}%</span>
-                  <span className="text-xs text-gray-400">done</span>
+                  <span className="text-xs text-gray-400">{t("cheatsheet.done")}</span>
                 </div>
               </div>
             </div>
@@ -264,15 +271,15 @@ function OverviewTab({ dash }: { readonly dash: LoadState<DashSummary> & { reloa
       {/* Compliance score area chart (simulated trend) */}
       <Card>
         <CardHeader
-          title="Compliance Score Trend"
-          subtitle="Simulated 6-month trajectory"
+          title={t("cheatsheet.score_trend")}
+          subtitle={t("cheatsheet.score_trend_sub")}
           action={<span className="text-2xl font-bold text-blue-600">{d.compliance.average_score ?? "—"}%</span>}
         />
         <div className="px-5 pb-5">
           <ResponsiveContainer width="100%" height={140}>
             <AreaChart data={[
-              { m: "Aug", v: 58 }, { m: "Sep", v: 62 }, { m: "Oct", v: 65 },
-              { m: "Nov", v: 68 }, { m: "Dec", v: 71 }, { m: "Jan", v: d.compliance.average_score ?? 72 },
+              { m: month(7), v: 58 }, { m: month(8), v: 62 }, { m: month(9), v: 65 },
+              { m: month(10), v: 68 }, { m: month(11), v: 71 }, { m: month(0), v: d.compliance.average_score ?? 72 },
             ]}>
               <defs>
                 <linearGradient id="cg" x1="0" y1="0" x2="0" y2="1">
@@ -284,7 +291,7 @@ function OverviewTab({ dash }: { readonly dash: LoadState<DashSummary> & { reloa
               <XAxis dataKey="m" tick={{ fontSize: 11, fill: "#9ca3af" }} axisLine={false} tickLine={false} />
               <YAxis tick={{ fontSize: 11, fill: "#9ca3af" }} axisLine={false} tickLine={false} domain={[50, 100]} />
               <Tooltip content={<CustomTip />} />
-              <Area type="monotone" dataKey="v" stroke="#3b82f6" strokeWidth={2}
+              <Area type="monotone" dataKey="v" name={t("cheatsheet.score")} stroke="#3b82f6" strokeWidth={2}
                 fill="url(#cg)" dot={{ fill: "#3b82f6", r: 3 }} activeDot={{ r: 5 }} />
             </AreaChart>
           </ResponsiveContainer>
@@ -302,21 +309,22 @@ function RisksTab({
   readonly risks: LoadState<RiskPage> & { reload: () => void };
   readonly heatmap: LoadState<HeatmapData> & { reload: () => void };
 }) {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   return (
     <div className="space-y-5">
       {/* Heatmap summary */}
       <Card>
-        <CardHeader title="Risk Heatmap Summary" subtitle="Likelihood × Impact distribution"
+        <CardHeader title={t("cheatsheet.heatmap_summary")} subtitle={t("cheatsheet.heatmap_summary_sub")}
           action={
             <button onClick={() => navigate("/risks")}
               className="text-xs text-blue-600 flex items-center gap-1 hover:underline">
-              Open Register <ExternalLink className="w-3 h-3" />
+              {t("cheatsheet.open_register")} <ExternalLink className="w-3 h-3 rtl:-scale-x-100" />
             </button>
           }
         />
         {heatmap.loading ? (
-          <div className="px-5 pb-5 flex items-center gap-2 text-slate-400 text-sm"><Spinner /> Loading…</div>
+          <div className="px-5 pb-5 flex items-center gap-2 text-slate-400 text-sm"><Spinner /> {t("common.loading")}</div>
         ) : heatmap.data ? (
           <div className="px-5 pb-5">
             <div className="grid grid-cols-5 gap-1 mb-4">
@@ -340,13 +348,13 @@ function RisksTab({
               ))}
             </div>
             <div className="flex items-center justify-between text-xs text-gray-400">
-              <span>Likelihood →</span>
+              <span>{t("cartography.likelihood_axis")} →</span>
               <div className="flex gap-3">
                 {[
-                  { label: "Critical", cls: "bg-red-200" },
-                  { label: "High", cls: "bg-orange-200" },
-                  { label: "Medium", cls: "bg-yellow-200" },
-                  { label: "Low", cls: "bg-green-100" },
+                  { label: t("vocab.critical"), cls: "bg-red-200" },
+                  { label: t("vocab.high"), cls: "bg-orange-200" },
+                  { label: t("vocab.medium"), cls: "bg-yellow-200" },
+                  { label: t("vocab.low"), cls: "bg-green-100" },
                 ].map(({ label, cls }) => (
                   <span key={label} className="flex items-center gap-1">
                     <span className={`w-3 h-3 rounded ${cls}`} />
@@ -364,8 +372,8 @@ function RisksTab({
       {/* Risk list */}
       <Card>
         <CardHeader
-          title={`Risk Register (${risks.data?.total ?? "…"} total)`}
-          subtitle="Live from /risks endpoint"
+          title={t("cheatsheet.risk_register_title", { total: risks.data?.total ?? "…" })}
+          subtitle={t("cheatsheet.live_from", { endpoint: "/risks" })}
           action={
             <button onClick={risks.reload} className="text-gray-400 hover:text-gray-600">
               <RefreshCw className="w-4 h-4" />
@@ -376,8 +384,8 @@ function RisksTab({
           <table className="w-full text-sm">
             <thead>
               <tr className="border-t border-gray-50">
-                {["Title", "Category", "L×I", "Severity", "Status"].map(h => (
-                  <th key={h} className="text-left px-5 py-2.5 text-xs font-semibold text-gray-400 whitespace-nowrap">{h}</th>
+                {[t("cheatsheet.col_title"), t("common.category"), t("cheatsheet.col_lxi"), t("common.severity"), t("common.status")].map(h => (
+                  <th key={h} className="text-start px-5 py-2.5 text-xs font-semibold text-gray-400 whitespace-nowrap">{h}</th>
                 ))}
               </tr>
             </thead>
@@ -396,7 +404,7 @@ function RisksTab({
             </tbody>
           </table>
           {!risks.loading && (risks.data?.items?.length ?? 0) === 0 && (
-            <p className="text-center py-10 text-sm text-slate-400">No risks yet — run <code>python seed.py</code> to populate</p>
+            <p className="text-center py-10 text-sm text-slate-400">{t("cheatsheet.no_risks")} <code>python seed.py</code></p>
           )}
         </div>
       </Card>
@@ -407,18 +415,19 @@ function RisksTab({
 // ── section: compliance ───────────────────────────────────────────────────────
 
 function ComplianceTab({ assessments }: { readonly assessments: LoadState<AssessPage> & { reload: () => void } }) {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   return (
     <Card>
       <CardHeader
-        title={`Assessments (${assessments.data?.total ?? "…"})`}
-        subtitle="Live from /compliance/assessments"
+        title={t("cheatsheet.assessments_title", { total: assessments.data?.total ?? "…" })}
+        subtitle={t("cheatsheet.live_from", { endpoint: "/compliance/assessments" })}
         action={
           <div className="flex gap-2">
             <button onClick={assessments.reload} className="text-gray-400 hover:text-gray-600"><RefreshCw className="w-4 h-4" /></button>
             <button onClick={() => navigate("/compliance")}
               className="text-xs text-blue-600 flex items-center gap-1 hover:underline">
-              Open <ExternalLink className="w-3 h-3" />
+              {t("cartography.open")} <ExternalLink className="w-3 h-3 rtl:-scale-x-100" />
             </button>
           </div>
         }
@@ -427,8 +436,8 @@ function ComplianceTab({ assessments }: { readonly assessments: LoadState<Assess
         <table className="w-full text-sm">
           <thead>
             <tr className="border-t border-gray-50">
-              {["Assessment", "Framework", "Score", "Status", "Docs", ""].map(h => (
-                <th key={h} className="text-left px-5 py-2.5 text-xs font-semibold text-gray-400 whitespace-nowrap">{h}</th>
+              {[t("cheatsheet.col_assessment"), t("cheatsheet.col_framework"), t("cheatsheet.col_score"), t("common.status"), t("cheatsheet.col_docs"), ""].map(h => (
+                <th key={h} className="text-start px-5 py-2.5 text-xs font-semibold text-gray-400 whitespace-nowrap">{h}</th>
               ))}
             </tr>
           </thead>
@@ -447,11 +456,11 @@ function ComplianceTab({ assessments }: { readonly assessments: LoadState<Assess
                 <td className="px-5 py-3 text-gray-500 whitespace-nowrap">{a.framework_name}</td>
                 <td className="px-5 py-3 whitespace-nowrap"><ScoreBadge score={a.compliance_score} /></td>
                 <td className="px-5 py-3"><StatusBadge status={a.status} /></td>
-                <td className="px-5 py-3 text-gray-400 text-xs">{a.document_count} docs</td>
+                <td className="px-5 py-3 text-gray-400 text-xs">{t("cheatsheet.docs_count", { count: a.document_count })}</td>
                 <td className="px-5 py-3">
                   <button onClick={() => navigate(`/compliance/${a.id}`)}
                     className="text-xs text-blue-600 hover:underline flex items-center gap-1">
-                    View <Eye className="w-3 h-3" />
+                    {t("common.view")} <Eye className="w-3 h-3" />
                   </button>
                 </td>
               </tr>
@@ -459,7 +468,7 @@ function ComplianceTab({ assessments }: { readonly assessments: LoadState<Assess
           </tbody>
         </table>
         {!assessments.loading && (assessments.data?.items?.length ?? 0) === 0 && (
-          <p className="text-center py-10 text-sm text-slate-400">No assessments yet — run <code>python seed.py</code></p>
+          <p className="text-center py-10 text-sm text-slate-400">{t("cheatsheet.no_assessments")} <code>python seed.py</code></p>
         )}
       </div>
     </Card>
@@ -469,6 +478,7 @@ function ComplianceTab({ assessments }: { readonly assessments: LoadState<Assess
 // ── section: frameworks ───────────────────────────────────────────────────────
 
 function FrameworksTab({ frameworks }: { readonly frameworks: LoadState<FwItem[]> & { reload: () => void } }) {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -484,13 +494,13 @@ function FrameworksTab({ frameworks }: { readonly frameworks: LoadState<FwItem[]
               <BookOpen className={`w-4 h-4 ${fw.is_builtin ? "text-blue-600" : "text-purple-600"}`} />
             </div>
             <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${fw.is_builtin ? "bg-blue-50 text-blue-700" : "bg-purple-50 text-purple-700"}`}>
-              {fw.is_builtin ? "Built-in" : "Custom"}
+              {fw.is_builtin ? t("frameworks.builtin") : t("frameworks.tenant")}
             </span>
           </div>
           <p className="font-semibold text-gray-900 text-sm leading-snug">{fw.name}</p>
           <p className="text-xs text-gray-400 mt-0.5 font-mono">{fw.short_name}</p>
           <div className="flex items-center justify-between mt-3 pt-3 border-t border-gray-50">
-            <span className="text-xs text-gray-500">{fw.control_count} controls</span>
+            <span className="text-xs text-gray-500">{t("cheatsheet.controls_count", { count: fw.control_count })}</span>
             <StatusBadge status={fw.status} />
           </div>
         </Card>
@@ -502,7 +512,7 @@ function FrameworksTab({ frameworks }: { readonly frameworks: LoadState<FwItem[]
         <div className="w-9 h-9 rounded-xl bg-gray-100 flex items-center justify-center">
           <Zap className="w-4 h-4 text-gray-400" />
         </div>
-        <p className="text-sm font-medium text-gray-400">Build Custom Framework</p>
+        <p className="text-sm font-medium text-gray-400">{t("cheatsheet.build_custom")}</p>
       </Card>
     </div>
   );
@@ -522,7 +532,27 @@ function TestBadge({ status }: { readonly status: TestResult["status"] }) {
   return <XCircle className="w-3.5 h-3.5 text-red-500" />;
 }
 
+// Test names double as upsert keys, so they stay English in the suites; the
+// row label is translated here (code-like names such as "GET /x" stay as-is).
+const TEST_NAME_KEYS: Record<string, string> = {
+  "Reject bad password": "reject_bad_password",
+  "List risks": "list_risks",
+  "Create CRITICAL risk (L4×I5)": "create_critical_risk",
+  "Create LOW risk (L1×I2)": "create_low_risk",
+  "Patch risk → accepted": "patch_risk_accepted",
+  "List frameworks": "list_frameworks",
+  "Create custom framework": "create_custom_framework",
+  "Add control": "add_control",
+  "Add requirement": "add_requirement",
+  "List assessments": "list_assessments",
+};
+
 function TestRow({ r }: { readonly r: TestResult }) {
+  const { t } = useTranslation();
+  const login = r.name.match(/^Login (.+)$/);
+  const label = login
+    ? t("cheatsheet.test.login", { email: login[1] })
+    : TEST_NAME_KEYS[r.name] ? t(`cheatsheet.test.${TEST_NAME_KEYS[r.name]}`) : r.name;
   const [open, setOpen] = useState(false);
   const bg = r.status === "pass" ? "bg-green-50/50 border-green-100" :
              r.status === "fail" ? "bg-red-50/50 border-red-100" : "bg-white border-gray-50";
@@ -531,7 +561,7 @@ function TestRow({ r }: { readonly r: TestResult }) {
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-2 min-w-0">
           <TestBadge status={r.status} />
-          <span className="text-sm font-medium text-gray-700 truncate">{r.name}</span>
+          <span className="text-sm font-medium text-gray-700 truncate">{label}</span>
         </div>
         <div className="flex items-center gap-2 flex-shrink-0">
           <span className={`text-xs font-mono px-1.5 py-0.5 rounded ${
@@ -671,6 +701,8 @@ const TEST_SUITES = [
 ];
 
 function ApiTestsTab() {
+  const { t } = useTranslation();
+  const suiteLabel = (id: string) => t(`cheatsheet.suite.${id}`, { defaultValue: TEST_SUITES.find(s => s.id === id)?.label ?? id });
   const [results, setResults] = useState<Record<string, TestResult[]>>({});
   const [running, setRunning] = useState(false);
   const [activeId, setActiveId] = useState("risks");
@@ -719,10 +751,10 @@ function ApiTestsTab() {
     <div className="space-y-4">
       {/* Top bar */}
       <div className="flex items-center justify-between">
-        <p className="text-sm text-gray-500">Executes real API calls against the backend</p>
+        <p className="text-sm text-gray-500">{t("cheatsheet.tests_intro")}</p>
         <button onClick={runAll} disabled={running}
           className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors">
-          {running ? <><Loader2 className="w-4 h-4 animate-spin" /> Running…</> : <><Play className="w-4 h-4" /> Run All Tests</>}
+          {running ? <><Loader2 className="w-4 h-4 animate-spin" /> {t("cheatsheet.running")}</> : <><Play className="w-4 h-4 rtl:-scale-x-100" /> {t("cheatsheet.run_all")}</>}
         </button>
       </div>
 
@@ -731,9 +763,9 @@ function ApiTestsTab() {
           {summary.fail === 0 ? <CheckCircle className="w-5 h-5 text-green-600" /> : <XCircle className="w-5 h-5 text-red-600" />}
           <div>
             <p className={`font-semibold text-sm ${summary.fail === 0 ? "text-green-800" : "text-red-800"}`}>
-              {summary.fail === 0 ? "All tests passed!" : `${summary.fail} test(s) failed`}
+              {summary.fail === 0 ? t("cheatsheet.all_passed") : t("cheatsheet.n_failed", { count: summary.fail })}
             </p>
-            <p className="text-xs text-gray-500">{summary.pass} passed · {summary.fail} failed</p>
+            <p className="text-xs text-gray-500">{t("cheatsheet.pass_fail", { pass: summary.pass, fail: summary.fail })}</p>
           </div>
         </div>
       )}
@@ -750,9 +782,9 @@ function ApiTestsTab() {
                 className={`px-4 py-3 text-sm font-medium whitespace-nowrap border-b-2 transition-colors ${
                   activeId === s.id ? "border-blue-500 text-blue-700 bg-blue-50/50" : "border-transparent text-gray-500 hover:text-gray-700"
                 }`}>
-                {s.label}
+                {suiteLabel(s.id)}
                 {sr.length > 0 && (
-                  <span className={`ml-1.5 text-xs px-1.5 py-0.5 rounded-full ${fail > 0 ? "bg-red-100 text-red-700" : "bg-green-100 text-green-700"}`}>
+                  <span className={`ms-1.5 text-xs px-1.5 py-0.5 rounded-full ${fail > 0 ? "bg-red-100 text-red-700" : "bg-green-100 text-green-700"}`}>
                     {pass}/{sr.length}
                   </span>
                 )}
@@ -763,10 +795,10 @@ function ApiTestsTab() {
 
         {/* Section header */}
         <div className="px-5 py-3 border-b border-gray-50 flex items-center justify-between">
-          <span className="text-sm font-medium text-gray-700 capitalize">{activeId} tests</span>
+          <span className="text-sm font-medium text-gray-700">{t("cheatsheet.suite_tests", { suite: suiteLabel(activeId) })}</span>
           <button onClick={() => runSuite(activeId)} disabled={running}
             className="flex items-center gap-1.5 text-xs bg-gray-100 hover:bg-gray-200 disabled:opacity-50 text-gray-600 px-3 py-1.5 rounded-lg transition-colors">
-            <RefreshCw className="w-3.5 h-3.5" /> Run {activeId}
+            <RefreshCw className="w-3.5 h-3.5" /> {t("cheatsheet.run_suite", { suite: suiteLabel(activeId) })}
           </button>
         </div>
 
@@ -775,7 +807,7 @@ function ApiTestsTab() {
           {sectionResults.length === 0 ? (
             <div className="text-center py-10 text-gray-300">
               <Database className="w-8 h-8 mx-auto mb-2 opacity-40" />
-              <p className="text-sm">Press "Run {activeId}" to execute</p>
+              <p className="text-sm">{t("cheatsheet.press_run", { suite: suiteLabel(activeId) })}</p>
             </div>
           ) : (
             sectionResults.map(r => <TestRow key={r.name} r={r} />)
@@ -788,17 +820,19 @@ function ApiTestsTab() {
 
 // ── main page ─────────────────────────────────────────────────────────────────
 
+// `label` is an i18n key, resolved with t() at render time.
 const TABS = [
-  { id: "overview",    label: "Overview",    icon: Activity },
-  { id: "risks",       label: "Risks",       icon: AlertTriangle },
-  { id: "compliance",  label: "Compliance",  icon: Shield },
-  { id: "frameworks",  label: "Frameworks",  icon: BookOpen },
-  { id: "tests",       label: "API Tests",   icon: Zap },
+  { id: "overview",    label: "cheatsheet.tab.overview",    icon: Activity },
+  { id: "risks",       label: "cheatsheet.tab.risks",       icon: AlertTriangle },
+  { id: "compliance",  label: "nav.compliance",             icon: Shield },
+  { id: "frameworks",  label: "nav.frameworks",             icon: BookOpen },
+  { id: "tests",       label: "cheatsheet.tab.tests",       icon: Zap },
 ] as const;
 
 type TabId = typeof TABS[number]["id"];
 
 export default function CheatSheetPage() {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const [tab, setTab] = useState<TabId>("overview");
 
@@ -826,15 +860,15 @@ export default function CheatSheetPage() {
         <div>
           <button onClick={() => navigate("/dashboard")}
             className="flex items-center gap-1.5 text-sm text-gray-400 hover:text-gray-600 mb-2">
-            <ArrowLeft className="w-4 h-4" /> Dashboard
+            <ArrowLeft className="w-4 h-4 rtl:rotate-180" /> {t("nav.dashboard")}
           </button>
-          <h1 className="text-2xl font-bold text-gray-900">Admin Panel</h1>
-          <p className="text-gray-400 text-sm mt-0.5">Live data from every module · Acme Corp (Demo)</p>
+          <h1 className="text-2xl font-bold text-gray-900">{t("cheatsheet.title")}</h1>
+          <p className="text-gray-400 text-sm mt-0.5">{t("cheatsheet.subtitle")}</p>
         </div>
         <div className="flex items-center gap-2">
           <button onClick={reloadAll}
             className="flex items-center gap-1.5 text-sm text-gray-500 bg-white border border-gray-200 hover:bg-gray-50 px-3 py-2 rounded-lg transition-colors">
-            <RefreshCw className="w-4 h-4" /> Refresh
+            <RefreshCw className="w-4 h-4" /> {t("common.refresh")}
           </button>
           <a href="http://localhost:8000/api/v1/docs" target="_blank" rel="noreferrer"
             className="flex items-center gap-1.5 text-sm text-blue-600 bg-blue-50 hover:bg-blue-100 px-3 py-2 rounded-lg transition-colors font-medium">
@@ -846,13 +880,13 @@ export default function CheatSheetPage() {
       {/* Quick module nav */}
       <div className="flex flex-wrap gap-2">
         {[
-          { label: "Compliance", path: "/compliance", color: "bg-blue-50 text-blue-700 hover:bg-blue-100" },
-          { label: "Risk Register", path: "/risks", color: "bg-red-50 text-red-700 hover:bg-red-100" },
-          { label: "Frameworks", path: "/framework", color: "bg-purple-50 text-purple-700 hover:bg-purple-100" },
-          { label: "Custom Framework", path: "/framework/custom/new", color: "bg-violet-50 text-violet-700 hover:bg-violet-100" },
-          { label: "Vendors", path: "/vendors", color: "bg-emerald-50 text-emerald-700 hover:bg-emerald-100" },
-          { label: "Policies", path: "/policies", color: "bg-amber-50 text-amber-700 hover:bg-amber-100" },
-          { label: "Audits", path: "/audits", color: "bg-orange-50 text-orange-700 hover:bg-orange-100" },
+          { label: t("nav.compliance"), path: "/compliance", color: "bg-blue-50 text-blue-700 hover:bg-blue-100" },
+          { label: t("nav.risks"), path: "/risks", color: "bg-red-50 text-red-700 hover:bg-red-100" },
+          { label: t("nav.frameworks"), path: "/framework", color: "bg-purple-50 text-purple-700 hover:bg-purple-100" },
+          { label: t("cheatsheet.custom_framework"), path: "/framework/custom/new", color: "bg-violet-50 text-violet-700 hover:bg-violet-100" },
+          { label: t("nav.vendors"), path: "/vendors", color: "bg-emerald-50 text-emerald-700 hover:bg-emerald-100" },
+          { label: t("nav.policies"), path: "/policies", color: "bg-amber-50 text-amber-700 hover:bg-amber-100" },
+          { label: t("nav.audits"), path: "/audits", color: "bg-orange-50 text-orange-700 hover:bg-orange-100" },
         ].map(({ label, path, color }) => (
           <button key={path} onClick={() => navigate(path)}
             className={`text-xs font-medium px-3 py-1.5 rounded-lg transition-colors ${color}`}>
@@ -866,15 +900,15 @@ export default function CheatSheetPage() {
         <div>
           <div className="flex items-center gap-2 mb-1">
             <Database className="w-4 h-4 text-slate-400" />
-            <p className="text-sm font-semibold text-slate-200">Seed demo data</p>
+            <p className="text-sm font-semibold text-slate-200">{t("cheatsheet.seed_title")}</p>
           </div>
           <code className="text-xs text-emerald-400 font-mono">cd d:/GRC/backend &amp;&amp; python seed.py</code>
-          <p className="text-xs text-slate-500 mt-1">Creates: ISO-Lite framework · 8 controls · 12 risks · 2 assessments (67.5% scored)</p>
+          <p className="text-xs text-slate-500 mt-1">{t("cheatsheet.seed_desc")}</p>
         </div>
         <div className="flex gap-4">
           {[
-            { role: "Admin", email: "admin@demo.com" },
-            { role: "CISO",  email: "ciso@demo.com" },
+            { role: t("cheatsheet.role_admin"), email: "admin@demo.com" },
+            { role: t("company_admin.roles.ciso_label"),  email: "ciso@demo.com" },
           ].map(c => (
             <div key={c.email}>
               <p className="text-xs text-slate-500">{c.role}</p>
@@ -893,7 +927,7 @@ export default function CheatSheetPage() {
               tab === id ? "border-blue-500 text-blue-700" : "border-transparent text-gray-500 hover:text-gray-700"
             }`}>
             <Icon className="w-3.5 h-3.5" />
-            {label}
+            {t(label)}
           </button>
         ))}
       </div>

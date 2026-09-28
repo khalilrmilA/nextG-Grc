@@ -275,6 +275,9 @@ async def update_raci(
                     entity_type="raci_assignment",
                     link="/governance",
                     severity="info",
+                    title_key="notifications.raci_responsible_assigned.title",
+                    message_key="notifications.raci_responsible_assigned.message",
+                    params={"activity": row.activity},
                 )
         if old_user_id and old_user_id != row.user_id:
             old_result = await db.execute(select(User).where(User.id == old_user_id, User.tenant_id == tenant_id))
@@ -290,6 +293,9 @@ async def update_raci(
                     entity_type="raci_assignment",
                     link="/governance",
                     severity="info",
+                    title_key="notifications.raci_responsible_removed.title",
+                    message_key="notifications.raci_responsible_removed.message",
+                    params={"activity": row.activity},
                 )
         await db.commit()
 

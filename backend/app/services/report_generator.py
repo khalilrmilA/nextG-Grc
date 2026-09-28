@@ -129,6 +129,9 @@ _VOCAB: dict[str, dict[str, str]] = {
     "avoid": {"en": "Avoid", "fr": "Éviter", "ar": "تجنّب"},
     # generic lifecycle
     "draft": {"fr": "Brouillon", "ar": "مسودة"},
+    "in_review": {"fr": "En revue", "ar": "قيد المراجعة"},
+    "published": {"fr": "Publiée", "ar": "منشورة"},
+    "retired": {"fr": "Retirée", "ar": "مسحوبة"},
     "not_started": {"fr": "Non démarré", "ar": "لم يبدأ"},
     "in_progress": {"fr": "En cours", "ar": "قيد التنفيذ"},
     "completed": {"fr": "Terminé", "ar": "مكتمل"},
@@ -590,6 +593,12 @@ def _label(lang: str, value, default: str = "—") -> str:
 # import back. Unknown names fall through to today's Title Case, so a column
 # added elsewhere degrades to English instead of vanishing.
 _COLUMNS: dict[str, dict[str, str]] = {
+    "archive_id": {"en": "Archive ID", "fr": "Identifiant d'archive", "ar": "معرّف الأرشيف"},
+    "entity_type": {"fr": "Type d'entité", "ar": "نوع الكيان"},
+    "entity_id": {"en": "Entity ID", "fr": "Identifiant de l'entité", "ar": "معرّف الكيان"},
+    "reason": {"fr": "Motif", "ar": "السبب"},
+    "archived_at": {"fr": "Archivé le", "ar": "تاريخ الأرشفة"},
+    "retention_until": {"fr": "Conservation jusqu'au", "ar": "الاحتفاظ حتى"},
     "applicable_industries": {"fr": "Secteurs applicables", "ar": "القطاعات المعنية"},
     "applicable_regions": {"fr": "Régions applicables", "ar": "المناطق المعنية"},
     "assessment_end": {"fr": "Fin de l'évaluation", "ar": "نهاية التقييم"},
@@ -695,6 +704,7 @@ _COLUMNS: dict[str, dict[str, str]] = {
 # the endpoint already uses (data_io's root_tag, report_builder's dataset name);
 # a trailing "_export" is tolerated so a file stem can be passed straight in.
 _REGISTERS: dict[str, dict[str, str]] = {
+    "archives": {"en": "Archive Records", "fr": "Enregistrements archivés", "ar": "السجلات المؤرشفة"},
     "risks": {"en": "Risk Register", "fr": "Registre des risques", "ar": "سجل المخاطر"},
     "vendors": {"en": "Third Parties", "fr": "Tiers et fournisseurs", "ar": "الأطراف الثالثة"},
     "assets": {"en": "Asset Inventory", "fr": "Inventaire des actifs", "ar": "جرد الأصول"},
@@ -774,8 +784,64 @@ def _fmt_date(value, lang: str, default: str = "—") -> str:
 
 
 def _fmt_datetime(value: datetime, lang: str) -> str:
-    """Date + UTC clock, for the "generated at" stamp."""
-    return f"{_fmt_date(value, lang)}, {value.strftime('%H:%M')} UTC"
+    """Date + UTC clock, for the "generated at" stamp (Arabic comma in Arabic)."""
+    sep = "،" if lang == "ar" else ","
+    return f"{_fmt_date(value, lang)}{sep} {value.strftime('%H:%M')} UTC"
+
+
+# Risk categories and vendor sectors are free text, but most tenants pick them
+# from the SPA's own list (frontend locales `risks.categories`), whose values
+# are English words. Those are platform vocabulary and are translated with the
+# SPA's own wording; anything a tenant typed itself is shown as typed.
+_CATEGORIES: dict[str, dict[str, str]] = {
+    "strategic": {"fr": "Stratégique", "ar": "استراتيجي"},
+    "operational": {"fr": "Opérationnel", "ar": "تشغيلي"},
+    "financial": {"fr": "Financier", "ar": "مالي"},
+    "compliance": {"fr": "Conformité", "ar": "امتثال"},
+    "technology": {"fr": "Technologie", "ar": "تقنية"},
+    "reputational": {"fr": "Réputation", "ar": "سمعة"},
+    "technical": {"fr": "Technique", "ar": "تقني"},
+    "access_control": {"fr": "Contrôle d'accès", "ar": "التحكم في الوصول"},
+    "identity_access": {"fr": "Identité & Accès", "ar": "الهوية والوصول"},
+    "business_continuity": {"fr": "Continuité d'activité", "ar": "استمرارية الأعمال"},
+    "vendor_risk": {"fr": "Risque fournisseur", "ar": "مخاطر الموردين"},
+    "people": {"fr": "Personnes", "ar": "الأشخاص"},
+    "incident_management": {"fr": "Gestion des incidents", "ar": "إدارة الحوادث"},
+    "application": {"fr": "Application", "ar": "تطبيق"},
+    "data_protection": {"fr": "Protection des données", "ar": "حماية البيانات"},
+    "governance": {"fr": "Gouvernance", "ar": "الحوكمة"},
+    "physical": {"fr": "Physique", "ar": "مادي"},
+    "legal_compliance": {"fr": "Juridique & Conformité", "ar": "قانوني وامتثال"},
+    # Vendor sectors
+    "finance": {"fr": "Finance", "ar": "المالية"},
+    "banking": {"fr": "Banque", "ar": "الخدمات المصرفية"},
+    "healthcare": {"fr": "Santé", "ar": "الرعاية الصحية"},
+    "telecom": {"fr": "Télécommunications", "ar": "الاتصالات"},
+    "telecommunications": {"fr": "Télécommunications", "ar": "الاتصالات"},
+    "retail": {"fr": "Commerce de détail", "ar": "تجارة التجزئة"},
+    "manufacturing": {"fr": "Industrie", "ar": "الصناعة"},
+    "energy": {"fr": "Énergie", "ar": "الطاقة"},
+    "government": {"fr": "Secteur public", "ar": "القطاع الحكومي"},
+    "consulting": {"fr": "Conseil", "ar": "الاستشارات"},
+    "logistics": {"fr": "Logistique", "ar": "الخدمات اللوجستية"},
+    "insurance": {"fr": "Assurance", "ar": "التأمين"},
+    "education": {"fr": "Éducation", "ar": "التعليم"},
+    "cloud": {"fr": "Cloud", "ar": "الحوسبة السحابية"},
+    "software": {"fr": "Logiciel", "ar": "البرمجيات"},
+}
+
+
+def _category_label(lang: str, value) -> str:
+    """A category / sector in the report language when it is platform vocabulary."""
+    raw = str(value or "").strip()
+    if not raw:
+        return "—"
+    if lang == "en":
+        return raw
+    norm = raw.lower().replace("&", " ").replace("/", " ").replace("-", " ")
+    norm = "_".join(norm.split())
+    entry = _CATEGORIES.get(norm)
+    return (entry or {}).get(lang) or raw
 
 
 def _styles(lang: str = "en"):
@@ -1179,7 +1245,7 @@ async def generate_risk_report(db: AsyncSession, tenant_id: str, org: str, lang:
     rows = []
     for r in scored:
         score = (r.likelihood or 0) * (r.impact or 0)
-        rows.append([r.title[:50], r.risk_category[:20] if r.risk_category else "—", f"{score:.1f}",
+        rows.append([r.title[:50], _category_label(lang, r.risk_category)[:24], f"{score:.1f}",
                      _label(lang, r.severity), _label(lang, r.status)])
     els.append(_table(
         [_t(lang, "col_title"), _t(lang, "col_category"), _t(lang, "col_score"),
@@ -1241,7 +1307,7 @@ async def generate_vendor_report(db: AsyncSession, tenant_id: str, org: str, lan
     for v in vendors[:15]:
         score = f"{v.risk_score:.0f}" if v.risk_score else "—"
         dpa = _t(lang, "yes") if v.has_data_processing_agreement else _t(lang, "no")
-        rows.append([v.name[:30], v.industry[:20] if v.industry else "—",
+        rows.append([v.name[:30], _category_label(lang, v.industry)[:24],
                      _label(lang, v.risk_tier), score, dpa, _label(lang, v.status)])
     els.append(_table(
         [_t(lang, "col_vendor"), _t(lang, "col_industry"), _t(lang, "col_tier"),
@@ -1274,7 +1340,7 @@ async def generate_vendor_report(db: AsyncSession, tenant_id: str, org: str, lan
     # Missing DPA
     if no_dpa > 0:
         els.append(_section(st, _t(lang, "sec_missing_dpa")))
-        rows = [[v.name[:40], v.industry[:25] if v.industry else "—"] for v in vendors if not v.has_data_processing_agreement][:10]
+        rows = [[v.name[:40], _category_label(lang, v.industry)[:28]] for v in vendors if not v.has_data_processing_agreement][:10]
         els.append(_table([_t(lang, "col_vendor"), _t(lang, "col_industry")], rows,
                           [PAGE_W * 0.55, PAGE_W * 0.45], lang))
 

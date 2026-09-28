@@ -4,19 +4,23 @@ import {
   Bot, X, Send, Loader2, Sparkles, ChevronDown,
   Shield, AlertTriangle, CheckSquare, FileText, RotateCcw,
 } from "lucide-react";
+import { aiLanguageHeaders, uiLanguage } from "@/lib/sse";
 
 interface Message {
   id: string;
   role: "user" | "assistant";
   content: string;
+  /** UI-owned messages (welcome / cleared) store a key so they follow the UI language. */
+  i18nKey?: string;
   loading?: boolean;
 }
 
+// Labels and prompt texts are i18n keys (ai_assistant.prompts.<id>_label / _text).
 const QUICK_PROMPTS = [
-  { icon: Shield,        label: "ISO 27001 gap",    text: "What are the most common ISO 27001:2022 gaps for a SaaS company?" },
-  { icon: AlertTriangle, label: "Risk treatment",   text: "Explain the 4 risk treatment options (accept, avoid, transfer, mitigate) with examples." },
-  { icon: CheckSquare,   label: "SOC 2 controls",   text: "What are the key SOC 2 Trust Service Criteria I need to implement first?" },
-  { icon: FileText,      label: "Draft policy",     text: "Draft a concise Information Security Policy for a 50-person SaaS company." },
+  { icon: Shield,        id: "iso_gap" },
+  { icon: AlertTriangle, id: "risk_treatment" },
+  { icon: CheckSquare,   id: "soc2" },
+  { icon: FileText,      id: "draft_policy" },
 ];
 
 const API_BASE = import.meta.env.VITE_API_URL || "/api/v1";
@@ -101,9 +105,11 @@ async function streamChat(
     method: "POST",
     headers: {
       "Content-Type": "application/json",
+      // UI language, not the browser's (raw fetch bypasses the axios interceptor).
+      ...aiLanguageHeaders(),
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
     },
-    body: JSON.stringify({ messages, stream: true, language }),
+    body: JSON.stringify({ messages, stream: true, language: language || uiLanguage() }),
     signal,
   });
   clearTimeout(timeoutId);
@@ -128,14 +134,15 @@ async function streamChat(
 }
 
 export default function AIAssistant() {
-  const { i18n } = useTranslation();
+  const { t, i18n } = useTranslation();
   const [open, setOpen]       = useState(false);
   const [input, setInput]     = useState("");
   const [messages, setMessages] = useState<Message[]>([
     {
       id: "welcome",
       role: "assistant",
-      content: "Hi! I'm your GRC AI assistant.\n\nI can help you with ISO 27001, SOC 2, GDPR, risk assessments, policy drafting, audit prep, and more.\n\n⚡ First response may take ~10s while the AI loads. What do you need help with?",
+      content: "",
+      i18nKey: "ai_assistant.welcome",
     },
   ]);
   const [loading, setLoading] = useState(false);
@@ -176,7 +183,7 @@ export default function AIAssistant() {
 
     const history = messages
       .filter(m => !m.loading)
-      .map(m => ({ role: m.role, content: m.content }));
+      .map(m => ({ role: m.role, content: m.i18nKey ? t(m.i18nKey as never) : m.content }));
     history.push({ role: "user", content: trimmed });
 
     abortRef.current = new AbortController();
@@ -202,7 +209,7 @@ export default function AIAssistant() {
       setMessages(prev =>
         prev.map(m =>
           m.id === assistantId
-            ? { ...m, content: "Sorry, I couldn't reach the AI service. Make sure the backend and Ollama are running.", loading: false }
+            ? { ...m, content: t("ai_assistant.error_unreachable"), loading: false }
             : m
         )
       );
@@ -229,7 +236,8 @@ export default function AIAssistant() {
     setMessages([{
       id: "welcome",
       role: "assistant",
-      content: "Chat cleared. How can I help you with your GRC work?",
+      content: "",
+      i18nKey: "ai_assistant.cleared",
     }]);
     setLoading(false);
     abortRef.current?.abort();
@@ -256,7 +264,8 @@ export default function AIAssistant() {
       <button
         onClick={() => setOpen(true)}
         className="ai-assistant-button fixed bottom-6 right-6 rtl:right-auto rtl:left-6 z-50 w-14 h-14 bg-gradient-to-br from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white rounded-2xl shadow-xl shadow-blue-500/30 flex items-center justify-center transition-all hover:scale-110 group"
-        title="GRC AI Assistant"
+        title={t("ai_assistant.button_title")}
+        aria-label={t("ai_assistant.button_title")}
       >
         <Bot className="w-6 h-6" />
         <span className="absolute -top-1 -right-1 rtl:right-auto rtl:-left-1 w-3.5 h-3.5 bg-green-400 rounded-full border-2 border-white" />
@@ -274,10 +283,10 @@ export default function AIAssistant() {
             <Bot className="w-4 h-4" />
           </div>
           <div>
-            <p className="text-sm font-semibold leading-none">GRC Assistant</p>
+            <p className="text-sm font-semibold leading-none">{t("ai_assistant.title")}</p>
             <div className="flex items-center gap-1 mt-0.5">
               <span className="w-1.5 h-1.5 bg-green-400 rounded-full" />
-              <span className="text-xs text-blue-100">Online</span>
+              <span className="text-xs text-blue-100">{t("ai_assistant.online")}</span>
             </div>
           </div>
         </div>
@@ -285,21 +294,21 @@ export default function AIAssistant() {
           <button
             onClick={clearChat}
             className="w-7 h-7 rounded-lg flex items-center justify-center text-white/70 hover:bg-white/20 transition-colors"
-            title="Clear chat"
+            title={t("public.chat.clear")}
           >
             <RotateCcw className="w-3.5 h-3.5" />
           </button>
           <button
             onClick={() => setMinimized(m => !m)}
             className="w-7 h-7 rounded-lg flex items-center justify-center text-white/70 hover:bg-white/20 transition-colors"
-            title="Minimize"
+            title={t("public.chat.minimize")}
           >
             <ChevronDown className={`w-4 h-4 transition-transform ${minimized ? "rotate-180" : ""}`} />
           </button>
           <button
             onClick={() => setOpen(false)}
             className="w-7 h-7 rounded-lg flex items-center justify-center text-white/70 hover:bg-white/20 transition-colors"
-            title="Close"
+            title={t("common.close")}
           >
             <X className="w-4 h-4" />
           </button>
@@ -313,7 +322,7 @@ export default function AIAssistant() {
             {messages.map(msg => (
               <div key={msg.id} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
                 {msg.role === "assistant" && (
-                  <div className="w-6 h-6 bg-gradient-to-br from-blue-500 to-indigo-500 rounded-lg flex items-center justify-center flex-shrink-0 mr-2 mt-0.5">
+                  <div className="w-6 h-6 bg-gradient-to-br from-blue-500 to-indigo-500 rounded-lg flex items-center justify-center flex-shrink-0 me-2 mt-0.5">
                     <Sparkles className="w-3 h-3 text-white" />
                   </div>
                 )}
@@ -329,7 +338,7 @@ export default function AIAssistant() {
                       <span className="w-1.5 h-1.5 bg-blue-400 rounded-full animate-bounce" style={{ animationDelay: "300ms" }} />
                     </div>
                   ) : (
-                    <div>{renderContent(msg.content)}</div>
+                    <div>{renderContent(msg.i18nKey ? t(msg.i18nKey as never) : msg.content)}</div>
                   )}
                 </div>
               </div>
@@ -340,14 +349,14 @@ export default function AIAssistant() {
           {/* Quick prompts (only when 1 message = welcome) */}
           {messages.length === 1 && (
             <div className="px-4 pb-2 grid grid-cols-2 gap-2 flex-shrink-0">
-              {QUICK_PROMPTS.map(({ icon: Icon, label, text }) => (
+              {QUICK_PROMPTS.map(({ icon: Icon, id }) => (
                 <button
-                  key={label}
-                  onClick={() => sendMessage(text)}
-                  className="flex items-center gap-2 px-3 py-2 bg-gray-50 hover:bg-blue-50 border border-gray-100 hover:border-blue-200 rounded-xl text-xs text-gray-600 hover:text-blue-700 font-medium transition-colors text-left"
+                  key={id}
+                  onClick={() => sendMessage(t(`ai_assistant.prompts.${id}_text` as never))}
+                  className="flex items-center gap-2 px-3 py-2 bg-gray-50 hover:bg-blue-50 border border-gray-100 hover:border-blue-200 rounded-xl text-xs text-gray-600 hover:text-blue-700 font-medium transition-colors text-start"
                 >
                   <Icon className="w-3.5 h-3.5 flex-shrink-0 text-blue-500" />
-                  {label}
+                  {t(`ai_assistant.prompts.${id}_label` as never)}
                 </button>
               ))}
             </div>
@@ -362,7 +371,7 @@ export default function AIAssistant() {
                 value={input}
                 onChange={e => setInput(e.target.value)}
                 onKeyDown={handleKeyDown}
-                placeholder="Ask about ISO 27001, risks, policies..."
+                placeholder={t("ai_assistant.placeholder")}
                 className="flex-1 bg-transparent resize-none text-sm text-gray-800 placeholder-gray-400 focus:outline-none max-h-28 leading-relaxed"
                 style={{ minHeight: "24px" }}
               />
@@ -370,7 +379,7 @@ export default function AIAssistant() {
                 <button
                   onClick={stopGeneration}
                   className="flex-shrink-0 w-8 h-8 rounded-xl bg-red-100 hover:bg-red-200 text-red-600 flex items-center justify-center transition-colors"
-                  title="Stop"
+                  title={t("public.chat.stop")}
                 >
                   <Loader2 className="w-4 h-4 animate-spin" />
                 </button>
@@ -379,13 +388,13 @@ export default function AIAssistant() {
                   onClick={() => sendMessage(input)}
                   disabled={!input.trim()}
                   className="flex-shrink-0 w-8 h-8 rounded-xl bg-blue-600 hover:bg-blue-700 disabled:bg-gray-200 disabled:text-gray-400 text-white flex items-center justify-center transition-colors"
-                  title="Send (Enter)"
+                  title={t("public.chat.send")}
                 >
                   <Send className="w-3.5 h-3.5" />
                 </button>
               )}
             </div>
-            <p className="text-center text-xs text-gray-300 mt-1.5">Enter to send · Shift+Enter for new line</p>
+            <p className="text-center text-xs text-gray-300 mt-1.5">{t("ai_assistant.input_hint")}</p>
           </div>
         </>
       )}

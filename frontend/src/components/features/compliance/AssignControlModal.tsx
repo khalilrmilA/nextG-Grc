@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { X, UserCheck, Printer, Loader2, Calendar, Mail, User, CheckCircle } from "lucide-react";
 import { complianceApi } from "@/api/endpoints";
 import type { ControlAssessmentDetail, GapDetail } from "@/types";
@@ -11,14 +12,14 @@ interface Props {
   onClose: () => void;
 }
 
-const STATUS_LABELS: Record<string, string> = {
-  implemented: "Compliant",
-  partially_implemented: "Partial",
-  not_implemented: "Gap",
-  not_applicable: "N/A",
-  not_started: "Not Started",
-  in_progress: "In Progress",
-};
+// Display labels resolved at render time through t("assign_control.status.<key>").
+const STATUS_KEYS = ["implemented", "partially_implemented", "not_implemented", "not_applicable", "not_started", "in_progress"];
+
+function intlLocale(lang: string): string {
+  if (lang.startsWith("fr")) return "fr-FR";
+  if (lang.startsWith("ar")) return "ar-u-nu-latn";
+  return "en-GB";
+}
 
 const STATUS_COLORS: Record<string, string> = {
   implemented: "#15803d",
@@ -42,6 +43,10 @@ export default function AssignControlModal({ ca, gap, assessmentName, frameworkN
   const [form, setForm] = useState({ name: "", email: "", due: "", notes: "" });
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const { t, i18n } = useTranslation();
+  const lang = i18n.language || "en";
+  const fmtDate = (d: Date) => d.toLocaleDateString(intlLocale(lang), { day: "2-digit", month: "long", year: "numeric" });
+  const statusLabel = (s: string) => (STATUS_KEYS.includes(s) ? t(`assign_control.status.${s}`) : s);
 
   async function handleSaveAndPrint() {
     if (!form.name.trim()) return;
@@ -49,10 +54,10 @@ export default function AssignControlModal({ ca, gap, assessmentName, frameworkN
     try {
       const assignNote = [
         ca.notes ?? "",
-        `\n\n[Assignment] Assigned to: ${form.name}${form.email ? ` <${form.email}>` : ""}`,
-        form.due ? `Due: ${new Date(form.due).toLocaleDateString("en-GB", { day: "2-digit", month: "long", year: "numeric" })}` : null,
-        form.notes ? `Notes: ${form.notes}` : null,
-        `Assigned on: ${new Date().toLocaleDateString("en-GB", { day: "2-digit", month: "long", year: "numeric" })}`,
+        `\n\n[${t("assign_control.note_tag")}] ${t("assign_control.note_assigned_to")}: ${form.name}${form.email ? ` <${form.email}>` : ""}`,
+        form.due ? `${t("assign_control.note_due")}: ${fmtDate(new Date(form.due))}` : null,
+        form.notes ? `${t("common.notes")}: ${form.notes}` : null,
+        `${t("assign_control.assigned_on")}: ${fmtDate(new Date())}`,
       ].filter(Boolean).join("\n");
 
       await complianceApi.updateControlAssessment(ca.id, { notes: assignNote });
@@ -64,10 +69,10 @@ export default function AssignControlModal({ ca, gap, assessmentName, frameworkN
   function printPDF() {
     const status = ca.status;
     const html = `<!DOCTYPE html>
-<html lang="en">
+<html lang="${lang.slice(0, 2)}" dir="${lang.startsWith("ar") ? "rtl" : "ltr"}">
 <head>
   <meta charset="UTF-8"/>
-  <title>Control Assignment — ${ca.control_identifier}</title>
+  <title>${t("assign_control.doc_type")} — ${ca.control_identifier}</title>
   <style>
     *{margin:0;padding:0;box-sizing:border-box}
     body{font-family:-apple-system,Arial,sans-serif;color:#111827;padding:48px;font-size:13px;line-height:1.65}
@@ -107,8 +112,8 @@ export default function AssignControlModal({ ca, gap, assessmentName, frameworkN
       <div class="logo-sub">${assessmentName} · ${frameworkName}</div>
     </div>
     <div style="text-align:right">
-      <div class="doc-type">Control Assignment</div>
-      <div style="font-size:11px;color:#9ca3af;margin-top:2px">${new Date().toLocaleDateString("en-GB", { day: "2-digit", month: "long", year: "numeric" })}</div>
+      <div class="doc-type">${t("assign_control.doc_type")}</div>
+      <div style="font-size:11px;color:#9ca3af;margin-top:2px">${fmtDate(new Date())}</div>
     </div>
   </div>
 
@@ -117,52 +122,52 @@ export default function AssignControlModal({ ca, gap, assessmentName, frameworkN
     <div class="control-title">${ca.control_title}</div>
     <div class="control-meta">
       ${ca.control_category ? `<span class="meta-chip">${ca.control_category}</span>` : ""}
-      ${ca.is_mandatory ? '<span class="meta-chip" style="background:#fee2e2;color:#991b1b">Mandatory</span>' : ""}
-      <span class="status-chip" style="background:${STATUS_BG[status] ?? "#f3f4f6"};color:${STATUS_COLORS[status] ?? "#6b7280"}">${STATUS_LABELS[status] ?? status}</span>
-      ${ca.ai_confidence != null ? `<span class="meta-chip">AI confidence: ${Math.round(ca.ai_confidence * 100)}%</span>` : ""}
+      ${ca.is_mandatory ? '<span class="meta-chip" style="background:#fee2e2;color:#991b1b">' + t("compliance.mandatory_badge") + '</span>' : ""}
+      <span class="status-chip" style="background:${STATUS_BG[status] ?? "#f3f4f6"};color:${STATUS_COLORS[status] ?? "#6b7280"}">${statusLabel(status)}</span>
+      ${ca.ai_confidence != null ? `<span class="meta-chip">${t("compliance.ai_confidence")}: ${Math.round(ca.ai_confidence * 100)}%</span>` : ""}
     </div>
   </div>
 
   ${ca.control_description ? `
   <div class="section">
-    <div class="section-title">Control Description</div>
+    <div class="section-title">${t("assign_control.control_description")}</div>
     <p style="font-size:12px;color:#374151;line-height:1.7">${ca.control_description}</p>
   </div>` : ""}
 
   ${ca.implementation_notes ? `
   <div class="section">
-    <div class="section-title">AI Assessment</div>
+    <div class="section-title">${t("compliance.ai_assessment_label")}</div>
     <div class="ai-box">${ca.implementation_notes}</div>
   </div>` : ""}
 
   ${gap ? `
   <div class="section">
-    <div class="section-title">Gap Analysis</div>
+    <div class="section-title">${t("compliance.journey_gap_analysis")}</div>
     <div class="gap-box">
-      <div class="gap-severity">${gap.severity}</div>
+      <div class="gap-severity">${t(`compliance.severities.${gap.severity}`, { defaultValue: gap.severity })}</div>
       <div class="gap-desc">${gap.gap_description}</div>
-      ${gap.remediation_steps ? `<div class="remediation"><strong>Remediation:</strong> ${gap.remediation_steps}</div>` : ""}
+      ${gap.remediation_steps ? `<div class="remediation"><strong>${t("assign_control.remediation")}:</strong> ${gap.remediation_steps}</div>` : ""}
     </div>
   </div>` : ""}
 
   <div class="section">
-    <div class="section-title">Control Owner Assignment</div>
+    <div class="section-title">${t("assign_control.owner_assignment")}</div>
     <div class="assign-box">
       <div class="assign-name">${form.name}</div>
       ${form.email ? `<div class="assign-meta">${form.email}</div>` : ""}
       <div class="info-grid" style="margin-top:12px">
-        <span class="info-label">Due Date</span>
-        <span class="info-value">${form.due ? new Date(form.due).toLocaleDateString("en-GB", { day: "2-digit", month: "long", year: "numeric" }) : "No deadline set"}</span>
-        ${form.notes ? `<span class="info-label">Assignment Notes</span><span class="info-value">${form.notes}</span>` : ""}
-        <span class="info-label">Assigned On</span>
-        <span class="info-value">${new Date().toLocaleDateString("en-GB", { day: "2-digit", month: "long", year: "numeric" })}</span>
+        <span class="info-label">${t("common.due_date")}</span>
+        <span class="info-value">${form.due ? fmtDate(new Date(form.due)) : t("assign_control.no_deadline")}</span>
+        ${form.notes ? `<span class="info-label">${t("assign_control.assignment_notes")}</span><span class="info-value">${form.notes}</span>` : ""}
+        <span class="info-label">${t("assign_control.assigned_on")}</span>
+        <span class="info-value">${fmtDate(new Date())}</span>
       </div>
     </div>
   </div>
 
   <div class="footer">
-    <span>GRCEye — Control Assignment Record</span>
-    <span class="confidential">Confidential</span>
+    <span>GRCEye — ${t("assign_control.record")}</span>
+    <span class="confidential">${t("assign_control.confidential")}</span>
   </div>
 
   <script>window.onload=function(){window.print()}</script>
@@ -183,7 +188,7 @@ export default function AssignControlModal({ ca, gap, assessmentName, frameworkN
               <UserCheck className="w-5 h-5 text-blue-600" />
             </div>
             <div>
-              <h2 className="text-sm font-semibold text-gray-900">Assign Control</h2>
+              <h2 className="text-sm font-semibold text-gray-900">{t("assign_control.title")}</h2>
               <p className="text-xs text-gray-400 mt-0.5">
                 <span className="font-mono text-gray-500">{ca.control_identifier}</span> — {ca.control_title}
               </p>
@@ -199,11 +204,11 @@ export default function AssignControlModal({ ca, gap, assessmentName, frameworkN
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide flex items-center gap-1 mb-1.5">
-                <User className="w-3 h-3" /> Full Name *
+                <User className="w-3 h-3" /> {t("assign_control.full_name")} *
               </label>
               <input
                 type="text"
-                placeholder="e.g. John Smith"
+                placeholder={t("assign_control.full_name_placeholder")}
                 value={form.name}
                 onChange={e => setForm(p => ({ ...p, name: e.target.value }))}
                 className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-400"
@@ -211,7 +216,7 @@ export default function AssignControlModal({ ca, gap, assessmentName, frameworkN
             </div>
             <div>
               <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide flex items-center gap-1 mb-1.5">
-                <Mail className="w-3 h-3" /> Email
+                <Mail className="w-3 h-3" /> {t("assign_control.email")}
               </label>
               <input
                 type="email"
@@ -225,7 +230,7 @@ export default function AssignControlModal({ ca, gap, assessmentName, frameworkN
 
           <div>
             <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide flex items-center gap-1 mb-1.5">
-              <Calendar className="w-3 h-3" /> Due Date
+              <Calendar className="w-3 h-3" /> {t("common.due_date")}
             </label>
             <input
               type="date"
@@ -237,10 +242,10 @@ export default function AssignControlModal({ ca, gap, assessmentName, frameworkN
 
           <div>
             <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5 block">
-              Implementation Guidance
+              {t("assign_control.guidance")}
             </label>
             <textarea
-              placeholder="Describe what the control owner needs to implement or provide as evidence..."
+              placeholder={t("assign_control.guidance_placeholder")}
               value={form.notes}
               onChange={e => setForm(p => ({ ...p, notes: e.target.value }))}
               rows={3}
@@ -251,7 +256,7 @@ export default function AssignControlModal({ ca, gap, assessmentName, frameworkN
           {saved && (
             <div className="flex items-center gap-2 text-sm text-green-700 bg-green-50 border border-green-200 rounded-xl px-3 py-2.5">
               <CheckCircle className="w-4 h-4 flex-shrink-0" />
-              Assignment saved. PDF is opening in a new tab.
+              {t("assign_control.saved")}
             </div>
           )}
         </div>
@@ -262,14 +267,14 @@ export default function AssignControlModal({ ca, gap, assessmentName, frameworkN
             onClick={onClose}
             className="text-sm text-gray-600 border border-gray-200 px-4 py-2.5 rounded-xl hover:bg-gray-50 transition-colors"
           >
-            Cancel
+            {t("common.cancel")}
           </button>
           <button
             onClick={printPDF}
             className="flex items-center gap-1.5 text-sm font-medium text-gray-700 border border-gray-200 px-4 py-2.5 rounded-xl hover:bg-gray-50 transition-colors"
           >
             <Printer className="w-4 h-4" />
-            Preview PDF
+            {t("assign_control.preview_pdf")}
           </button>
           <button
             onClick={handleSaveAndPrint}
@@ -277,7 +282,7 @@ export default function AssignControlModal({ ca, gap, assessmentName, frameworkN
             className="flex-1 flex items-center justify-center gap-1.5 text-sm font-semibold bg-blue-600 hover:bg-blue-700 text-white px-4 py-2.5 rounded-xl disabled:opacity-40 transition-colors"
           >
             {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Printer className="w-4 h-4" />}
-            Save & Export PDF
+            {t("assign_control.save_export")}
           </button>
         </div>
       </div>

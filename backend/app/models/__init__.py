@@ -27,6 +27,7 @@ from app.models.report_distribution import ReportDistribution
 from app.models.compliance_scale import ComplianceScale
 from app.models.control_applicability import ControlApplicability
 from app.models.control_translation import ControlTranslation
+from app.models.content_translation import ContentTranslation, ContentTranslationRequest  # machine-translation cache + on-demand queue
 from app.models.action_item_attachment import ActionItemAttachment
 from app.models.regulatory_feed import RegulatoryFeed, RegulatoryUpdateVersion
 from app.models.policy import Policy, PolicyVersion, PolicyAttestation
@@ -75,7 +76,7 @@ from app.models.archive import ArchiveRecord, ArchivingRule
 from app.models.scenario_version import RiskScenarioVersion
 from app.models.stored_file_version import StoredFileVersion
 from app.models.access_governance import AccessDelegation, AccessReviewCampaign, AccessReviewItem, CustomRole
-from app.models.scanner_connector import ScannerConnector
+from app.models.scanner_connector import ScannerConnector, ScannerConnectorSettings
 from app.models.report_schedule import ReportSchedule, ReportFrequency
 from app.models.login_event import LoginEvent
 from app.models.user_session import UserSession
@@ -83,6 +84,7 @@ from app.models.risk_snapshot import RiskSnapshot
 from app.models.group import Group
 from app.models.tenant_ai_config import TenantAIConfig
 from app.models.dashboard_layout import DashboardLayout
+from app.models.user_locale import UserLocale  # server-side UI language (e-mails, scheduled reports)
 
 __all__ = [
     "Tenant", "User", "UserRole",
@@ -118,7 +120,7 @@ __all__ = [
     "GovernanceDocumentAccess", "GovernanceCommittee",
     "ArchiveRecord", "ArchivingRule",
     "RiskScenarioVersion",
-    "ScannerConnector",
+    "ScannerConnector", "ScannerConnectorSettings",
     "ReportSchedule", "ReportFrequency",
     "LoginEvent",
     "UserSession",
@@ -137,6 +139,8 @@ __all__ = [
     "ComplianceScale",
     "ControlApplicability",
     "ControlTranslation",
+    "ContentTranslation", "ContentTranslationRequest",
     "ActionItemAttachment",
     "RegulatoryFeed", "RegulatoryUpdateVersion",
+    "UserLocale",
 ]

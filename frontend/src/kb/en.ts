@@ -57,7 +57,7 @@ export const kbEn: KbArticle[] = [
       },
       {
         heading: "Finding your way: the sidebar",
-        body: "The left sidebar is organised into collapsible domain menus: **Overview**, **Asset & Risk Management**, **Vulnerability & Threats**, **Compliance & Controls**, **Audit**, **Policies & Documents**, **Third Parties**, **Governance** and **Reports & Support**. Click a menu name to open or close it. You only see the pages your role allows. A greyed-out item with a lock means that module is not enabled for your organisation. At the bottom you will find **Documentation** (this site), **Settings** and **Help**.",
+        body: "The left sidebar is organised into collapsible menus, one per domain: **Overview**, **Asset Management**, **Risk Management**, **Vulnerability Management**, **Threat Management**, **Incident Management**, **Compliance Management**, **Control Management**, **Audit Management**, **Policies & Documents**, **Third-Party Management**, **Governance** and **Reports & Support**. Click a menu name to open or close it. You only see the pages your role allows. A greyed-out item with a lock means that module is not enabled for your organisation. At the bottom you will find **Documentation** (this site), **Settings** and **Help**.",
       },
       {
         heading: "Language and help",
@@ -122,7 +122,7 @@ export const kbEn: KbArticle[] = [
   {
     id: "assets",
     route: "/assets",
-    group: "asset_risk",
+    group: "assets",
     title: "Asset Inventory",
     summary: "The register of your primary and support assets, with CIA valuation, ownership, status and lifecycle.",
     keywords: ["inventory", "CMDB", "server", "application", "database", "CIA", "owner", "lifecycle", "end-of-life"],
@@ -160,7 +160,7 @@ export const kbEn: KbArticle[] = [
   {
     id: "asset-graph",
     route: "/asset-graph",
-    group: "asset_risk",
+    group: "assets",
     title: "Asset Cartography",
     summary: "An interactive map linking your organisation’s entities, business processes and the assets that support them.",
     keywords: ["map", "graph", "entity", "department", "business process", "dependencies", "cartography"],
@@ -189,7 +189,7 @@ export const kbEn: KbArticle[] = [
   {
     id: "risks",
     route: "/risks",
-    group: "asset_risk",
+    group: "risk",
     title: "Risk Register",
     summary: "Your central list of risks, scored by likelihood × impact, with a heat map, risk appetite and target validation.",
     keywords: ["risk", "register", "heatmap", "likelihood", "impact", "appetite", "residual", "inherent", "export"],
@@ -228,7 +228,7 @@ export const kbEn: KbArticle[] = [
   {
     id: "risk-scenarios",
     route: "/risk-scenarios",
-    group: "asset_risk",
+    group: "risk",
     title: "Risk Scenarios",
     summary: "Describe how a threat could exploit a vulnerability on an asset, and assess current versus target risk with a treatment decision.",
     keywords: ["scenario", "threat", "vulnerability", "asset", "treatment", "priority", "EBIOS", "version history"],
@@ -266,7 +266,7 @@ export const kbEn: KbArticle[] = [
   {
     id: "risk-cartography",
     route: "/risk-cartography",
-    group: "asset_risk",
+    group: "risk",
     title: "Risk Cartography",
     summary: "Build your own risk maps with custom grid size, axis labels, colour zones and manual positions, and export them as PDF.",
     keywords: ["risk map", "heatmap", "matrix", "zones", "grid", "PDF", "cartography"],
@@ -301,7 +301,7 @@ export const kbEn: KbArticle[] = [
   {
     id: "risk-treatment",
     route: "/risk-treatment",
-    group: "asset_risk",
+    group: "risk",
     title: "Risk Treatment",
     summary: "Record the treatment decision for each risk (mitigate, accept, transfer, avoid) with schedule, cost and progress tracking.",
     keywords: ["treatment plan", "mitigate", "accept", "transfer", "avoid", "insurance", "budget", "due date"],
@@ -338,7 +338,7 @@ export const kbEn: KbArticle[] = [
   {
     id: "vulnerabilities",
     route: "/vulnerabilities",
-    group: "security",
+    group: "vulnerability",
     title: "Vulnerabilities",
     summary: "Track and remediate security vulnerabilities, from manual entries, scanner imports and automatic scanner connectors through to closure.",
     keywords: ["CVE", "CVSS", "scan", "scanner", "nessus", "tenable", "qualys", "openvas", "import", "connector", "EASM", "patch"],
@@ -378,7 +378,7 @@ export const kbEn: KbArticle[] = [
         tips: [
           "Nessus needs an edition with API access, such as Nessus Manager. If your edition does not allow it, export the scan as `.nessus` and use **Import scan**.",
           "OpenVAS / Greenbone is file import only: it cannot be pulled over the network. Export the report as XML or CSV and use **Import scan**.",
-          "A dedicated EASM (external attack surface) connector is coming. Until then, import your EASM results as a **Generic CSV**.",
+          "**EASM (External Attack Surface)** connectors pull findings from your external attack surface platform: enter its Base URL, API key, authentication style and findings endpoint path, then click **Test** — it shows how the platform’s fields were mapped, with a preview. Newly discovered domains and IPs are created as assets (tagged `easm`); assign them an owner during review.",
         ],
       },
       {
@@ -393,7 +393,7 @@ export const kbEn: KbArticle[] = [
   {
     id: "cve",
     route: "/cve",
-    group: "security",
+    group: "vulnerability",
     title: "CVE Knowledge Base",
     summary: "Search the public NVD CVE catalogue, keep it up to date, and decide which CVEs are relevant to your environment.",
     keywords: ["CVE", "NVD", "CWE", "KEV", "exploited", "CISA", "triage", "advisory", "patch"],
@@ -424,7 +424,7 @@ export const kbEn: KbArticle[] = [
   {
     id: "threats",
     route: "/threats",
-    group: "security",
+    group: "threat",
     title: "Threat Library",
     summary: "A catalogue of threats — built-in, MITRE ATT&CK and live feeds — that you adopt into your own register and profile.",
     keywords: ["threat", "MITRE", "ATT&CK", "CISA", "SANS", "feed", "threat intelligence", "threat profile"],
@@ -462,7 +462,7 @@ export const kbEn: KbArticle[] = [
   {
     id: "incidents",
     route: "/incidents",
-    group: "security",
+    group: "incident",
     title: "Incidents",
     summary: "Record security incidents, update them through their lifecycle, and turn them into risk scenarios.",
     keywords: ["incident", "breach", "malware", "phishing", "outage", "notification", "security event", "edit", "status", "lifecycle", "timeline", "root cause", "post-mortem"],
@@ -655,7 +655,7 @@ export const kbEn: KbArticle[] = [
   {
     id: "control-effectiveness",
     route: "/control-effectiveness",
-    group: "compliance",
+    group: "controls",
     title: "Control Effectiveness",
     summary: "Score how well each applied control really works, on five criteria, and follow up the ones found ineffective.",
     keywords: ["effectiveness", "control testing", "evaluation", "four-eyes", "performance", "assurance"],
@@ -682,7 +682,7 @@ export const kbEn: KbArticle[] = [
   {
     id: "applied-controls",
     route: "/applied-controls",
-    group: "compliance",
+    group: "controls",
     title: "Applied Controls",
     summary: "The register of security controls you have in place or planned, with cost, effort, progress, expiry and sign-off.",
     keywords: ["control", "safeguard", "measure", "implementation", "cost", "sign-off", "expiry", "NIST CSF"],
@@ -713,7 +713,7 @@ export const kbEn: KbArticle[] = [
   {
     id: "security-exceptions",
     route: "/security-exceptions",
-    group: "compliance",
+    group: "controls",
     title: "Exceptions & Waivers",
     summary: "Request, approve and track formal exceptions to security rules and risk acceptances, with compensating controls and expiry dates.",
     keywords: ["exception", "waiver", "risk acceptance", "approval", "compensating control", "expiry"],
@@ -1044,29 +1044,6 @@ export const kbEn: KbArticle[] = [
       {
         heading: "Tips",
         tips: ["CISOs and admins can click **Draft framework control** to turn an update into a new control in a customised framework."],
-      },
-    ],
-  },
-  {
-    id: "activity-log",
-    route: "/activity-log",
-    group: "governance",
-    title: "Activity Log",
-    summary: "The audit trail of who did what, who signed in, and who consulted a given record.",
-    keywords: ["audit trail", "log", "history", "sign-in", "login", "access log", "traceability"],
-    sections: [
-      {
-        heading: "What it’s for",
-        body: "The Activity Log records every change across the platform, including the fields changed (before → after). It has three tabs: **Activity**, **Sign-ins** (account, IP address, device, result) and **Access to this record** (who viewed or downloaded a record). Available to admins, CISOs, compliance managers and risk managers.",
-      },
-      {
-        heading: "How to investigate",
-        steps: [
-          "On **Activity**, filter by entity, action, category (Access, Validations, Changes, Other), origin and date.",
-          "Expand a row to see the fields changed.",
-          "On **Sign-ins**, tick **Failed** to show only failed logins.",
-          "On **Access to this record**, choose a record type and ID and click **Search**.",
-        ],
       },
     ],
   },

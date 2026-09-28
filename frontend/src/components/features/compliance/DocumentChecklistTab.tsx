@@ -47,7 +47,7 @@ function DocFileRow({
   }
 
   async function handleDelete() {
-    if (!confirm(`Delete "${doc.file_name}"?`)) return;
+    if (!confirm(t("compliance.checklist_delete_confirm", { name: doc.file_name }))) return;
     setDeleting(true);
     try {
       await complianceApi.deleteDocument(doc.id);
@@ -266,7 +266,8 @@ function ClauseRow({
 // ─── Main component ───────────────────────────────────────────────────────────
 
 export default function DocumentChecklistTab({ assessmentId, frameworkShortName }: Props) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const dateLocale = i18n.language?.startsWith("fr") ? "fr-FR" : i18n.language?.startsWith("ar") ? "ar-u-nu-latn" : "en-GB";
   const [checklist, setChecklist] = useState<DocumentChecklistResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -647,7 +648,7 @@ export default function DocumentChecklistTab({ assessmentId, frameworkShortName 
                         <div className="flex flex-wrap items-center gap-3 mt-1.5 text-[11px] text-gray-500">
                           <span className="flex items-center gap-1">
                             <Calendar className="w-3 h-3" />
-                            {uploadDate.toLocaleDateString()} {uploadDate.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                            {uploadDate.toLocaleDateString(dateLocale)} {uploadDate.toLocaleTimeString(dateLocale, { hour: "2-digit", minute: "2-digit" })}
                           </span>
                           {entry.uploaded_by_name && (
                             <span className="flex items-center gap-1">

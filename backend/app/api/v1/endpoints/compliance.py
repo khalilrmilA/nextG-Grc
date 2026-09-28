@@ -53,6 +53,7 @@ from app.models.user import User, UserRole
 from app.services import ai_chunking, ai_prompts, ai_provider
 from app.services.activity_chain import chain_and_add
 from app.services.ai_locale import get_request_language, normalize_language
+from app.services.content_translation import get_display_language, localize_fields
 from app.services.ai_structured import ai_structured, coerce_shape, extract_json, validate_against
 
 router = APIRouter()
@@ -172,6 +173,11 @@ class ControlAssessmentResponse(BaseModel):
     cross_framework_coverage: list[dict] = []
     is_mandatory: bool = False
     linked_checklist_documents: list[LinkedChecklistDocument] = []
+    # Machine translation of the requirement text for display (content_translations);
+    # the stored text stays in original_*. Additive/optional.
+    translated: bool = False
+    original_control_title: str | None = None
+    original_control_description: str | None = None
 
     model_config = {"from_attributes": True, "populate_by_name": True}
 
@@ -189,6 +195,9 @@ class GapResponse(BaseModel):
     is_certification_blocker: bool = False
     remediation_priority: int = 50
     action_item_id: str | None = None
+    translated: bool = False
+    original_control_title: str | None = None
+    original_control_description: str | None = None
 
     model_config = {"from_attributes": True}
 
@@ -222,6 +231,8 @@ class AssessmentDetailResponse(BaseModel):
     control_assessments: list[ControlAssessmentResponse] = []
     gaps: list[GapResponse] = []
     cross_framework_summary: dict = {}
+    translated: bool = False
+    original_framework_name: str | None = None
 
     model_config = {"from_attributes": True}
 
@@ -242,6 +253,8 @@ class AssessmentListItem(BaseModel):
     business_process_name: str | None = None
     scale_id: str | None = None
     created_at: datetime
+    translated: bool = False
+    original_framework_name: str | None = None
 
     model_config = {"from_attributes": True}
 
@@ -1748,6 +1761,16 @@ async def create_assessment(
     return await _build_assessment_detail(db, assessment)
 
 
+async def _localize_assessment_detail(db: AsyncSession, lang: str, detail: AssessmentDetailResponse) -> None:
+    """Requirement text and framework name of an assessment in the reader's language
+    (cached machine translations; the stored text is kept in original_*)."""
+    entries: list = [(detail, {"framework_name": detail.framework_name})]
+    for row in list(detail.control_assessments) + list(detail.gaps):
+        entries.append((row, {"control_title": row.control_title,
+                              "control_description": row.control_description or ""}))
+    await localize_fields(db, lang, entries)
+
+
 @router.get("/assessments")
 async def list_assessments(
     pagination: PaginationParams = Depends(),
@@ -1759,6 +1782,7 @@ async def list_assessments(
     db: AsyncSession = Depends(get_db),
     _: User = Depends(require_roles(UserRole.CISO)),
     tenant_id: str = Depends(get_tenant_id),
+    lang: str = Depends(get_display_language),
 ) -> PaginatedAssessments:
     """List compliance assessments for the tenant, limited to selected frameworks."""
     # Load tenant to get selected framework IDs
@@ -1858,6 +1882,7 @@ async def list_assessments(
         )
         for a in assessments
     ]
+    await localize_fields(db, lang, [(it, {"framework_name": it.framework_name}) for it in items])
 
     page_size = pagination.limit
     return PaginatedAssessments(
@@ -1875,6 +1900,7 @@ async def get_assessment(
     db: AsyncSession = Depends(get_db),
     _: User = Depends(require_roles(UserRole.CISO)),
     tenant_id: str = Depends(get_tenant_id),
+    lang: str = Depends(get_display_language),
 ) -> AssessmentDetailResponse:
     """Get full assessment detail."""
     result = await db.execute(
@@ -1886,7 +1912,9 @@ async def get_assessment(
     assessment = result.scalar_one_or_none()
     if not assessment:
         raise HTTPException(status_code=404, detail="Assessment not found")
-    return await _build_assessment_detail(db, assessment)
+    detail = await _build_assessment_detail(db, assessment)
+    await _localize_assessment_detail(db, lang if isinstance(lang, str) else "", detail)
+    return detail
 
 
 @router.patch("/assessments/{assessment_id}")
@@ -2899,9 +2927,10 @@ async def get_assessment_results(
     db: AsyncSession = Depends(get_db),
     _: User = Depends(require_roles(UserRole.CISO)),
     tenant_id: str = Depends(get_tenant_id),
+    lang: str = Depends(get_display_language),
 ) -> AssessmentDetailResponse:
     """Get assessment results (alias for GET /assessments/{id})."""
-    return await get_assessment(assessment_id, db, _, tenant_id)
+    return await get_assessment(assessment_id, db, _, tenant_id, lang)
 
 
 @router.patch("/control-assessments/{control_assessment_id}")
@@ -2912,6 +2941,7 @@ async def update_control_assessment(
     current_user: User = Depends(require_roles(UserRole.CISO)),
     tenant_id: str = Depends(get_tenant_id),
     lang: str = Depends(get_request_language),
+    display_lang: str = Depends(get_display_language),
 ) -> ControlAssessmentResponse:
     """Record a human evaluation of one requirement.
 
@@ -3079,6 +3109,11 @@ async def update_control_assessment(
             },
         ))
 
+    # Same display language as GET /assessments/{id}, so the row the page swaps in
+    # does not flip back to the stored text.
+    await localize_fields(db, display_lang, [(response, {
+        "control_title": response.control_title,
+        "control_description": response.control_description or ""})])
     return response
 
 
@@ -3518,6 +3553,7 @@ async def get_traceability_matrix(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
     tenant_id: str = Depends(get_tenant_id),
+    lang: str = Depends(get_display_language),
 ) -> dict:
     """Return control → gap → action_item traceability matrix for an assessment."""
     asmt_result = await db.execute(
@@ -3602,6 +3638,8 @@ async def get_traceability_matrix(
                 "remediation_priority": None,
                 "action_items": [],
             })
+
+    await localize_fields(db, lang, [(r, {"control_title": r["control_title"]}) for r in rows])
 
     total_controls = len(cas)
     gaps_total = sum(len(v) for v in gaps_by_control.values())
@@ -4362,6 +4400,10 @@ class ActionPlanItem(BaseModel):
     # owner
     owner_id: str | None
     owner_name: str | None
+    # Machine translation of control_title / framework_name for display.
+    translated: bool = False
+    original_control_title: str | None = None
+    original_framework_name: str | None = None
     model_config = {"from_attributes": True}
 
 
@@ -4584,6 +4626,9 @@ async def list_action_plan(
     item_status: Annotated[
         str | None, Query(alias="status", description="Filter on open | in_progress | completed | cancelled")
     ] = None,
+    # Annotated for the same reason as above: a direct call (the PATCH/POST
+    # responses) gets "" — stored text — rather than a Depends sentinel.
+    lang: Annotated[str, Depends(get_display_language)] = "",
 ):
     """Return action items for the tenant (or a single assessment if assessment_id given).
 
@@ -4693,6 +4738,9 @@ async def list_action_plan(
             owner_id=r.owner_id,
             owner_name=f"{own.first_name} {own.last_name}".strip() if own else None,
         ))
+    await localize_fields(db, lang, [
+        (it, {"control_title": it.control_title or "", "framework_name": it.framework_name or ""})
+        for it in items])
     return items
 
 

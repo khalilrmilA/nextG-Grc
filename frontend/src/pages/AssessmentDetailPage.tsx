@@ -1,3 +1,4 @@
+import { TranslatedText } from "@/components/common/AutoTranslatedBadge";
 import { useState, useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { useParams, useNavigate } from "react-router-dom";
@@ -321,8 +322,8 @@ function ResultsTab({
     setHistory((prev) => ({
       ...prev,
       [caId]: [
-        ...(prev[caId] ?? [{ status: currentStatus, by: t("compliance.ai_assessment_label"), at: new Date(assessment.updated_at).toLocaleDateString() }]),
-        { status: newStatus, by: t("compliance.manually_overridden"), at: new Date().toLocaleDateString() },
+        ...(prev[caId] ?? [{ status: currentStatus, by: t("compliance.ai_assessment_label"), at: new Date(assessment.updated_at).toLocaleDateString(i18n.language?.startsWith("fr") ? "fr-FR" : i18n.language?.startsWith("ar") ? "ar-u-nu-latn" : "en-GB") }]),
+        { status: newStatus, by: t("compliance.manually_overridden"), at: new Date().toLocaleDateString(i18n.language?.startsWith("fr") ? "fr-FR" : i18n.language?.startsWith("ar") ? "ar-u-nu-latn" : "en-GB") },
       ],
     }));
   }
@@ -662,7 +663,7 @@ function ResultsTab({
               frameworkName: assessment.framework_name ?? "",
               frameworkShortName: assessment.framework_short_name ?? "",
               complianceScore: assessment.compliance_score ?? null,
-              generatedAt: new Date().toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }),
+              generatedAt: new Date().toLocaleDateString(i18n.language?.startsWith("fr") ? "fr-FR" : i18n.language?.startsWith("ar") ? "ar-u-nu-latn" : "en-GB", { day: "2-digit", month: "short", year: "numeric" }),
               org: "",
               statusCounts: {
                 implemented: counts.implemented,
@@ -757,9 +758,7 @@ function ResultsTab({
                       <span className="text-xs font-mono text-gray-400 bg-gray-50 px-1.5 py-0.5 rounded">
                         {ca.control_identifier}
                       </span>
-                      <span className="text-sm font-medium text-gray-800 truncate">
-                        {ca.control_title}
-                      </span>
+                      <TranslatedText item={ca} field="control_title" className="text-sm font-medium text-gray-800 truncate" />
                       {ca.is_mandatory && (
                         <span className="text-xs font-semibold text-red-700 bg-red-50 border border-red-200 px-1.5 py-0.5 rounded">
                           {t("compliance.mandatory_badge")}
@@ -1113,7 +1112,7 @@ function ResultsTab({
                               </button>
                               {/* File history (scoped to the control, not this row) */}
                               <button
-                                onClick={() => setHistoryFor({ id: ca.id, label: ca.control_identifier || ca.control_title || "Control" })}
+                                onClick={() => setHistoryFor({ id: ca.id, label: ca.control_identifier || ca.control_title || t("traceability.control") })}
                                 title={t("compliance.file_history_open", "File history for this control")}
                                 className="flex-shrink-0 text-gray-400 hover:text-gray-600"
                               >

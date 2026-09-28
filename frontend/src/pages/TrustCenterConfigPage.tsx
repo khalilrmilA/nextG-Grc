@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useTranslation } from "react-i18next";
 import {
   Shield,
   Eye,
@@ -15,6 +16,7 @@ import {
 import { trustCenterApi } from "@/api/endpoints";
 
 export default function TrustCenterConfigPage() {
+  const { t } = useTranslation();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -68,7 +70,7 @@ export default function TrustCenterConfigPage() {
       setSaved(true);
       setTimeout(() => setSaved(false), 3000);
     } catch (err: any) {
-      setError(err?.response?.data?.detail || "Failed to save configuration");
+      setError(err?.response?.data?.detail || t("trust_center_cfg.save_failed"));
     } finally {
       setSaving(false);
     }
@@ -83,7 +85,7 @@ export default function TrustCenterConfigPage() {
       const data = await trustCenterApi.getPublic(previewSlug.trim());
       setPreviewData(data);
     } catch (err: any) {
-      setPreviewError(err?.response?.data?.detail || "Could not load trust center for this slug");
+      setPreviewError(err?.response?.data?.detail || t("trust_center_cfg.preview_failed"));
     } finally {
       setPreviewLoading(false);
     }
@@ -101,9 +103,9 @@ export default function TrustCenterConfigPage() {
     <div className="p-8 max-w-7xl space-y-6">
       {/* Header */}
       <div>
-        <h1 className="text-2xl font-bold text-gray-900">Trust Center</h1>
+        <h1 className="text-2xl font-bold text-gray-900">{t("nav.trust_center")}</h1>
         <p className="text-sm text-gray-500 mt-1">
-          Configure and preview your public-facing trust center page
+          {t("trust_center_cfg.subtitle")}
         </p>
       </div>
 
@@ -115,8 +117,8 @@ export default function TrustCenterConfigPage() {
               <Shield className="w-5 h-5" />
             </div>
             <div>
-              <h2 className="text-lg font-semibold text-gray-900">Configuration</h2>
-              <p className="text-xs text-gray-500">Control what is visible on your public trust center</p>
+              <h2 className="text-lg font-semibold text-gray-900">{t("trust_center_cfg.config_title")}</h2>
+              <p className="text-xs text-gray-500">{t("trust_center_cfg.config_desc")}</p>
             </div>
           </div>
 
@@ -128,11 +130,11 @@ export default function TrustCenterConfigPage() {
             {/* Toggles */}
             <div className="space-y-3">
               {[
-                { key: "enabled", label: "Enable Trust Center", desc: "Make your trust center publicly accessible" },
-                { key: "show_frameworks", label: "Show Frameworks", desc: "Display compliance frameworks and scores" },
-                { key: "show_policies", label: "Show Policies", desc: "List published security policies" },
-                { key: "show_certifications", label: "Show Certifications", desc: "Display active certifications" },
-                { key: "show_subprocessors", label: "Show Subprocessors", desc: "List third-party subprocessors" },
+                { key: "enabled", label: t("trust_center_cfg.toggle.enabled"), desc: t("trust_center_cfg.toggle.enabled_desc") },
+                { key: "show_frameworks", label: t("trust_center_cfg.toggle.frameworks"), desc: t("trust_center_cfg.toggle.frameworks_desc") },
+                { key: "show_policies", label: t("trust_center_cfg.toggle.policies"), desc: t("trust_center_cfg.toggle.policies_desc") },
+                { key: "show_certifications", label: t("trust_center_cfg.toggle.certifications"), desc: t("trust_center_cfg.toggle.certifications_desc") },
+                { key: "show_subprocessors", label: t("trust_center_cfg.toggle.subprocessors"), desc: t("trust_center_cfg.toggle.subprocessors_desc") },
               ].map((toggle) => (
                 <div
                   key={toggle.key}
@@ -153,7 +155,7 @@ export default function TrustCenterConfigPage() {
                   >
                     <span
                       className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out mt-0.5 ${
-                        config[toggle.key as keyof typeof config] ? "translate-x-5 ml-0.5" : "translate-x-0 ml-0.5"
+                        config[toggle.key as keyof typeof config] ? "translate-x-5 rtl:-translate-x-5 ms-0.5" : "translate-x-0 ms-0.5"
                       }`}
                     />
                   </button>
@@ -164,13 +166,13 @@ export default function TrustCenterConfigPage() {
             {/* Custom Message */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                Custom Message
+                {t("trust_center_cfg.custom_message")}
               </label>
               <textarea
                 value={config.custom_message}
                 onChange={(e) => setConfig({ ...config, custom_message: e.target.value })}
                 rows={4}
-                placeholder="Welcome to our Trust Center. We are committed to protecting your data..."
+                placeholder={t("trust_center_cfg.custom_message_placeholder")}
                 className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
             </div>
@@ -178,7 +180,7 @@ export default function TrustCenterConfigPage() {
             {/* Contact Email */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                Contact Email
+                {t("trust_center_cfg.contact_email")}
               </label>
               <input
                 type="email"
@@ -202,7 +204,7 @@ export default function TrustCenterConfigPage() {
               ) : (
                 <Save className="w-4 h-4" />
               )}
-              {saved ? "Saved!" : "Save Configuration"}
+              {saved ? t("trust_center_cfg.saved") : t("trust_center_cfg.save")}
             </button>
           </div>
         </div>
@@ -214,8 +216,8 @@ export default function TrustCenterConfigPage() {
               <Eye className="w-5 h-5" />
             </div>
             <div>
-              <h2 className="text-lg font-semibold text-gray-900">Preview</h2>
-              <p className="text-xs text-gray-500">See what your public trust center looks like</p>
+              <h2 className="text-lg font-semibold text-gray-900">{t("trust_center_cfg.preview_title")}</h2>
+              <p className="text-xs text-gray-500">{t("trust_center_cfg.preview_desc")}</p>
             </div>
           </div>
 
@@ -224,7 +226,7 @@ export default function TrustCenterConfigPage() {
             <input
               value={previewSlug}
               onChange={(e) => setPreviewSlug(e.target.value)}
-              placeholder="Enter organization slug..."
+              placeholder={t("trust_center_cfg.slug_placeholder")}
               className="flex-1 border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
             <button
@@ -233,7 +235,7 @@ export default function TrustCenterConfigPage() {
               className="inline-flex items-center gap-2 bg-purple-600 text-white px-4 py-2 rounded-xl text-sm font-medium hover:bg-purple-700 disabled:opacity-50 transition-colors"
             >
               {previewLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
-              Load
+              {t("trust_center_cfg.load")}
             </button>
           </div>
 
@@ -248,10 +250,10 @@ export default function TrustCenterConfigPage() {
               <div className="bg-gradient-to-r from-blue-600 to-indigo-700 px-6 py-8 text-white">
                 <div className="flex items-center gap-3 mb-2">
                   <Globe className="w-6 h-6" />
-                  <h3 className="text-xl font-bold">{previewData.org_name || "Organization"}</h3>
+                  <h3 className="text-xl font-bold">{previewData.org_name || t("trust_center_cfg.organization")}</h3>
                 </div>
                 <p className="text-blue-100 text-sm">
-                  {previewData.custom_message || "Committed to security, privacy, and compliance."}
+                  {previewData.custom_message || t("trust_center_cfg.default_message")}
                 </p>
               </div>
 
@@ -260,7 +262,7 @@ export default function TrustCenterConfigPage() {
                 {previewData.frameworks && previewData.frameworks.length > 0 && (
                   <div>
                     <h4 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
-                      <Shield className="w-4 h-4 text-blue-600" /> Compliance Frameworks
+                      <Shield className="w-4 h-4 text-blue-600" /> {t("trust_center_cfg.frameworks")}
                     </h4>
                     <div className="space-y-2">
                       {previewData.frameworks.map((fw: any, i: number) => (
@@ -282,7 +284,7 @@ export default function TrustCenterConfigPage() {
                 {previewData.policies && previewData.policies.length > 0 && (
                   <div>
                     <h4 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
-                      <FileText className="w-4 h-4 text-blue-600" /> Published Policies
+                      <FileText className="w-4 h-4 text-blue-600" /> {t("trust_center_cfg.policies")}
                     </h4>
                     <div className="space-y-2">
                       {previewData.policies.map((p: any, i: number) => (
@@ -304,7 +306,7 @@ export default function TrustCenterConfigPage() {
                 {previewData.certifications && previewData.certifications.length > 0 && (
                   <div>
                     <h4 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
-                      <Award className="w-4 h-4 text-blue-600" /> Certifications
+                      <Award className="w-4 h-4 text-blue-600" /> {t("trust_center_cfg.certifications")}
                     </h4>
                     <div className="flex flex-wrap gap-2">
                       {previewData.certifications.map((c: any, i: number) => (
@@ -324,7 +326,7 @@ export default function TrustCenterConfigPage() {
                 {previewData.subprocessors && previewData.subprocessors.length > 0 && (
                   <div>
                     <h4 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
-                      <Users className="w-4 h-4 text-blue-600" /> Subprocessors
+                      <Users className="w-4 h-4 text-blue-600" /> {t("trust_center_cfg.subprocessors")}
                     </h4>
                     <div className="space-y-2">
                       {previewData.subprocessors.map((sp: any, i: number) => (
@@ -341,7 +343,7 @@ export default function TrustCenterConfigPage() {
                 {previewData.contact_email && (
                   <div className="pt-3 border-t border-gray-100 text-center">
                     <p className="text-xs text-gray-500">
-                      Questions? Contact us at{" "}
+                      {t("trust_center_cfg.contact_us")}{" "}
                       <a
                         href={`mailto:${previewData.contact_email}`}
                         className="text-blue-600 hover:underline"
@@ -356,7 +358,7 @@ export default function TrustCenterConfigPage() {
           ) : (
             <div className="text-center py-16 text-gray-400">
               <Globe className="w-10 h-10 mx-auto mb-3 opacity-50" />
-              <p className="text-sm">Enter an organization slug and click Load to preview</p>
+              <p className="text-sm">{t("trust_center_cfg.preview_empty")}</p>
             </div>
           )}
         </div>

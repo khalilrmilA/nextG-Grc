@@ -35,187 +35,11 @@ import { apiClient } from "@/api/client";
 import { MultiSelect, type MultiSelectOption } from "@/components/common/MultiSelect";
 import ModuleDashboard from "@/components/dashboards/ModuleDashboard";
 import { hasAnyRole, useAuthStore } from "@/store/auth";
-import i18n from "@/i18n";
 
-/* ── French and Arabic for the strings this page introduced ──────────────────
- * Every t() call added for objectif 5 carries an English `defaultValue`, and a
- * defaultValue is used for ALL languages — so without this block a French or
- * Arabic user reads the obsolescence panel, the sign-off column and the change
- * history in English. The tender is French and the product is Arabic-first, so
- * that is a defect, not a rough edge.
- *
- * Registered through i18n.addResourceBundle exactly as i18n/index.ts already
- * does for eliteLocales and gapfills, and NON-DESTRUCTIVELY (last argument
- * false): the locale files are another lane's in this wave, and when that lane
- * adds these keys for real its values are already in the store and win over
- * these. Registered at module scope, i.e. before the first render, so no lookup
- * can miss them. See needs_integration — this belongs in locales/*.ts.
- */
-const CONTROLS_I18N: Record<string, Record<string, string>> = {
-  en: {
-    all_validations: "All sign-off states",
-    col_expiration: "Expiry",
-    col_validation: "Sign-off",
-    delete_confirm: "Removing this control removes a claimed mitigation from every risk that counted on it. The deletion is recorded with your justification.",
-    delete_reason_label: "Justification",
-    delete_reason_required: "A justification of at least 3 characters is required to remove a control.",
-    edit_title: "Edit applied control",
-    error_action_failed: "The action failed. Nothing was changed.",
-    error_delete_failed: "The control could not be removed. Nothing was changed.",
-    error_forbidden: "Your profile is not allowed to sign off on controls.",
-    error_update_failed: "The control could not be saved. Nothing was changed.",
-    expired_days_ago: "expired {{n}} day(s) ago",
-    expires_in_days: "in {{n}} day(s)",
-    form_expiration: "Expiry date",
-    history_empty: "No change recorded yet.",
-    history_failed: "The change history could not be read.",
-    history_for: "Change history for this control",
-    history_title: "Change history",
-    history_truncated: "{{n}} older entries are held but not listed here.",
-    obsolescence_evals_unavailable: "The effectiveness assessments could not be read on this server, so no assessment-related reason appears below. That is missing information, not a clean result.",
-    obsolescence_failed: "The obsolescence alerts could not be loaded. The register below is unaffected.",
-    obsolescence_more: "{{n}} more not listed here.",
-    obsolescence_title: "Controls needing attention",
-    route_not_published: "This view is not published on this server yet — the backend has not been restarted since it was added. Contact your administrator.",
-    register_failed: "The control register could not be read. Nothing is missing from it — it simply could not be loaded.",
-    register_truncated: "Showing {{shown}} of {{total}} controls. Every counter except the total covers the rows listed here only.",
-    validation_stale: "sign-off predates the last edit",
-    reason_expired: "Expired",
-    reason_rejected_in_service: "Rejected but still in service",
-    reason_ineffective: "Assessed ineffective",
-    reason_expiring_soon: "Expiring soon",
-    reason_deprecated: "Marked obsolete",
-    reason_invalid_expiration: "Unreadable expiry date",
-    reason_evaluation_overdue: "Assessment overdue",
-    reason_unverified: "In service without sign-off",
-    reason_never_evaluated: "Never assessed",
-    history_action_created: "Created",
-    history_action_updated: "Edited",
-    history_action_status_changed: "Status changed",
-    history_action_validated: "Signed off",
-    history_action_rejected: "Rejected",
-    history_action_evaluated: "Assessed",
-    history_action_deleted: "Deleted",
-  },
-  fr: {
-    all_validations: "Tous les états de validation",
-    col_expiration: "Expiration",
-    col_validation: "Validation",
-    delete_confirm: "Supprimer ce contrôle retire une mesure d'atténuation revendiquée à chaque risque qui s'appuyait dessus. La suppression est enregistrée avec votre justification.",
-    delete_reason_label: "Justification",
-    delete_reason_required: "Une justification d'au moins 3 caractères est requise pour supprimer un contrôle.",
-    edit_title: "Modifier le contrôle appliqué",
-    error_action_failed: "L'action a échoué. Rien n'a été modifié.",
-    error_delete_failed: "Le contrôle n'a pas pu être supprimé. Rien n'a été modifié.",
-    error_forbidden: "Votre profil n'est pas autorisé à valider les contrôles.",
-    error_update_failed: "Le contrôle n'a pas pu être enregistré. Rien n'a été modifié.",
-    expired_days_ago: "expiré depuis {{n}} jour(s)",
-    expires_in_days: "dans {{n}} jour(s)",
-    form_expiration: "Date d'expiration",
-    history_empty: "Aucune modification enregistrée pour l'instant.",
-    history_failed: "L'historique des modifications n'a pas pu être lu.",
-    history_for: "Historique des modifications de ce contrôle",
-    history_title: "Historique des modifications",
-    history_truncated: "{{n}} entrées plus anciennes sont conservées mais ne sont pas listées ici.",
-    obsolescence_evals_unavailable: "Les évaluations d'efficacité n'ont pas pu être lues sur ce serveur : aucun motif lié à l'évaluation n'apparaît ci-dessous. Il s'agit d'une information manquante, pas d'un résultat sans anomalie.",
-    obsolescence_failed: "Les alertes d'obsolescence n'ont pas pu être chargées. Le registre ci-dessous n'est pas affecté.",
-    obsolescence_more: "{{n}} autres non listés ici.",
-    obsolescence_title: "Contrôles nécessitant une attention",
-    route_not_published: "Cette vue n'est pas encore publiée sur ce serveur — le backend n'a pas été redémarré depuis son ajout. Contactez votre administrateur.",
-    register_failed: "Le registre des contrôles n'a pas pu être lu. Rien n'y manque — il n'a simplement pas pu être chargé.",
-    register_truncated: "Affichage de {{shown}} contrôles sur {{total}}. Tous les compteurs, sauf le total, ne portent que sur les lignes listées ici.",
-    validation_stale: "validation antérieure à la dernière modification",
-    reason_expired: "Expiré",
-    reason_rejected_in_service: "Rejeté mais toujours en service",
-    reason_ineffective: "Évalué non performant",
-    reason_expiring_soon: "Expire bientôt",
-    reason_deprecated: "Déclaré obsolète",
-    reason_invalid_expiration: "Date d'expiration illisible",
-    reason_evaluation_overdue: "Évaluation en retard",
-    reason_unverified: "En service sans validation",
-    reason_never_evaluated: "Jamais évalué",
-    history_action_created: "Créé",
-    history_action_updated: "Modifié",
-    history_action_status_changed: "Statut modifié",
-    history_action_validated: "Validé",
-    history_action_rejected: "Rejeté",
-    history_action_evaluated: "Évalué",
-    history_action_deleted: "Supprimé",
-  },
-  ar: {
-    all_validations: "جميع حالات الاعتماد",
-    col_expiration: "الانتهاء",
-    col_validation: "الاعتماد",
-    delete_confirm: "حذف هذا الضابط يزيل إجراء تخفيف مُعلَناً عن كل خطر كان يعتمد عليه. ويُسجَّل الحذف مع التبرير الذي تُدخله.",
-    delete_reason_label: "التبرير",
-    delete_reason_required: "يلزم تبرير من 3 أحرف على الأقل لحذف ضابط.",
-    edit_title: "تعديل الضابط المطبق",
-    error_action_failed: "فشل الإجراء. لم يتغيّر شيء.",
-    error_delete_failed: "تعذّر حذف الضابط. لم يتغيّر شيء.",
-    error_forbidden: "ملفك الشخصي غير مخوَّل لاعتماد الضوابط.",
-    error_update_failed: "تعذّر حفظ الضابط. لم يتغيّر شيء.",
-    expired_days_ago: "منتهٍ منذ {{n}} يوم",
-    expires_in_days: "خلال {{n}} يوم",
-    form_expiration: "تاريخ الانتهاء",
-    history_empty: "لم تُسجَّل أي تعديلات بعد.",
-    history_failed: "تعذّرت قراءة سجل التعديلات.",
-    history_for: "سجل تعديلات هذا الضابط",
-    history_title: "سجل التعديلات",
-    history_truncated: "توجد {{n}} إدخالات أقدم محفوظة وغير مدرجة هنا.",
-    obsolescence_evals_unavailable: "تعذّرت قراءة تقييمات الفعالية على هذا الخادم، لذا لا يظهر أدناه أي سبب متعلق بالتقييم. هذه معلومات ناقصة، وليست نتيجة خالية من الملاحظات.",
-    obsolescence_failed: "تعذّر تحميل تنبيهات التقادم. السجل أدناه غير متأثر.",
-    obsolescence_more: "و{{n}} أخرى غير مدرجة هنا.",
-    obsolescence_title: "ضوابط تحتاج إلى متابعة",
-    route_not_published: "هذه الواجهة غير منشورة على هذا الخادم بعد — لم يُعَد تشغيل الخادم منذ إضافتها. يرجى مراجعة المسؤول.",
-    register_failed: "تعذّرت قراءة سجل الضوابط. لا ينقصه شيء — لكنه لم يُحمَّل فحسب.",
-    register_truncated: "عرض {{shown}} ضابطاً من أصل {{total}}. جميع المؤشرات، عدا الإجمالي، تخص الصفوف المدرجة هنا فقط.",
-    validation_stale: "الاعتماد أقدم من آخر تعديل",
-    reason_expired: "منتهي الصلاحية",
-    reason_rejected_in_service: "مرفوض ولا يزال قيد الخدمة",
-    reason_ineffective: "مُقيَّم كغير فعّال",
-    reason_expiring_soon: "على وشك الانتهاء",
-    reason_deprecated: "مُعلن كمتقادم",
-    reason_invalid_expiration: "تاريخ انتهاء غير مقروء",
-    reason_evaluation_overdue: "التقييم متأخر",
-    reason_unverified: "قيد الخدمة دون اعتماد",
-    reason_never_evaluated: "لم يُقيَّم قط",
-    history_action_created: "أُنشئ",
-    history_action_updated: "عُدِّل",
-    history_action_status_changed: "تغيّرت الحالة",
-    history_action_validated: "اعتُمد",
-    history_action_rejected: "رُفض",
-    history_action_evaluated: "قُيِّم",
-    history_action_deleted: "حُذف",
-  },
-};
-
-/** The three performance levels are raw French enum values in the database
- *  (performant / moyennement_performant / non_performant) and were absent from
- *  moduledash.vocab, so vocab() printed "moyennement performant" to an English
- *  or Arabic reader. */
-const PERFORMANCE_VOCAB: Record<string, Record<string, string>> = {
-  en: { performant: "Effective", moyennement_performant: "Partly effective", non_performant: "Ineffective" },
-  fr: { performant: "Performant", moyennement_performant: "Moyennement performant", non_performant: "Non performant" },
-  ar: { performant: "فعّال", moyennement_performant: "فعّال جزئياً", non_performant: "غير فعّال" },
-};
-
-/** The six NIST CSF 2.0 functions, which `csf_function` stores raw. Verified
- *  absent from moduledash.vocab in all three locale files, so the picker below
- *  fell through to its defaultValue — a capitalised English word — for a French
- *  and an Arabic reader alike. Same vocabulary chain as every other raw enum on
- *  this page, so the CSF column and the CSF picker read the same words. */
-const CSF_VOCAB: Record<string, Record<string, string>> = {
-  en: { govern: "Govern", identify: "Identify", protect: "Protect", detect: "Detect", respond: "Respond", recover: "Recover" },
-  fr: { govern: "Gouverner", identify: "Identifier", protect: "Protéger", detect: "Détecter", respond: "Répondre", recover: "Rétablir" },
-  ar: { govern: "الحوكمة", identify: "التحديد", protect: "الحماية", detect: "الكشف", respond: "الاستجابة", recover: "التعافي" },
-};
-
-for (const lng of ["en", "fr", "ar"]) {
-  i18n.addResourceBundle(lng, "translation", {
-    applied_controls: CONTROLS_I18N[lng],
-    moduledash: { vocab: { ...PERFORMANCE_VOCAB[lng], ...CSF_VOCAB[lng] } },
-  }, true, false);
-}
+/* The EN/FR/AR strings this page introduced (applied_controls.* sign-off,
+ * obsolescence and history keys, plus moduledash.vocab entries for the raw
+ * performance levels and NIST CSF functions) now live in i18n/sweep/g4_risk_gov.ts,
+ * merged non-destructively into i18n at startup. */
 
 /** Whether the dashboard panel is open, per browser. localStorage THROWS in
  *  some privacy modes, so a remembered preference must never take the controls
@@ -365,7 +189,8 @@ function statusOf(err: unknown): number {
 }
 
 export default function AppliedControlsPage() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const numLocale = i18n.language?.startsWith("fr") ? "fr-FR" : i18n.language?.startsWith("ar") ? "ar-u-nu-latn" : "en-US";
 
   // ── Who may do what ──────────────────────────────────────────────────────
   // ADVISORY only, never the policy: the server re-checks on every call, and it
@@ -840,7 +665,7 @@ export default function AppliedControlsPage() {
             <p className="text-xs text-gray-400 mt-0.5">{t("applied_controls.kpi_in_progress", "In Progress")}</p>
           </div>
           <div className="bg-white rounded-2xl border border-gray-100 p-4 text-center">
-            <p className="text-2xl font-bold text-gray-900">${kpiTotalCost.toLocaleString()}</p>
+            <p className="text-2xl font-bold text-gray-900">${kpiTotalCost.toLocaleString(numLocale)}</p>
             <p className="text-xs text-gray-400 mt-0.5">{t("applied_controls.kpi_total_cost", "Total Cost")}</p>
           </div>
         </div>
@@ -1105,7 +930,7 @@ export default function AppliedControlsPage() {
                               {/* Through the vocabulary chain, not a key of its
                                   own: the three levels are FRENCH enum values
                                   (performant / moyennement_performant /
-                                  non_performant) and PERFORMANCE_VOCAB above
+                                  non_performant) and the moduledash.vocab entries in i18n/sweep/g4_risk_gov.ts
                                   registers them into moduledash.vocab in all
                                   three languages, so an English or Arabic reader
                                   no longer sees "moyennement performant". */}
@@ -1160,7 +985,7 @@ export default function AppliedControlsPage() {
                         )}
                       </td>
                       <td className="px-6 py-4 text-right text-gray-700">
-                        {item.cost != null ? `$${Number(item.cost).toLocaleString()}` : "-"}
+                        {item.cost != null ? `$${Number(item.cost).toLocaleString(numLocale)}` : "-"}
                       </td>
                       <td className="px-6 py-4">
                         <div className="flex items-center justify-end gap-1">
@@ -1493,7 +1318,7 @@ export default function AppliedControlsPage() {
                             {row.control_name}
                           </p>
                           <p className="text-xs text-gray-400 mt-0.5">
-                            {new Date(row.created_at).toLocaleString()}
+                            {new Date(row.created_at).toLocaleString(numLocale)}
                             {row.actor_email ? ` · ${row.actor_email}` : ""}
                           </p>
                           {row.note && <p className="text-xs text-gray-600 mt-1 italic">{row.note}</p>}

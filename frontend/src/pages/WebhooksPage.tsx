@@ -24,7 +24,17 @@ const MODULE_GROUPS: Record<string, string[]> = {
 };
 
 export default function WebhooksPage() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  // Event codes (risk.created …) are API identifiers and stay as-is; a translated
+  // description is shown next to them when one exists.
+  const eventLabel = (ev: string) => {
+    const k = `webhooks_ui.events.${ev.replace(/\./g, "__")}`;
+    return i18n.exists(k) ? t(k as never) : "";
+  };
+  const moduleLabel = (m: string) => {
+    const k = `webhooks_ui.modules.${m}`;
+    return i18n.exists(k) ? t(k as never) : m;
+  };
   const [webhooks, setWebhooks] = useState<any[]>([]);
   const [availableEvents, setAvailableEvents] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
@@ -111,7 +121,7 @@ export default function WebhooksPage() {
     } catch (err: any) {
       setTestResults((prev) => ({
         ...prev,
-        [id]: { loading: false, error: err?.response?.data?.detail || "Test failed" },
+        [id]: { loading: false, error: err?.response?.data?.detail || t("webhooks_ui.test_failed") },
       }));
     }
   }
@@ -203,12 +213,13 @@ export default function WebhooksPage() {
                       </span>
                     </div>
                     {hook.description && (
-                      <p className="text-xs text-gray-500 mb-3 ml-6">{hook.description}</p>
+                      <p className="text-xs text-gray-500 mb-3 ms-6">{hook.description}</p>
                     )}
-                    <div className="flex flex-wrap gap-1.5 ml-6">
+                    <div className="flex flex-wrap gap-1.5 ms-6">
                       {(hook.events || []).map((ev: string) => (
                         <span
                           key={ev}
+                          title={eventLabel(ev) || undefined}
                           className="inline-flex items-center bg-blue-50 text-blue-700 border border-blue-200 rounded-full px-2.5 py-0.5 text-xs font-medium"
                         >
                           {ev}
@@ -314,11 +325,11 @@ export default function WebhooksPage() {
                           onChange={() => toggleModuleGroup(module)}
                           className="rounded border-gray-300"
                         />
-                        <span className="text-sm font-semibold text-gray-900 capitalize">
-                          {module}.*
+                        <span className="text-sm font-semibold text-gray-900">
+                          {moduleLabel(module)} <span className="font-mono text-xs font-normal text-gray-400" dir="ltr">{module}.*</span>
                         </span>
                       </div>
-                      <div className="ml-6 grid grid-cols-1 gap-1.5">
+                      <div className="ms-6 grid grid-cols-1 gap-1.5">
                         {events.map((ev) => (
                           <label
                             key={ev}
@@ -330,7 +341,9 @@ export default function WebhooksPage() {
                               onChange={() => toggleEvent(ev)}
                               className="rounded border-gray-300"
                             />
-                            <span className="text-sm text-gray-600">{ev}</span>
+                            <span className="text-sm text-gray-600">
+                              {eventLabel(ev) ? <>{eventLabel(ev)} <span className="font-mono text-xs text-gray-400" dir="ltr">{ev}</span></> : <span dir="ltr">{ev}</span>}
+                            </span>
                           </label>
                         ))}
                       </div>

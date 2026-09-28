@@ -11,6 +11,10 @@ import { auditorPortalApi, policiesApi, auditCommentsApi, type AuditorAssignment
 import { useAuthStore } from "@/store/auth";
 import type { Policy, AuditorEngagement, PendingAuditComment } from "@/types";
 
+/** Display locale for dates: Latin digits in Arabic, French day-month order in French. */
+const dateLocale = (lang: string) => (lang?.startsWith("fr") ? "fr-FR" : lang?.startsWith("ar") ? "ar-u-nu-latn" : "en-US");
+
+
 // ─── Status vocabulary ────────────────────────────────────────────────────────
 // The engagement status (planning → fieldwork → review → reporting → closed) and
 // the legacy assessment status are two different vocabularies; each gets its own
@@ -129,7 +133,7 @@ export default function AuditorPortalPage() {
   function fmtDate(value?: string | null) {
     if (!value) return "—";
     const d = new Date(value);
-    return Number.isNaN(d.getTime()) ? value : d.toLocaleDateString(i18n.language);
+    return Number.isNaN(d.getTime()) ? value : d.toLocaleDateString(dateLocale(i18n.language));
   }
 
   if (loading) {

@@ -7,21 +7,23 @@ register (auto-matching assets + dedup), and records a ScanJournal per run.
 from datetime import datetime
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.core.database import get_db
+from app.core.i18n_messages import request_language, translate_text
 from app.core.security_utils import assert_safe_upload_name
 from app.models.user import User, UserRole
 from app.models.scan_journal import ScanJournal
 from app.api.v1.dependencies.auth import get_tenant_id, require_roles
 from app.api.v1.dependencies.features import require_feature
 from app.services.scanner_import import import_scan
-from app.models.scanner_connector import ScannerConnector
-from app.services.scanner_connectors import PULL_TOOLS, sync_connector, test_connector
+from app.models.scanner_connector import ScannerConnector, ScannerConnectorSettings
+from app.services.scanner_connectors import PULL_TOOLS, load_settings, sync_connector, test_connector
+from app.services.easm_connector import normalize_config as normalize_easm_config
 
 router = APIRouter()
 
@@ -50,7 +52,18 @@ class ScanJournalOut(BaseModel):
     started_at: datetime | None
     finished_at: datetime | None
     created_at: datetime
+    # Set on a connector-sync response only (EASM asset discovery); not stored
+    # as a column — the journal's filename line carries it for later reads.
+    discovered_assets: int | None = None
     model_config = {"from_attributes": True}
+
+
+def _journal_out(journal: ScanJournal, lang: str) -> ScanJournalOut:
+    """ScanJournalOut with the stored (English) error text localised for display."""
+    out = ScanJournalOut.model_validate(journal)
+    if out.error:
+        out.error = translate_text(out.error, lang)
+    return out
 
 
 @router.post("/upload", response_model=ScanJournalOut, status_code=201)
@@ -63,6 +76,7 @@ async def upload_scan(
     _role: Annotated[User, Depends(_CONNECTOR_ADMIN)],
     tenant_id: Annotated[str, Depends(get_tenant_id)],
     db: Annotated[AsyncSession, Depends(get_db)],
+    request: Request,
     tool: Annotated[str, Form()] = "csv",
     file: UploadFile = File(...),
 ):
@@ -92,7 +106,7 @@ async def upload_scan(
         content=content,
         created_by_id=current_user.id,
     )
-    return ScanJournalOut.model_validate(journal)
+    return _journal_out(journal, request_language(request))
 
 
 @router.get("/journal", response_model=list[ScanJournalOut])
@@ -100,6 +114,7 @@ async def list_journals(
     current_user: Annotated[User, Depends(_GATE)],
     tenant_id: Annotated[str, Depends(get_tenant_id)],
     db: Annotated[AsyncSession, Depends(get_db)],
+    request: Request,
     limit: int = 50,
 ):
     """List recent scanner-import runs for the tenant (newest first)."""
@@ -110,13 +125,16 @@ async def list_journals(
         .order_by(ScanJournal.created_at.desc())
         .limit(limit)
     )
-    return [ScanJournalOut.model_validate(j) for j in result.scalars().all()]
+    lang = request_language(request)
+    return [_journal_out(j, lang) for j in result.scalars().all()]
 
 
 # ---------------------------------------------------------------------------
 # Scanner connectors (live API integration — RFP 'Collecte automatique')
 # ---------------------------------------------------------------------------
-_CONNECTOR_TOOLS = {"tenable", "nessus", "qualys", "openvas", "demo"}
+_CONNECTOR_TOOLS = {"tenable", "nessus", "qualys", "openvas", "demo", "easm"}
+# Tools whose connector takes a `config` object (stored in scanner_connector_settings).
+_CONFIG_TOOLS = {"easm"}
 
 
 class ConnectorIn(BaseModel):
@@ -128,6 +146,9 @@ class ConnectorIn(BaseModel):
     verify_ssl: bool = True
     schedule_enabled: bool = False
     interval_hours: int = Field(default=168, ge=1, le=8760)  # 1 hour .. 1 year
+    # EASM only — non-secret settings (auth style, endpoint paths, field
+    # mapping); validated by easm_connector.normalize_config.
+    config: dict | None = None
 
 
 class ConnectorPatch(BaseModel):
@@ -141,6 +162,9 @@ class ConnectorPatch(BaseModel):
     enabled: bool | None = None
     schedule_enabled: bool | None = None
     interval_hours: int | None = Field(default=None, ge=1, le=8760)
+    # EASM only. Merged key-by-key into the stored config (a key sent as null
+    # goes back to its default); field_map, when sent, replaces the whole map.
+    config: dict | None = None
 
 
 class ConnectorOut(BaseModel):
@@ -154,12 +178,35 @@ class ConnectorOut(BaseModel):
     interval_hours: int
     last_sync_at: datetime | None = None
     last_status: str | None = None
+    # Non-secret tool settings (EASM). Credentials are never part of it.
+    config: dict | None = None
     model_config = {"from_attributes": True}  # note: secrets deliberately not exposed
 
 
 class ConnectorTestOut(BaseModel):
     ok: bool
     message: str
+    # EASM: first mapped findings, so the admin can check the field mapping.
+    preview: list[dict] | None = None
+
+
+def _out(conn: ScannerConnector, config: dict | None) -> ConnectorOut:
+    out = ConnectorOut.model_validate(conn)
+    out.config = config if (conn.tool or "").lower() in _CONFIG_TOOLS else None
+    return out
+
+
+def _validated_config(raw: dict | None, base_url: str | None) -> dict:
+    try:
+        return normalize_easm_config(raw, base_url)
+    except ValueError as exc:
+        raise HTTPException(400, f"Invalid EASM configuration: {exc}") from None
+
+
+async def _settings_row(db: AsyncSession, cid: str) -> ScannerConnectorSettings | None:
+    return (await db.execute(
+        select(ScannerConnectorSettings).where(ScannerConnectorSettings.connector_id == cid)
+    )).scalar_one_or_none()
 
 
 async def _get_connector(db: AsyncSession, cid: str, tenant_id: str) -> ScannerConnector:
@@ -204,15 +251,26 @@ async def create_connector(
     if body.tool not in _CONNECTOR_TOOLS:
         raise HTTPException(400, f"tool must be one of {sorted(_CONNECTOR_TOOLS)}")
     _assert_schedulable(body.tool, body.schedule_enabled)
+    base_url = _clean_base_url(body.base_url)
+    config = None
+    if body.tool in _CONFIG_TOOLS:
+        if not base_url:
+            raise HTTPException(400, "base_url is required for an EASM connector")
+        config = _validated_config(body.config, base_url)
+    elif body.config:
+        raise HTTPException(400, f"'{body.tool}' connectors take no config")
     conn = ScannerConnector(
-        tenant_id=tenant_id, name=body.name.strip(), tool=body.tool, base_url=_clean_base_url(body.base_url),
+        tenant_id=tenant_id, name=body.name.strip(), tool=body.tool, base_url=base_url,
         api_key=body.api_key or None, api_secret=body.api_secret or None, verify_ssl=body.verify_ssl,
         schedule_enabled=body.schedule_enabled, interval_hours=body.interval_hours,
     )
     db.add(conn)
+    await db.flush()
+    if config is not None:
+        db.add(ScannerConnectorSettings(tenant_id=tenant_id, connector_id=conn.id, config=config))
     await db.commit()
     await db.refresh(conn)
-    return conn
+    return _out(conn, config)
 
 
 @router.get("/connectors", response_model=list[ConnectorOut])
@@ -225,7 +283,15 @@ async def list_connectors(
         select(ScannerConnector).where(ScannerConnector.tenant_id == tenant_id)
         .order_by(ScannerConnector.created_at.desc())
     )
-    return list(result.scalars().all())
+    conns = list(result.scalars().all())
+    configs: dict[str, dict] = {}
+    if any((c.tool or "").lower() in _CONFIG_TOOLS for c in conns):
+        rows = await db.execute(
+            select(ScannerConnectorSettings.connector_id, ScannerConnectorSettings.config)
+            .where(ScannerConnectorSettings.tenant_id == tenant_id)
+        )
+        configs = {cid: cfg for cid, cfg in rows.all()}
+    return [_out(c, configs.get(c.id)) for c in conns]
 
 
 @router.patch("/connectors/{cid}", response_model=ConnectorOut)
@@ -246,6 +312,24 @@ async def update_connector(
         conn.name = body.name.strip()
     if "base_url" in sent:
         conn.base_url = _clean_base_url(body.base_url)
+    is_config_tool = (conn.tool or "").lower() in _CONFIG_TOOLS
+    if "config" in sent and body.config is not None and not is_config_tool:
+        raise HTTPException(400, f"'{conn.tool}' connectors take no config")
+    row = await _settings_row(db, conn.id) if is_config_tool else None
+    config = dict(row.config or {}) if row else None
+    if is_config_tool and (("config" in sent and body.config is not None) or "base_url" in sent):
+        if not conn.base_url:
+            raise HTTPException(400, "base_url is required for an EASM connector")
+        merged = {**(config or {}), **(body.config or {})}
+        # A path or URL key sent as null/"" goes back to its default.
+        merged = {k: v for k, v in merged.items() if v is not None}
+        # Re-validated against the (possibly new) base URL: a full-URL path must
+        # stay on the connector's host.
+        config = _validated_config(merged, conn.base_url)
+        if row is None:
+            db.add(ScannerConnectorSettings(tenant_id=tenant_id, connector_id=conn.id, config=config))
+        else:
+            row.config = config
     # Never clear a stored secret by omission or by an empty field.
     if body.api_key:
         conn.api_key = body.api_key
@@ -259,7 +343,7 @@ async def update_connector(
     _assert_schedulable((conn.tool or "").lower(), bool(conn.schedule_enabled))
     await db.commit()
     await db.refresh(conn)
-    return conn
+    return _out(conn, config)
 
 
 @router.delete("/connectors/{cid}", status_code=204)
@@ -271,6 +355,10 @@ async def delete_connector(
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
     conn = await _get_connector(db, cid, tenant_id)
+    row = await _settings_row(db, conn.id)
+    if row is not None:
+        await db.delete(row)
+        await db.flush()
     await db.delete(conn)
     await db.commit()
     return None
@@ -283,9 +371,14 @@ async def test_conn(
     _role: Annotated[User, Depends(_CONNECTOR_ADMIN)],
     tenant_id: Annotated[str, Depends(get_tenant_id)],
     db: Annotated[AsyncSession, Depends(get_db)],
+    request: Request,
 ):
     conn = await _get_connector(db, cid, tenant_id)
-    return await test_connector(conn)
+    lang = request_language(request)
+    result = await test_connector(conn, await load_settings(db, conn), lang=lang)
+    if isinstance(result, dict) and isinstance(result.get("message"), str):
+        result = {**result, "message": translate_text(result["message"], lang)}
+    return result
 
 
 @router.post("/connectors/{cid}/sync", response_model=ScanJournalOut)
@@ -295,7 +388,8 @@ async def sync_conn(
     _role: Annotated[User, Depends(_CONNECTOR_ADMIN)],
     tenant_id: Annotated[str, Depends(get_tenant_id)],
     db: Annotated[AsyncSession, Depends(get_db)],
+    request: Request,
 ):
     conn = await _get_connector(db, cid, tenant_id)
     journal = await sync_connector(db, conn, created_by_id=current_user.id)
-    return ScanJournalOut.model_validate(journal)
+    return _journal_out(journal, request_language(request))

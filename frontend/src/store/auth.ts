@@ -33,7 +33,10 @@ export function hasAnyRole(user: AuthUser | null, allowedRoles: string[]): boole
 }
 
 export const PLAN_FEATURES: Record<PlanTier, {
+  /** English fallback — render with t(labelKey, label). */
   label: string;
+  /** i18n key for the display name (plan.<tier>, present in en/fr/ar). */
+  labelKey: string;
   maxFrameworks: number;
   maxAdmins: number;
   maxIntegrations: number;
@@ -42,6 +45,7 @@ export const PLAN_FEATURES: Record<PlanTier, {
 }> = {
   free_trial: {
     label: "Free Trial",
+    labelKey: "plan.free_trial",
     maxFrameworks: 999,
     maxAdmins: 999,
     maxIntegrations: 999,
@@ -50,6 +54,7 @@ export const PLAN_FEATURES: Record<PlanTier, {
   },
   starter: {
     label: "Starter",
+    labelKey: "plan.starter",
     maxFrameworks: 3,
     maxAdmins: 10,
     maxIntegrations: 25,
@@ -58,6 +63,7 @@ export const PLAN_FEATURES: Record<PlanTier, {
   },
   professional: {
     label: "Professional",
+    labelKey: "plan.professional",
     maxFrameworks: 10,
     maxAdmins: 50,
     maxIntegrations: 75,
@@ -66,6 +72,7 @@ export const PLAN_FEATURES: Record<PlanTier, {
   },
   enterprise: {
     label: "Enterprise",
+    labelKey: "plan.enterprise",
     maxFrameworks: 999,
     maxAdmins: 999,
     maxIntegrations: 999,
@@ -75,6 +82,7 @@ export const PLAN_FEATURES: Record<PlanTier, {
   elite: {
     // Elite Pack = god mode: every module + every settings tab, no plan gate anywhere.
     label: "Elite Pack",
+    labelKey: "plan.elite",
     maxFrameworks: 999,
     maxAdmins: 999,
     maxIntegrations: 999,

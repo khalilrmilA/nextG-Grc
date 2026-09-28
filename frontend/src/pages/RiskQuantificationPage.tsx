@@ -9,11 +9,19 @@ import {
   Play,
   Target,
 } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { riskQuantApi, risksApi, riskScenariosApi } from "@/api/endpoints";
+import i18n from "@/i18n";
+
+/** Number locale for the current UI language (Latin digits kept for Arabic). */
+function numLocale(): string {
+  const l = i18n.language || "en";
+  return l.startsWith("fr") ? "fr-FR" : l.startsWith("ar") ? "ar-u-nu-latn" : "en-US";
+}
 
 function fmtDollar(value: number | null | undefined): string {
   if (value == null) return "$0";
-  return "$" + value.toLocaleString("en-US", { maximumFractionDigits: 0 });
+  return "$" + value.toLocaleString(numLocale(), { maximumFractionDigits: 0 });
 }
 
 // Map 1-5 impact scale to rough dollar ranges
@@ -29,6 +37,7 @@ function impactToDollars(impact: number): { min: number; likely: number; max: nu
 }
 
 export default function RiskQuantificationPage() {
+  const { t } = useTranslation();
   const [risks, setRisks]         = useState<any[]>([]);
   const [scenarios, setScenarios] = useState<any[]>([]);
   const [loadingRisks, setLoadingRisks] = useState(true);
@@ -104,7 +113,7 @@ export default function RiskQuantificationPage() {
 
   async function handleRun() {
     if (!form.risk_id) {
-      setError("Please select a risk");
+      setError(t("risk_quant.error_select_risk"));
       return;
     }
     setRunning(true);
@@ -121,7 +130,7 @@ export default function RiskQuantificationPage() {
       });
       setResult(data);
     } catch (err: any) {
-      setError(err?.response?.data?.detail || "Simulation failed");
+      setError(err?.response?.data?.detail || t("risk_quant.error_simulation_failed"));
     } finally {
       setRunning(false);
     }
@@ -134,9 +143,9 @@ export default function RiskQuantificationPage() {
     <div className="p-8 max-w-7xl space-y-6">
       {/* Header */}
       <div>
-        <h1 className="text-2xl font-bold text-gray-900">Risk Quantification</h1>
+        <h1 className="text-2xl font-bold text-gray-900">{t("risk_quant.title")}</h1>
         <p className="text-sm text-gray-500 mt-1">
-          Monte Carlo simulation for quantitative risk analysis (FAIR model)
+          {t("risk_quant.subtitle")}
         </p>
       </div>
 
@@ -148,8 +157,8 @@ export default function RiskQuantificationPage() {
               <Calculator className="w-5 h-5" />
             </div>
             <div>
-              <h2 className="text-lg font-semibold text-gray-900">Simulation Parameters</h2>
-              <p className="text-xs text-gray-500">Configure inputs for the Monte Carlo simulation</p>
+              <h2 className="text-lg font-semibold text-gray-900">{t("risk_quant.params_title")}</h2>
+              <p className="text-xs text-gray-500">{t("risk_quant.params_subtitle")}</p>
             </div>
           </div>
 
@@ -161,11 +170,11 @@ export default function RiskQuantificationPage() {
             {/* Risk / Scenario Selector */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                Select Risk or Scenario
+                {t("risk_quant.select_label")}
               </label>
               {loadingRisks ? (
                 <div className="flex items-center gap-2 text-gray-400 text-sm">
-                  <Loader2 className="w-4 h-4 animate-spin" /> Loading...
+                  <Loader2 className="w-4 h-4 animate-spin" /> {t("common.loading")}
                 </div>
               ) : (
                 <select
@@ -177,9 +186,9 @@ export default function RiskQuantificationPage() {
                   onChange={(e) => handleSelectChange(e.target.value)}
                   className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                 >
-                  <option value="">-- Select a risk or scenario --</option>
+                  <option value="">{t("risk_quant.select_placeholder")}</option>
                   {risks.length > 0 && (
-                    <optgroup label={`Risks (${risks.length})`}>
+                    <optgroup label={t("risk_quant.group_risks", { n: risks.length })}>
                       {risks.map((r: any) => (
                         <option key={r.id} value={r.id}>
                           [{r.severity?.toUpperCase() ?? "—"}] {r.title || r.name}
@@ -188,10 +197,10 @@ export default function RiskQuantificationPage() {
                     </optgroup>
                   )}
                   {scenarios.length > 0 && (
-                    <optgroup label={`Risk Scenarios (${scenarios.length})`}>
+                    <optgroup label={t("risk_quant.group_scenarios", { n: scenarios.length })}>
                       {scenarios.map((s: any) => (
                         <option key={s.id} value={`scenario:${s.id}`}>
-                          {s.name || s.title || `Scenario ${s.id.slice(0, 8)}`}
+                          {s.name || s.title || t("risk_quant.scenario_fallback", { id: s.id.slice(0, 8) })}
                         </option>
                       ))}
                     </optgroup>
@@ -200,7 +209,7 @@ export default function RiskQuantificationPage() {
               )}
               {form.risk_id && (
                 <p className="text-xs text-gray-400 mt-1">
-                  Loss values pre-filled from risk data — adjust as needed
+                  {t("risk_quant.prefilled_hint")}
                 </p>
               )}
             </div>
@@ -209,7 +218,7 @@ export default function RiskQuantificationPage() {
             <div className="grid grid-cols-3 gap-3">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Min Loss ($)
+                  {t("risk_quant.min_loss")}
                 </label>
                 <input
                   type="number"
@@ -223,7 +232,7 @@ export default function RiskQuantificationPage() {
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Most Likely ($)
+                  {t("risk_quant.most_likely")}
                 </label>
                 <input
                   type="number"
@@ -237,7 +246,7 @@ export default function RiskQuantificationPage() {
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Max Loss ($)
+                  {t("risk_quant.max_loss")}
                 </label>
                 <input
                   type="number"
@@ -254,7 +263,7 @@ export default function RiskQuantificationPage() {
             {/* Probability Slider */}
             <div>
               <div className="flex items-center justify-between mb-1">
-                <label className="text-sm font-medium text-gray-700">Probability</label>
+                <label className="text-sm font-medium text-gray-700">{t("risk_quant.probability")}</label>
                 <span className="text-sm font-semibold text-blue-600">
                   {form.probability_percent}%
                 </span>
@@ -278,7 +287,7 @@ export default function RiskQuantificationPage() {
             {/* Control Effectiveness Slider */}
             <div>
               <div className="flex items-center justify-between mb-1">
-                <label className="text-sm font-medium text-gray-700">Control Effectiveness</label>
+                <label className="text-sm font-medium text-gray-700">{t("risk_quant.control_effectiveness")}</label>
                 <span className="text-sm font-semibold text-green-600">
                   {form.control_effectiveness}%
                 </span>
@@ -310,7 +319,7 @@ export default function RiskQuantificationPage() {
               ) : (
                 <Play className="w-4 h-4" />
               )}
-              {running ? "Running Simulation..." : "Run Simulation"}
+              {running ? t("risk_quant.running") : t("risk_quant.run")}
             </button>
           </div>
         </div>
@@ -323,25 +332,25 @@ export default function RiskQuantificationPage() {
               <div className="grid grid-cols-2 gap-4">
                 {[
                   {
-                    label: "Annualized Loss Expectancy",
+                    label: t("risk_quant.kpi_ale"),
                     value: fmtDollar(result.ale),
                     icon: DollarSign,
                     color: "text-red-600 bg-red-50",
                   },
                   {
-                    label: "Single Loss Expectancy",
+                    label: t("risk_quant.kpi_sle"),
                     value: fmtDollar(result.sle),
                     icon: Target,
                     color: "text-orange-600 bg-orange-50",
                   },
                   {
-                    label: "Residual ALE",
+                    label: t("risk_quant.kpi_residual_ale"),
                     value: fmtDollar(result.residual_ale),
                     icon: ShieldCheck,
                     color: "text-green-600 bg-green-50",
                   },
                   {
-                    label: "Risk Reduction",
+                    label: t("risk_quant.kpi_risk_reduction"),
                     value: fmtDollar(result.risk_reduction),
                     icon: TrendingDown,
                     color: "text-blue-600 bg-blue-50",
@@ -369,20 +378,20 @@ export default function RiskQuantificationPage() {
               {/* Percentiles */}
               {(result.p90 != null || result.p95 != null) && (
                 <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
-                  <h3 className="text-sm font-semibold text-gray-900 mb-3">Percentile Values</h3>
+                  <h3 className="text-sm font-semibold text-gray-900 mb-3">{t("risk_quant.percentiles")}</h3>
                   <div className="grid grid-cols-2 gap-4">
                     {result.p90 != null && (
                       <div className="p-3 bg-amber-50 rounded-xl border border-amber-100">
                         <p className="text-xs text-amber-600 font-medium">P90</p>
                         <p className="text-lg font-bold text-gray-900">{fmtDollar(result.p90)}</p>
-                        <p className="text-xs text-gray-500">90% of losses below this</p>
+                        <p className="text-xs text-gray-500">{t("risk_quant.p90_hint")}</p>
                       </div>
                     )}
                     {result.p95 != null && (
                       <div className="p-3 bg-red-50 rounded-xl border border-red-100">
                         <p className="text-xs text-red-600 font-medium">P95</p>
                         <p className="text-lg font-bold text-gray-900">{fmtDollar(result.p95)}</p>
-                        <p className="text-xs text-gray-500">95% of losses below this</p>
+                        <p className="text-xs text-gray-500">{t("risk_quant.p95_hint")}</p>
                       </div>
                     )}
                   </div>
@@ -396,11 +405,11 @@ export default function RiskQuantificationPage() {
                     <div className="flex items-center gap-2">
                       <BarChart3 className="w-4 h-4 text-blue-600" />
                       <h3 className="text-sm font-semibold text-gray-900">
-                        Loss Distribution
+                        {t("risk_quant.loss_distribution")}
                       </h3>
                     </div>
                     <span className="text-xs text-gray-400">
-                      {result.simulations?.toLocaleString() || "10,000"} simulations
+                      {t("risk_quant.simulations", { n: (result.simulations ?? 10000).toLocaleString(numLocale()) })}
                     </span>
                   </div>
                   <div className="space-y-2">
@@ -436,10 +445,10 @@ export default function RiskQuantificationPage() {
             <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-16 text-center">
               <BarChart3 className="w-10 h-10 mx-auto mb-3 text-gray-300" />
               <p className="text-sm text-gray-400">
-                Configure parameters and run the simulation to see results
+                {t("risk_quant.empty")}
               </p>
               <p className="text-xs text-gray-400 mt-1">
-                Uses Monte Carlo method with 10,000 iterations
+                {t("risk_quant.empty_hint", { n: (10000).toLocaleString(numLocale()) })}
               </p>
             </div>
           )}

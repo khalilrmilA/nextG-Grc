@@ -40,6 +40,10 @@ import type {
   AuditReportDistribution, AuditFindingStatusEvent, FrameworkControl,
 } from "@/types";
 
+/** Display locale for dates: Latin digits in Arabic, French day-month order in French. */
+const dateLocale = (lang: string) => (lang?.startsWith("fr") ? "fr-FR" : lang?.startsWith("ar") ? "ar-u-nu-latn" : "en-US");
+
+
 // ── Vocabulary ────────────────────────────────────────────────────────────────
 
 const STATUS_STEPS = ["planning", "fieldwork", "review", "reporting", "closed"] as const;
@@ -489,7 +493,7 @@ export default function AuditDetailPage() {
     (value?: string | null) => {
       if (!value) return "—";
       const d = new Date(value);
-      return Number.isNaN(d.getTime()) ? value : d.toLocaleDateString(i18n.language);
+      return Number.isNaN(d.getTime()) ? value : d.toLocaleDateString(dateLocale(i18n.language));
     },
     [i18n.language],
   );

@@ -3,7 +3,7 @@ import {
   Plus, Search, X, Loader2, Filter, Shield, Trash2, Tag, BarChart3,
   Sparkles, Download, ThumbsUp, ThumbsDown, Clock, CheckCircle2, RefreshCw,
   AlertTriangle, ExternalLink, CheckCheck, ChevronRight, ChevronDown, Pencil, Lock, Rss,
-  BadgeCheck, CalendarClock, CopyPlus, History, TrendingUp,
+  BadgeCheck, CalendarClock, CopyPlus, History, TrendingUp, Languages,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { threatsApi, assetsApi, vulnerabilitiesApi } from "@/api/endpoints";
@@ -14,6 +14,10 @@ import { apiClient } from "@/api/client";
 import { MultiSelect, type MultiSelectOption } from "@/components/common/MultiSelect";
 import ModuleDashboard from "@/components/dashboards/ModuleDashboard";
 import { useBucketLabel } from "@/components/common/Breakdown";
+import i18n from "@/i18n";
+
+// Dates follow the UI language (Arabic keeps Latin digits).
+const uiLocale = () => { const l = i18n.language || "en"; return l.startsWith("fr") ? "fr-FR" : l.startsWith("ar") ? "ar-u-nu-latn" : "en-US"; };
 
 const PROBABILITY_LEVELS = ["rare", "peu_probable", "possible", "probable", "quasiment_certain"];
 const SEVERITY_LEVELS = ["mineur", "notable", "fort", "tres_fort", "critique"];
@@ -71,6 +75,49 @@ function errorDetail(err: unknown): string {
   return typeof detail === "string" && detail.trim() ? detail : "";
 }
 
+// ── Machine-translated feed text ──────────────────────────────────────────────
+//
+// System threats — the built-in catalogue (MITRE in English, BQ-* in French) and
+// feed imports (SANS ISC / CISA KEV / OSM) — and watch items are stored in one
+// language. For a reader of another UI language the API swaps in a cached
+// machine translation and sets `translated`, keeping the stored text in
+// original_* — so the reader is told the text was machine-translated and can
+// always see the original.
+
+/** Name/description (or title/summary) to display, honouring "show original". */
+function feedText(item: any, showOriginal: boolean, fields: [string, string] = ["name", "description"]) {
+  const [a, b] = fields;
+  if (!item?.translated || !showOriginal) return { primary: item?.[a], secondary: item?.[b] };
+  return {
+    primary: item[`original_${a}`] ?? item[a],
+    secondary: item[`original_${b}`] ?? item[b],
+  };
+}
+
+function AutoTranslatedBadge({ showingOriginal, onToggle }: { showingOriginal: boolean; onToggle: () => void }) {
+  const { t } = useTranslation();
+  return (
+    <span className="inline-flex items-center gap-1.5 text-[11px]">
+      <span
+        className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 font-semibold bg-sky-50 text-sky-700 border border-sky-200"
+        title={t("threats.auto_translated_hint", "Machine-translated from the original text")}
+      >
+        <Languages className="w-3 h-3" />
+        {t("threats.auto_translated", "Auto-translated")}
+      </span>
+      <button
+        type="button"
+        onClick={(e) => { e.stopPropagation(); onToggle(); }}
+        className="font-medium text-sky-700 hover:text-sky-900 underline-offset-2 hover:underline"
+      >
+        {showingOriginal
+          ? t("threats.show_translation", "Show translation")
+          : t("threats.show_original", "Show original")}
+      </button>
+    </span>
+  );
+}
+
 // ── Detail modal ──────────────────────────────────────────────────────────────
 
 const EMPTY_PROFILE_FORM = {
@@ -99,6 +146,8 @@ function ThreatDetailModal({ threat, onClose, onUpdated }: { threat: any; onClos
   const [busy, setBusy] = useState("");
   const [showHistory, setShowHistory] = useState(false);
   const [history, setHistory] = useState<any[] | null>(null);
+  const [showOriginal, setShowOriginal] = useState(false);
+  const shown = feedText(threat, showOriginal);
 
   async function runAction(kind: "adopt" | "validate" | "review") {
     setBusy(kind); setProfileError("");
@@ -201,7 +250,12 @@ function ThreatDetailModal({ threat, onClose, onUpdated }: { threat: any; onClos
                 </span>
               )}
             </div>
-            <h2 className="text-lg font-bold text-gray-900 leading-snug">{threat.name}</h2>
+            <h2 className="text-lg font-bold text-gray-900 leading-snug">{shown.primary}</h2>
+            {threat.translated && (
+              <div className="mt-1.5">
+                <AutoTranslatedBadge showingOriginal={showOriginal} onToggle={() => setShowOriginal((v) => !v)} />
+              </div>
+            )}
           </div>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600 shrink-0 mt-1">
             <X className="w-5 h-5" />
@@ -212,10 +266,10 @@ function ThreatDetailModal({ threat, onClose, onUpdated }: { threat: any; onClos
         <div className="overflow-y-auto flex-1 px-6 py-5 space-y-5">
 
           {/* Description */}
-          {threat.description && (
+          {shown.secondary && (
             <div>
               <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">{t("common.description")}</h3>
-              <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-line">{threat.description}</p>
+              <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-line">{shown.secondary}</p>
             </div>
           )}
 
@@ -422,7 +476,7 @@ function ThreatDetailModal({ threat, onClose, onUpdated }: { threat: any; onClos
                             {String(t(`threats.action_${h.action}` as never, h.action.replace(/_/g, " ")))}
                           </span>
                           <span className="text-[11px] text-gray-400 whitespace-nowrap">
-                            {h.created_at ? new Date(h.created_at).toLocaleString() : ""}
+                            {h.created_at ? new Date(h.created_at).toLocaleString(uiLocale()) : ""}
                           </span>
                         </div>
                         {h.actor_email && <p className="text-[11px] text-gray-400">{h.actor_email}</p>}
@@ -805,7 +859,7 @@ function TrendPanel({
 }
 
 export default function ThreatLibraryPage() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   // Raw backend enum values (`cyber_attack`, `technical_failure`) through the
   // product vocabulary — the raw values read as English on every screen.
   const label = useBucketLabel();
@@ -824,6 +878,13 @@ export default function ThreatLibraryPage() {
   const [watchKind, setWatchKind] = useState("");
   const [watchBusy, setWatchBusy] = useState("");
   const [showWatch, setShowWatch] = useState(false);
+  // Ids of machine-translated cards/rows the reader flipped back to the English original.
+  const [originalIds, setOriginalIds] = useState<Set<string>>(() => new Set());
+  const toggleOriginal = (id: string) => setOriginalIds((prev) => {
+    const next = new Set(prev);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    return next;
+  });
   const [error, setError]           = useState("");
   const [loadError, setLoadError]   = useState("");
   const [dashOpen, setDashOpen]     = useState<boolean>(readDashOpen);
@@ -880,7 +941,7 @@ export default function ThreatLibraryPage() {
     });
   }
 
-  useEffect(() => { load(); }, [catFilter, typeFilter, probFilter, sevFilter, overdueOnly]);
+  useEffect(() => { load(); }, [catFilter, typeFilter, probFilter, sevFilter, overdueOnly, i18n.language]);
 
   async function loadWatch() {
     try {
@@ -888,7 +949,7 @@ export default function ThreatLibraryPage() {
       setWatch(Array.isArray(d) ? d : []);
     } catch { setWatch([]); }
   }
-  useEffect(() => { loadWatch(); /* eslint-disable-next-line */ }, [watchKind]);
+  useEffect(() => { loadWatch(); /* eslint-disable-next-line */ }, [watchKind, i18n.language]);
 
   async function dismissWatch(id: string) {
     setWatchBusy(id);
@@ -898,11 +959,12 @@ export default function ThreatLibraryPage() {
   async function promoteWatch(item: any) {
     setWatchBusy(item.id);
     try {
-      await threatsApi.promoteWatch(item.id, { name: item.title, category: "cyber_attack" });
+      // The register keeps the feed's own (English) title; a translation is display-only.
+      await threatsApi.promoteWatch(item.id, { name: item.original_title ?? item.title, category: "cyber_attack" });
       await loadWatch(); await load();
-      setNotice({ msg: `"${String(item.title).slice(0, 60)}" proposed for the register — it is pending validation.`, ok: true });
+      setNotice({ msg: t("threats_ui.promoted_pending", { title: String(item.title).slice(0, 60) }), ok: true });
     } catch (e: any) {
-      setNotice({ msg: e?.response?.data?.detail || "Could not promote this item.", ok: false });
+      setNotice({ msg: e?.response?.data?.detail || t("threats_ui.promote_failed"), ok: false });
     } finally { setWatchBusy(""); }
   }
 
@@ -947,12 +1009,12 @@ export default function ThreatLibraryPage() {
 
   /* ── Approve all pending ── */
   async function handleApproveAll() {
-    if (!confirm(`Approve all ${pending.length} pending threats and add them to your library?`)) return;
+    if (!confirm(t("threats_ui.confirm_approve_all", { count: pending.length }))) return;
     setApprovingAll(true);
     setNotice(null);
     try {
       await Promise.all(pending.map((th) => threatsApi.approve(th.id)));
-      setNotice({ msg: `Approved ${pending.length} threat${pending.length > 1 ? "s" : ""} — added to library.`, ok: true });
+      setNotice({ msg: t("threats_ui.approved_all", { count: pending.length }), ok: true });
       load();
     } catch {
       setNotice({ msg: t("threats.error_approve_failed"), ok: false });
@@ -989,7 +1051,7 @@ export default function ThreatLibraryPage() {
       setLoading(true);
       load();
     } catch (err: any) {
-      setError(err?.response?.data?.detail || "Failed to create threat");
+      setError(err?.response?.data?.detail || t("threats_ui.create_failed"));
     } finally {
       setSubmitting(false);
     }
@@ -1002,6 +1064,7 @@ export default function ThreatLibraryPage() {
 
   const filtered = items.filter(
     (i) => i.name?.toLowerCase().includes(search.toLowerCase()) ||
+           i.original_name?.toLowerCase().includes(search.toLowerCase()) ||
            i.ref_id?.toLowerCase().includes(search.toLowerCase()),
   );
 
@@ -1206,7 +1269,10 @@ export default function ThreatLibraryPage() {
                       {String(t(`threats.watch_kind_${w.kind}` as never, w.kind.replace(/_/g, " ")))}
                     </span>
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm text-gray-800 break-words">{w.title}</p>
+                      <p className="text-sm text-gray-800 break-words">{feedText(w, originalIds.has(w.id), ["title", "summary"]).primary}</p>
+                      {w.translated && (
+                        <AutoTranslatedBadge showingOriginal={originalIds.has(w.id)} onToggle={() => toggleOriginal(w.id)} />
+                      )}
                       <p className="text-[11px] text-gray-400">
                         {w.source}{w.ref ? ` · ${w.ref}` : ""}
                         {w.status !== "new" && ` · ${String(t(`threats.watch_status_${w.status}` as never, w.status))}`}
@@ -1275,7 +1341,7 @@ export default function ThreatLibraryPage() {
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
                     {th.ref_id && <span className="font-mono text-xs text-gray-400">{th.ref_id}</span>}
-                    <span className="font-medium text-sm text-gray-900">{th.name}</span>
+                    <span className="font-medium text-sm text-gray-900">{feedText(th, originalIds.has(th.id)).primary}</span>
                     <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-semibold border ${CATEGORY_BADGE[th.category] || "bg-gray-100 text-gray-600 border-gray-200"}`}>
                       {label(th.category || "cyber_attack")}
                     </span>
@@ -1285,8 +1351,13 @@ export default function ThreatLibraryPage() {
                       </span>
                     )}
                   </div>
-                  {th.description && (
-                    <p className="text-xs text-gray-500 mt-1 line-clamp-2">{th.description}</p>
+                  {th.translated && (
+                    <div className="mt-1">
+                      <AutoTranslatedBadge showingOriginal={originalIds.has(th.id)} onToggle={() => toggleOriginal(th.id)} />
+                    </div>
+                  )}
+                  {feedText(th, originalIds.has(th.id)).secondary && (
+                    <p className="text-xs text-gray-500 mt-1 line-clamp-2">{feedText(th, originalIds.has(th.id)).secondary}</p>
                   )}
                   <div className="flex flex-wrap gap-1 mt-1.5">
                     {th.typical_threat_actors?.slice(0, 3).map((a: string, i: number) => (
@@ -1436,8 +1507,13 @@ export default function ThreatLibraryPage() {
                     </div>
                   </div>
 
-                  <h3 className="font-semibold text-gray-900 mb-1 line-clamp-2 leading-snug">{threat.name}</h3>
-                  <p className="text-sm text-gray-500 mb-3 line-clamp-2">{threat.description || t("threats.no_description")}</p>
+                  <h3 className="font-semibold text-gray-900 mb-1 line-clamp-2 leading-snug">{feedText(threat, originalIds.has(threat.id)).primary}</h3>
+                  {threat.translated && (
+                    <div className="mb-1.5">
+                      <AutoTranslatedBadge showingOriginal={originalIds.has(threat.id)} onToggle={() => toggleOriginal(threat.id)} />
+                    </div>
+                  )}
+                  <p className="text-sm text-gray-500 mb-3 line-clamp-2">{feedText(threat, originalIds.has(threat.id)).secondary || t("threats.no_description")}</p>
 
                   {/* Actors + vectors/tags combined */}
                   {((threat.typical_threat_actors?.length > 0) || (threat.typical_attack_vectors?.length > 0)) && (
@@ -1481,7 +1557,16 @@ export default function ThreatLibraryPage() {
         <ThreatDetailModal
           threat={detail}
           onClose={() => setDetail(null)}
-          onUpdated={(updated) => {
+          onUpdated={(raw) => {
+            // Single-threat responses (profile, validate, review, adopt) are not
+            // localised; keep the translation the list gave us if the English
+            // text it was made from is unchanged.
+            const prevItem = detail;
+            const updated = prevItem?.translated && !raw.translated && prevItem.id === raw.id
+              && prevItem.original_name === raw.name && prevItem.original_description === raw.description
+              ? { ...raw, name: prevItem.name, description: prevItem.description, translated: true,
+                  original_name: prevItem.original_name, original_description: prevItem.original_description }
+              : raw;
             setDetail(updated);
             setItems((prev) => prev.map((x) => (x.id === updated.id ? updated : x)));
           }}

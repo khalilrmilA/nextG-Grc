@@ -149,6 +149,16 @@ async def get_entitlements(
     r = await db.execute(select(Subscription).where(Subscription.tenant_id == tenant_id))
     sub = r.scalar_one_or_none()
 
+    if getattr(current_user, "elite_access", False):
+        # Individually granted the Elite Pack by a super admin: every feature is
+        # open to this user (require_feature bypasses for them too). Quotas stay
+        # the tenant's own; the grant is about capabilities, not limits.
+        return EntitlementsOut(
+            tier=SubscriptionTier.ELITE.value,
+            features={k: True for k in keys},
+            limits=sub.limits if sub else TIER_LIMITS[SubscriptionTier.STARTER],
+        )
+
     if not sub:
         # No subscription row: fall back to Starter rather than unlocking
         # everything. Failing open here would defeat the gate for any tenant

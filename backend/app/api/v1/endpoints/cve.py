@@ -21,6 +21,9 @@ from app.models.cve_entry import CveAnnotation, CveEntry, RELEVANCE_VALUES
 from app.models.cwe_entry import CweEntry
 from app.models.user import User, UserRole
 from app.services.nvd_sync import sync_all
+from app.services.content_translation import (
+    enqueue_requests, get_display_language, localize_fields, missing_hashes, source_hash,
+)
 
 router = APIRouter()
 
@@ -77,7 +80,34 @@ class CveOut(BaseModel):
     relevance: str | None = None
     notes: str | None = None
     linked_asset_ids: list = []
+    # Machine translation of the NVD text into the reader's language — ON DEMAND:
+    # entries shown in fr/ar without one are queued for the background worker
+    # (app.services.translation_worker) and come back translated on a later view.
+    translated: bool = False
+    original_description: str | None = None
+    original_kev_action: str | None = None
     model_config = {"from_attributes": True}
+
+
+# At most this many CVEs are queued for translation per request (a page is 50).
+_TRANSLATE_QUEUE_PER_REQUEST = 50
+
+
+async def _localize_cves(db: AsyncSession, lang: str, pairs: list[tuple["CveOut", CveEntry]]) -> None:
+    """Cached translations in place; the entries still missing one are queued
+    (bounded, deduplicated). Never raises."""
+    if not lang or not pairs:
+        return
+    fields = [(out, {"description": e.description or "", "kev_action": e.kev_action or ""}) for out, e in pairs]
+    await localize_fields(db, lang, fields)
+    missing = await missing_hashes(db, lang, [t for _o, f in fields for t in f.values()])
+    if not missing:
+        return
+    ids = [e.id for _o, e in pairs
+           if any(t and source_hash(t) in missing for t in (e.description, e.kev_action))]
+    if await enqueue_requests(db, "cve", lang, ids, limit=_TRANSLATE_QUEUE_PER_REQUEST):
+        from app.services.translation_worker import nudge
+        nudge()
 
 
 class CveDetailOut(CveOut):
@@ -167,6 +197,7 @@ async def search_cve(
     known_exploited: bool | None = None,
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=200),
+    lang: str = Depends(get_display_language),
 ):
     """Advanced search: flaw type (CWE), criticality, attack vector, publication
     date, and the tenant's own relevance triage.
@@ -231,13 +262,16 @@ async def search_cve(
     ).offset((page - 1) * page_size).limit(page_size)
 
     out: list[CveOut] = []
+    entries: list[CveEntry] = []
     for entry, annotation in (await db.execute(stmt)).all():
         item = CveOut.model_validate(entry)
         item.relevance = annotation.relevance if annotation else None
         item.notes = annotation.notes if annotation else None
         item.linked_asset_ids = (annotation.linked_asset_ids or []) if annotation else []
         out.append(item)
+        entries.append(entry)
     await _attach_cwe_names(db, out)
+    await _localize_cves(db, lang, list(zip(out, entries)))
     return out
 
 
@@ -269,6 +303,7 @@ async def get_cve(
     current_user: Annotated[User, Depends(_GATE)],
     tenant_id: Annotated[str, Depends(get_tenant_id)],
     db: Annotated[AsyncSession, Depends(get_db)],
+    lang: str = Depends(get_display_language),
 ):
     """The detailed sheet for one CVE: description, criticality, attack vector,
     the weaknesses it is classified against with MITRE's published mitigations,
@@ -298,6 +333,7 @@ async def get_cve(
         found = {r.cwe_id: r for r in rows}
         item.weaknesses = [CweDetail.model_validate(found[c]) for c in codes if c in found]
         item.cwe = [CweRef(cwe_id=c, name=found[c].name if c in found else None) for c in codes]
+    await _localize_cves(db, lang, [(item, entry)])
     return item
 
 
@@ -308,6 +344,7 @@ async def set_annotation(
     current_user: Annotated[User, Depends(_GATE)],
     tenant_id: Annotated[str, Depends(get_tenant_id)],
     db: Annotated[AsyncSession, Depends(get_db)],
+    lang: str = Depends(get_display_language),
 ):
     if body.relevance not in RELEVANCE_VALUES:
         raise HTTPException(status_code=422, detail=f"relevance must be one of {RELEVANCE_VALUES}")
@@ -337,4 +374,8 @@ async def set_annotation(
     item.notes = body.notes
     item.linked_asset_ids = body.linked_asset_ids
     await _attach_cwe_names(db, [item])
+    # Same display language as the list, so the page's merge of this row does not
+    # flip the description back to English. Only a lookup — nothing is queued here.
+    await localize_fields(db, lang, [(item, {"description": entry.description or "",
+                                             "kev_action": entry.kev_action or ""})])
     return item

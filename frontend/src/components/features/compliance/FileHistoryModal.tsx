@@ -183,7 +183,7 @@ export function FileHistoryModal({
                           </span>
                         </div>
                         <div className="flex items-center gap-3 mt-1 text-xs text-gray-400">
-                          <span>{v.created_at ? new Date(v.created_at).toLocaleString() : "—"}</span>
+                          <span>{v.created_at ? new Date(v.created_at).toLocaleString(i18n.language?.startsWith("fr") ? "fr-FR" : i18n.language?.startsWith("ar") ? "ar-u-nu-latn" : "en-GB") : "—"}</span>
                           <span>{fmtSize(v.file_size_bytes)}</span>
                         </div>
                         {v.note && <p className="text-xs text-gray-400 mt-1 italic">{v.note}</p>}

@@ -137,7 +137,7 @@ export default function GapConfirmModal({ gap, assessmentId, onClose, onAccepted
     "w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white";
 
   return (
-    <AiGate featureLabel="Gap Analysis">
+    <AiGate featureLabel={t("compliance.journey_gap_analysis")}>
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col">
         {/* Header */}

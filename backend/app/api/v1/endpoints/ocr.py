@@ -15,6 +15,7 @@ from app.core.config import settings
 from app.core.security_utils import assert_safe_upload_name
 from app.models.user import User
 from app.api.v1.dependencies.features import require_feature
+from app.services.ai_locale import get_request_language
 from app.services.ocr_service import (
     DEFAULT_LANG,
     OcrUnavailableError,
@@ -128,7 +129,16 @@ def _has_arabic(text: str) -> bool:
     return any("؀" <= ch <= "ۿ" or "ݐ" <= ch <= "ݿ" for ch in (text or ""))
 
 
-def _render_text_pdf(text: str, title: str = "Extracted Text") -> bytes:
+# Default document title / empty placeholder, in the caller's UI language (the
+# SPA sends it as Accept-Language). A title the client supplies is used as is.
+_OCR_PDF_TEXT = {
+    "en": {"title": "Extracted Text", "empty": "(no text)"},
+    "fr": {"title": "Texte extrait", "empty": "(aucun texte)"},
+    "ar": {"title": "النص المستخرج", "empty": "(لا يوجد نص)"},
+}
+
+
+def _render_text_pdf(text: str, title: str = "Extracted Text", lang: str = "en") -> bytes:
     """Render extracted text into a clean, paginated PDF (ReportLab).
 
     Latin text uses a Unicode TTF (DejaVuSans) so French accents render. Arabic
@@ -195,17 +205,20 @@ def _render_text_pdf(text: str, title: str = "Extracted Text") -> bytes:
         else:
             story.append(Spacer(1, 0.25 * cm))
     if len(story) <= 2:
-        story.append(Paragraph("(no text)", body))
+        empty = (_OCR_PDF_TEXT.get(lang) or _OCR_PDF_TEXT["en"])["empty"]
+        story.append(Paragraph(escape(shape_rtl(empty)), body_ar if _has_arabic(empty) else body))
     doc.build(story)
     return buf.getvalue()
 
 
 @router.post("/export-pdf")
-async def export_pdf(body: OcrPdfIn, current_user: Annotated[User, Depends(_GATE)]):
+async def export_pdf(body: OcrPdfIn, current_user: Annotated[User, Depends(_GATE)],
+                     ui_lang: Annotated[str, Depends(get_request_language)] = "en"):
     """Turn extracted text into a downloadable PDF."""
     if not (body.text or "").strip():
         raise HTTPException(400, "No text to export")
-    pdf = await asyncio.to_thread(_render_text_pdf, body.text, body.title or "Extracted Text")
+    default_title = (_OCR_PDF_TEXT.get(ui_lang) or _OCR_PDF_TEXT["en"])["title"]
+    pdf = await asyncio.to_thread(_render_text_pdf, body.text, body.title or default_title, ui_lang)
     stem = (body.filename or "extraction").rsplit(".", 1)[0] or "extraction"
     return Response(
         content=pdf,

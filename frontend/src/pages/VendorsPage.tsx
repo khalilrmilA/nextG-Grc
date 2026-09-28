@@ -58,6 +58,12 @@ const INDUSTRY_OPTIONS = [
   "Utilities", "Pharmaceuticals", "Other",
 ];
 
+/** i18n key suffix for an industry value (the stored value stays English). */
+const industryKey = (o: string) => o.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
+
+/** Display locale for dates, following the interface language. */
+const dateLocale = (lang: string) => (lang.startsWith("fr") ? "fr-FR" : lang.startsWith("ar") ? "ar-u-nu-latn" : "en-US");
+
 function riskScoreColor(score: number) {
   if (score > 20) return "text-red-600 bg-red-50";
   if (score > 12) return "text-orange-600 bg-orange-50";
@@ -66,44 +72,46 @@ function riskScoreColor(score: number) {
 }
 
 // ── Prescreen Questionnaire Definition ──────────────────────────────────────
+// The English question text is what gets sent to the AI (it keys the responses),
+// so it stays here as data; the on-screen label goes through t() by id.
 interface QuestionGroup {
   category: string;
   icon: string;
-  questions: string[];
+  questions: { id: string; text: string }[];
 }
 
 const PRESCREEN_QUESTIONS: QuestionGroup[] = [
   {
-    category: "Security",
+    category: "security",
     icon: "shield",
     questions: [
-      "Is the 3rd party ISO 27001 certified?",
-      "Does the 3rd party hold SOC 2 Type II certification?",
-      "Is data encrypted at rest and in transit (AES-256, TLS 1.3)?",
-      "Does the 3rd party conduct annual penetration testing?",
-      "Is multi-factor authentication enforced for all admin access?",
+      { id: "iso27001", text: "Is the 3rd party ISO 27001 certified?" },
+      { id: "soc2", text: "Does the 3rd party hold SOC 2 Type II certification?" },
+      { id: "encryption", text: "Is data encrypted at rest and in transit (AES-256, TLS 1.3)?" },
+      { id: "pentest", text: "Does the 3rd party conduct annual penetration testing?" },
+      { id: "mfa", text: "Is multi-factor authentication enforced for all admin access?" },
     ],
   },
   {
-    category: "Compliance",
+    category: "compliance",
     icon: "check",
     questions: [
-      "Is the 3rd party GDPR compliant?",
-      "Will a Data Processing Agreement (DPA) be signed?",
-      "Does the 3rd party have a documented incident response plan?",
-      "Will sub-processor changes be notified in advance?",
-      "Does the contract include a 'right to audit' clause?",
+      { id: "gdpr", text: "Is the 3rd party GDPR compliant?" },
+      { id: "dpa", text: "Will a Data Processing Agreement (DPA) be signed?" },
+      { id: "irp", text: "Does the 3rd party have a documented incident response plan?" },
+      { id: "subprocessors", text: "Will sub-processor changes be notified in advance?" },
+      { id: "right_to_audit", text: "Does the contract include a 'right to audit' clause?" },
     ],
   },
   {
-    category: "Operations",
+    category: "operations",
     icon: "settings",
     questions: [
-      "Does the 3rd party guarantee 99.9%+ uptime SLA?",
-      "Is 24/7 support available?",
-      "Is the disaster recovery plan tested annually?",
-      "Are data backup procedures documented and tested?",
-      "Is there a documented change management process?",
+      { id: "sla", text: "Does the 3rd party guarantee 99.9%+ uptime SLA?" },
+      { id: "support", text: "Is 24/7 support available?" },
+      { id: "drp", text: "Is the disaster recovery plan tested annually?" },
+      { id: "backup", text: "Are data backup procedures documented and tested?" },
+      { id: "change_mgmt", text: "Is there a documented change management process?" },
     ],
   },
 ];
@@ -135,7 +143,7 @@ function AddVendorModal({ onClose, onSaved }: { readonly onClose: () => void; re
   // Questionnaire state
   const [responses, setResponses] = useState<Record<string, string>>(() => {
     const init: Record<string, string> = {};
-    PRESCREEN_QUESTIONS.forEach(g => g.questions.forEach(q => { init[q] = "na"; }));
+    PRESCREEN_QUESTIONS.forEach(g => g.questions.forEach(q => { init[q.text] = "na"; }));
     return init;
   });
   const [analyzing, setAnalyzing] = useState(false);
@@ -163,7 +171,7 @@ function AddVendorModal({ onClose, onSaved }: { readonly onClose: () => void; re
       setForm(f => ({ ...f, risk_score: Math.round(result.initial_risk_score * 4) }));  // 1-10 → 1-40
       setStep(3);
     } catch (err) {
-      setError(`AI analysis failed: ${err instanceof Error ? err.message : 'Unknown error'}`);
+      setError(t("vendors_page.ai_analysis_failed", { error: err instanceof Error ? err.message : t("vendors_page.unknown_error") }));
       console.error(err);
     } finally {
       setAnalyzing(false);
@@ -203,7 +211,7 @@ function AddVendorModal({ onClose, onSaved }: { readonly onClose: () => void; re
       onSaved(newVendor as unknown as VendorEntry);
       onClose();
     } catch (err) {
-      setError(`Failed to create 3rd party. Please try again. ${err instanceof Error ? err.message : ''}`);
+      setError(t("vendors_page.create_failed", { error: err instanceof Error ? err.message : "" }));
       console.error(err);
     } finally {
       setUploading(false);
@@ -233,9 +241,9 @@ function AddVendorModal({ onClose, onSaved }: { readonly onClose: () => void; re
                 </div>
               ))}
               <span className="text-xs text-gray-500 ml-2">
-                {step === 1 && "Vendor Info"}
-                {step === 2 && "Security Questionnaire"}
-                {step === 3 && "AI Insights"}
+                {step === 1 && t("vendors_page.step_info")}
+                {step === 2 && t("vendors_page.step_questionnaire")}
+                {step === 3 && t("vendors_page.step_insights")}
               </span>
             </div>
           </div>
@@ -258,7 +266,7 @@ function AddVendorModal({ onClose, onSaved }: { readonly onClose: () => void; re
               <label htmlFor="v-industry" className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">{t("vendors.industry_label")}</label>
               <select id="v-industry" className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
                 value={form.industry} onChange={e => setForm(f => ({ ...f, industry: e.target.value }))}>
-                {INDUSTRY_OPTIONS.map(o => <option key={o} value={o}>{o}</option>)}
+                {INDUSTRY_OPTIONS.map(o => <option key={o} value={o}>{t(`vendors_page.industry.${industryKey(o)}`, { defaultValue: o })}</option>)}
               </select>
             </div>
             <div>
@@ -274,14 +282,14 @@ function AddVendorModal({ onClose, onSaved }: { readonly onClose: () => void; re
               <label htmlFor="v-tier" className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">{t("vendors.risk_tier_label")}</label>
               <select id="v-tier" className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
                 value={form.tier} onChange={e => setForm(f => ({ ...f, tier: e.target.value }))}>
-                {TIER_OPTIONS.map(o => <option key={o} value={o} className="capitalize">{o.charAt(0).toUpperCase() + o.slice(1)}</option>)}
+                {TIER_OPTIONS.map(o => <option key={o} value={o}>{t(`vendors.tiers.${o}`)}</option>)}
               </select>
             </div>
             <div>
               <label htmlFor="v-status" className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">{t("vendors.status_label")}</label>
               <select id="v-status" className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
                 value={form.status} onChange={e => setForm(f => ({ ...f, status: e.target.value }))}>
-                {STATUS_OPTIONS.map(o => <option key={o} value={o}>{o.replaceAll("_", " ")}</option>)}
+                {STATUS_OPTIONS.map(o => <option key={o} value={o}>{t(`vocab.${o}`, { defaultValue: o.replaceAll("_", " ") })}</option>)}
               </select>
             </div>
           </div>
@@ -360,7 +368,7 @@ function AddVendorModal({ onClose, onSaved }: { readonly onClose: () => void; re
               <div className="bg-blue-50 border border-blue-100 rounded-xl p-3">
                 <p className="text-xs text-blue-900">
                   <Sparkles className="w-3 h-3 inline mr-1" />
-                  Answer these security questions. AI will analyze your responses and provide an initial risk assessment.
+                  {t("vendors_page.questionnaire_intro")}
                 </p>
               </div>
 
@@ -368,12 +376,12 @@ function AddVendorModal({ onClose, onSaved }: { readonly onClose: () => void; re
                 <div key={group.category}>
                   <h3 className="text-xs font-bold text-gray-700 uppercase tracking-wide mb-2 flex items-center gap-1.5">
                     <ShieldCheck className="w-3.5 h-3.5 text-blue-600" />
-                    {group.category}
+                    {t(`vendors_page.prescreen_category.${group.category}`)}
                   </h3>
                   <div className="space-y-2">
-                    {group.questions.map((q) => (
+                    {group.questions.map(({ id, text: q }) => (
                       <div key={q} className="bg-gray-50 rounded-lg p-3">
-                        <p className="text-sm text-gray-800 mb-2">{q}</p>
+                        <p className="text-sm text-gray-800 mb-2">{t(`vendors_page.prescreen.${id}`, { defaultValue: q })}</p>
                         <div className="flex gap-2">
                           {["yes", "no", "na"].map((option) => (
                             <label key={option} className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg border cursor-pointer transition-colors text-xs font-medium ${
@@ -391,7 +399,7 @@ function AddVendorModal({ onClose, onSaved }: { readonly onClose: () => void; re
                                 onChange={() => setResponses(r => ({ ...r, [q]: option }))}
                                 className="sr-only"
                               />
-                              {option === "yes" ? "✓ Yes" : option === "no" ? "✗ No" : "N/A"}
+                              {option === "yes" ? `✓ ${t("common.yes")}` : option === "no" ? `✗ ${t("common.no")}` : t("dashboard.na")}
                             </label>
                           ))}
                         </div>
@@ -427,7 +435,7 @@ function AddVendorModal({ onClose, onSaved }: { readonly onClose: () => void; re
 
               {aiResult.strengths.length > 0 && (
                 <div>
-                  <h4 className="text-xs font-bold text-green-700 uppercase mb-1.5">✓ Strengths</h4>
+                  <h4 className="text-xs font-bold text-green-700 uppercase mb-1.5">✓ {t("vendors_page.strengths")}</h4>
                   <ul className="space-y-1">
                     {aiResult.strengths.map((s, i) => (
                       <li key={i} className="text-xs text-gray-700 bg-green-50 rounded px-2 py-1.5">{s}</li>
@@ -438,7 +446,7 @@ function AddVendorModal({ onClose, onSaved }: { readonly onClose: () => void; re
 
               {aiResult.concerns.length > 0 && (
                 <div>
-                  <h4 className="text-xs font-bold text-yellow-700 uppercase mb-1.5">⚠ Concerns</h4>
+                  <h4 className="text-xs font-bold text-yellow-700 uppercase mb-1.5">⚠ {t("vendors_page.concerns")}</h4>
                   <ul className="space-y-1">
                     {aiResult.concerns.map((c, i) => (
                       <li key={i} className="text-xs text-gray-700 bg-yellow-50 rounded px-2 py-1.5">{c}</li>
@@ -449,7 +457,7 @@ function AddVendorModal({ onClose, onSaved }: { readonly onClose: () => void; re
 
               {aiResult.red_flags.length > 0 && (
                 <div>
-                  <h4 className="text-xs font-bold text-red-700 uppercase mb-1.5">🚩 Red Flags</h4>
+                  <h4 className="text-xs font-bold text-red-700 uppercase mb-1.5">🚩 {t("vendors_page.red_flags")}</h4>
                   <ul className="space-y-1">
                     {aiResult.red_flags.map((r, i) => (
                       <li key={i} className="text-xs text-gray-700 bg-red-50 rounded px-2 py-1.5">{r}</li>
@@ -460,7 +468,7 @@ function AddVendorModal({ onClose, onSaved }: { readonly onClose: () => void; re
 
               {aiResult.recommendations.length > 0 && (
                 <div>
-                  <h4 className="text-xs font-bold text-blue-700 uppercase mb-1.5">💡 Recommendations</h4>
+                  <h4 className="text-xs font-bold text-blue-700 uppercase mb-1.5">💡 {t("vendors_page.recommendations")}</h4>
                   <ul className="space-y-1">
                     {aiResult.recommendations.map((r, i) => (
                       <li key={i} className="text-xs text-gray-700 bg-blue-50 rounded px-2 py-1.5">{r}</li>
@@ -500,7 +508,7 @@ function AddVendorModal({ onClose, onSaved }: { readonly onClose: () => void; re
                   {analyzing ? (
                     <>
                       <Loader2 className="w-4 h-4 animate-spin" />
-                      {t("ai.analyzing", "AI Analyzing…")}
+                      {t("vendors_page.ai_analyzing")}
                     </>
                   ) : (
                     <>
@@ -522,11 +530,11 @@ function AddVendorModal({ onClose, onSaved }: { readonly onClose: () => void; re
                   {uploading ? (
                     <>
                       <Loader2 className="w-4 h-4 animate-spin" />
-                      Saving...
+                      {t("common.saving")}
                     </>
                   ) : (
                     <>
-                      ✓ Save 3rd Party
+                      ✓ {t("vendors_page.save_vendor")}
                     </>
                   )}
                 </button>
@@ -566,7 +574,7 @@ const CONTRACT_STATUS_LABELS: Record<string, { key: string; fallback: string; co
 };
 
 function VendorDetailModal({ vendor, onClose, onRunAI }: { readonly vendor: VendorEntry; readonly onClose: () => void; readonly onRunAI: () => void }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const navigate = useNavigate();
   const tier   = vendor.risk_tier as Tier;
   const status = vendor.status as Status;
@@ -615,8 +623,8 @@ function VendorDetailModal({ vendor, onClose, onRunAI }: { readonly vendor: Vend
               <div>
                 <h2 className="font-semibold text-gray-900 leading-snug">{vendor.name}</h2>
                 <div className="flex items-center gap-2 mt-1.5 flex-wrap">
-                  <span className={`text-xs font-semibold px-2.5 py-0.5 rounded-full border capitalize ${TIER_BADGE[tier]}`}>{vendor.risk_tier}</span>
-                  <span className={`text-xs font-medium px-2.5 py-0.5 rounded-full capitalize ${STATUS_BADGE[status]}`}>{vendor.status.replaceAll("_", " ")}</span>
+                  <span className={`text-xs font-semibold px-2.5 py-0.5 rounded-full border ${TIER_BADGE[tier]}`}>{t(`vendors.tiers.${vendor.risk_tier}`, { defaultValue: vendor.risk_tier })}</span>
+                  <span className={`text-xs font-medium px-2.5 py-0.5 rounded-full ${STATUS_BADGE[status]}`}>{t(`vocab.${vendor.status}`, { defaultValue: vendor.status.replaceAll("_", " ") })}</span>
                   <span className="flex items-center gap-1 text-xs text-gray-400"><Globe className="w-3 h-3" />{vendor.country}</span>
                 </div>
               </div>
@@ -692,7 +700,7 @@ function VendorDetailModal({ vendor, onClose, onRunAI }: { readonly vendor: Vend
 
           <div>
             <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1">{t("vendors.industry_label")}</p>
-            <p className="text-sm text-gray-700">{vendor.industry}</p>
+            <p className="text-sm text-gray-700">{vendor.industry ? t(`vendors_page.industry.${industryKey(vendor.industry)}`, { defaultValue: vendor.industry }) : ""}</p>
           </div>
 
           {vendor.services_provided && (
@@ -760,7 +768,7 @@ function VendorDetailModal({ vendor, onClose, onRunAI }: { readonly vendor: Vend
                           <FileCheck className="w-4 h-4 text-gray-400 flex-shrink-0" />
                           <div className="min-w-0">
                             <p className="text-sm font-medium text-gray-900 truncate">{contract.file_name}</p>
-                            <p className="text-xs text-gray-500">v{contract.version} · {new Date(contract.created_at).toLocaleDateString()}</p>
+                            <p className="text-xs text-gray-500">v{contract.version} · {new Date(contract.created_at).toLocaleDateString(dateLocale(i18n.language))}</p>
                           </div>
                         </div>
                         <span className={`text-xs font-semibold px-2 py-0.5 rounded-full flex-shrink-0 ${statusCfg.color}`}>
@@ -950,7 +958,7 @@ export default function VendorsPage() {
                     <div>
                       <p className="text-sm font-medium text-gray-900 group-hover:text-blue-700 transition-colors">{v.name}</p>
                       <div className="flex items-center gap-2 mt-0.5 text-xs text-gray-400">
-                        <span>{v.industry}</span>
+                        <span>{v.industry ? t(`vendors_page.industry.${industryKey(v.industry)}`, { defaultValue: v.industry }) : ""}</span>
                         <span className="flex items-center gap-0.5"><Globe className="w-2.5 h-2.5" />{v.country}</span>
                       </div>
                     </div>
@@ -958,15 +966,15 @@ export default function VendorsPage() {
                 </td>
                 {isVisible("risk_tier") && (
                   <td className="px-4 py-4">
-                    <span className={`text-xs font-semibold px-2.5 py-1 rounded-full border capitalize ${TIER_BADGE[v.risk_tier as Tier]}`}>
-                      {v.risk_tier}
+                    <span className={`text-xs font-semibold px-2.5 py-1 rounded-full border ${TIER_BADGE[v.risk_tier as Tier]}`}>
+                      {t(`vendors.tiers.${v.risk_tier}`, { defaultValue: v.risk_tier })}
                     </span>
                   </td>
                 )}
                 {isVisible("status") && (
                   <td className="px-4 py-4">
-                    <span className={`text-xs font-medium px-2.5 py-1 rounded-full capitalize ${STATUS_BADGE[v.status as Status]}`}>
-                      {v.status.replaceAll("_", " ")}
+                    <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${STATUS_BADGE[v.status as Status]}`}>
+                      {t(`vocab.${v.status}`, { defaultValue: v.status.replaceAll("_", " ") })}
                     </span>
                   </td>
                 )}

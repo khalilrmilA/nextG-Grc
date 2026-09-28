@@ -1615,7 +1615,7 @@ async def _deliver_report(
         try:
             return bool(await send_report_email(
                 to_email=to_email, subject=subject, pdf_bytes=pdf_bytes,
-                filename=filename, body_text=text,
+                filename=filename, body_text=text, lang=lang,
             ))
         except Exception as exc:  # noqa: BLE001 — send_report_email swallows its own
             logger.error("Report distribution to %s failed: %s", to_email, exc)

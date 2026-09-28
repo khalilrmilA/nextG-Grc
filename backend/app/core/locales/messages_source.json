@@ -1,0 +1,2230 @@
+{
+ "static": {
+  "'controls' must be a list": [
+   "app/api/v1/endpoints/frameworks.py:1924"
+  ],
+  "A URL is required for an rss, atom or json source.": [
+   "app/api/v1/endpoints/regulatory.py:325"
+  ],
+  "A change_summary is required to supersede a treatment plan.": [
+   "app/api/v1/endpoints/risk_treatment.py:533"
+  ],
+  "A closed audit can only be withdrawn by a tenant administrator": [
+   "app/api/v1/endpoints/audits.py:1196"
+  ],
+  "A closure note is required": [
+   "app/api/v1/endpoints/audits.py:1098",
+   "app/api/v1/endpoints/audits.py:1922"
+  ],
+  "A comment body is required": [
+   "app/api/v1/endpoints/audits.py:2482"
+  ],
+  "A custom role must grant at least one built-in role.": [
+   "app/api/v1/endpoints/access_governance.py:637"
+  ],
+  "A justification is required to override the impact score": [
+   "app/api/v1/endpoints/vulnerabilities.py:570"
+  ],
+  "A name is required.": [
+   "app/api/v1/endpoints/access_governance.py:688"
+  ],
+  "A not_applicable decision needs a written justification (at least 10 characters) — an auditor will ask why this requirement was excluded.": [
+   "app/api/v1/endpoints/frameworks.py:2650"
+  ],
+  "A platform-provided source cannot be deleted — switch it off instead (PATCH /regulatory/feeds/{id} with is_active=false).": [
+   "app/api/v1/endpoints/regulatory.py:1094"
+  ],
+  "A rejection reason is required": [
+   "app/api/v1/endpoints/audits.py:1507"
+  ],
+  "A reply to an internal note must itself be internal": [
+   "app/api/v1/endpoints/audit_comments.py:480"
+  ],
+  "A response is required": [
+   "app/api/v1/endpoints/audits.py:1981"
+  ],
+  "A retired scale cannot be made the default": [
+   "app/api/v1/endpoints/compliance_scales.py:453"
+  ],
+  "A source needs a name.": [
+   "app/api/v1/endpoints/regulatory.py:1005",
+   "app/api/v1/endpoints/regulatory.py:1053"
+  ],
+  "A translation needs at least one of title, description or guidance": [
+   "app/api/v1/endpoints/frameworks.py:2817"
+  ],
+  "A user cannot delegate to themselves.": [
+   "app/api/v1/endpoints/access_governance.py:121"
+  ],
+  "AI provider reported an error mid-stream.": [
+   "app/services/ai_provider.py:1198"
+  ],
+  "AI provider reported an error.": [
+   "app/services/ai_provider.py:822"
+  ],
+  "AI provider returned a non-JSON body.": [
+   "app/services/ai_provider.py:817"
+  ],
+  "AI provider returned an unexpected body.": [
+   "app/services/ai_provider.py:819"
+  ],
+  "Acceptance not found": [
+   "app/api/v1/endpoints/security_exceptions.py:268"
+  ],
+  "Access grant not found": [
+   "app/api/v1/endpoints/governance.py:873"
+  ],
+  "Access review not found": [
+   "app/api/v1/endpoints/access_governance.py:562"
+  ],
+  "Account disabled.": [
+   "app/api/v1/endpoints/sso.py:306"
+  ],
+  "Account has expired": [
+   "app/api/v1/dependencies/auth.py:281",
+   "app/api/v1/endpoints/support.py:239"
+  ],
+  "Account has expired. Contact your administrator.": [
+   "app/api/v1/dependencies/auth.py:78",
+   "app/api/v1/endpoints/auth.py:338",
+   "app/api/v1/endpoints/auth.py:431",
+   "app/api/v1/endpoints/auth.py:918",
+   "app/api/v1/endpoints/sso.py:318"
+  ],
+  "Account temporarily locked due to failed login attempts. Try again later.": [
+   "app/api/v1/endpoints/auth.py:295",
+   "app/api/v1/endpoints/auth.py:426"
+  ],
+  "Action item not found": [
+   "app/api/v1/endpoints/compliance.py:4769",
+   "app/api/v1/endpoints/compliance.py:4918",
+   "app/api/v1/endpoints/compliance.py:4972"
+  ],
+  "Action-plan attachments are not available until the server has been restarted once (action_item_attachments is created at startup).": [
+   "app/api/v1/endpoints/compliance.py:5065"
+  ],
+  "Activation code not found on the licence server.": [
+   "app/services/license_client.py:103"
+  ],
+  "Activation code was rejected by the licence server.": [
+   "app/services/license_client.py:101"
+  ],
+  "Active Directory / LDAP SSO is part of the Elite Pack.": [
+   "app/api/v1/endpoints/sso.py:183"
+  ],
+  "Admin access required": [
+   "app/api/v1/endpoints/license.py:154",
+   "app/api/v1/endpoints/license.py:174"
+  ],
+  "An AI analysis is running on this assessment; wait for it to finish.": [
+   "app/api/v1/endpoints/compliance.py:2002"
+  ],
+  "An endpoint URL is required.": [
+   "app/services/ai_provider.py:215"
+  ],
+  "An external auditor conducts the engagements they are appointed to; the tenant's audit plan is not theirs to change.": [
+   "app/api/v1/endpoints/audit_campaigns.py:71"
+  ],
+  "An external auditor records verdicts on a grid; the tenant's grids are not theirs to author.": [
+   "app/api/v1/endpoints/audit_grids.py:79"
+  ],
+  "An org entity cannot be its own parent": [
+   "app/api/v1/endpoints/asset_graph.py:232"
+  ],
+  "Analysis already in progress": [
+   "app/api/v1/endpoints/compliance.py:2878"
+  ],
+  "Analysis started": [
+   "app/api/v1/endpoints/compliance.py:2896"
+  ],
+  "Another threat in your register already has this reference and name.": [
+   "app/api/v1/endpoints/threats.py:578"
+  ],
+  "Applied control not found": [
+   "app/api/v1/endpoints/control_evaluation.py:121"
+  ],
+  "Archive record not found": [
+   "app/api/v1/endpoints/archiving.py:439",
+   "app/api/v1/endpoints/archiving.py:497",
+   "app/api/v1/endpoints/archiving.py:597"
+  ],
+  "Archived report failed its integrity check": [
+   "app/api/v1/endpoints/reports.py:178"
+  ],
+  "Archived report file could not be read": [
+   "app/api/v1/endpoints/reports.py:174"
+  ],
+  "Archived report file is no longer on disk": [
+   "app/api/v1/endpoints/reports.py:172"
+  ],
+  "Archived report not found": [
+   "app/api/v1/endpoints/reports.py:167"
+  ],
+  "Archiving rule not found": [
+   "app/api/v1/endpoints/archiving.py:420"
+  ],
+  "Assessment not found": [
+   "app/api/v1/endpoints/auditor_portal.py:1074",
+   "app/api/v1/endpoints/auditor_portal.py:900",
+   "app/api/v1/endpoints/compliance.py:1914",
+   "app/api/v1/endpoints/compliance.py:1947",
+   "app/api/v1/endpoints/compliance.py:2060",
+   "app/api/v1/endpoints/compliance.py:2362",
+   "app/api/v1/endpoints/compliance.py:2875",
+   "app/api/v1/endpoints/compliance.py:2915",
+   "app/api/v1/endpoints/compliance.py:3142",
+   "app/api/v1/endpoints/compliance.py:3567",
+   "app/api/v1/endpoints/compliance.py:4164",
+   "app/api/v1/endpoints/compliance.py:4865",
+   "app/api/v1/endpoints/users.py:690"
+  ],
+  "Asset not found": [
+   "app/api/v1/endpoints/assets.py:294"
+  ],
+  "Assignment not found": [
+   "app/api/v1/endpoints/users.py:721"
+  ],
+  "At least one affected asset is required (affected_assets must not be empty)": [
+   "app/api/v1/endpoints/vulnerabilities.py:115"
+  ],
+  "At least one control is required": [
+   "app/api/v1/endpoints/frameworks.py:847"
+  ],
+  "At least one recipient is required": [
+   "app/api/v1/endpoints/audits.py:1677"
+  ],
+  "At least one role is required": [
+   "app/api/v1/endpoints/users.py:201",
+   "app/api/v1/endpoints/users.py:311"
+  ],
+  "At least one role is required.": [
+   "app/api/v1/endpoints/access_governance.py:126"
+  ],
+  "Attachment not found": [
+   "app/api/v1/endpoints/compliance.py:5135",
+   "app/api/v1/endpoints/compliance.py:5198"
+  ],
+  "Attestation not found": [
+   "app/api/v1/endpoints/policies.py:720"
+  ],
+  "Audit not found": [
+   "app/api/v1/endpoints/audit_comments.py:149",
+   "app/api/v1/endpoints/auditor_portal.py:653",
+   "app/api/v1/endpoints/audits.py:358",
+   "app/api/v1/endpoints/audits.py:367",
+   "app/api/v1/endpoints/data_io.py:698"
+  ],
+  "Audit not found for this tenant": [
+   "app/api/v1/endpoints/report_schedules.py:143"
+  ],
+  "Auditor is already assigned to this assessment": [
+   "app/api/v1/endpoints/users.py:697"
+  ],
+  "Auditor not found": [
+   "app/api/v1/endpoints/users.py:744"
+  ],
+  "Auditor not found in this tenant": [
+   "app/api/v1/endpoints/users.py:687"
+  ],
+  "Built-in scales are read-only. Duplicate it to customise it.": [
+   "app/api/v1/endpoints/compliance_scales.py:229"
+  ],
+  "Built-in threat not found": [
+   "app/api/v1/endpoints/threats.py:674"
+  ],
+  "Business process not found": [
+   "app/api/v1/endpoints/asset_graph.py:144",
+   "app/api/v1/endpoints/frameworks.py:2678"
+  ],
+  "CVE": [
+   "app/api/v1/endpoints/threats.py:909"
+  ],
+  "CVE not found in catalog": [
+   "app/api/v1/endpoints/cve.py:315",
+   "app/api/v1/endpoints/cve.py:357"
+  ],
+  "Campaign not found": [
+   "app/api/v1/endpoints/audit_campaigns.py:206"
+  ],
+  "Can only delete auditor accounts via this endpoint": [
+   "app/api/v1/endpoints/users.py:746"
+  ],
+  "Cannot create super admin accounts": [
+   "app/api/v1/endpoints/admin.py:197"
+  ],
+  "Cannot delegate to a disabled account.": [
+   "app/api/v1/endpoints/access_governance.py:123"
+  ],
+  "Cannot delete super admin accounts": [
+   "app/api/v1/endpoints/users.py:478"
+  ],
+  "Cannot delete your own account": [
+   "app/api/v1/endpoints/admin.py:304",
+   "app/api/v1/endpoints/users.py:466"
+  ],
+  "Cannot modify a built-in or another tenant's framework": [
+   "app/api/v1/endpoints/frameworks.py:1180"
+  ],
+  "Cannot modify super admin accounts": [
+   "app/api/v1/endpoints/users.py:282"
+  ],
+  "Cannot modify your own account": [
+   "app/api/v1/endpoints/users.py:275"
+  ],
+  "Cannot promote users to super admin": [
+   "app/api/v1/endpoints/admin.py:269"
+  ],
+  "Cannot reset super admin passwords": [
+   "app/api/v1/endpoints/users.py:425"
+  ],
+  "Cartography not found": [
+   "app/api/v1/endpoints/risk_cartographies.py:285",
+   "app/api/v1/endpoints/risk_cartographies.py:312",
+   "app/api/v1/endpoints/risk_cartographies.py:357",
+   "app/api/v1/endpoints/risk_cartographies.py:382",
+   "app/api/v1/endpoints/risk_cartographies.py:688"
+  ],
+  "Changing the directory server requires re-entering the bind password. Enter the service-account password, or clear the bind DN to use an anonymous bind.": [
+   "app/api/v1/endpoints/tenants.py:402"
+  ],
+  "Chat already active": [
+   "app/api/v1/endpoints/support.py:501"
+  ],
+  "Chat not in pending state": [
+   "app/api/v1/endpoints/support.py:552"
+  ],
+  "Close a finding through POST /{audit_id}/findings/{fid}/close": [
+   "app/api/v1/endpoints/audits.py:1846"
+  ],
+  "Close a recommendation through POST /recommendations/{id}/close": [
+   "app/api/v1/endpoints/audits.py:1068"
+  ],
+  "Comment not found": [
+   "app/api/v1/endpoints/audit_comments.py:593",
+   "app/api/v1/endpoints/audit_comments.py:625"
+  ],
+  "Committee not found": [
+   "app/api/v1/endpoints/governance.py:965",
+   "app/api/v1/endpoints/governance.py:991"
+  ],
+  "Connected to Qualys (host detection API authorised).": [
+   "app/services/scanner_connectors.py:599"
+  ],
+  "Connected to Tenable.io.": [
+   "app/services/scanner_connectors.py:579"
+  ],
+  "Connector not found": [
+   "app/api/v1/endpoints/vuln_import.py:220"
+  ],
+  "Control assessment not found": [
+   "app/api/v1/endpoints/audit_comments.py:346",
+   "app/api/v1/endpoints/auditor_portal.py:938",
+   "app/api/v1/endpoints/compliance.py:2966",
+   "app/api/v1/endpoints/compliance.py:3688",
+   "app/api/v1/endpoints/compliance.py:4300"
+  ],
+  "Control not found": [
+   "app/api/v1/endpoints/applied_controls.py:1073",
+   "app/api/v1/endpoints/applied_controls.py:1103",
+   "app/api/v1/endpoints/applied_controls.py:825",
+   "app/api/v1/endpoints/applied_controls.py:840",
+   "app/api/v1/endpoints/applied_controls.py:886",
+   "app/api/v1/endpoints/audit_grids.py:642",
+   "app/api/v1/endpoints/frameworks.py:1010",
+   "app/api/v1/endpoints/frameworks.py:1410",
+   "app/api/v1/endpoints/frameworks.py:1510",
+   "app/api/v1/endpoints/frameworks.py:1695",
+   "app/api/v1/endpoints/frameworks.py:1758",
+   "app/api/v1/endpoints/frameworks.py:2562",
+   "app/api/v1/endpoints/frameworks.py:2814",
+   "app/api/v1/endpoints/policies.py:369",
+   "app/api/v1/endpoints/policies.py:392"
+  ],
+  "Could not find the list of records in the EASM response — set 'Results key' (e.g. data.items) in the advanced field mapping.": [
+   "app/services/easm_connector.py:224"
+  ],
+  "Could not validate credentials": [
+   "app/core/security.py:120"
+  ],
+  "Creating a framework on import needs both 'name' and 'short_name' (or a 'framework:' block in the YAML). Pass 'framework_id' to import into an existing one.": [
+   "app/api/v1/endpoints/frameworks.py:2081"
+  ],
+  "Current password is incorrect": [
+   "app/api/v1/endpoints/auth.py:962"
+  ],
+  "Custom role not found": [
+   "app/api/v1/endpoints/access_governance.py:735",
+   "app/api/v1/endpoints/access_governance.py:778"
+  ],
+  "DEBUG must be False in production": [
+   "app/core/config.py:201"
+  ],
+  "Delegation not found": [
+   "app/api/v1/endpoints/access_governance.py:197"
+  ],
+  "Delegator or delegate not found in this organization.": [
+   "app/api/v1/endpoints/access_governance.py:119"
+  ],
+  "Demo accounts are read-only. Upgrade to a full account to use this feature.": [
+   "app/api/v1/dependencies/auth.py:85"
+  ],
+  "Demo connector ready (simulated pull).": [
+   "app/services/scanner_connectors.py:573"
+  ],
+  "Describe what was done before closing the follow-up": [
+   "app/api/v1/endpoints/control_evaluation.py:245"
+  ],
+  "Detail": [
+   "app/api/v1/endpoints/dashboard_export.py:502"
+  ],
+  "Directory account has no email address; cannot provision a login.": [
+   "app/services/directory_auth.py:496"
+  ],
+  "Do not put credentials in the URL. Use the API key field.": [
+   "app/services/ai_provider.py:222"
+  ],
+  "Document not found": [
+   "app/api/v1/endpoints/compliance.py:4060",
+   "app/api/v1/endpoints/compliance.py:4066",
+   "app/api/v1/endpoints/compliance.py:4106",
+   "app/api/v1/endpoints/compliance.py:4234",
+   "app/api/v1/endpoints/governance.py:531",
+   "app/api/v1/endpoints/governance.py:572"
+  ],
+  "Détail": [
+   "app/api/v1/endpoints/dashboard_export.py:591"
+  ],
+  "EASM connector is not configured: set the findings endpoint path.": [
+   "app/services/scanner_connectors.py:536"
+  ],
+  "EASM connector needs an API key.": [
+   "app/services/easm_connector.py:547"
+  ],
+  "EASM endpoint path must stay on the base URL's host.": [
+   "app/services/easm_connector.py:606"
+  ],
+  "Email already registered": [
+   "app/api/v1/endpoints/admin.py:184",
+   "app/api/v1/endpoints/users.py:198",
+   "app/api/v1/endpoints/users.py:602"
+  ],
+  "Empty file": [
+   "app/api/v1/endpoints/auditor_portal.py:1703",
+   "app/api/v1/endpoints/ocr.py:102",
+   "app/api/v1/endpoints/ocr.py:247",
+   "app/api/v1/endpoints/vuln_import.py:97"
+  ],
+  "Enter a current code from your authenticator app to continue.": [
+   "app/api/v1/endpoints/mfa.py:105"
+  ],
+  "Evaluation grids are not available until the server has been restarted once (compliance_scales is created at startup).": [
+   "app/api/v1/endpoints/compliance.py:885"
+  ],
+  "Evaluation not found": [
+   "app/api/v1/endpoints/control_evaluation.py:236"
+  ],
+  "Evidence file not found on disk": [
+   "app/api/v1/endpoints/audits.py:2344"
+  ],
+  "Evidence not found": [
+   "app/api/v1/endpoints/auditor_portal.py:1804",
+   "app/api/v1/endpoints/audits.py:2337",
+   "app/api/v1/endpoints/audits.py:2365",
+   "app/api/v1/endpoints/compliance.py:3940",
+   "app/api/v1/endpoints/compliance.py:3975"
+  ],
+  "Evidence not found in this archive": [
+   "app/api/v1/endpoints/archiving.py:609"
+  ],
+  "Exception not found": [
+   "app/api/v1/endpoints/security_exceptions.py:204",
+   "app/api/v1/endpoints/security_exceptions.py:229"
+  ],
+  "Executive accounts are read-only (strategic dashboards / consultation).": [
+   "app/api/v1/dependencies/auth.py:93"
+  ],
+  "Failed to fetch MITRE ATT&CK data": [
+   "app/api/v1/endpoints/threats.py:822"
+  ],
+  "Failed to return the created item": [
+   "app/api/v1/endpoints/compliance.py:4898"
+  ],
+  "Failed to return updated item": [
+   "app/api/v1/endpoints/compliance.py:4817"
+  ],
+  "File contents do not match the declared PDF type.": [
+   "app/api/v1/endpoints/audits.py:2231",
+   "app/api/v1/endpoints/compliance.py:2396",
+   "app/api/v1/endpoints/compliance.py:3725"
+  ],
+  "File contents do not match the declared PNG type.": [
+   "app/api/v1/endpoints/audits.py:2235"
+  ],
+  "File contents do not match the declared XLS type.": [
+   "app/api/v1/endpoints/compliance.py:2400",
+   "app/api/v1/endpoints/compliance.py:3729"
+  ],
+  "File contents do not match the declared XLSX type.": [
+   "app/api/v1/endpoints/audits.py:2233",
+   "app/api/v1/endpoints/compliance.py:2398",
+   "app/api/v1/endpoints/compliance.py:3727"
+  ],
+  "File not available on disk": [
+   "app/api/v1/endpoints/compliance.py:5626"
+  ],
+  "File not found": [
+   "app/api/v1/endpoints/compliance.py:4011",
+   "app/api/v1/endpoints/compliance.py:4016",
+   "app/api/v1/endpoints/compliance.py:5165",
+   "app/api/v1/endpoints/compliance.py:5169"
+  ],
+  "File not found on disk": [
+   "app/api/v1/endpoints/auditor_portal.py:1814",
+   "app/api/v1/endpoints/compliance.py:4019",
+   "app/api/v1/endpoints/compliance.py:4069",
+   "app/api/v1/endpoints/compliance.py:5172"
+  ],
+  "File retention is disabled (FILE_RETENTION_ENABLED=false). Review GET /compliance/files/retention/preview, then enable it.": [
+   "app/api/v1/endpoints/compliance.py:5680"
+  ],
+  "File version not found": [
+   "app/api/v1/endpoints/compliance.py:5578",
+   "app/api/v1/endpoints/compliance.py:5610",
+   "app/api/v1/endpoints/compliance.py:5619"
+  ],
+  "Finding not found": [
+   "app/api/v1/endpoints/audit_comments.py:331",
+   "app/api/v1/endpoints/audits.py:1760"
+  ],
+  "Finding not found on this audit": [
+   "app/api/v1/endpoints/auditor_portal.py:1689"
+  ],
+  "Forbidden": [
+   "app/api/v1/endpoints/support.py:212",
+   "app/api/v1/endpoints/support.py:410"
+  ],
+  "Framework not found": [
+   "app/api/v1/endpoints/audit_grids.py:628",
+   "app/api/v1/endpoints/auth.py:761",
+   "app/api/v1/endpoints/compliance.py:1669",
+   "app/api/v1/endpoints/data_io.py:592",
+   "app/api/v1/endpoints/frameworks.py:1178",
+   "app/api/v1/endpoints/frameworks.py:249",
+   "app/api/v1/endpoints/frameworks.py:251"
+  ],
+  "Gap not found": [
+   "app/api/v1/endpoints/compliance.py:3351",
+   "app/api/v1/endpoints/compliance.py:4852"
+  ],
+  "Generate the report before approving it": [
+   "app/api/v1/endpoints/audits.py:1462",
+   "app/api/v1/endpoints/audits.py:1541"
+  ],
+  "Generate the report before submitting it for validation": [
+   "app/api/v1/endpoints/audits.py:1419"
+  ],
+  "Grid item not found": [
+   "app/api/v1/endpoints/audit_grids.py:566",
+   "app/api/v1/endpoints/audit_grids.py:601",
+   "app/api/v1/endpoints/auditor_portal.py:1464"
+  ],
+  "Grid item not found on this audit's grid": [
+   "app/api/v1/endpoints/audit_grids.py:847"
+  ],
+  "Grid not found": [
+   "app/api/v1/endpoints/audit_grids.py:284"
+  ],
+  "Group not found": [
+   "app/api/v1/endpoints/governance.py:389",
+   "app/api/v1/endpoints/governance.py:413",
+   "app/api/v1/endpoints/groups.py:164",
+   "app/api/v1/endpoints/groups.py:224"
+  ],
+  "Impact label count must match grid_cols": [
+   "app/api/v1/endpoints/risk_cartographies.py:327"
+  ],
+  "Inactive user": [
+   "app/api/v1/dependencies/auth.py:73"
+  ],
+  "Incident not found": [
+   "app/api/v1/endpoints/incidents.py:234",
+   "app/api/v1/endpoints/incidents.py:241",
+   "app/api/v1/endpoints/incidents.py:262",
+   "app/api/v1/endpoints/incidents.py:332"
+  ],
+  "Insufficient permissions": [
+   "app/api/v1/endpoints/subscriptions.py:89"
+  ],
+  "Internal server error": [
+   "app/api/v1/endpoints/admin.py:623",
+   "app/api/v1/endpoints/admin.py:683",
+   "app/api/v1/endpoints/auth.py:394"
+  ],
+  "Invalid MFA code": [
+   "app/api/v1/endpoints/auth.py:469"
+  ],
+  "Invalid business_process_id: not in this tenant": [
+   "app/api/v1/endpoints/policies.py:161"
+  ],
+  "Invalid control_id for this audit": [
+   "app/api/v1/endpoints/auditor_portal.py:1586"
+  ],
+  "Invalid directory credentials.": [
+   "app/api/v1/endpoints/sso.py:203",
+   "app/services/directory_auth.py:490"
+  ],
+  "Invalid email or password": [
+   "app/api/v1/endpoints/auth.py:304",
+   "app/api/v1/endpoints/auth.py:319",
+   "app/api/v1/endpoints/auth.py:323"
+  ],
+  "Invalid file path": [
+   "app/core/security_utils.py:172"
+  ],
+  "Invalid license key": [
+   "app/api/v1/endpoints/license.py:202",
+   "app/api/v1/endpoints/license.py:207",
+   "app/core/licensing.py:106",
+   "app/core/licensing.py:108"
+  ],
+  "Invalid or expired MFA challenge — please log in again": [
+   "app/api/v1/endpoints/auth.py:409",
+   "app/api/v1/endpoints/auth.py:411",
+   "app/api/v1/endpoints/auth.py:417",
+   "app/api/v1/endpoints/auth.py:440"
+  ],
+  "Invalid or expired code.": [
+   "app/api/v1/endpoints/mfa.py:107",
+   "app/api/v1/endpoints/mfa.py:162"
+  ],
+  "Invalid or expired reset token": [
+   "app/api/v1/endpoints/auth.py:1039",
+   "app/api/v1/endpoints/auth.py:1044"
+  ],
+  "Invalid org_entity_id: not in this tenant": [
+   "app/api/v1/endpoints/policies.py:168"
+  ],
+  "Invalid refresh token": [
+   "app/api/v1/endpoints/auth.py:901"
+  ],
+  "Invalid token": [
+   "app/api/v1/dependencies/auth.py:269",
+   "app/api/v1/dependencies/auth.py:274"
+  ],
+  "Invalid token payload": [
+   "app/api/v1/dependencies/auth.py:62"
+  ],
+  "Invalid token type": [
+   "app/api/v1/dependencies/auth.py:271",
+   "app/api/v1/dependencies/auth.py:54",
+   "app/api/v1/endpoints/support.py:235"
+  ],
+  "Invalid trial_ends_at date format": [
+   "app/api/v1/endpoints/admin.py:849"
+  ],
+  "LDAP SSO is not configured for this organization.": [
+   "app/api/v1/endpoints/sso.py:170"
+  ],
+  "LDAP support is not installed on this server (ldap3 missing).": [
+   "app/services/directory_auth.py:108"
+  ],
+  "Label counts must match grid dimensions": [
+   "app/api/v1/endpoints/risk_cartographies.py:245"
+  ],
+  "Licence server returned a malformed response.": [
+   "app/services/license_client.py:116",
+   "app/services/license_client.py:160"
+  ],
+  "Licence server returned an unrecognised status.": [
+   "app/services/license_client.py:164"
+  ],
+  "Licence server returned no licence key.": [
+   "app/services/license_client.py:120"
+  ],
+  "License key expired": [
+   "app/api/v1/endpoints/license.py:209"
+  ],
+  "License not found": [
+   "app/api/v1/endpoints/admin.py:965"
+  ],
+  "License public key not configured": [
+   "app/api/v1/endpoints/license.py:197"
+  ],
+  "License signing key not configured": [
+   "app/api/v1/endpoints/admin.py:896"
+  ],
+  "Likelihood label count must match grid_rows": [
+   "app/api/v1/endpoints/risk_cartographies.py:325"
+  ],
+  "MFA support is not installed on this server (pyotp missing).": [
+   "app/api/v1/endpoints/mfa.py:65"
+  ],
+  "MFA support is not installed on this server.": [
+   "app/api/v1/endpoints/auth.py:445"
+  ],
+  "Making a scale the default is a governance decision. Provide `reason`, or use PUT /compliance-scales/{id}/default.": [
+   "app/api/v1/endpoints/compliance_scales.py:390"
+  ],
+  "Matrix not found": [
+   "app/api/v1/endpoints/risk_matrices.py:97"
+  ],
+  "Matrix not found or is built-in": [
+   "app/api/v1/endpoints/risk_matrices.py:122"
+  ],
+  "No MFA enrollment in progress. Enroll first.": [
+   "app/api/v1/endpoints/mfa.py:160"
+  ],
+  "No account provisioned for this directory user.": [
+   "app/api/v1/endpoints/sso.py:242"
+  ],
+  "No chat session": [
+   "app/api/v1/endpoints/support.py:546"
+  ],
+  "No current version to attest": [
+   "app/api/v1/endpoints/policies.py:707"
+  ],
+  "No data rows found in the file": [
+   "app/api/v1/endpoints/frameworks.py:2061"
+  ],
+  "No documents uploaded. Upload at least one document first.": [
+   "app/api/v1/endpoints/compliance.py:2885"
+  ],
+  "No existing treatment plan for this risk — use POST /risk-treatment to create one.": [
+   "app/api/v1/endpoints/risk_treatment.py:542"
+  ],
+  "No licence server is configured on this deployment. Use offline activation and paste the licence key you were issued.": [
+   "app/api/v1/endpoints/license.py:179"
+  ],
+  "No licence server is configured.": [
+   "app/services/license_client.py:141"
+  ],
+  "No licence server is configured. Use offline activation instead: paste the licence key you were issued.": [
+   "app/services/license_client.py:74"
+  ],
+  "No report has been generated for this audit yet": [
+   "app/api/v1/endpoints/audits.py:1394"
+  ],
+  "No server URI is set.": [
+   "app/services/directory_auth.py:251"
+  ],
+  "No subscription found": [
+   "app/api/v1/endpoints/subscriptions.py:60",
+   "app/api/v1/endpoints/subscriptions.py:77"
+  ],
+  "No text to export": [
+   "app/api/v1/endpoints/ocr.py:219"
+  ],
+  "Not assigned to this assessment": [
+   "app/api/v1/endpoints/audit_comments.py:361",
+   "app/api/v1/endpoints/auditor_portal.py:1064",
+   "app/api/v1/endpoints/auditor_portal.py:890",
+   "app/api/v1/endpoints/auditor_portal.py:956"
+  ],
+  "Not assigned to this audit": [
+   "app/api/v1/endpoints/auditor_portal.py:1807",
+   "app/api/v1/endpoints/auditor_portal.py:655"
+  ],
+  "Nothing eligible.": [
+   "app/api/v1/endpoints/activity_log.py:565"
+  ],
+  "Notification not found": [
+   "app/api/v1/endpoints/notifications.py:162"
+  ],
+  "OCR is not installed on this server (Pillow missing).": [
+   "app/services/ocr_service.py:41"
+  ],
+  "OCR is not installed on this server (pytesseract missing).": [
+   "app/services/ocr_service.py:32"
+  ],
+  "Only PDF, DOCX, XLSX, XLS, TXT, PNG and JPEG files are supported": [
+   "app/api/v1/endpoints/compliance.py:5023"
+  ],
+  "Only PDF, DOCX, XLSX, XLS, and TXT files are supported": [
+   "app/api/v1/endpoints/compliance.py:2387",
+   "app/api/v1/endpoints/compliance.py:3716"
+  ],
+  "Only a report submitted for validation can be approved": [
+   "app/api/v1/endpoints/audits.py:1467"
+  ],
+  "Only a report submitted for validation can be rejected": [
+   "app/api/v1/endpoints/audits.py:1505"
+  ],
+  "Only an administrator can delegate on someone else's behalf.": [
+   "app/api/v1/endpoints/access_governance.py:112"
+  ],
+  "Only an administrator can revoke another administrator's access.": [
+   "app/api/v1/endpoints/access_governance.py:398"
+  ],
+  "Only an approved report may be distributed": [
+   "app/api/v1/endpoints/audits.py:1674"
+  ],
+  "Only draft assessments can be deleted. Archive completed assessments instead.": [
+   "app/api/v1/endpoints/compliance.py:2064"
+  ],
+  "Only platform admins can change subscription tier": [
+   "app/api/v1/endpoints/subscriptions.py:80"
+  ],
+  "Only support staff can initiate chat": [
+   "app/api/v1/endpoints/support.py:496"
+  ],
+  "Only support staff can update ticket status": [
+   "app/api/v1/endpoints/support.py:388"
+  ],
+  "Only the action's owner or a CISO can update this action.": [
+   "app/api/v1/endpoints/compliance.py:4519"
+  ],
+  "Only the audit team can post an internal note": [
+   "app/api/v1/endpoints/audit_comments.py:463"
+  ],
+  "Only the audit team can record a verdict": [
+   "app/api/v1/endpoints/audit_grids.py:821"
+  ],
+  "Only the delegator or an administrator can revoke this.": [
+   "app/api/v1/endpoints/access_governance.py:202"
+  ],
+  "Only the document's owner or a CISO/tenant admin can delete this document": [
+   "app/api/v1/endpoints/governance.py:727"
+  ],
+  "Only the document's owner or a CISO/tenant admin can grant access": [
+   "app/api/v1/endpoints/governance.py:829"
+  ],
+  "Only the document's owner or a CISO/tenant admin can revoke access": [
+   "app/api/v1/endpoints/governance.py:862"
+  ],
+  "Only the document's owner or a CISO/tenant admin can view its access list": [
+   "app/api/v1/endpoints/governance.py:812"
+  ],
+  "Only the finding's owner or the audit team can answer this finding": [
+   "app/api/v1/endpoints/audits.py:1983"
+  ],
+  "Only the uploader or the audit owners can remove this evidence": [
+   "app/api/v1/endpoints/audits.py:2367"
+  ],
+  "Only user accepts chat": [
+   "app/api/v1/endpoints/support.py:550"
+  ],
+  "OpenVAS/Greenbone is reached over GMP (a socket protocol), not HTTP, so it cannot be pulled automatically. Export the report from Greenbone as XML or CSV and use 'Import scanner results' instead.": [
+   "app/services/scanner_connectors.py:513",
+   "app/services/scanner_connectors.py:575"
+  ],
+  "Org entity not found": [
+   "app/api/v1/endpoints/asset_graph.py:132",
+   "app/api/v1/endpoints/frameworks.py:2669"
+  ],
+  "Organization slug already taken": [
+   "app/api/v1/endpoints/auth.py:582"
+  ],
+  "Owner is not a member of this organization": [
+   "app/api/v1/endpoints/applied_controls.py:307"
+  ],
+  "Owner not found in this tenant": [
+   "app/api/v1/endpoints/audit_campaigns.py:196"
+  ],
+  "PDF support is not installed on this server (pypdf missing).": [
+   "app/services/ocr_service.py:50"
+  ],
+  "Parent comment not found": [
+   "app/api/v1/endpoints/audit_comments.py:474"
+  ],
+  "Plain http is only allowed to a private address. Use https for a public endpoint.": [
+   "app/services/ai_provider.py:228"
+  ],
+  "Policy not found": [
+   "app/api/v1/endpoints/policies.py:153"
+  ],
+  "Provide a verdict or auditor_notes": [
+   "app/api/v1/endpoints/auditor_portal.py:970"
+  ],
+  "Provide exactly one of audit_id, finding_id or control_assessment_id": [
+   "app/api/v1/endpoints/audit_comments.py:323"
+  ],
+  "Purging archived records requires a tenant administrator.": [
+   "app/api/v1/endpoints/archiving.py:132"
+  ],
+  "Qualys connector needs the API username and password.": [
+   "app/services/scanner_connectors.py:369"
+  ],
+  "Qualys returned a pagination URL on a different host; stopping.": [
+   "app/services/scanner_connectors.py:481"
+  ],
+  "RACI assignment not found": [
+   "app/api/v1/endpoints/governance.py:230",
+   "app/api/v1/endpoints/governance.py:318"
+  ],
+  "Recommendation not found": [
+   "app/api/v1/endpoints/audits.py:1043"
+  ],
+  "Registration could not be completed": [
+   "app/api/v1/endpoints/auth.py:570"
+  ],
+  "Remediation owner is not a member of this organization": [
+   "app/api/v1/endpoints/control_evaluation.py:255"
+  ],
+  "Reopening a closed risk requires a justification (reopen_reason).": [
+   "app/api/v1/endpoints/risks.py:388"
+  ],
+  "Report file not found on disk": [
+   "app/api/v1/endpoints/audits.py:1404"
+  ],
+  "Report generation failed": [
+   "app/api/v1/endpoints/reports.py:224"
+  ],
+  "Report preview failed": [
+   "app/api/v1/endpoints/reports.py:287"
+  ],
+  "Request not found": [
+   "app/api/v1/endpoints/admin.py:580",
+   "app/api/v1/endpoints/admin.py:661"
+  ],
+  "Review item not found": [
+   "app/api/v1/endpoints/access_governance.py:488"
+  ],
+  "Risk not found": [
+   "app/api/v1/endpoints/risk_treatment.py:205",
+   "app/api/v1/endpoints/risks.py:343",
+   "app/api/v1/endpoints/risks.py:365",
+   "app/api/v1/endpoints/risks.py:447",
+   "app/api/v1/endpoints/risks.py:666",
+   "app/api/v1/endpoints/risks.py:768",
+   "app/api/v1/endpoints/risks.py:835",
+   "app/api/v1/endpoints/risks.py:935"
+  ],
+  "Risk or Scenario not found": [
+   "app/api/v1/endpoints/risks.py:1026"
+  ],
+  "Risk scenario not found": [
+   "app/api/v1/endpoints/scenario_versions.py:70"
+  ],
+  "SECRET_KEY is unset, default, or too short for production. Generate a strong secret: python -c \"import secrets; print(secrets.token_urlsafe(64))\"": [
+   "app/core/config.py:197"
+  ],
+  "Scale not found": [
+   "app/api/v1/endpoints/compliance_scales.py:221",
+   "app/api/v1/endpoints/compliance_scales.py:231"
+  ],
+  "Scanned-PDF support is not installed on this server (pdf2image missing).": [
+   "app/services/ocr_service.py:60"
+  ],
+  "Scanner URL has no host.": [
+   "app/services/scanner_connectors.py:87"
+  ],
+  "Scanner URL host is not allowed.": [
+   "app/services/scanner_connectors.py:91"
+  ],
+  "Scanner URL must start with http:// or https://.": [
+   "app/services/scanner_connectors.py:84"
+  ],
+  "Scenario not found": [
+   "app/api/v1/endpoints/risk_scenarios.py:476",
+   "app/api/v1/endpoints/risk_scenarios.py:483",
+   "app/api/v1/endpoints/risk_scenarios.py:547"
+  ],
+  "Schedule not found": [
+   "app/api/v1/endpoints/report_schedules.py:185"
+  ],
+  "Scope the decision to an org entity OR a business process, not both": [
+   "app/api/v1/endpoints/frameworks.py:2660"
+  ],
+  "Server URI has no host.": [
+   "app/services/directory_auth.py:258"
+  ],
+  "Session not found": [
+   "app/api/v1/endpoints/auth.py:554"
+  ],
+  "Session revoked": [
+   "app/api/v1/endpoints/support.py:249"
+  ],
+  "Session revoked. Please sign in again.": [
+   "app/api/v1/dependencies/auth.py:104",
+   "app/api/v1/dependencies/auth.py:289",
+   "app/api/v1/endpoints/auth.py:936"
+  ],
+  "Set a target likelihood and impact before validating the treatment target.": [
+   "app/api/v1/endpoints/risks.py:851"
+  ],
+  "Set an appetite threshold before validating the treatment target.": [
+   "app/api/v1/endpoints/risks.py:846"
+  ],
+  "Set exactly one of user_id or role": [
+   "app/api/v1/endpoints/governance.py:832"
+  ],
+  "Several organizations use directory sign-in here. Please specify yours.": [
+   "app/api/v1/endpoints/sso.py:160"
+  ],
+  "Share link not found": [
+   "app/api/v1/endpoints/compliance.py:5223"
+  ],
+  "Source not found": [
+   "app/api/v1/endpoints/regulatory.py:975"
+  ],
+  "Subscription not found for this tenant": [
+   "app/api/v1/endpoints/admin.py:465",
+   "app/api/v1/endpoints/admin.py:823"
+  ],
+  "Super admin access required": [
+   "app/api/v1/endpoints/admin.py:41"
+  ],
+  "Super admin accounts are managed by the platform and cannot be revoked from a tenant access review.": [
+   "app/api/v1/endpoints/access_governance.py:393"
+  ],
+  "Template not found": [
+   "app/api/v1/endpoints/report_builder.py:445",
+   "app/api/v1/endpoints/report_builder.py:468"
+  ],
+  "Template references an unknown dataset": [
+   "app/api/v1/endpoints/report_builder.py:470"
+  ],
+  "Tenant not found": [
+   "app/api/v1/endpoints/activity_log.py:511",
+   "app/api/v1/endpoints/admin.py:189",
+   "app/api/v1/endpoints/admin.py:457",
+   "app/api/v1/endpoints/admin.py:818",
+   "app/api/v1/endpoints/auth.py:767",
+   "app/api/v1/endpoints/auth.py:843",
+   "app/api/v1/endpoints/risk_scenarios.py:335",
+   "app/api/v1/endpoints/tenants.py:172",
+   "app/api/v1/endpoints/tenants.py:187",
+   "app/api/v1/endpoints/tenants.py:217",
+   "app/api/v1/endpoints/tenants.py:240",
+   "app/api/v1/endpoints/tenants.py:317",
+   "app/api/v1/endpoints/tenants.py:340",
+   "app/api/v1/endpoints/tenants.py:450",
+   "app/api/v1/endpoints/tenants.py:495",
+   "app/api/v1/endpoints/webhooks.py:114",
+   "app/api/v1/endpoints/webhooks.py:136",
+   "app/api/v1/endpoints/webhooks.py:62",
+   "app/api/v1/endpoints/webhooks.py:84"
+  ],
+  "Testing against a different server requires the bind password. Enter the service-account password, or clear the bind DN to test an anonymous bind.": [
+   "app/api/v1/endpoints/tenants.py:476"
+  ],
+  "That host is not reachable as a public regulatory source.": [
+   "app/api/v1/endpoints/regulatory.py:332"
+  ],
+  "That organization slug is reserved": [
+   "app/api/v1/endpoints/auth.py:575"
+  ],
+  "That parent would create a cycle in the org chart": [
+   "app/api/v1/endpoints/asset_graph.py:161"
+  ],
+  "That version is already the current one.": [
+   "app/api/v1/endpoints/policies.py:643"
+  ],
+  "The EASM API returned a pagination URL on a different host; stopping.": [
+   "app/services/easm_connector.py:625"
+  ],
+  "The URL must be an absolute http(s) address.": [
+   "app/api/v1/endpoints/regulatory.py:330"
+  ],
+  "The archived evidence file is no longer on disk.": [
+   "app/api/v1/endpoints/archiving.py:615"
+  ],
+  "The archived evidence file is present but cannot be read. Contact your administrator.": [
+   "app/api/v1/endpoints/archiving.py:653"
+  ],
+  "The audit's grid was not found": [
+   "app/api/v1/endpoints/audit_grids.py:828"
+  ],
+  "The automated-task account cannot be deleted.": [
+   "app/api/v1/endpoints/admin.py:316",
+   "app/api/v1/endpoints/users.py:474"
+  ],
+  "The automated-task account cannot be given a password.": [
+   "app/api/v1/endpoints/users.py:430"
+  ],
+  "The automated-task account cannot be modified.": [
+   "app/api/v1/endpoints/access_governance.py:816",
+   "app/api/v1/endpoints/admin.py:255",
+   "app/api/v1/endpoints/users.py:285"
+  ],
+  "The change could not be saved (database error). Nothing was written — retry in a moment; if it persists, check the backend log.": [
+   "app/api/v1/endpoints/applied_controls.py:193"
+  ],
+  "The dashboard layout could not be saved. Please retry.": [
+   "app/api/v1/endpoints/dashboard.py:867"
+  ],
+  "The dashboard refresh interval cannot be saved yet: column dashboard_layouts.refresh_interval_seconds does not exist. Run `python -m scripts.migrate_add_dashboard_refresh` on the server, then retry.": [
+   "app/api/v1/endpoints/dashboard.py:690"
+  ],
+  "The endpoint must be an http or https URL.": [
+   "app/services/ai_provider.py:218"
+  ],
+  "The parent comment belongs to a different thread": [
+   "app/api/v1/endpoints/audit_comments.py:477"
+  ],
+  "The recommendation owner cannot certify their own closure": [
+   "app/api/v1/endpoints/audits.py:1102"
+  ],
+  "The remediation owner cannot certify the closure of their own finding": [
+   "app/api/v1/endpoints/audits.py:1926"
+  ],
+  "The report cannot be validated by the person who produced or submitted it": [
+   "app/api/v1/endpoints/audits.py:1471",
+   "app/api/v1/endpoints/audits.py:1552"
+  ],
+  "The review this item belongs to no longer exists.": [
+   "app/api/v1/endpoints/access_governance.py:497"
+  ],
+  "The uploaded file is empty": [
+   "app/api/v1/endpoints/audits.py:2222",
+   "app/api/v1/endpoints/frameworks.py:2038"
+  ],
+  "The upstream framework this copy was cloned from no longer exists": [
+   "app/api/v1/endpoints/frameworks.py:2898",
+   "app/api/v1/endpoints/frameworks.py:2980"
+  ],
+  "This Nessus edition does not allow API access (HTTP 412). Use Nessus Manager / Tenable.io, or export the scan as .nessus and use file import.": [
+   "app/services/scanner_connectors.py:228"
+  ],
+  "This acceptance's expiration date has already passed. Extend it before approving.": [
+   "app/api/v1/endpoints/security_exceptions.py:278"
+  ],
+  "This activation code has already been used on another deployment.": [
+   "app/services/license_client.py:106"
+  ],
+  "This audit is not conducted on a grid": [
+   "app/api/v1/endpoints/audit_grids.py:823",
+   "app/api/v1/endpoints/auditor_portal.py:1455"
+  ],
+  "This campaign has already been announced. Pass force=true to re-send.": [
+   "app/api/v1/endpoints/audit_campaigns.py:514"
+  ],
+  "This capability requires the Elite Pack.": [
+   "app/api/v1/endpoints/risks.py:50"
+  ],
+  "This comment was withdrawn": [
+   "app/api/v1/endpoints/audit_comments.py:595"
+  ],
+  "This delegation is already revoked.": [
+   "app/api/v1/endpoints/access_governance.py:199"
+  ],
+  "This directory account belongs to another organization.": [
+   "app/api/v1/endpoints/sso.py:238"
+  ],
+  "This evidence record has no file": [
+   "app/api/v1/endpoints/auditor_portal.py:1809"
+  ],
+  "This evidence record has no stored file": [
+   "app/api/v1/endpoints/audits.py:2339"
+  ],
+  "This exception's expiration date has already passed. Extend it before approving.": [
+   "app/api/v1/endpoints/security_exceptions.py:214"
+  ],
+  "This file no longer matches the checksum recorded at upload.": [
+   "app/api/v1/endpoints/auditor_portal.py:1822"
+  ],
+  "This framework was not cloned from another one": [
+   "app/api/v1/endpoints/frameworks.py:2975"
+  ],
+  "This framework was not cloned from another one, so there is no upstream to compare against.": [
+   "app/api/v1/endpoints/frameworks.py:2892"
+  ],
+  "This is a test webhook from GRC Platform": [
+   "app/api/v1/endpoints/webhooks.py:149"
+  ],
+  "This is the organization's last administrator. Appoint another administrator before revoking this one.": [
+   "app/api/v1/endpoints/access_governance.py:409"
+  ],
+  "This organisation already watches that URL.": [
+   "app/api/v1/endpoints/regulatory.py:1017",
+   "app/api/v1/endpoints/regulatory.py:1064"
+  ],
+  "This report has not been approved for distribution yet": [
+   "app/api/v1/endpoints/audits.py:1397"
+  ],
+  "This review is already completed.": [
+   "app/api/v1/endpoints/access_governance.py:499",
+   "app/api/v1/endpoints/access_governance.py:564"
+  ],
+  "This risk is the register entry consolidated from a risk scenario. Delete the scenario instead — removing the risk alone would leave it pointing at a row that no longer exists.": [
+   "app/api/v1/endpoints/risks.py:469"
+  ],
+  "This would leave the user with no module access.": [
+   "app/api/v1/endpoints/users.py:351"
+  ],
+  "Threat not found": [
+   "app/api/v1/endpoints/threats.py:1083",
+   "app/api/v1/endpoints/threats.py:1103"
+  ],
+  "Threat not found or is built-in": [
+   "app/api/v1/endpoints/threats.py:634"
+  ],
+  "Threat not found or is built-in (read-only)": [
+   "app/api/v1/endpoints/threats.py:540"
+  ],
+  "Ticket not found": [
+   "app/api/v1/endpoints/support.py:209"
+  ],
+  "Token has been revoked": [
+   "app/core/security.py:115"
+  ],
+  "Treatment not found": [
+   "app/api/v1/endpoints/risk_treatment.py:486"
+  ],
+  "URL host is not allowed": [
+   "app/core/security_utils.py:137"
+  ],
+  "URL is required": [
+   "app/core/security_utils.py:130"
+  ],
+  "URL must include a hostname": [
+   "app/core/security_utils.py:135"
+  ],
+  "URL must use http or https": [
+   "app/core/security_utils.py:133"
+  ],
+  "URL resolves to a private or local address": [
+   "app/core/security_utils.py:139"
+  ],
+  "Unknown audit for this tenant": [
+   "app/api/v1/endpoints/control_evaluation.py:130"
+  ],
+  "Unknown group for this organization": [
+   "app/api/v1/endpoints/governance.py:111"
+  ],
+  "Unknown organization for SSO login.": [
+   "app/api/v1/endpoints/sso.py:164"
+  ],
+  "Update not found": [
+   "app/api/v1/endpoints/regulatory.py:1133",
+   "app/api/v1/endpoints/regulatory.py:1449",
+   "app/api/v1/endpoints/regulatory.py:1475",
+   "app/api/v1/endpoints/regulatory.py:1700",
+   "app/api/v1/endpoints/regulatory.py:1756",
+   "app/api/v1/endpoints/regulatory.py:1825",
+   "app/api/v1/endpoints/regulatory.py:1860"
+  ],
+  "User not found": [
+   "app/api/v1/dependencies/auth.py:70",
+   "app/api/v1/endpoints/access_governance.py:814",
+   "app/api/v1/endpoints/admin.py:248",
+   "app/api/v1/endpoints/admin.py:309",
+   "app/api/v1/endpoints/admin.py:747",
+   "app/api/v1/endpoints/users.py:280",
+   "app/api/v1/endpoints/users.py:423",
+   "app/api/v1/endpoints/users.py:476"
+  ],
+  "User not found in directory.": [
+   "app/services/directory_auth.py:476"
+  ],
+  "User not found in this tenant": [
+   "app/api/v1/endpoints/governance.py:838"
+  ],
+  "User not found or inactive": [
+   "app/api/v1/dependencies/auth.py:278",
+   "app/api/v1/endpoints/auth.py:911"
+  ],
+  "Username and password are required.": [
+   "app/services/directory_auth.py:438"
+  ],
+  "Version not found": [
+   "app/api/v1/endpoints/policies.py:610",
+   "app/api/v1/endpoints/policies.py:641"
+  ],
+  "Vulnerability is not pending validation": [
+   "app/api/v1/endpoints/vulnerabilities.py:532"
+  ],
+  "Vulnerability not found": [
+   "app/api/v1/endpoints/vulnerabilities.py:457",
+   "app/api/v1/endpoints/vulnerabilities.py:474",
+   "app/api/v1/endpoints/vulnerabilities.py:529",
+   "app/api/v1/endpoints/vulnerabilities.py:561",
+   "app/api/v1/endpoints/vulnerabilities.py:630",
+   "app/api/v1/endpoints/vulnerabilities.py:656",
+   "app/api/v1/endpoints/vulnerabilities.py:680",
+   "app/api/v1/endpoints/vulnerabilities.py:723"
+  ],
+  "Watch item not found": [
+   "app/api/v1/endpoints/threats.py:986"
+  ],
+  "Webhook not found": [
+   "app/api/v1/endpoints/webhooks.py:140"
+  ],
+  "YAML must be a list of controls, or {framework: {...}, controls: [...]}": [
+   "app/api/v1/endpoints/frameworks.py:1922"
+  ],
+  "You are not assigned to this audit": [
+   "app/api/v1/endpoints/audit_comments.py:334",
+   "app/api/v1/endpoints/audit_comments.py:359",
+   "app/api/v1/endpoints/audit_comments.py:366",
+   "app/api/v1/endpoints/audit_grids.py:754",
+   "app/api/v1/endpoints/audit_grids.py:817"
+  ],
+  "You can only edit your own comment": [
+   "app/api/v1/endpoints/audit_comments.py:597"
+  ],
+  "You can only withdraw your own comment": [
+   "app/api/v1/endpoints/audit_comments.py:648"
+  ],
+  "You cannot approve your own request (four-eyes principle).": [
+   "app/api/v1/endpoints/security_exceptions.py:206"
+  ],
+  "You cannot approve your own risk acceptance (four-eyes principle).": [
+   "app/api/v1/endpoints/security_exceptions.py:270"
+  ],
+  "You cannot certify your own access. A second administrator must review your entitlements.": [
+   "app/api/v1/endpoints/access_governance.py:507"
+  ],
+  "You cannot reject your own request (four-eyes principle).": [
+   "app/api/v1/endpoints/security_exceptions.py:231"
+  ],
+  "You do not have edit access to this document": [
+   "app/api/v1/endpoints/governance.py:667"
+  ],
+  "You may not attach evidence to this audit": [
+   "app/api/v1/endpoints/audits.py:2286"
+  ],
+  "You may not attach evidence to this finding": [
+   "app/api/v1/endpoints/audits.py:2313"
+  ],
+  "Your register already contains a threat with this reference and name.": [
+   "app/api/v1/endpoints/threats.py:1046"
+  ],
+  "access_level must be read, edit, or validate": [
+   "app/api/v1/endpoints/governance.py:627",
+   "app/api/v1/endpoints/governance.py:671"
+  ],
+  "action must be 'accept' or 'reject'": [
+   "app/api/v1/endpoints/compliance.py:3338",
+   "app/api/v1/endpoints/compliance.py:3451"
+  ],
+  "action must be accept or end": [
+   "app/api/v1/endpoints/support.py:563"
+  ],
+  "advisory": [
+   "app/api/v1/endpoints/threats.py:911"
+  ],
+  "ai_structured_sync() called inside a running event loop; await ai_structured() instead": [
+   "app/services/ai_structured.py:1230"
+  ],
+  "applicability is required": [
+   "app/api/v1/endpoints/frameworks.py:2546"
+  ],
+  "approved report failed its integrity check": [
+   "app/services/report_scheduler.py:217"
+  ],
+  "asset_class must be 'primary' or 'support'": [
+   "app/api/v1/endpoints/assets.py:281",
+   "app/api/v1/endpoints/assets.py:598"
+  ],
+  "assets.status is not present in the database yet — run `python -m scripts.migrate_add_asset_status` on the API host (it is safe to run while the API is up).": [
+   "app/api/v1/endpoints/assets.py:89"
+  ],
+  "at least one level must carry a weight, or no score can be computed": [
+   "app/api/v1/endpoints/compliance_scales.py:147"
+  ],
+  "audit not found for this tenant": [
+   "app/services/report_scheduler.py:202"
+  ],
+  "auth_header must be a header name (letters, digits and '-')": [
+   "app/services/easm_connector.py:123"
+  ],
+  "auth_query_param must be a parameter name (letters, digits, '_', '.', '-')": [
+   "app/services/easm_connector.py:131"
+  ],
+  "base_url is required for an EASM connector": [
+   "app/api/v1/endpoints/vuln_import.py:258",
+   "app/api/v1/endpoints/vuln_import.py:322"
+  ],
+  "base_url must start with http:// or https://": [
+   "app/api/v1/endpoints/vuln_import.py:232"
+  ],
+  "body is required": [
+   "app/api/v1/endpoints/audit_comments.py:456",
+   "app/api/v1/endpoints/audit_comments.py:586"
+  ],
+  "business_process_id does not belong to this organisation": [
+   "app/api/v1/endpoints/risks.py:305"
+  ],
+  "business_process_id does not exist in this tenant": [
+   "app/api/v1/endpoints/compliance.py:736"
+  ],
+  "business_process_id is required when scope_type is 'business_process'": [
+   "app/api/v1/endpoints/compliance.py:747"
+  ],
+  "business_process_id must reference a business process in this tenant": [
+   "app/api/v1/endpoints/assets.py:325"
+  ],
+  "cadence must be monthly, quarterly, annual, or ad_hoc": [
+   "app/api/v1/endpoints/governance.py:937",
+   "app/api/v1/endpoints/governance.py:967"
+  ],
+  "closure_evidence_id is not a piece of evidence of this audit": [
+   "app/api/v1/endpoints/audits.py:1932"
+  ],
+  "criteria must have at least one clause": [
+   "app/services/archiving_engine.py:97"
+  ],
+  "criteria must not be empty": [
+   "app/services/archiving_engine.py:86"
+  ],
+  "database (or Oracle service name) is required": [
+   "app/core/db_config.py:154"
+  ],
+  "decision must be 'confirmed' or 'revoked'": [
+   "app/api/v1/endpoints/access_governance.py:482"
+  ],
+  "discover_assets must be true or false": [
+   "app/services/easm_connector.py:162"
+  ],
+  "each mapping needs a framework and a control — {\"framework\": \"ISO27001\", \"control\": \"A.5.1\"} or \"ISO27001:A.5.1\"": [
+   "app/api/v1/endpoints/frameworks.py:214"
+  ],
+  "ends_at must be after starts_at.": [
+   "app/api/v1/endpoints/access_governance.py:146"
+  ],
+  "feature must be a non-empty string": [
+   "app/api/v1/endpoints/admin.py:719"
+  ],
+  "field_map must be an object of field -> source key": [
+   "app/services/easm_connector.py:148"
+  ],
+  "findings_path is required for an EASM connector (e.g. /api/v1/findings)": [
+   "app/services/easm_connector.py:136"
+  ],
+  "format must be 'csv' or 'xml'": [
+   "app/api/v1/endpoints/data_io.py:80"
+  ],
+  "format must be 'xlsx', 'csv', or 'pdf'": [
+   "app/api/v1/endpoints/archiving.py:777"
+  ],
+  "give either gap_ids or filter": [
+   "app/api/v1/endpoints/compliance.py:3453"
+  ],
+  "host is required": [
+   "app/core/db_config.py:152"
+  ],
+  "in_scope_assets must name at least one asset when scope_type is 'assets'": [
+   "app/api/v1/endpoints/compliance.py:750"
+  ],
+  "levels must be a non-empty list": [
+   "app/api/v1/endpoints/audit_grids.py:227",
+   "app/api/v1/endpoints/compliance_scales.py:104"
+  ],
+  "lockout_minutes must be at least 1": [
+   "app/api/v1/endpoints/tenants.py:236"
+  ],
+  "malicious package": [
+   "app/api/v1/endpoints/threats.py:910"
+  ],
+  "mapped_controls must be a list": [
+   "app/api/v1/endpoints/frameworks.py:199"
+  ],
+  "mapped_controls: not valid JSON": [
+   "app/api/v1/endpoints/frameworks.py:192"
+  ],
+  "max_failed_logins must be at least 1": [
+   "app/api/v1/endpoints/tenants.py:234"
+  ],
+  "messages must be a non-empty list of {'role', 'content'} dicts": [
+   "app/services/ai_structured.py:959"
+  ],
+  "monthly_limit must be a non-negative integer": [
+   "app/api/v1/endpoints/admin.py:717"
+  ],
+  "name cannot be empty": [
+   "app/api/v1/endpoints/vuln_import.py:311"
+  ],
+  "name is required": [
+   "app/api/v1/endpoints/audit_campaigns.py:288",
+   "app/api/v1/endpoints/audit_grids.py:352",
+   "app/api/v1/endpoints/compliance_scales.py:323"
+  ],
+  "news": [
+   "app/api/v1/endpoints/threats.py:912"
+  ],
+  "no CVE field found": [
+   "app/services/easm_connector.py:703"
+  ],
+  "no JSON object or array found in the reply": [
+   "app/services/ai_structured.py:313"
+  ],
+  "no XML file inside the CWE archive": [
+   "app/services/mitre_cwe_sync.py:138"
+  ],
+  "no host/IP field found — findings will not link to assets": [
+   "app/services/easm_connector.py:705"
+  ],
+  "no report has been generated for this audit": [
+   "app/services/report_scheduler.py:207"
+  ],
+  "not_applicable_justification cannot be empty on a Not Applicable control.": [
+   "app/api/v1/endpoints/compliance.py:3029"
+  ],
+  "org_entity_id does not belong to this organisation": [
+   "app/api/v1/endpoints/risks.py:297"
+  ],
+  "org_entity_id does not exist in this tenant": [
+   "app/api/v1/endpoints/compliance.py:727"
+  ],
+  "org_entity_id is required when scope_type is 'org_entity'": [
+   "app/api/v1/endpoints/compliance.py:744"
+  ],
+  "org_entity_id must reference an org entity in this tenant": [
+   "app/api/v1/endpoints/assets.py:336"
+  ],
+  "owner_id must reference a user in this tenant": [
+   "app/api/v1/endpoints/assets.py:543",
+   "app/api/v1/endpoints/assets.py:596"
+  ],
+  "parent_id is not a comment of this audit": [
+   "app/api/v1/endpoints/audits.py:2491"
+  ],
+  "period_end must not precede period_start": [
+   "app/api/v1/endpoints/audit_campaigns.py:185"
+  ],
+  "permission must be view, edit, or validate": [
+   "app/api/v1/endpoints/governance.py:834"
+  ],
+  "raci must be one of R, A, C, I": [
+   "app/api/v1/endpoints/governance.py:200",
+   "app/api/v1/endpoints/governance.py:235"
+  ],
+  "responsible_type must be 'role', 'user', or 'group'": [
+   "app/api/v1/endpoints/governance.py:202",
+   "app/api/v1/endpoints/governance.py:238"
+  ],
+  "results_key must be a key or dotted path, e.g. data.items": [
+   "app/services/easm_connector.py:142"
+  ],
+  "retention_days must be >= 0": [
+   "app/api/v1/endpoints/archiving.py:395",
+   "app/services/archiving_engine.py:288"
+  ],
+  "scale_id does not exist or is not available to this tenant": [
+   "app/api/v1/endpoints/compliance.py:889"
+  ],
+  "scale_id points at a scale that defines no levels": [
+   "app/api/v1/endpoints/compliance.py:891"
+  ],
+  "schema must be a dict, a pydantic model class, or a typing form": [
+   "app/services/ai_structured.py:381",
+   "app/services/ai_structured.py:385"
+  ],
+  "schema_text expects a JSON-schema dict": [
+   "app/services/ai_prompts.py:1208"
+  ],
+  "status must be 'closed' or 'accepted'": [
+   "app/api/v1/endpoints/audits.py:1924"
+  ],
+  "status must be 'closed' or 'rejected'": [
+   "app/api/v1/endpoints/audits.py:1100"
+  ],
+  "the JSON reply was cut off before it was complete": [
+   "app/services/ai_structured.py:283"
+  ],
+  "the reply was empty": [
+   "app/services/ai_structured.py:307"
+  ],
+  "title is required": [
+   "app/api/v1/endpoints/audit_grids.py:524",
+   "app/api/v1/endpoints/compliance.py:4836"
+  ],
+  "user_filter must contain the {username} placeholder": [
+   "app/api/v1/endpoints/tenants.py:412"
+  ],
+  "user_id is required": [
+   "app/api/v1/endpoints/admin.py:714"
+  ],
+  "xlsx import is unavailable on this server — save the sheet as CSV and re-upload": [
+   "app/api/v1/endpoints/frameworks.py:1874"
+  ],
+  "التفاصيل": [
+   "app/api/v1/endpoints/dashboard_export.py:677"
+  ]
+ },
+ "templates": {
+  "'{body_tool}' connectors take no config": [
+   "app/api/v1/endpoints/vuln_import.py:261"
+  ],
+  "'{conn_tool}' connectors take no config": [
+   "app/api/v1/endpoints/vuln_import.py:317"
+  ],
+  "'{control_name}' is {state_replace} and has been operating for over 30 days without validation by a security referent. Everything that reads the register counts it as a mitigation.": [
+   "app/services/notification_generator.py:1448"
+  ],
+  "'{f_title}' was closed after verification.": [
+   "app/api/v1/endpoints/audits.py:1951"
+  ],
+  "'{f_title}' was raised in the audit '{a_title}'.": [
+   "app/api/v1/endpoints/audits.py:1817"
+  ],
+  "'{finding_title}' was raised in the audit '{audit_title}'.": [
+   "app/services/notification_generator.py:2272"
+  ],
+  "'{name}' was reported by {source} and is waiting in the threat watch.": [
+   "app/services/threat_scheduler.py:157"
+  ],
+  "'{tool}' connectors are file-import only and cannot sync automatically": [
+   "app/api/v1/endpoints/vuln_import.py:240"
+  ],
+  "A contract from {vendor_name} has been analyzed by AI and needs your approval.": [
+   "app/services/notification_generator.py:930"
+  ],
+  "A custom role named '{name}' already exists.": [
+   "app/api/v1/endpoints/access_governance.py:692"
+  ],
+  "A justification is required for treatment option '{option_value}'.": [
+   "app/api/v1/endpoints/risk_treatment.py:253"
+  ],
+  "A new message was posted on the audit '{a_title}'.": [
+   "app/api/v1/endpoints/audits.py:2518"
+  ],
+  "A report in state '{current}' cannot be submitted": [
+   "app/api/v1/endpoints/audits.py:1422"
+  ],
+  "A risk in status '{current_status}' records a decision that was taken and cannot be deleted. Reopen it first if it was created in error.": [
+   "app/api/v1/endpoints/risks.py:458"
+  ],
+  "A stakeholder uploaded \"{safe_display_name}\" ({size_kb} KB){ctrl_display} via share link \"{link_label}\".": [
+   "app/api/v1/endpoints/public_upload.py:415"
+  ],
+  "A table or column this dashboard reads does not exist on the database yet. Restart the API so create_all() creates the new tables, and apply any pending column script from backend/scripts/, then retry. ({type_exc___name})": [
+   "app/api/v1/endpoints/dashboard_export.py:464"
+  ],
+  "A threat with reference {body_ref_id} and this name is already in your register.": [
+   "app/api/v1/endpoints/threats.py:525"
+  ],
+  "AI daily token limit reached ({daily_token_limit} tokens). Resets at 00:00 UTC.": [
+   "app/core/ai_quota.py:61"
+  ],
+  "At most {max_recipients} recipients per diffusion": [
+   "app/api/v1/endpoints/audits.py:1679"
+  ],
+  "Cannot approve acceptance in status '{a_status}'": [
+   "app/api/v1/endpoints/security_exceptions.py:275"
+  ],
+  "Cannot approve exception in status '{e_status}'": [
+   "app/api/v1/endpoints/security_exceptions.py:208"
+  ],
+  "Cannot assign role: {r}": [
+   "app/api/v1/endpoints/users.py:223",
+   "app/api/v1/endpoints/users.py:319"
+  ],
+  "Cannot exclude role: {r}": [
+   "app/api/v1/endpoints/users.py:332"
+  ],
+  "Cannot grant role via group: {r}": [
+   "app/api/v1/endpoints/groups.py:59"
+  ],
+  "Cannot reject exception in status '{e_status}'": [
+   "app/api/v1/endpoints/security_exceptions.py:233"
+  ],
+  "Connected to Nessus — {len_scans} scan(s) visible, {done} completed.": [
+   "app/services/scanner_connectors.py:588"
+  ],
+  "Connected. {count} finding(s) on the first page.": [
+   "app/services/easm_connector.py:698"
+  ],
+  "Control '{control_control_id}' is mandatory and cannot be marked as Not Applicable.": [
+   "app/api/v1/endpoints/compliance.py:2992",
+   "app/api/v1/endpoints/compliance.py:3003"
+  ],
+  "Could not reach the licence server: {exc}": [
+   "app/services/license_client.py:152"
+  ],
+  "Could not reach the licence server: {exc}. Activate offline instead.": [
+   "app/services/license_client.py:97"
+  ],
+  "Dataset '{dataset}' requires one of: {sorted_r_value_for_r_in_allowed}": [
+   "app/api/v1/endpoints/report_builder.py:150"
+  ],
+  "Directory search failed: {exc}": [
+   "app/services/directory_auth.py:473"
+  ],
+  "Directory unreachable: {exc}": [
+   "app/services/directory_auth.py:459"
+  ],
+  "Email domain must match your organization's domain (@{expected_domain})": [
+   "app/api/v1/endpoints/users.py:213"
+  ],
+  "File contents do not match the declared {label} type.": [
+   "app/api/v1/endpoints/auditor_portal.py:1723"
+  ],
+  "File contents do not match the declared {mime} type.": [
+   "app/api/v1/endpoints/compliance.py:5035"
+  ],
+  "File exceeds {settings_max_upload_size_mb} MB limit": [
+   "app/api/v1/endpoints/vuln_import.py:99"
+  ],
+  "File exceeds {settings_ocr_max_upload_size_mb} MB limit": [
+   "app/api/v1/endpoints/ocr.py:105",
+   "app/api/v1/endpoints/ocr.py:250"
+  ],
+  "File too large (max {evidence_max_mb}MB)": [
+   "app/api/v1/endpoints/audits.py:2225"
+  ],
+  "File too large (max {settings_max_upload_size_mb}MB)": [
+   "app/api/v1/endpoints/auditor_portal.py:1707",
+   "app/api/v1/endpoints/compliance.py:2392",
+   "app/api/v1/endpoints/compliance.py:3721",
+   "app/api/v1/endpoints/compliance.py:5029"
+  ],
+  "Framework not found: {unknown_0}": [
+   "app/api/v1/endpoints/auth.py:838"
+  ],
+  "Insufficient permissions. Required roles: {r_value_for_r_in_roles}": [
+   "app/api/v1/dependencies/auth.py:133",
+   "app/api/v1/dependencies/auth.py:196"
+  ],
+  "Invalid EASM configuration: {exc}": [
+   "app/api/v1/endpoints/vuln_import.py:203"
+  ],
+  "Invalid XML: {e}": [
+   "app/api/v1/endpoints/data_io.py:238"
+  ],
+  "Invalid billing_cycle: {body_billing_cycle}": [
+   "app/api/v1/endpoints/subscriptions.py:93"
+  ],
+  "Invalid events: {invalid}. Valid: {valid_events}": [
+   "app/api/v1/endpoints/webhooks.py:80"
+  ],
+  "Invalid linked_scenario_ids: unknown scenario id(s) {missing}": [
+   "app/api/v1/endpoints/risk_treatment.py:243"
+  ],
+  "Invalid priority: {priority}": [
+   "app/api/v1/endpoints/compliance.py:4471"
+  ],
+  "Invalid role: {body_role}": [
+   "app/api/v1/endpoints/admin.py:194",
+   "app/api/v1/endpoints/admin.py:267"
+  ],
+  "Invalid role: {r}": [
+   "app/api/v1/endpoints/groups.py:57",
+   "app/api/v1/endpoints/users.py:221",
+   "app/api/v1/endpoints/users.py:317",
+   "app/api/v1/endpoints/users.py:330"
+  ],
+  "Invalid status: {body_status}": [
+   "app/api/v1/endpoints/admin.py:835"
+  ],
+  "Invalid status: {item_status}": [
+   "app/api/v1/endpoints/compliance.py:4476"
+  ],
+  "Invalid tier: {body_tier}": [
+   "app/api/v1/endpoints/admin.py:829",
+   "app/api/v1/endpoints/subscriptions.py:86"
+  ],
+  "Invalid {field_name}: not in this tenant": [
+   "app/core/security_utils.py:240"
+  ],
+  "Invalid {field_name}: unknown asset id(s) {missing}": [
+   "app/core/security_utils.py:261"
+  ],
+  "Invalid {field_name}: unknown id(s) {missing}": [
+   "app/api/v1/endpoints/audits.py:468"
+  ],
+  "Invalid {field} '{value}'. Expected one of: {join_e_value_for_e_in_enum_cls}": [
+   "app/api/v1/endpoints/incidents.py:38"
+  ],
+  "Level(s) {sorted_orphaned} are still recorded on control assessments. Re-answer those controls before removing the level.": [
+   "app/api/v1/endpoints/compliance_scales.py:409"
+  ],
+  "Level(s) {sorted_orphaned} are still used by recorded verdicts. Re-answer or clear those items before removing the level.": [
+   "app/api/v1/endpoints/audit_grids.py:433"
+  ],
+  "Licence server did not respond within {int_timeout_seconds}s. Check outbound connectivity, or activate offline.": [
+   "app/services/license_client.py:92"
+  ],
+  "Licence server returned {response_status_code}": [
+   "app/services/license_client.py:155"
+  ],
+  "Licence server returned {response_status_code}. Activate offline instead.": [
+   "app/services/license_client.py:110"
+  ],
+  "Mapped: {summary}": [
+   "app/services/easm_connector.py:700"
+  ],
+  "Not valid e-mail addresses: {bad}": [
+   "app/api/v1/endpoints/audits.py:1684"
+  ],
+  "OCR failed: {type_exc___name}: {exc}": [
+   "app/api/v1/endpoints/ocr.py:118"
+  ],
+  "Password must contain {join_problems}.": [
+   "app/core/password_policy.py:34"
+  ],
+  "Report type '{report_type}' requires one of: {sorted_r_value_for_r_in_allowed}": [
+   "app/api/v1/endpoints/report_schedules.py:68"
+  ],
+  "Retention cannot be shorter than {audit_retention_absolute_floor_d} days. A shorter period is far more likely to be a mistake than an intention.": [
+   "app/api/v1/endpoints/activity_log.py:518"
+  ],
+  "Risk '{risk_title}' has a TARGET score of {risk_target_risk_score} which still exceeds the appetite threshold of {risk_appetite_threshold} even after the planned treatment. The treatment plan may need to be strengthened.": [
+   "app/api/v1/endpoints/risks.py:109"
+  ],
+  "Risk '{risk_title}' has a residual score of {score} which exceeds the appetite threshold of {risk_appetite_threshold}. Treatment is required.": [
+   "app/api/v1/endpoints/risks.py:83",
+   "app/services/notification_generator.py:742"
+  ],
+  "Risk scenario '{s_name}' has a current score of {score} which exceeds its own appetite threshold of {s_appetite_threshold}. Treatment is required.": [
+   "app/api/v1/endpoints/risk_scenarios.py:243"
+  ],
+  "Rows not on this audit's grid: {sorted_unknown}": [
+   "app/api/v1/endpoints/audit_grids.py:881"
+  ],
+  "Scanner URL rejected: {exc_detail}": [
+   "app/services/scanner_connectors.py:98"
+  ],
+  "Scenario {label} — '{sc_name}' — scores {sc_priority_score} against a threshold of {criteria_alert_threshold}. Review its treatment plan.": [
+   "app/services/notification_generator.py:1618"
+  ],
+  "Searchable-PDF build failed: {type_exc___name}: {exc}": [
+   "app/api/v1/endpoints/ocr.py:258"
+  ],
+  "Server URI must start with ldap:// or ldaps:// (got {scheme_or_nothing}://).": [
+   "app/services/directory_auth.py:255"
+  ],
+  "Target score {risk_target_risk_score} still exceeds the appetite threshold of {risk_appetite_threshold}. Strengthen the treatment plan before validating.": [
+   "app/api/v1/endpoints/risks.py:857"
+  ],
+  "The EASM API answered with a redirect (HTTP {r_status_code}) — use the final API URL as base URL / path (redirects are not followed).": [
+   "app/services/easm_connector.py:581"
+  ],
+  "The EASM API did not return JSON (HTTP {r_status_code}, content-type {ctype}) — check the endpoint path: it must be the API, not the web interface.": [
+   "app/services/easm_connector.py:592"
+  ],
+  "The EASM API returned 404 for {urlparse_url_path} — check the endpoint path.": [
+   "app/services/easm_connector.py:585"
+  ],
+  "The EASM platform rejected the credentials (HTTP {r_status_code}) — check the API key, the auth style and the account's permissions.": [
+   "app/services/easm_connector.py:576"
+  ],
+  "The access check for this dashboard reads a table or column that does not exist on the database yet, so the export was refused rather than run unchecked. Restart the API so create_all() creates the new tables, and apply any pending column script from backend/scripts/, then retry. ({type_exc___name})": [
+   "app/api/v1/endpoints/dashboard_export.py:319"
+  ],
+  "The audit campaign '{campaign_name}' has been published.": [
+   "app/api/v1/endpoints/audit_campaigns.py:552"
+  ],
+  "The dashboard aggregation now takes parameters this export cannot supply. Update _bind_kwargs in endpoints/dashboard_export.py to match {getattr_fn___name___fn}.": [
+   "app/api/v1/endpoints/dashboard_export.py:415"
+  ],
+  "The dashboard's access gate could not be evaluated by the export path, so the export was refused rather than run unchecked. Teach _resolve_dependency in endpoints/dashboard_export.py about the new dependency ({exc}).": [
+   "app/api/v1/endpoints/dashboard_export.py:303"
+  ],
+  "The dashboard's access gate raised while being evaluated, so the export was refused rather than run unchecked. ({type_exc___name})": [
+   "app/api/v1/endpoints/dashboard_export.py:336"
+  ],
+  "The effectiveness evaluation for '{control_name}' {when} ({due_isoformat}). Last result: {ev_performance_level_or_not_reco}.": [
+   "app/services/notification_generator.py:1544"
+  ],
+  "The profile for '{threat_name}' {when} ({threat_next_review_due}). Confirm it still holds against the current threat watch, or update it.": [
+   "app/services/notification_generator.py:1291"
+  ],
+  "The profile is incomplete and cannot be validated. Still missing: {join_missing}": [
+   "app/api/v1/endpoints/threats.py:732"
+  ],
+  "The report for '{a_title}' is awaiting validation before distribution.": [
+   "app/api/v1/endpoints/audits.py:1430"
+  ],
+  "The report for '{a_title}' was approved and may now be distributed.": [
+   "app/api/v1/endpoints/audits.py:1479"
+  ],
+  "The report for '{a_title}' was returned for correction.": [
+   "app/api/v1/endpoints/audits.py:1515"
+  ],
+  "The scheduled import from {tool} connector '{name}' did not complete: {detail}. The vulnerability register has not been refreshed from this tool — check the connector and re-run the sync.": [
+   "app/services/vuln_scanner_scheduler.py:74"
+  ],
+  "The share link \"{link_label}\"{ctrl_display} was opened by an external stakeholder.": [
+   "app/api/v1/endpoints/public_upload.py:258"
+  ],
+  "The {key} dashboard could not be computed ({type_exc___name}).": [
+   "app/api/v1/endpoints/dashboard_export.py:485"
+  ],
+  "These roles cannot be composed into a custom role: {sorted_refused}": [
+   "app/api/v1/endpoints/access_governance.py:642"
+  ],
+  "These roles cannot be delegated: {sorted_refused}": [
+   "app/api/v1/endpoints/access_governance.py:135"
+  ],
+  "This audit could not be archived before withdrawal: {exc}": [
+   "app/api/v1/endpoints/audits.py:1221"
+  ],
+  "This capability is part of the Elite Pack. Upgrade the subscription to enable '{feature}'.": [
+   "app/api/v1/dependencies/features.py:77"
+  ],
+  "This group is still assigned in {len_referencing} RACI line(s) ({join_activities}). Reassign or remove them first.": [
+   "app/api/v1/endpoints/governance.py:429"
+  ],
+  "This request would exceed your remaining daily AI quota ({get_remaining_user_id} tokens left).": [
+   "app/core/ai_quota.py:67"
+  ],
+  "This scale grades {usage} assessment(s); changing it re-scores them. Provide `reason` so the governance decision is recorded.": [
+   "app/api/v1/endpoints/compliance_scales.py:381"
+  ],
+  "This week: {open_risks} open risks, {open_findings} audit findings, {policies_due} policies due for review.": [
+   "app/workers/tasks/notifications.py:395"
+  ],
+  "URL is too long (max {feed_url_max} characters).": [
+   "app/api/v1/endpoints/regulatory.py:327"
+  ],
+  "Unassignable role(s) in the group mapping: {bad}. Allowed: {sorted_assignable}": [
+   "app/api/v1/endpoints/tenants.py:357"
+  ],
+  "Unknown EASM setting(s): {join_sorted_unknown}": [
+   "app/services/easm_connector.py:110"
+  ],
+  "Unknown auth_style '{style}'.": [
+   "app/services/easm_connector.py:561"
+  ],
+  "Unknown category '{category}'. Expected one of {sorted_category_choices}.": [
+   "app/api/v1/endpoints/activity_log.py:107"
+  ],
+  "Unknown custom role(s): {sorted_missing}": [
+   "app/api/v1/endpoints/access_governance.py:824"
+  ],
+  "Unknown dashboard '{key}'": [
+   "app/api/v1/endpoints/dashboard_export.py:1004",
+   "app/api/v1/endpoints/dashboard_export.py:438"
+  ],
+  "Unknown dataset '{body_dataset}'": [
+   "app/api/v1/endpoints/report_builder.py:371",
+   "app/api/v1/endpoints/report_builder.py:418"
+  ],
+  "Unknown incident id(s) for this tenant: {join_missing}": [
+   "app/api/v1/endpoints/risk_scenarios.py:99"
+  ],
+  "Unknown member id(s): {sorted_unknown}": [
+   "app/api/v1/endpoints/groups.py:73"
+  ],
+  "Unknown report type. Valid types: {list_report_generators_keys}": [
+   "app/api/v1/endpoints/reports.py:131",
+   "app/api/v1/endpoints/reports.py:214",
+   "app/api/v1/endpoints/reports.py:277"
+  ],
+  "Unknown report type: {report_type}": [
+   "app/services/report_generator.py:1808"
+  ],
+  "Unknown risk scenario(s) for this organization: {sorted_missing}": [
+   "app/api/v1/endpoints/applied_controls.py:301"
+  ],
+  "Unknown risk scenario(s) for this tenant: {join_missing}": [
+   "app/api/v1/endpoints/vulnerabilities.py:693"
+  ],
+  "Unknown risk(s) for this organization: {sorted_missing}": [
+   "app/api/v1/endpoints/applied_controls.py:292"
+  ],
+  "Unknown scanner tool '{conn_tool}'.": [
+   "app/services/scanner_connectors.py:552",
+   "app/services/scanner_connectors.py:603"
+  ],
+  "Unknown user(s) for this organization: {sorted_missing}": [
+   "app/api/v1/endpoints/governance.py:97"
+  ],
+  "Unknown vulnerability id(s) for this tenant: {join_missing}": [
+   "app/api/v1/endpoints/threats.py:301"
+  ],
+  "Unrecognised XML report (root <{tag}>). Supported XML: Nessus (.nessus) and OpenVAS/Greenbone XML reports; other tools can be imported as CSV.": [
+   "app/services/scanner_import.py:467"
+  ],
+  "Unsupported entity_type {body_entity_type}. Supported: {sorted_archivable_entities}": [
+   "app/api/v1/endpoints/archiving.py:388"
+  ],
+  "Unsupported entity_type {entity_type}. Supported: {sorted_archivable_entities}": [
+   "app/services/archiving_engine.py:310"
+  ],
+  "Unsupported evidence type. Accepted: {join__evidence_extensions}": [
+   "app/api/v1/endpoints/audits.py:2218"
+  ],
+  "Unsupported tool '{tool}'. Expected one of: {sorted__allowed_tools}": [
+   "app/api/v1/endpoints/vuln_import.py:91"
+  ],
+  "Version {n} not found": [
+   "app/api/v1/endpoints/risks.py:676",
+   "app/api/v1/endpoints/scenario_versions.py:155"
+  ],
+  "You are no longer the responsible (R) party for '{row_activity}'.": [
+   "app/api/v1/endpoints/governance.py:291"
+  ],
+  "You cannot delegate roles you do not hold: {sorted_requested_grantable}": [
+   "app/api/v1/endpoints/access_governance.py:142"
+  ],
+  "You have been assigned as the responsible (R) party for '{row_activity}'.": [
+   "app/api/v1/endpoints/governance.py:273"
+  ],
+  "Your GRCEye account was just signed in to from a device we haven't seen before ({label}){where}. If this wasn't you, change your password immediately and review your active sessions in Settings.": [
+   "app/services/notification_generator.py:1848"
+  ],
+  "Your register already contains a threat with reference {source_ref_id} and this name. Edit that one instead of adopting a second copy.": [
+   "app/api/v1/endpoints/threats.py:702"
+  ],
+  "action must be one of {list_control_actions}": [
+   "app/api/v1/endpoints/applied_controls.py:793"
+  ],
+  "action_type must be one of {list_action_types}": [
+   "app/api/v1/endpoints/compliance.py:3356",
+   "app/api/v1/endpoints/compliance.py:3455",
+   "app/api/v1/endpoints/compliance.py:4464"
+  ],
+  "approved report file is {status}": [
+   "app/services/report_scheduler.py:213"
+  ],
+  "auth_header cannot be '{header_strip}'": [
+   "app/services/easm_connector.py:125"
+  ],
+  "auth_style must be one of: {join_auth_styles}": [
+   "app/services/easm_connector.py:117"
+  ],
+  "cadence must be one of {list_campaign_cadences}": [
+   "app/api/v1/endpoints/audit_campaigns.py:179"
+  ],
+  "catalog XML too large ({info_file_size} bytes)": [
+   "app/services/mitre_cwe_sync.py:142"
+  ],
+  "catalog archive too large ({len_blob} bytes)": [
+   "app/services/mitre_cwe_sync.py:134"
+  ],
+  "complexity must be one of {complexity_levels}": [
+   "app/api/v1/endpoints/risk_treatment.py:264"
+  ],
+  "csf_function must be one of {list__csf_values}": [
+   "app/api/v1/endpoints/applied_controls.py:221"
+  ],
+  "default_role must be one of {sorted_assignable}": [
+   "app/api/v1/endpoints/tenants.py:364"
+  ],
+  "duplicate level key '{key}'": [
+   "app/api/v1/endpoints/audit_grids.py:237",
+   "app/api/v1/endpoints/compliance_scales.py:114"
+  ],
+  "effort must be one of {list__effort_values}": [
+   "app/api/v1/endpoints/applied_controls.py:219"
+  ],
+  "field_map keys must be among: {join_field_map_keys} (got {join_sorted_bad})": [
+   "app/services/easm_connector.py:151"
+  ],
+  "field_map.{k} must be a key or dotted path, e.g. asset.hostname": [
+   "app/services/easm_connector.py:156"
+  ],
+  "finding_type must be one of {sorted_finding_types}": [
+   "app/api/v1/endpoints/audits.py:1797",
+   "app/api/v1/endpoints/audits.py:1838"
+  ],
+  "format must be one of {join__export_formats}": [
+   "app/api/v1/endpoints/dashboard_export.py:1008"
+  ],
+  "format must be one of {join__output_formats}": [
+   "app/api/v1/endpoints/report_builder.py:373",
+   "app/api/v1/endpoints/report_builder.py:473"
+  ],
+  "format must be one of {join_sorted__export_formats}": [
+   "app/api/v1/endpoints/data_io.py:60"
+  ],
+  "invalid criteria clause: {part}": [
+   "app/services/archiving_engine.py:93"
+  ],
+  "kind must be one of {join_feed_kinds}.": [
+   "app/api/v1/endpoints/regulatory.py:1008",
+   "app/api/v1/endpoints/regulatory.py:1050"
+  ],
+  "kind must be one of {watch_kinds}": [
+   "app/api/v1/endpoints/threats.py:966"
+  ],
+  "levels[{i}] must be an object": [
+   "app/api/v1/endpoints/audit_grids.py:232",
+   "app/api/v1/endpoints/compliance_scales.py:109"
+  ],
+  "levels[{i}] needs at least one of label_fr/label_en/label_ar": [
+   "app/api/v1/endpoints/audit_grids.py:240",
+   "app/api/v1/endpoints/compliance_scales.py:117"
+  ],
+  "levels[{i}].key is required": [
+   "app/api/v1/endpoints/audit_grids.py:235",
+   "app/api/v1/endpoints/compliance_scales.py:112"
+  ],
+  "levels[{i}].legacy_status must be one of {sorted_legacy_statuses} — control_assessments.status keeps being written alongside status_key so existing queries, exports and reports are unaffected.": [
+   "app/api/v1/endpoints/compliance_scales.py:132"
+  ],
+  "levels[{i}].weight must be a number or null": [
+   "app/api/v1/endpoints/audit_grids.py:246",
+   "app/api/v1/endpoints/compliance_scales.py:124"
+  ],
+  "levels[{i}].weight must be between 0 and 1": [
+   "app/api/v1/endpoints/audit_grids.py:248",
+   "app/api/v1/endpoints/compliance_scales.py:126"
+  ],
+  "lifecycle_state must be one of {sorted__valid_lifecycle}": [
+   "app/api/v1/endpoints/assets.py:251"
+  ],
+  "method must be one of {evaluation_methods}": [
+   "app/api/v1/endpoints/control_evaluation.py:124"
+  ],
+  "moteur non supporté : {body_engine}": [
+   "app/api/v1/endpoints/database_config.py:143"
+  ],
+  "probability_level must be one of {probability_levels}": [
+   "app/api/v1/endpoints/threats.py:306",
+   "app/api/v1/endpoints/threats.py:344"
+  ],
+  "recurrence must be one of {list_action_recurrences}": [
+   "app/api/v1/endpoints/compliance.py:3358",
+   "app/api/v1/endpoints/compliance.py:4466"
+  ],
+  "recurrence must be one of {sorted_audit_recurrences}": [
+   "app/api/v1/endpoints/audits.py:278"
+  ],
+  "refresh_interval_seconds must be 0 (auto-refresh off) or between {min_refresh_seconds} and {max_refresh_seconds} seconds": [
+   "app/api/v1/endpoints/dashboard.py:717"
+  ],
+  "relevance must be one of {relevance_values__untriaged}": [
+   "app/api/v1/endpoints/cve.py:255"
+  ],
+  "relevance must be one of {relevance_values}": [
+   "app/api/v1/endpoints/cve.py:350"
+  ],
+  "remediation_status must be one of {remediation_statuses}": [
+   "app/api/v1/endpoints/control_evaluation.py:239"
+  ],
+  "report not approved (status={audit_report_status_or_draft})": [
+   "app/services/report_scheduler.py:205"
+  ],
+  "report_type must be one of {sorted_report_types} or '{engagement_prefix}<audit_id>'": [
+   "app/api/v1/endpoints/report_schedules.py:125"
+  ],
+  "results_key '{results_key}' does not point at a list in the response": [
+   "app/services/easm_connector.py:204"
+  ],
+  "scope_type must be one of {list_scope_types}": [
+   "app/api/v1/endpoints/compliance.py:720"
+  ],
+  "severity_level must be one of {severity_levels}": [
+   "app/api/v1/endpoints/threats.py:308",
+   "app/api/v1/endpoints/threats.py:346"
+  ],
+  "status must be one of {list__status_values}": [
+   "app/api/v1/endpoints/applied_controls.py:215"
+  ],
+  "status must be one of {list_campaign_statuses}": [
+   "app/api/v1/endpoints/audit_campaigns.py:181"
+  ],
+  "status must be one of {sorted__valid_status}": [
+   "app/api/v1/endpoints/assets.py:265"
+  ],
+  "status must be one of {sorted_settable}": [
+   "app/api/v1/endpoints/audits.py:1064"
+  ],
+  "status must be one of {watch_statuses}": [
+   "app/api/v1/endpoints/threats.py:968"
+  ],
+  "status_key '{body_status_key}' is not a level of this assessment's scale": [
+   "app/api/v1/endpoints/compliance.py:2980"
+  ],
+  "task {task} has no JSON schema; only Markdown output is available": [
+   "app/services/ai_prompts.py:1062"
+  ],
+  "task {task} has no user template (chat turns are passed as-is)": [
+   "app/services/ai_prompts.py:1232"
+  ],
+  "threat_type must be one of {threat_types}": [
+   "app/api/v1/endpoints/threats.py:1028",
+   "app/api/v1/endpoints/threats.py:310",
+   "app/api/v1/endpoints/threats.py:342",
+   "app/api/v1/endpoints/threats.py:509",
+   "app/api/v1/endpoints/threats.py:555"
+  ],
+  "tool must be one of {sorted__connector_tools}": [
+   "app/api/v1/endpoints/vuln_import.py:252"
+  ],
+  "unknown AI task {task}; known: {join_tasks}": [
+   "app/services/ai_prompts.py:1026"
+  ],
+  "unknown filter '{body_filter}'": [
+   "app/api/v1/endpoints/compliance.py:3474"
+  ],
+  "unknown output format {fmt} for task {task}; expected 'json' or 'markdown'": [
+   "app/services/ai_prompts.py:1060"
+  ],
+  "unsupported engine: {engine}": [
+   "app/core/db_config.py:140"
+  ],
+  "user template for {task} is missing slots: {join_missing}": [
+   "app/services/ai_prompts.py:1236"
+  ],
+  "validation_status must be one of {list__validation_values}": [
+   "app/api/v1/endpoints/applied_controls.py:217"
+  ],
+  "verdict must be one of {sorted_valid_keys}": [
+   "app/api/v1/endpoints/audit_grids.py:794"
+  ],
+  "{answered} recorded verdict(s) reference this row; it cannot be deleted.": [
+   "app/api/v1/endpoints/audit_grids.py:606"
+  ],
+  "{answered} verdict(s) already recorded on this grid; refusing to replace its rows.": [
+   "app/api/v1/endpoints/audit_grids.py:690"
+  ],
+  "{answered} verdict(s) are recorded against this grid's rows. Set is_active=false to retire it instead of deleting it.": [
+   "app/api/v1/endpoints/audit_grids.py:495"
+  ],
+  "{attached} audit(s) belong to this campaign. Detach them or set is_active=false to close the plan instead.": [
+   "app/api/v1/endpoints/audit_campaigns.py:375"
+  ],
+  "{author_name} commented on '{subject}': {excerpt}": [
+   "app/api/v1/endpoints/audit_comments.py:556"
+  ],
+  "{count} record(s) had no title or id and will be skipped": [
+   "app/services/easm_connector.py:707"
+  ],
+  "{entity_type} {entity_id} not found in this tenant": [
+   "app/services/archiving_engine.py:340"
+  ],
+  "{field_name} must be one of {m_value_for_m_in_enum_cls}": [
+   "app/api/v1/endpoints/audits.py:292"
+  ],
+  "{field_name}: '{join_sorted_blocked}' files are not accepted. Upload the document itself (PDF, Office, image, archive or text).": [
+   "app/core/security_utils.py:61"
+  ],
+  "{field} must be a path without spaces (max 500 characters)": [
+   "app/services/easm_connector.py:87"
+  ],
+  "{field} must be a string": [
+   "app/services/easm_connector.py:82"
+  ],
+  "{field} must be an ISO date (YYYY-MM-DD)": [
+   "app/api/v1/endpoints/applied_controls.py:226",
+   "app/api/v1/endpoints/audit_campaigns.py:170"
+  ],
+  "{field} must be an ISO-8601 datetime": [
+   "app/api/v1/endpoints/access_governance.py:81"
+  ],
+  "{field} must be on the same host as the base URL ({base_host_or_none_set})": [
+   "app/services/easm_connector.py:96"
+  ],
+  "{field} must start with '/' (e.g. /api/v1/findings) or be a full URL on the base URL's host": [
+   "app/services/easm_connector.py:98"
+  ],
+  "{field} must start with a single '/'": [
+   "app/services/easm_connector.py:90"
+  ],
+  "{in_use} audit(s) are conducted on this grid. Set is_active=false to retire it instead of deleting it.": [
+   "app/api/v1/endpoints/audit_grids.py:480"
+  ],
+  "{key} must be between 0 and 5": [
+   "app/api/v1/endpoints/risk_scenarios.py:340"
+  ],
+  "{label} exceeds {settings_max_upload_size_mb} MB limit": [
+   "app/api/v1/endpoints/data_io.py:93"
+  ],
+  "{len_controls} controls exceed the {max_seeded_items}-row grid limit. Narrow the seed with a `domain`.": [
+   "app/api/v1/endpoints/audit_grids.py:677"
+  ],
+  "{plan_eligible_count} entries would be sealed and removed. Re-send with confirm=true to proceed.": [
+   "app/api/v1/endpoints/activity_log.py:565"
+  ],
+  "{tool} connector needs a base URL to a reachable instance.": [
+   "app/services/scanner_connectors.py:132"
+  ],
+  "{tool} connector needs both an access key and a secret key.": [
+   "app/services/scanner_connectors.py:186"
+  ],
+  "{tool} rejected the credentials (HTTP {r_status_code}) — check the keys / account permissions.": [
+   "app/services/scanner_connectors.py:117"
+  ],
+  "{usage} assessment(s) are graded on this scale. Set is_active=false to retire it instead of deleting it.": [
+   "app/api/v1/endpoints/compliance_scales.py:490"
+  ],
+  "{user_full_name} ({user_email}) signed in from a device not previously seen for this account ({label}){where}.": [
+   "app/services/notification_generator.py:1871"
+  ]
+ }
+}

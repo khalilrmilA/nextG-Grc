@@ -9,6 +9,10 @@ import { reportsApi, reportSchedulesApi, complianceApi } from "@/api/endpoints";
 import type { StoredFileVersionItem } from "@/types";
 import { useAuthStore } from "@/store/auth";
 import FileHistoryModal from "@/components/features/compliance/FileHistoryModal";
+import i18n from "@/i18n";
+
+/** Display locale for dates: Latin digits in Arabic, French day-month order in French. */
+const dateLocale = (lang: string) => (lang?.startsWith("fr") ? "fr-FR" : lang?.startsWith("ar") ? "ar-u-nu-latn" : "en-US");
 
 interface ReportType {
   id: string;
@@ -50,7 +54,7 @@ const EMPTY_SCHEDULE_FORM = {
 function fmtDateTime(iso: string | null | undefined): string {
   if (!iso) return "-";
   try {
-    return new Date(iso).toLocaleString();
+    return new Date(iso).toLocaleString(dateLocale(i18n.language));
   } catch {
     return iso;
   }
@@ -276,12 +280,24 @@ export default function ReportsPage() {
     setPreviewUrl(null);
   }
 
+  /** The scheduler stores a free-text status ("sent 2/3 at <iso>", "no recipients",
+   *  "refused: …"); the known shapes are rendered in the UI language, anything else as-is. */
+  function lastStatusLabel(raw: string): string {
+    const sent = /^sent (\d+)\/(\d+)/.exec(raw);
+    if (sent) return t("reports_ui.last_status_sent", { sent: sent[1], total: sent[2] });
+    if (raw === "no recipients") return t("reports_ui.last_status_no_recipients");
+    if (raw.startsWith("unknown report_type")) return t("reports_ui.last_status_unknown_type");
+    if (raw.startsWith("refused:")) return `${t("reports_ui.last_status_refused")} — ${raw.slice(8).trim()}`;
+    if (raw.startsWith("generation error:")) return `${t("reports_ui.last_status_generation_error")} — ${raw.slice(17).trim()}`;
+    return raw;
+  }
+
   // Get current week dates
   const today = new Date();
   const weekStart = new Date(today);
   weekStart.setDate(today.getDate() - 7);
-  const weekStartStr = weekStart.toLocaleDateString("en-US", { month: "short", day: "numeric" });
-  const weekEndStr = today.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+  const weekStartStr = weekStart.toLocaleDateString(dateLocale(i18n.language), { month: "short", day: "numeric" });
+  const weekEndStr = today.toLocaleDateString(dateLocale(i18n.language), { month: "short", day: "numeric", year: "numeric" });
 
   if (loading) {
     return (
@@ -544,8 +560,8 @@ export default function ReportsPage() {
                     <td className="py-2.5 pr-3 text-gray-500">{fmtDateTime(s.next_run_at)}</td>
                     <td className="py-2.5 pr-3">
                       {s.last_status ? (
-                        <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${s.last_status === "sent" || s.last_status === "ok" ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"}`}>
-                          {s.last_status}
+                        <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${String(s.last_status).startsWith("sent") || s.last_status === "ok" ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"}`}>
+                          {lastStatusLabel(s.last_status)}
                         </span>
                       ) : (
                         <span className="text-gray-400 text-xs">{t("reports.status_never_run")}</span>
@@ -606,7 +622,7 @@ export default function ReportsPage() {
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">{t("reports.form_report_type")}</label>
                 <select value={scheduleForm.report_type} onChange={(e) => setScheduleForm({ ...scheduleForm, report_type: e.target.value })} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-                  {reportTypes.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
+                  {reportTypes.map((r) => <option key={r.id} value={r.id}>{String(t(`reports.${r.id}_name` as never, r.name))}</option>)}
                 </select>
               </div>
               <div className="grid grid-cols-2 gap-4">

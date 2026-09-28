@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useNavigate, Navigate } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import { authSession } from "../store/auth";
 import {
   superAdminUsersApi,
@@ -66,23 +67,25 @@ const CORE_MODULES = ["dashboard","risks","compliance","frameworks","audits","po
 // ── Shared: Demo Banner ───────────────────────────────────────────────────────
 
 function DemoBanner() {
+  const { t } = useTranslation();
   return (
     <div className="flex items-center gap-2 mb-4 px-4 py-3 bg-amber-50 border border-amber-200 rounded-xl text-amber-700 text-sm">
       <AlertCircle className="w-4 h-4 flex-shrink-0" />
-      Backend offline — showing demo data. Changes update local state only.
+      {t("superadmin.demo_banner")}
     </div>
   );
 }
 
 // ── Subscription helpers (shared by UsersTab + SubscriptionsTab) ──────────────
 
-const TIER_OPTIONS = ["starter", "professional", "enterprise"] as const;
+const TIER_OPTIONS = ["starter", "professional", "enterprise", "elite"] as const;
 const STATUS_OPTIONS = ["active", "trialing", "past_due", "canceled", "paused"] as const;
 
 const TIER_COLORS: Record<string, string> = {
   starter:      "bg-gray-100 text-gray-700",
   professional: "bg-blue-100 text-blue-700",
   enterprise:   "bg-purple-100 text-purple-700",
+  elite:        "bg-amber-100 text-amber-800",
 };
 
 const STATUS_COLORS: Record<string, string> = {
@@ -102,6 +105,7 @@ function EditSubscriptionModal({
   readonly onClose: () => void;
   readonly onSaved: (updated: TenantSubscription) => void;
 }) {
+  const { t } = useTranslation();
   const [tier, setTier]     = useState(sub.tier);
   const [status, setStatus] = useState(sub.status);
   const [expiresAt, setExpiresAt] = useState(
@@ -122,7 +126,7 @@ function EditSubscriptionModal({
       const updated = await superAdminSubscriptionsApi.update(sub.tenant_id, payload);
       onSaved(updated);
     } catch {
-      setError("Failed to save. Please try again.");
+      setError(t("superadmin.err_save"));
     } finally {
       setSaving(false);
     }
@@ -133,35 +137,35 @@ function EditSubscriptionModal({
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md">
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
           <h2 className="font-semibold text-gray-900 flex items-center gap-2">
-            <CreditCard className="w-4 h-4 text-indigo-600" /> Edit Subscription — {sub.tenant_name}
+            <CreditCard className="w-4 h-4 text-indigo-600" /> {t("superadmin.edit_sub_title", { tenant: sub.tenant_name })}
           </h2>
-          <button type="button" onClick={onClose} className="p-1 rounded-lg hover:bg-gray-100 text-gray-400"><X className="w-4 h-4" /></button>
+          <button type="button" onClick={onClose} aria-label={t("common.close")} className="p-1 rounded-lg hover:bg-gray-100 text-gray-400"><X className="w-4 h-4" /></button>
         </div>
 
         <form onSubmit={handleSave} className="p-6 space-y-5">
           <div>
-            <label className="block text-xs font-medium text-gray-700 mb-2">Plan / Tier</label>
-            <div className="grid grid-cols-3 gap-2">
-              {TIER_OPTIONS.map(t => (
-                <button key={t} type="button" onClick={() => setTier(t)}
-                  className={`py-2.5 rounded-xl text-sm font-medium border-2 transition-all capitalize ${
-                    tier === t ? "border-indigo-600 bg-indigo-600 text-white" : "border-gray-200 text-gray-600 hover:border-indigo-400"
+            <label className="block text-xs font-medium text-gray-700 mb-2">{t("superadmin.plan_tier")}</label>
+            <div className="grid grid-cols-2 gap-2">
+              {TIER_OPTIONS.map(opt => (
+                <button key={opt} type="button" onClick={() => setTier(opt)}
+                  className={`py-2.5 rounded-xl text-sm font-medium border-2 transition-all ${
+                    tier === opt ? "border-indigo-600 bg-indigo-600 text-white" : "border-gray-200 text-gray-600 hover:border-indigo-400"
                   }`}>
-                  {t}
+                  {t(`superadmin.tier_${opt}`)}
                 </button>
               ))}
             </div>
           </div>
 
           <div>
-            <label className="block text-xs font-medium text-gray-700 mb-2">Status</label>
+            <label className="block text-xs font-medium text-gray-700 mb-2">{t("common.status")}</label>
             <div className="grid grid-cols-2 gap-2">
               {STATUS_OPTIONS.map(s => (
                 <button key={s} type="button" onClick={() => setStatus(s)}
-                  className={`py-2.5 rounded-xl text-sm font-medium border-2 transition-all capitalize ${
+                  className={`py-2.5 rounded-xl text-sm font-medium border-2 transition-all ${
                     status === s ? "border-indigo-600 bg-indigo-600 text-white" : "border-gray-200 text-gray-600 hover:border-indigo-400"
                   }`}>
-                  {s.replace("_", " ")}
+                  {t(`superadmin.sub_status_${s}`)}
                 </button>
               ))}
             </div>
@@ -169,10 +173,10 @@ function EditSubscriptionModal({
 
           {status === "trialing" && (
             <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">Trial Expiry Date</label>
+              <label className="block text-xs font-medium text-gray-700 mb-1">{t("superadmin.trial_expiry_date")}</label>
               <input type="date" value={expiresAt} onChange={e => setExpiresAt(e.target.value)}
                 className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
-              <p className="text-xs text-gray-400 mt-1">Leave blank to clear the expiry date.</p>
+              <p className="text-xs text-gray-400 mt-1">{t("superadmin.trial_expiry_hint")}</p>
             </div>
           )}
 
@@ -185,11 +189,11 @@ function EditSubscriptionModal({
           <div className="flex gap-3 pt-1">
             <button type="button" onClick={onClose}
               className="flex-1 py-2.5 border border-gray-200 rounded-xl text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors">
-              Cancel
+              {t("common.cancel")}
             </button>
             <button type="submit" disabled={saving}
               className="flex-1 py-2.5 bg-indigo-600 text-white rounded-xl text-sm font-medium hover:bg-indigo-700 disabled:opacity-60 transition-colors flex items-center justify-center gap-2">
-              {saving ? <><Loader2 className="w-4 h-4 animate-spin" /> Saving…</> : "Save Changes"}
+              {saving ? <><Loader2 className="w-4 h-4 animate-spin" /> {t("superadmin.saving")}</> : t("superadmin.save_changes")}
             </button>
           </div>
         </form>
@@ -198,19 +202,10 @@ function EditSubscriptionModal({
   );
 }
 
-const CREATE_ROLE_OPTIONS: { value: string; label: string }[] = [
-  { value: "tenant_admin",       label: "Tenant Admin"       },
-  { value: "ciso",               label: "CISO"               },
-  { value: "risk_manager",       label: "Risk Manager"       },
-  { value: "compliance_manager", label: "Compliance Manager" },
-  { value: "policy_manager",     label: "Policy Manager"     },
-  { value: "vendor_manager",     label: "Vendor Manager"     },
-  { value: "control_owner",      label: "Control Owner"      },
-  { value: "business_owner",     label: "Business Owner"     },
-  { value: "security_analyst",   label: "Security Analyst"   },
-  { value: "executive",          label: "Executive (Direction Générale)" },
-  { value: "auditor",            label: "Auditor"            },
-  { value: "viewer",             label: "Viewer"             },
+// Display labels come from company_admin.roles.<value>_label (resolved with t() at render).
+const CREATE_ROLE_OPTIONS: string[] = [
+  "tenant_admin", "ciso", "risk_manager", "compliance_manager", "policy_manager", "vendor_manager",
+  "control_owner", "business_owner", "security_analyst", "executive", "auditor", "viewer",
 ];
 
 function CreateUserModal({
@@ -222,6 +217,7 @@ function CreateUserModal({
   readonly onClose: () => void;
   readonly onCreated: (user: SuperAdminUser) => void;
 }) {
+  const { t } = useTranslation();
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName]   = useState("");
   const [email, setEmail]         = useState("");
@@ -236,11 +232,11 @@ function CreateUserModal({
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault();
     if (!email.trim() || !firstName.trim() || !lastName.trim() || !tenantId) {
-      setError("Please fill in all required fields.");
+      setError(t("superadmin.err_required_fields"));
       return;
     }
     if (password && password.length < 8) {
-      setError("Password must be at least 8 characters (or leave blank to auto-generate).");
+      setError(t("superadmin.err_password_short"));
       return;
     }
     setSaving(true);
@@ -258,7 +254,7 @@ function CreateUserModal({
       onCreated(user);
     } catch (err: unknown) {
       const detail = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
-      setError(typeof detail === "string" ? detail : "Failed to create user. Please try again.");
+      setError(typeof detail === "string" ? detail : t("superadmin.err_create_user"));
     } finally {
       setSaving(false);
     }
@@ -277,82 +273,82 @@ function CreateUserModal({
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md">
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
           <h2 className="font-semibold text-gray-900 flex items-center gap-2">
-            <UserPlus className="w-4 h-4 text-indigo-600" /> Create User
+            <UserPlus className="w-4 h-4 text-indigo-600" /> {t("superadmin.create_user")}
           </h2>
           <button type="button" onClick={onClose} disabled={saving}
-            className="p-1 rounded-lg hover:bg-gray-100 text-gray-400 disabled:opacity-40"><X className="w-4 h-4" /></button>
+            aria-label={t("common.close")} className="p-1 rounded-lg hover:bg-gray-100 text-gray-400 disabled:opacity-40"><X className="w-4 h-4" /></button>
         </div>
 
         {created ? (
           <div className="p-6 space-y-5">
             <div className="flex items-center gap-2 text-green-700 bg-green-50 border border-green-200 px-4 py-3 rounded-xl text-sm">
               <CheckCircle className="w-4 h-4 flex-shrink-0" />
-              User <strong>{created.email}</strong> created in {created.tenant_name}.
+              <span>{t("superadmin.user_created_pre")} <strong>{created.email}</strong> {t("superadmin.user_created_post", { tenant: created.tenant_name })}</span>
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">Temporary password</label>
+              <label className="block text-xs font-medium text-gray-700 mb-1">{t("superadmin.temp_password")}</label>
               <div className="flex items-center gap-2">
                 <code className="flex-1 px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm font-mono tracking-wide">
                   {created.temporary_password}
                 </code>
                 <button type="button" onClick={copyPassword}
-                  className="p-2.5 border border-gray-200 rounded-xl text-gray-500 hover:bg-gray-50 transition-colors" title="Copy password">
+                  className="p-2.5 border border-gray-200 rounded-xl text-gray-500 hover:bg-gray-50 transition-colors" title={t("superadmin.copy_password")}>
                   {copied ? <CheckCircle className="w-4 h-4 text-green-600" /> : <Copy className="w-4 h-4" />}
                 </button>
               </div>
               <p className="text-xs text-amber-600 mt-2">
-                This password is shown only once — share it with the user securely. They should change it after first login.
+                {t("superadmin.temp_password_hint")}
               </p>
             </div>
             <button type="button" onClick={onClose}
               className="w-full py-2.5 bg-indigo-600 text-white rounded-xl text-sm font-medium hover:bg-indigo-700 transition-colors">
-              Done
+              {t("superadmin.done")}
             </button>
           </div>
         ) : (
           <form onSubmit={handleCreate} className="p-6 space-y-4">
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">First name *</label>
+                <label className="block text-xs font-medium text-gray-700 mb-1">{t("public.register.first_name")} *</label>
                 <input value={firstName} onChange={e => setFirstName(e.target.value)}
                   className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
               </div>
               <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">Last name *</label>
+                <label className="block text-xs font-medium text-gray-700 mb-1">{t("public.register.last_name")} *</label>
                 <input value={lastName} onChange={e => setLastName(e.target.value)}
                   className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
               </div>
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">Email *</label>
+              <label className="block text-xs font-medium text-gray-700 mb-1">{t("auth.email")} *</label>
               <input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="user@company.com"
                 className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">Organization *</label>
+                <label className="block text-xs font-medium text-gray-700 mb-1">{t("superadmin.organization")} *</label>
                 <select value={tenantId} onChange={e => setTenantId(e.target.value)}
                   className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white">
-                  {tenants.map(t => (
-                    <option key={t.tenant_id} value={t.tenant_id}>{t.tenant_name}</option>
+                  {tenants.map(tn => (
+                    <option key={tn.tenant_id} value={tn.tenant_id}>{tn.tenant_name}</option>
                   ))}
                 </select>
               </div>
               <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">Role *</label>
+                <label className="block text-xs font-medium text-gray-700 mb-1">{t("settings.col_role")} *</label>
                 <select value={role} onChange={e => setRole(e.target.value)}
                   className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white">
                   {CREATE_ROLE_OPTIONS.map(r => (
-                    <option key={r.value} value={r.value}>{r.label}</option>
+                    <option key={r} value={r}>{t(`company_admin.roles.${r}_label`)}</option>
                   ))}
                 </select>
               </div>
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">Password</label>
-              <input type="text" value={password} onChange={e => setPassword(e.target.value)} placeholder="Leave blank to auto-generate"
+              <label className="block text-xs font-medium text-gray-700 mb-1">{t("auth.password")}</label>
+              <input type="text" value={password} onChange={e => setPassword(e.target.value)} placeholder={t("superadmin.password_placeholder")}
                 className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm font-mono focus:outline-none focus:ring-2 focus:ring-indigo-500" />
-              <p className="text-xs text-gray-400 mt-1">Minimum 8 characters. If blank, a secure temporary password is generated.</p>
+              <p className="text-xs text-gray-400 mt-1">{t("superadmin.password_hint")}</p>
             </div>
 
             {error && (
@@ -364,11 +360,11 @@ function CreateUserModal({
             <div className="flex gap-3 pt-1">
               <button type="button" onClick={onClose} disabled={saving}
                 className="flex-1 py-2.5 border border-gray-200 rounded-xl text-sm font-medium text-gray-600 hover:bg-gray-50 disabled:opacity-60 transition-colors">
-                Cancel
+                {t("common.cancel")}
               </button>
               <button type="submit" disabled={saving}
                 className="flex-1 py-2.5 bg-indigo-600 text-white rounded-xl text-sm font-medium hover:bg-indigo-700 disabled:opacity-60 transition-colors flex items-center justify-center gap-2">
-                {saving ? <><Loader2 className="w-4 h-4 animate-spin" /> Creating…</> : <><UserPlus className="w-4 h-4" /> Create User</>}
+                {saving ? <><Loader2 className="w-4 h-4 animate-spin" /> {t("superadmin.creating")}</> : <><UserPlus className="w-4 h-4" /> {t("superadmin.create_user")}</>}
               </button>
             </div>
           </form>
@@ -381,6 +377,8 @@ function CreateUserModal({
 // ── Tab: Users ────────────────────────────────────────────────────────────────
 
 function UsersTab() {
+  const { t, i18n } = useTranslation();
+  const loc = i18n.language === "ar" ? "ar-u-nu-latn" : i18n.language === "fr" ? "fr-FR" : "en-US";
   const [users, setUsers]       = useState<SuperAdminUser[]>([]);
   const [subs, setSubs]         = useState<Record<string, TenantSubscription>>({});
   const [loading, setLoading]   = useState(true);
@@ -423,6 +421,16 @@ function UsersTab() {
     } finally { setBusy(null); }
   }
 
+  async function toggleElite(u: SuperAdminUser) {
+    setBusy(u.id);
+    try {
+      const updated = await superAdminUsersApi.setElite(u.id, !u.elite_access);
+      setUsers(prev => prev.map(x => x.id === u.id ? updated : x));
+    } catch {
+      alert(t("superadmin.err_elite_update"));
+    } finally { setBusy(null); }
+  }
+
   async function changeRole(u: SuperAdminUser, role: string) {
     setBusy(u.id);
     try {
@@ -434,7 +442,7 @@ function UsersTab() {
   }
 
   async function deleteUser(id: string) {
-    if (!confirm("Delete this user? This cannot be undone.")) return;
+    if (!confirm(t("superadmin.confirm_delete_user"))) return;
     setBusy(id);
     try { await superAdminUsersApi.delete(id); } catch { /* demo */ }
     setUsers(prev => prev.filter(x => x.id !== id));
@@ -457,14 +465,14 @@ function UsersTab() {
           disabled={tenants.length === 0}
           className="flex items-center gap-2 px-4 py-2.5 bg-indigo-600 text-white rounded-xl text-sm font-medium hover:bg-indigo-700 disabled:opacity-60 transition-colors"
         >
-          <UserPlus className="w-4 h-4" /> Create User
+          <UserPlus className="w-4 h-4" /> {t("superadmin.create_user")}
         </button>
       </div>
       <div className="overflow-x-auto rounded-xl border border-gray-200 shadow-sm">
         <table className="w-full text-sm">
           <thead className="bg-gray-50 border-b border-gray-200">
             <tr>
-              {["User", "Tenant / Plan", "Role", "Account", "Actions"].map(h => (
+              {[t("superadmin.col_user"), t("superadmin.col_tenant_plan"), t("settings.col_role"), t("superadmin.col_elite"), t("superadmin.col_account"), t("common.actions")].map(h => (
                 <th key={h} className="px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">{h}</th>
               ))}
             </tr>
@@ -495,15 +503,15 @@ function UsersTab() {
                       <span className="px-2.5 py-1 bg-gray-100 text-gray-700 rounded-lg text-xs font-medium w-fit">{u.tenant_name}</span>
                       {sub ? (
                         <div className="flex items-center gap-1.5 flex-wrap">
-                          <span className={`px-2 py-0.5 rounded-full text-xs font-semibold capitalize ${TIER_COLORS[sub.tier] ?? "bg-gray-100 text-gray-600"}`}>
-                            {sub.tier}
+                          <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${TIER_COLORS[sub.tier] ?? "bg-gray-100 text-gray-600"}`}>
+                            {t(`superadmin.tier_${sub.tier}`, { defaultValue: sub.tier })}
                           </span>
-                          <span className={`px-2 py-0.5 rounded-full text-xs font-semibold capitalize ${STATUS_COLORS[sub.status] ?? "bg-gray-100 text-gray-600"}`}>
-                            {sub.status.replace("_", " ")}
+                          <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${STATUS_COLORS[sub.status] ?? "bg-gray-100 text-gray-600"}`}>
+                            {t(`superadmin.sub_status_${sub.status}`, { defaultValue: sub.status.replace("_", " ") })}
                           </span>
                           {expiry && (
                             <span className={`text-xs ${expired ? "text-red-500 font-medium" : "text-gray-400"}`}>
-                              {expired ? "Expired " : "Expires "}{expiry.toLocaleDateString()}
+                              {expired ? t("superadmin.expired_on", { date: expiry.toLocaleDateString(loc) }) : t("superadmin.expires_on", { date: expiry.toLocaleDateString(loc) })}
                             </span>
                           )}
                           {u.role !== "super_admin" && (
@@ -512,12 +520,12 @@ function UsersTab() {
                               onClick={() => setEditSub(sub)}
                               className="flex items-center gap-1 px-2 py-0.5 text-xs font-medium text-indigo-600 border border-indigo-200 rounded-lg hover:bg-indigo-50 transition-colors"
                             >
-                              <Pencil className="w-3 h-3" /> Edit plan
+                              <Pencil className="w-3 h-3" /> {t("superadmin.edit_plan")}
                             </button>
                           )}
                         </div>
                       ) : (
-                        <span className="text-xs text-gray-300">No subscription</span>
+                        <span className="text-xs text-gray-300">{t("superadmin.no_subscription")}</span>
                       )}
                     </div>
                   </td>
@@ -526,7 +534,7 @@ function UsersTab() {
                   <td className="px-5 py-3.5">
                     {u.role === "super_admin" ? (
                       <span className="inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-1 bg-yellow-50 text-yellow-700 border border-yellow-200 rounded-lg">
-                        👑 Super Admin
+                        👑 {t("company_admin.roles.super_admin_label")}
                       </span>
                     ) : (
                       <select
@@ -535,19 +543,32 @@ function UsersTab() {
                         onChange={e => changeRole(u, e.target.value)}
                         className="text-xs border border-gray-200 rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
                       >
-                        <option value="tenant_admin">Tenant Admin</option>
-                        <option value="ciso">CISO</option>
-                        <option value="risk_manager">Risk Manager</option>
-                        <option value="compliance_manager">Compliance Manager</option>
-                        <option value="policy_manager">Policy Manager</option>
-                        <option value="vendor_manager">Vendor Manager</option>
-                        <option value="control_owner">Control Owner</option>
-                        <option value="business_owner">Business Owner</option>
-                        <option value="security_analyst">Security Analyst</option>
-                        <option value="executive">Executive (Direction Générale)</option>
-                        <option value="auditor">Auditor</option>
-                        <option value="viewer">Viewer</option>
+                        {CREATE_ROLE_OPTIONS.map(r => (
+                          <option key={r} value={r}>{t(`company_admin.roles.${r}_label`)}</option>
+                        ))}
                       </select>
+                    )}
+                  </td>
+
+                  {/* Per-user Elite Pack grant */}
+                  <td className="px-5 py-3.5">
+                    {u.role === "super_admin" ? (
+                      <span className="text-xs text-gray-400">{t("superadmin.elite_always")}</span>
+                    ) : sub?.tier === "elite" && !u.elite_access ? (
+                      <span className="text-xs text-purple-600" title={t("superadmin.elite_via_plan_hint")}>{t("superadmin.elite_via_plan")}</span>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => toggleElite(u)}
+                        disabled={busy === u.id}
+                        title={u.elite_access ? t("superadmin.elite_revoke_hint") : t("superadmin.elite_grant_hint")}
+                        className="flex items-center gap-1.5 text-xs font-medium transition-colors"
+                      >
+                        {u.elite_access
+                          ? <><ToggleRight className="w-5 h-5 text-purple-500" /><span className="text-purple-600">{t("superadmin.tier_elite")}</span></>
+                          : <><ToggleLeft className="w-5 h-5 text-gray-400" /><span className="text-gray-500">{t("superadmin.off")}</span></>
+                        }
+                      </button>
                     )}
                   </td>
 
@@ -560,8 +581,8 @@ function UsersTab() {
                       className="flex items-center gap-1.5 text-xs font-medium transition-colors"
                     >
                       {u.is_active
-                        ? <><ToggleRight className="w-5 h-5 text-emerald-500" /><span className="text-emerald-600">Active</span></>
-                        : <><ToggleLeft className="w-5 h-5 text-gray-400" /><span className="text-gray-500">Disabled</span></>
+                        ? <><ToggleRight className="w-5 h-5 text-emerald-500" /><span className="text-emerald-600">{t("superadmin.sub_status_active")}</span></>
+                        : <><ToggleLeft className="w-5 h-5 text-gray-400" /><span className="text-gray-500">{t("superadmin.disabled")}</span></>
                       }
                     </button>
                   </td>
@@ -573,7 +594,7 @@ function UsersTab() {
                       onClick={() => deleteUser(u.id)}
                       disabled={busy === u.id}
                       className="p-1.5 rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors"
-                      title="Delete user"
+                      title={t("superadmin.delete_user")}
                     >
                       {busy === u.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
                     </button>
@@ -584,7 +605,7 @@ function UsersTab() {
           </tbody>
         </table>
       </div>
-      <p className="text-xs text-gray-400 mt-3">{users.length} user{users.length !== 1 ? "s" : ""} across all tenants</p>
+      <p className="text-xs text-gray-400 mt-3">{t("superadmin.users_count", { count: users.length })}</p>
 
       {editSub && (
         <EditSubscriptionModal
@@ -614,6 +635,7 @@ function humanise(key: string): string {
 }
 
 function AccessControlTab() {
+  const { t } = useTranslation();
   const [entries, setEntries]     = useState<AccessControlEntry[]>([]);
   const [catalogue, setCatalogue] = useState<FeatureCatalogue | null>(null);
   const [loading, setLoading]     = useState(true);
@@ -646,7 +668,7 @@ function AccessControlTab() {
       const updated = await superAdminAccessApi.updateTenantAccess(tenantId, body);
       setEntries(prev => prev.map(e => (e.tenant_id === tenantId ? updated : e)));
     } catch {
-      setError("Could not save that change. It has not been applied.");
+      setError(t("superadmin.err_access_save"));
     } finally {
       setSaving(null);
     }
@@ -699,10 +721,10 @@ function AccessControlTab() {
               <div>
                 <h3 className="font-semibold text-gray-900">{entry.tenant_name}</h3>
                 <p className="mt-0.5 text-xs text-gray-500">
-                  {entry.enabled_modules.length} modules enabled
+                  {t("superadmin.modules_enabled", { count: entry.enabled_modules.length })}
                   {overrideCount > 0 && (
                     <span className="ml-2 rounded-md bg-amber-50 px-1.5 py-0.5 font-medium text-amber-700">
-                      {overrideCount} override{overrideCount === 1 ? "" : "s"}
+                      {t("superadmin.overrides_count", { count: overrideCount })}
                     </span>
                   )}
                 </p>
@@ -714,17 +736,17 @@ function AccessControlTab() {
                     feature follows it. Individual switches below are for the
                     exceptions, not the normal path. */}
                 <label className="text-xs font-medium text-gray-500" htmlFor={`pack-${entry.tenant_id}`}>
-                  Pack
+                  {t("superadmin.pack")}
                 </label>
                 <select
                   id={`pack-${entry.tenant_id}`}
                   value={entry.plan}
                   disabled={saving === entry.tenant_id || !catalogue}
                   onChange={e => setPack(entry.tenant_id, e.target.value)}
-                  className="rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-sm font-medium capitalize text-gray-900 focus:border-indigo-400 focus:outline-none disabled:opacity-50"
+                  className="rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-sm font-medium text-gray-900 focus:border-indigo-400 focus:outline-none disabled:opacity-50"
                 >
                   {(catalogue?.packs ?? [entry.plan]).map(p => (
-                    <option key={p} value={p}>{p.replace(/_/g, " ")}</option>
+                    <option key={p} value={p}>{t(`superadmin.tier_${p}`, { defaultValue: p.replace(/_/g, " ") })}</option>
                   ))}
                 </select>
                 <button
@@ -732,7 +754,7 @@ function AccessControlTab() {
                   onClick={() => setExpanded(isOpen ? null : entry.tenant_id)}
                   className="rounded-lg border border-gray-200 px-3 py-1.5 text-sm font-medium text-gray-600 hover:border-indigo-400 hover:text-indigo-600"
                 >
-                  {isOpen ? "Hide features" : "Customise"}
+                  {isOpen ? t("superadmin.hide_features") : t("superadmin.customise")}
                 </button>
               </div>
             </div>
@@ -741,7 +763,7 @@ function AccessControlTab() {
               <div className="mt-5 border-t border-gray-100 pt-4">
                 <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
                   <p className="text-xs text-gray-500">
-                    Switches that differ from the {entry.plan.replace(/_/g, " ")} pack are marked.
+                    {t("superadmin.switches_differ", { pack: t(`superadmin.tier_${entry.plan}`, { defaultValue: entry.plan.replace(/_/g, " ") }) })}
                   </p>
                   {overrideCount > 0 && (
                     <button
@@ -750,23 +772,23 @@ function AccessControlTab() {
                       disabled={saving === entry.tenant_id}
                       className="text-xs font-medium text-indigo-600 hover:text-indigo-800 disabled:opacity-50"
                     >
-                      Reset to pack defaults
+                      {t("superadmin.reset_to_pack")}
                     </button>
                   )}
                 </div>
 
                 <div className="mb-5">
                   <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-400">
-                    Core modules
+                    {t("superadmin.core_modules")}
                   </h4>
                   <div className="flex flex-wrap gap-2">
                     {CORE_MODULES.map(mod => (
                       <span
                         key={mod}
-                        title="Included in every pack"
+                        title={t("superadmin.included_every_pack")}
                         className="rounded-full border border-gray-200 bg-gray-50 px-3 py-1.5 text-xs font-medium text-gray-500"
                       >
-                        {mod}
+                        {t(`nav.${mod.replace(/-/g, "_")}`, { defaultValue: mod })}
                       </span>
                     ))}
                   </div>
@@ -775,7 +797,7 @@ function AccessControlTab() {
                 {groups.map(group => (
                   <div key={group} className="mb-5 last:mb-0">
                     <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-400">
-                      {humanise(group)}
+                      {t(`superadmin.feature_group.${group}`, { defaultValue: humanise(group) })}
                     </h4>
                     <div className="grid gap-2 sm:grid-cols-2">
                       {catalogue?.features.filter(f => f.group === group).map(f => {
@@ -794,13 +816,13 @@ function AccessControlTab() {
                             }`}
                           >
                             <span className="flex items-center gap-2 truncate">
-                              <span className="truncate">{humanise(f.key)}</span>
+                              <span className="truncate">{t(`superadmin.feature.${f.key}`, { defaultValue: humanise(f.key) })}</span>
                               {isOverride && (
                                 <span
-                                  title="Deliberately changed away from the pack default"
+                                  title={t("superadmin.override_hint")}
                                   className="shrink-0 rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700"
                                 >
-                                  override
+                                  {t("superadmin.override")}
                                 </span>
                               )}
                             </span>
@@ -831,6 +853,7 @@ function AddFrameworkModal({
   readonly onClose: () => void;
   readonly onCreated: (fw: SuperAdminFramework) => void;
 }) {
+  const { t } = useTranslation();
   const [mode, setMode]             = useState<"yaml" | "pdf">("yaml");
   const [name, setName]             = useState("");
   const [shortName, setShortName]   = useState("");
@@ -843,7 +866,7 @@ function AddFrameworkModal({
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!name.trim() || !shortName.trim()) { setError("Name and Short Name are required."); return; }
+    if (!name.trim() || !shortName.trim()) { setError(t("superadmin.err_fw_required")); return; }
     setSaving(true);
     setError("");
     try {
@@ -879,9 +902,9 @@ function AddFrameworkModal({
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg">
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
           <h2 className="font-semibold text-gray-900 flex items-center gap-2">
-            <BookOpen className="w-4 h-4 text-indigo-600" /> Add Framework
+            <BookOpen className="w-4 h-4 text-indigo-600" /> {t("superadmin.add_framework")}
           </h2>
-          <button type="button" onClick={onClose} className="p-1 rounded-lg hover:bg-gray-100 text-gray-400 transition-colors">
+          <button type="button" onClick={onClose} aria-label={t("common.close")} className="p-1 rounded-lg hover:bg-gray-100 text-gray-400 transition-colors">
             <X className="w-4 h-4" />
           </button>
         </div>
@@ -898,14 +921,14 @@ function AddFrameworkModal({
                   mode === m ? "bg-indigo-600 text-white" : "text-gray-500 hover:bg-gray-50"
                 }`}
               >
-                {m === "yaml" ? "YAML / JSON Entry" : "PDF Upload"}
+                {m === "yaml" ? t("superadmin.mode_yaml") : t("superadmin.mode_pdf")}
               </button>
             ))}
           </div>
 
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">Framework Name *</label>
+              <label className="block text-xs font-medium text-gray-700 mb-1">{t("superadmin.fw_name")} *</label>
               <input
                 value={name}
                 onChange={e => setName(e.target.value)}
@@ -915,7 +938,7 @@ function AddFrameworkModal({
               />
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">Short Name *</label>
+              <label className="block text-xs font-medium text-gray-700 mb-1">{t("framework_editor.short_name")} *</label>
               <input
                 value={shortName}
                 onChange={e => setShortName(e.target.value)}
@@ -927,7 +950,7 @@ function AddFrameworkModal({
           </div>
 
           <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">Version</label>
+            <label className="block text-xs font-medium text-gray-700 mb-1">{t("frameworks.version")}</label>
             <input
               value={version}
               onChange={e => setVersion(e.target.value)}
@@ -938,7 +961,7 @@ function AddFrameworkModal({
 
           {mode === "yaml" ? (
             <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">YAML / JSON Content <span className="text-gray-400 font-normal">(optional)</span></label>
+              <label className="block text-xs font-medium text-gray-700 mb-1">{t("superadmin.yaml_content")} <span className="text-gray-400 font-normal">({t("superadmin.optional")})</span></label>
               <textarea
                 value={yamlContent}
                 onChange={e => setYaml(e.target.value)}
@@ -949,7 +972,7 @@ function AddFrameworkModal({
             </div>
           ) : (
             <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">PDF File</label>
+              <label className="block text-xs font-medium text-gray-700 mb-1">{t("superadmin.pdf_file")}</label>
               <div
                 onClick={() => fileRef.current?.click()}
                 className="border-2 border-dashed border-gray-200 rounded-xl p-8 text-center cursor-pointer hover:border-indigo-400 hover:bg-indigo-50/50 transition-all"
@@ -958,8 +981,8 @@ function AddFrameworkModal({
                 {file
                   ? <p className="text-sm font-medium text-gray-800">{file.name}</p>
                   : <>
-                    <p className="text-sm text-gray-500 font-medium">Click to select a PDF</p>
-                    <p className="text-xs text-gray-400 mt-1">The framework controls will be extracted automatically</p>
+                    <p className="text-sm text-gray-500 font-medium">{t("superadmin.pdf_click")}</p>
+                    <p className="text-xs text-gray-400 mt-1">{t("superadmin.pdf_hint")}</p>
                   </>
                 }
               </div>
@@ -985,14 +1008,14 @@ function AddFrameworkModal({
               onClick={onClose}
               className="flex-1 py-2.5 border border-gray-200 rounded-xl text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors"
             >
-              Cancel
+              {t("common.cancel")}
             </button>
             <button
               type="submit"
               disabled={saving}
               className="flex-1 py-2.5 bg-indigo-600 text-white rounded-xl text-sm font-medium hover:bg-indigo-700 disabled:opacity-60 transition-colors flex items-center justify-center gap-2"
             >
-              {saving ? <><Loader2 className="w-4 h-4 animate-spin" /> Saving…</> : "Add Framework"}
+              {saving ? <><Loader2 className="w-4 h-4 animate-spin" /> {t("superadmin.saving")}</> : t("superadmin.add_framework")}
             </button>
           </div>
         </form>
@@ -1004,6 +1027,8 @@ function AddFrameworkModal({
 // ── Tab: Frameworks ───────────────────────────────────────────────────────────
 
 function FrameworksTab() {
+  const { t, i18n } = useTranslation();
+  const loc = i18n.language === "ar" ? "ar-u-nu-latn" : i18n.language === "fr" ? "fr-FR" : "en-US";
   const [frameworks, setFrameworks] = useState<SuperAdminFramework[]>([]);
   const [loading, setLoading]       = useState(true);
   const [isDemo, setIsDemo]         = useState(false);
@@ -1016,7 +1041,7 @@ function FrameworksTab() {
   }, []);
 
   async function deleteFramework(id: string) {
-    if (!confirm("Delete this framework? This will affect all tenants using it.")) return;
+    if (!confirm(t("superadmin.confirm_delete_fw"))) return;
     try { await superAdminFrameworksApi.delete(id); } catch { /* demo */ }
     setFrameworks(prev => prev.filter(f => f.id !== id));
   }
@@ -1031,13 +1056,13 @@ function FrameworksTab() {
     <div>
       {isDemo && <DemoBanner />}
       <div className="flex justify-between items-center mb-4">
-        <p className="text-sm text-gray-500">{frameworks.length} framework{frameworks.length !== 1 ? "s" : ""} available on the platform</p>
+        <p className="text-sm text-gray-500">{t("superadmin.fw_count", { count: frameworks.length })}</p>
         <button
           type="button"
           onClick={() => setShowModal(true)}
           className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-xl text-sm font-medium hover:bg-indigo-700 transition-colors shadow-sm"
         >
-          <Plus className="w-4 h-4" /> Add Framework
+          <Plus className="w-4 h-4" /> {t("superadmin.add_framework")}
         </button>
       </div>
 
@@ -1045,7 +1070,7 @@ function FrameworksTab() {
         <table className="w-full text-sm">
           <thead className="bg-gray-50 border-b border-gray-200">
             <tr>
-              {["Framework", "Short Name", "Version", "Controls", "Added", "Actions"].map(h => (
+              {[t("settings.framework"), t("framework_editor.short_name"), t("frameworks.version"), t("compliance.controls"), t("superadmin.col_added"), t("common.actions")].map(h => (
                 <th key={h} className="px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">{h}</th>
               ))}
             </tr>
@@ -1059,13 +1084,13 @@ function FrameworksTab() {
                 </td>
                 <td className="px-5 py-3.5 text-gray-600">{fw.version}</td>
                 <td className="px-5 py-3.5 text-gray-600">{fw.controls_count ?? <span className="text-gray-300">—</span>}</td>
-                <td className="px-5 py-3.5 text-gray-400 text-xs">{new Date(fw.created_at).toLocaleDateString()}</td>
+                <td className="px-5 py-3.5 text-gray-400 text-xs">{new Date(fw.created_at).toLocaleDateString(loc)}</td>
                 <td className="px-5 py-3.5">
                   <button
                     type="button"
                     onClick={() => deleteFramework(fw.id)}
                     className="p-1.5 rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors"
-                    title="Delete framework"
+                    title={t("superadmin.delete_framework")}
                   >
                     <Trash2 className="w-4 h-4" />
                   </button>
@@ -1090,14 +1115,16 @@ function FrameworksTab() {
 
 type SettingsSub = "profile" | "security" | "notifications" | "platform";
 
+// `label` is an i18n key, resolved with t() at render.
 const SETTINGS_TABS: { id: SettingsSub; label: string }[] = [
-  { id: "profile",       label: "Profile"       },
-  { id: "security",      label: "Security"      },
-  { id: "notifications", label: "Notifications" },
-  { id: "platform",      label: "Platform Info" },
+  { id: "profile",       label: "settings.profile"       },
+  { id: "security",      label: "settings.security"      },
+  { id: "notifications", label: "settings.notifications" },
+  { id: "platform",      label: "superadmin.platform_info" },
 ];
 
 function SettingsTab() {
+  const { t } = useTranslation();
   const user = authSession.getUser();
   const [sub, setSub] = useState<SettingsSub>("profile");
   const [firstName, setFirstName] = useState("Super");
@@ -1123,15 +1150,15 @@ function SettingsTab() {
     e.preventDefault();
     setPwError("");
     if (!currentPwd || !newPwd || !confirmPwd) {
-      setPwError("Please fill in all password fields.");
+      setPwError(t("superadmin.err_pw_fields"));
       return;
     }
     if (newPwd.length < 8) {
-      setPwError("New password must be at least 8 characters.");
+      setPwError(t("superadmin.err_pw_min"));
       return;
     }
     if (newPwd !== confirmPwd) {
-      setPwError("New passwords do not match.");
+      setPwError(t("superadmin.err_pw_mismatch"));
       return;
     }
     setPwSaving(true);
@@ -1143,7 +1170,7 @@ function SettingsTab() {
       setTimeout(() => setSaved(false), 2500);
     } catch (err: unknown) {
       const detail = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
-      setPwError(typeof detail === "string" ? detail : "Failed to update password. Please try again.");
+      setPwError(typeof detail === "string" ? detail : t("settings.err_password_update"));
     } finally {
       setPwSaving(false);
     }
@@ -1154,16 +1181,16 @@ function SettingsTab() {
       {/* Sub-nav */}
       <aside className="w-44 flex-shrink-0">
         <nav className="space-y-0.5">
-          {SETTINGS_TABS.map(t => (
+          {SETTINGS_TABS.map(tab => (
             <button
-              key={t.id}
+              key={tab.id}
               type="button"
-              onClick={() => setSub(t.id)}
-              className={`w-full text-left px-3 py-2.5 rounded-xl text-sm font-medium transition-all ${
-                sub === t.id ? "bg-indigo-600 text-white shadow-sm" : "text-gray-600 hover:bg-gray-100"
+              onClick={() => setSub(tab.id)}
+              className={`w-full text-start px-3 py-2.5 rounded-xl text-sm font-medium transition-all ${
+                sub === tab.id ? "bg-indigo-600 text-white shadow-sm" : "text-gray-600 hover:bg-gray-100"
               }`}
             >
-              {t.label}
+              {t(tab.label)}
             </button>
           ))}
         </nav>
@@ -1173,62 +1200,62 @@ function SettingsTab() {
       <div className="flex-1">
         {saved && (
           <div className="flex items-center gap-2 mb-4 px-4 py-3 bg-green-50 border border-green-200 rounded-xl text-green-700 text-sm">
-            <CheckCircle className="w-4 h-4 flex-shrink-0" /> Changes saved.
+            <CheckCircle className="w-4 h-4 flex-shrink-0" /> {t("superadmin.changes_saved")}
           </div>
         )}
 
         {sub === "profile" && (
           <form onSubmit={handleSave} className="bg-white rounded-xl border border-gray-200 shadow-sm p-6 space-y-5">
-            <h3 className="font-semibold text-gray-900">Profile</h3>
+            <h3 className="font-semibold text-gray-900">{t("settings.profile")}</h3>
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">First Name</label>
+                <label className="block text-xs font-medium text-gray-700 mb-1">{t("settings.first_name")}</label>
                 <input value={firstName} onChange={e => setFirstName(e.target.value)}
                   className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
               </div>
               <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">Last Name</label>
+                <label className="block text-xs font-medium text-gray-700 mb-1">{t("settings.last_name")}</label>
                 <input value={lastName} onChange={e => setLastName(e.target.value)}
                   className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
               </div>
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">Email</label>
+              <label className="block text-xs font-medium text-gray-700 mb-1">{t("auth.email")}</label>
               <input type="email" value={email} onChange={e => setEmail(e.target.value)}
                 className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">Role</label>
+              <label className="block text-xs font-medium text-gray-700 mb-1">{t("settings.col_role")}</label>
               <div className="px-3 py-2.5 border border-gray-100 rounded-xl bg-gray-50 text-sm text-gray-500">
-                <span className="px-2 py-0.5 bg-red-50 text-red-700 text-xs font-semibold rounded-full">Super Admin</span>
+                <span className="px-2 py-0.5 bg-red-50 text-red-700 text-xs font-semibold rounded-full">{t("company_admin.roles.super_admin_label")}</span>
               </div>
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">Organization</label>
-              <div className="px-3 py-2.5 border border-gray-100 rounded-xl bg-gray-50 text-sm text-gray-500">Platform Owner</div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">{t("superadmin.organization")}</label>
+              <div className="px-3 py-2.5 border border-gray-100 rounded-xl bg-gray-50 text-sm text-gray-500">{t("nav.platform_owner")}</div>
             </div>
             <button type="submit" className="px-5 py-2.5 bg-indigo-600 text-white rounded-xl text-sm font-medium hover:bg-indigo-700 transition-colors">
-              Save Changes
+              {t("superadmin.save_changes")}
             </button>
           </form>
         )}
 
         {sub === "security" && (
           <form onSubmit={handlePasswordSave} className="bg-white rounded-xl border border-gray-200 shadow-sm p-6 space-y-5">
-            <h3 className="font-semibold text-gray-900">Change Password</h3>
+            <h3 className="font-semibold text-gray-900">{t("settings.change_password")}</h3>
             <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">Current Password</label>
+              <label className="block text-xs font-medium text-gray-700 mb-1">{t("settings.current_password")}</label>
               <input type="password" value={currentPwd} onChange={e => setCurrentPwd(e.target.value)} placeholder="••••••••"
                 className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">New Password</label>
-              <input type="password" value={newPwd} onChange={e => setNewPwd(e.target.value)} placeholder="Min 8 characters"
+              <label className="block text-xs font-medium text-gray-700 mb-1">{t("settings.new_password")}</label>
+              <input type="password" value={newPwd} onChange={e => setNewPwd(e.target.value)} placeholder={t("superadmin.pw_min_placeholder")}
                 className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">Confirm New Password</label>
-              <input type="password" value={confirmPwd} onChange={e => setConfirmPwd(e.target.value)} placeholder="Repeat new password"
+              <label className="block text-xs font-medium text-gray-700 mb-1">{t("settings.confirm_password")}</label>
+              <input type="password" value={confirmPwd} onChange={e => setConfirmPwd(e.target.value)} placeholder={t("superadmin.pw_repeat_placeholder")}
                 className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
             </div>
             {pwError && (
@@ -1238,18 +1265,18 @@ function SettingsTab() {
             )}
             <button type="submit" disabled={pwSaving}
               className="px-5 py-2.5 bg-indigo-600 text-white rounded-xl text-sm font-medium hover:bg-indigo-700 disabled:opacity-60 transition-colors flex items-center gap-2">
-              {pwSaving ? <><Loader2 className="w-4 h-4 animate-spin" /> Updating…</> : "Update Password"}
+              {pwSaving ? <><Loader2 className="w-4 h-4 animate-spin" /> {t("superadmin.updating")}</> : t("settings.update_password")}
             </button>
           </form>
         )}
 
         {sub === "notifications" && (
           <form onSubmit={handleSave} className="bg-white rounded-xl border border-gray-200 shadow-sm p-6 space-y-5">
-            <h3 className="font-semibold text-gray-900">Notification Preferences</h3>
+            <h3 className="font-semibold text-gray-900">{t("superadmin.notif_prefs")}</h3>
             {[
-              { label: "Email notifications", sub: "Receive platform alerts by email", value: notifEmail, onChange: setNotifEmail },
-              { label: "New user registered",  sub: "Alert when a new user joins any tenant", value: notifNewUser, onChange: setNotifNewUser },
-              { label: "New tenant created",   sub: "Alert when a new organization signs up", value: notifNewTenant, onChange: setNotifNewTenant },
+              { label: t("superadmin.notif_email"), sub: t("superadmin.notif_email_desc"), value: notifEmail, onChange: setNotifEmail },
+              { label: t("superadmin.notif_new_user"),  sub: t("superadmin.notif_new_user_desc"), value: notifNewUser, onChange: setNotifNewUser },
+              { label: t("superadmin.notif_new_tenant"),   sub: t("superadmin.notif_new_tenant_desc"), value: notifNewTenant, onChange: setNotifNewTenant },
             ].map(({ label, sub: desc, value, onChange }) => (
               <div key={label} className="flex items-center justify-between py-3 border-b border-gray-50 last:border-0">
                 <div>
@@ -1269,20 +1296,20 @@ function SettingsTab() {
               </div>
             ))}
             <button type="submit" className="px-5 py-2.5 bg-indigo-600 text-white rounded-xl text-sm font-medium hover:bg-indigo-700 transition-colors">
-              Save Preferences
+              {t("settings.save_preferences")}
             </button>
           </form>
         )}
 
         {sub === "platform" && (
           <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6 space-y-4">
-            <h3 className="font-semibold text-gray-900">Platform Info</h3>
+            <h3 className="font-semibold text-gray-900">{t("superadmin.platform_info")}</h3>
             {[
-              { label: "Backend API",  value: <a href="http://localhost:8000/api/v1/docs" target="_blank" rel="noreferrer" className="text-indigo-600 hover:underline">localhost:8000/api/v1/docs</a> },
-              { label: "Frontend",     value: <span className="text-gray-900">localhost:4000</span> },
-              { label: "Version",      value: <span className="text-gray-900">0.1.0</span> },
-              { label: "Database",     value: <span className="text-gray-900">SQLite (dev) → PostgreSQL (prod)</span> },
-              { label: "Auth",         value: <span className="text-gray-900">JWT / bcrypt</span> },
+              { label: t("superadmin.pi_backend"),  value: <a href="http://localhost:8000/api/v1/docs" target="_blank" rel="noreferrer" className="text-indigo-600 hover:underline">localhost:8000/api/v1/docs</a> },
+              { label: t("superadmin.pi_frontend"),     value: <span className="text-gray-900">localhost:4000</span> },
+              { label: t("frameworks.version"),      value: <span className="text-gray-900">0.1.0</span> },
+              { label: t("superadmin.pi_database"),     value: <span className="text-gray-900">SQLite (dev) → PostgreSQL (prod)</span> },
+              { label: t("superadmin.pi_auth"),         value: <span className="text-gray-900">JWT / bcrypt</span> },
             ].map(({ label, value }) => (
               <div key={label} className="flex items-center justify-between py-2.5 border-b border-gray-50 last:border-0">
                 <span className="text-sm text-gray-500">{label}</span>
@@ -1299,6 +1326,8 @@ function SettingsTab() {
 // ── Tab: AI Access Requests ───────────────────────────────────────────────────
 
 function AiAccessTab() {
+  const { t, i18n } = useTranslation();
+  const loc = i18n.language === "ar" ? "ar-u-nu-latn" : i18n.language === "fr" ? "fr-FR" : "en-US";
   const [requests, setRequests] = useState<AiAccessRequest[]>([]);
   const [loading, setLoading] = useState(true);
   const [isDemo, setIsDemo] = useState(false);
@@ -1331,7 +1360,7 @@ function AiAccessTab() {
     } catch (err) {
       console.error("Approve failed:", err);
       // Show alert so user knows there was an error
-      alert(`Error approving request: ${err instanceof Error ? err.message : String(err)}`);
+      alert(t("superadmin.err_approve", { error: err instanceof Error ? err.message : String(err) }));
     } finally { setResponding(null); }
   }
 
@@ -1359,12 +1388,12 @@ function AiAccessTab() {
       {/* Pending requests */}
       <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold text-gray-900">Pending Requests</h2>
+          <h2 className="text-lg font-semibold text-gray-900">{t("superadmin.pending_requests")}</h2>
           <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-amber-100 text-amber-700 text-xs font-bold">{pending.length}</span>
         </div>
 
         {pending.length === 0 ? (
-          <p className="text-sm text-gray-400 py-8 text-center">No pending requests</p>
+          <p className="text-sm text-gray-400 py-8 text-center">{t("superadmin.no_pending_requests")}</p>
         ) : (
           <div className="space-y-3">
             {pending.map(req => (
@@ -1372,19 +1401,19 @@ function AiAccessTab() {
                 <div className="flex-1">
                   <div className="flex items-center gap-2 mb-1">
                     <p className="font-semibold text-gray-900">{req.user_name}</p>
-                    <span className="text-xs px-2 py-1 bg-blue-100 text-blue-700 rounded-full font-medium">{req.feature.replace("-", " ")}</span>
+                    <span className="text-xs px-2 py-1 bg-blue-100 text-blue-700 rounded-full font-medium">{t(`superadmin.ai_feature.${req.feature}`, { defaultValue: req.feature.replace("-", " ") })}</span>
                   </div>
                   <p className="text-sm text-gray-600 mb-2">{req.reason}</p>
-                  <p className="text-xs text-gray-500">{req.user_email} · {new Date(req.requested_at).toLocaleDateString()}</p>
+                  <p className="text-xs text-gray-500">{req.user_email} · {new Date(req.requested_at).toLocaleDateString(loc)}</p>
                 </div>
                 <div className="flex gap-2 ml-4">
                   <button type="button" onClick={() => approveRequest(req.id)} disabled={responding === req.id}
                     className="flex items-center gap-1 px-3 py-1.5 bg-green-600 text-white text-xs font-medium rounded-lg hover:bg-green-700 disabled:opacity-60">
-                    {responding === req.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <ThumbsUp className="w-3 h-3" />} Approve
+                    {responding === req.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <ThumbsUp className="w-3 h-3" />} {t("policies.approve")}
                   </button>
                   <button type="button" onClick={() => denyRequest(req.id)} disabled={responding === req.id}
                     className="flex items-center gap-1 px-3 py-1.5 bg-red-600 text-white text-xs font-medium rounded-lg hover:bg-red-700 disabled:opacity-60">
-                    {responding === req.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <ThumbsDown className="w-3 h-3" />} Deny
+                    {responding === req.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <ThumbsDown className="w-3 h-3" />} {t("superadmin.deny")}
                   </button>
                 </div>
               </div>
@@ -1397,7 +1426,7 @@ function AiAccessTab() {
       <div className="grid grid-cols-2 gap-6">
         {/* Approved */}
         <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
-          <h3 className="text-lg font-semibold text-gray-900 mb-3">Approved ({approved.length})</h3>
+          <h3 className="text-lg font-semibold text-gray-900 mb-3">{t("superadmin.approved_count", { count: approved.length })}</h3>
           <div className="space-y-2">
             {approved.map(req => (
               <div key={req.id} className="flex items-center justify-between p-3 border border-green-200 bg-green-50 rounded-lg">
@@ -1413,7 +1442,7 @@ function AiAccessTab() {
                     disabled={responding === req.id}
                     className="flex items-center gap-1 px-2 py-1 text-xs font-medium text-red-600 hover:bg-red-100 rounded transition-colors disabled:opacity-60"
                   >
-                    {responding === req.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <X className="w-3 h-3" />} Revoke
+                    {responding === req.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <X className="w-3 h-3" />} {t("superadmin.revoke")}
                   </button>
                 </div>
               </div>
@@ -1423,7 +1452,7 @@ function AiAccessTab() {
 
         {/* Denied */}
         <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
-          <h3 className="text-lg font-semibold text-gray-900 mb-3">Denied ({denied.length})</h3>
+          <h3 className="text-lg font-semibold text-gray-900 mb-3">{t("superadmin.denied_count", { count: denied.length })}</h3>
           <div className="space-y-2">
             {denied.map(req => (
               <div key={req.id} className="flex items-center justify-between p-3 border border-red-200 bg-red-50 rounded-lg">
@@ -1439,7 +1468,7 @@ function AiAccessTab() {
                     disabled={responding === req.id}
                     className="flex items-center gap-1 px-2 py-1 text-xs font-medium text-green-600 hover:bg-green-100 rounded transition-colors disabled:opacity-60"
                   >
-                    {responding === req.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <ThumbsUp className="w-3 h-3" />} Approve
+                    {responding === req.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <ThumbsUp className="w-3 h-3" />} {t("policies.approve")}
                   </button>
                 </div>
               </div>
@@ -1454,6 +1483,8 @@ function AiAccessTab() {
 // ── Tab: Subscriptions ────────────────────────────────────────────────────────
 
 function SubscriptionsTab() {
+  const { t, i18n } = useTranslation();
+  const loc = i18n.language === "ar" ? "ar-u-nu-latn" : i18n.language === "fr" ? "fr-FR" : "en-US";
   const [subs, setSubs]       = useState<TenantSubscription[]>([]);
   const [loading, setLoading] = useState(true);
   const [isDemo, setIsDemo]   = useState(false);
@@ -1479,7 +1510,7 @@ function SubscriptionsTab() {
         <table className="w-full text-sm">
           <thead className="bg-gray-50 border-b border-gray-200">
             <tr>
-              {["Organization", "Plan", "Status", "Trial Expires", "Actions"].map(h => (
+              {[t("superadmin.organization"), t("license.plan"), t("common.status"), t("superadmin.col_trial_expires"), t("common.actions")].map(h => (
                 <th key={h} className="px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">{h}</th>
               ))}
             </tr>
@@ -1492,20 +1523,20 @@ function SubscriptionsTab() {
                 <tr key={s.tenant_id} className="hover:bg-gray-50 transition-colors">
                   <td className="px-5 py-3.5 font-medium text-gray-900">{s.tenant_name}</td>
                   <td className="px-5 py-3.5">
-                    <span className={`px-2.5 py-1 rounded-full text-xs font-semibold capitalize ${TIER_COLORS[s.tier] ?? "bg-gray-100 text-gray-600"}`}>
-                      {s.tier}
+                    <span className={`px-2.5 py-1 rounded-full text-xs font-semibold ${TIER_COLORS[s.tier] ?? "bg-gray-100 text-gray-600"}`}>
+                      {t(`superadmin.tier_${s.tier}`, { defaultValue: s.tier })}
                     </span>
                   </td>
                   <td className="px-5 py-3.5">
-                    <span className={`px-2.5 py-1 rounded-full text-xs font-semibold capitalize ${STATUS_COLORS[s.status] ?? "bg-gray-100 text-gray-600"}`}>
-                      {s.status.replace("_", " ")}
+                    <span className={`px-2.5 py-1 rounded-full text-xs font-semibold ${STATUS_COLORS[s.status] ?? "bg-gray-100 text-gray-600"}`}>
+                      {t(`superadmin.sub_status_${s.status}`, { defaultValue: s.status.replace("_", " ") })}
                     </span>
                   </td>
                   <td className="px-5 py-3.5 text-sm">
                     {expiry ? (
                       <span className={expired ? "text-red-500 font-medium" : "text-gray-700"}>
-                        {expiry.toLocaleDateString()}
-                        {expired && <span className="ml-1.5 text-xs text-red-400">(expired)</span>}
+                        {expiry.toLocaleDateString(loc)}
+                        {expired && <span className="ms-1.5 text-xs text-red-400">({t("superadmin.expired_lower")})</span>}
                       </span>
                     ) : (
                       <span className="text-gray-300">—</span>
@@ -1517,7 +1548,7 @@ function SubscriptionsTab() {
                       onClick={() => setEditing(s)}
                       className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-indigo-600 border border-indigo-200 rounded-lg hover:bg-indigo-50 transition-colors"
                     >
-                      <Pencil className="w-3 h-3" /> Edit
+                      <Pencil className="w-3 h-3" /> {t("common.edit")}
                     </button>
                   </td>
                 </tr>
@@ -1526,7 +1557,7 @@ function SubscriptionsTab() {
           </tbody>
         </table>
       </div>
-      <p className="text-xs text-gray-400 mt-3">{subs.length} tenant{subs.length !== 1 ? "s" : ""} total</p>
+      <p className="text-xs text-gray-400 mt-3">{t("superadmin.tenants_total", { count: subs.length })}</p>
 
       {editing && (
         <EditSubscriptionModal
@@ -1541,22 +1572,24 @@ function SubscriptionsTab() {
 
 // ── Licenses Tab ──────────────────────────────────────────────────────────────
 
+// `label` values are i18n keys, resolved with t() at render.
 const LICENSE_DURATIONS = [
-  { value: "30",     label: "30 days"  },
-  { value: "90",     label: "90 days"  },
-  { value: "180",    label: "180 days" },
-  { value: "365",    label: "365 days (1 year)"  },
-  { value: "730",    label: "730 days (2 years)" },
-  { value: "custom", label: "Custom…" },
+  { value: "30",     label: "superadmin.dur_30"  },
+  { value: "90",     label: "superadmin.dur_90"  },
+  { value: "180",    label: "superadmin.dur_180" },
+  { value: "365",    label: "superadmin.dur_365"  },
+  { value: "730",    label: "superadmin.dur_730" },
+  { value: "custom", label: "superadmin.dur_custom" },
 ];
 
 const LICENSE_PLANS = [
-  { value: "enterprise",   label: "Enterprise — all modules & features" },
-  { value: "professional", label: "Professional" },
-  { value: "starter",      label: "Starter" },
+  { value: "enterprise",   label: "superadmin.lic_plan_enterprise" },
+  { value: "professional", label: "superadmin.tier_professional" },
+  { value: "starter",      label: "superadmin.tier_starter" },
 ];
 
 function CopyKeyButton({ licenseKey, className }: { licenseKey: string; className?: string }) {
+  const { t } = useTranslation();
   const [copied, setCopied] = useState(false);
   function copy() {
     navigator.clipboard?.writeText(licenseKey).then(() => {
@@ -1567,13 +1600,15 @@ function CopyKeyButton({ licenseKey, className }: { licenseKey: string; classNam
   return (
     <button type="button" onClick={copy}
       className={className ?? "p-2 border border-gray-200 rounded-lg text-gray-500 hover:bg-gray-50 transition-colors flex-shrink-0"}
-      title="Copy license key">
+      title={t("superadmin.copy_key")}>
       {copied ? <CheckCircle className="w-4 h-4 text-green-600" /> : <Copy className="w-4 h-4" />}
     </button>
   );
 }
 
 function LicensesTab() {
+  const { t, i18n } = useTranslation();
+  const loc = i18n.language === "ar" ? "ar-u-nu-latn" : i18n.language === "fr" ? "fr-FR" : "en-US";
   const [licenses, setLicenses]   = useState<IssuedLicense[]>([]);
   const [loading, setLoading]     = useState(true);
   const [loadError, setLoadError] = useState("");
@@ -1593,14 +1628,14 @@ function LicensesTab() {
   useEffect(() => {
     superAdminLicensesApi.list()
       .then(data => { setLicenses(data); setLoading(false); })
-      .catch(() => { setLoadError("Failed to load issued licenses — the backend may not support licensing yet."); setLoading(false); });
+      .catch(() => { setLoadError(t("superadmin.err_load_licenses")); setLoading(false); });
   }, []);
 
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault();
     const days = duration === "custom" ? parseInt(customDays, 10) : parseInt(duration, 10);
     if (!Number.isInteger(days) || days < 1 || days > 3650) {
-      setFormError("Duration must be between 1 and 3650 days.");
+      setFormError(t("superadmin.err_duration"));
       return;
     }
     setSaving(true);
@@ -1621,7 +1656,7 @@ function LicensesTab() {
       setNotes("");
     } catch (err: unknown) {
       const detail = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
-      setFormError(typeof detail === "string" ? detail : "Failed to generate license key. Please try again.");
+      setFormError(typeof detail === "string" ? detail : t("superadmin.err_generate"));
     } finally {
       setSaving(false);
     }
@@ -1648,48 +1683,48 @@ function LicensesTab() {
       {/* Create form */}
       <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
         <h2 className="font-semibold text-gray-900 flex items-center gap-2 mb-4">
-          <KeyRound className="w-4 h-4 text-indigo-600" /> Issue New License
+          <KeyRound className="w-4 h-4 text-indigo-600" /> {t("superadmin.issue_license")}
         </h2>
         <form onSubmit={handleCreate} className="space-y-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">Customer name *</label>
+              <label className="block text-xs font-medium text-gray-700 mb-1">{t("superadmin.customer_name")} *</label>
               <input value={customerName} onChange={e => setCustomerName(e.target.value)} required placeholder="Acme Corp"
                 className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">Contact email *</label>
+              <label className="block text-xs font-medium text-gray-700 mb-1">{t("superadmin.contact_email")} *</label>
               <input type="email" value={contactEmail} onChange={e => setContactEmail(e.target.value)} required placeholder="it@acme.com"
                 className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
             </div>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">Plan *</label>
+              <label className="block text-xs font-medium text-gray-700 mb-1">{t("license.plan")} *</label>
               <select value={plan} onChange={e => setPlan(e.target.value)}
                 className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white">
-                {LICENSE_PLANS.map(p => <option key={p.value} value={p.value}>{p.label}</option>)}
+                {LICENSE_PLANS.map(p => <option key={p.value} value={p.value}>{t(p.label)}</option>)}
               </select>
-              <p className="text-xs text-gray-400 mt-1">Enterprise unlocks every module — the default for self-hosted clients.</p>
+              <p className="text-xs text-gray-400 mt-1">{t("superadmin.lic_plan_hint")}</p>
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">Duration *</label>
+              <label className="block text-xs font-medium text-gray-700 mb-1">{t("superadmin.duration")} *</label>
               <select value={duration} onChange={e => setDuration(e.target.value)}
                 className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white">
-                {LICENSE_DURATIONS.map(d => <option key={d.value} value={d.value}>{d.label}</option>)}
+                {LICENSE_DURATIONS.map(d => <option key={d.value} value={d.value}>{t(d.label)}</option>)}
               </select>
             </div>
             {duration === "custom" && (
               <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">Custom duration (days, 1–3650) *</label>
+                <label className="block text-xs font-medium text-gray-700 mb-1">{t("superadmin.custom_duration")} *</label>
                 <input type="number" min={1} max={3650} value={customDays} onChange={e => setCustomDays(e.target.value)} required
                   className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
               </div>
             )}
           </div>
           <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">Notes (optional)</label>
-            <input value={notes} onChange={e => setNotes(e.target.value)} placeholder="Internal reference, PO number…"
+            <label className="block text-xs font-medium text-gray-700 mb-1">{t("superadmin.notes")} ({t("superadmin.optional")})</label>
+            <input value={notes} onChange={e => setNotes(e.target.value)} placeholder={t("superadmin.notes_placeholder")}
               className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
           </div>
           {formError && (
@@ -1700,7 +1735,7 @@ function LicensesTab() {
           <button type="submit" disabled={saving}
             className="flex items-center gap-2 px-4 py-2.5 bg-indigo-600 text-white rounded-xl text-sm font-medium hover:bg-indigo-700 transition-colors disabled:opacity-50">
             {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
-            Generate License Key
+            {t("superadmin.generate_key")}
           </button>
         </form>
 
@@ -1709,11 +1744,11 @@ function LicensesTab() {
           <div className="mt-5 p-5 bg-green-50 border border-green-200 rounded-xl space-y-3">
             <div className="flex items-center gap-2 text-green-700 text-sm font-semibold flex-wrap">
               <CheckCircle className="w-4 h-4 flex-shrink-0" />
-              License issued for {created.customer_name}
-              <span className={`px-2 py-0.5 rounded-full text-xs font-semibold capitalize ${TIER_COLORS[created.plan] ?? "bg-gray-100 text-gray-600"}`}>
-                {created.plan}
+              {t("superadmin.license_issued_for", { customer: created.customer_name })}
+              <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${TIER_COLORS[created.plan] ?? "bg-gray-100 text-gray-600"}`}>
+                {t(`superadmin.tier_${created.plan}`, { defaultValue: created.plan })}
               </span>
-              — expires {new Date(created.expires_at).toLocaleDateString()}
+              — {t("superadmin.expires_on", { date: new Date(created.expires_at).toLocaleDateString(loc) })}
             </div>
             <div className="flex items-start gap-2">
               <code className="flex-1 px-3 py-2.5 bg-white border border-green-200 rounded-xl text-xs font-mono break-all max-h-32 overflow-y-auto">
@@ -1722,7 +1757,7 @@ function LicensesTab() {
               <CopyKeyButton licenseKey={created.license_key} />
             </div>
             <p className="text-xs text-green-700">
-              Send this key to the client ({created.contact_email}). Their administrator activates it on the installation's <span className="font-mono">/license</span> page.
+              {t("superadmin.send_key_pre", { email: created.contact_email })} <span className="font-mono">/license</span>{t("superadmin.send_key_post")}
             </p>
           </div>
         )}
@@ -1739,7 +1774,7 @@ function LicensesTab() {
             <table className="w-full text-sm">
               <thead className="bg-gray-50 border-b border-gray-200">
                 <tr>
-                  {["Customer", "Email", "Plan", "Issued", "Expires", "Status", "Key", ""].map(h => (
+                  {[t("license.customer"), t("auth.email"), t("license.plan"), t("superadmin.col_issued"), t("license.expires"), t("common.status"), t("superadmin.col_key"), ""].map(h => (
                     <th key={h} className="px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">{h}</th>
                   ))}
                 </tr>
@@ -1747,12 +1782,12 @@ function LicensesTab() {
               <tbody className="divide-y divide-gray-100 bg-white">
                 {licenses.length === 0 ? (
                   <tr>
-                    <td colSpan={8} className="px-5 py-10 text-center text-sm text-gray-400">No licenses issued yet.</td>
+                    <td colSpan={8} className="px-5 py-10 text-center text-sm text-gray-400">{t("superadmin.no_licenses")}</td>
                   </tr>
                 ) : licenses.map(l => {
                   const revoked = l.status === "revoked";
                   const expired = !revoked && new Date(l.expires_at) < new Date();
-                  const statusLabel = revoked ? "revoked" : expired ? "expired" : "active";
+                  const statusLabel = revoked ? t("superadmin.lic_status_revoked") : expired ? t("superadmin.lic_status_expired") : t("superadmin.sub_status_active");
                   const statusStyle = revoked ? "bg-gray-200 text-gray-600"
                     : expired ? "bg-red-100 text-red-700" : "bg-green-100 text-green-700";
                   return (
@@ -1760,12 +1795,12 @@ function LicensesTab() {
                       <td className="px-5 py-3.5 font-medium text-gray-900">{l.customer_name}</td>
                       <td className="px-5 py-3.5 text-gray-600">{l.contact_email}</td>
                       <td className="px-5 py-3.5">
-                        <span className={`px-2.5 py-1 rounded-full text-xs font-semibold capitalize ${TIER_COLORS[l.plan] ?? "bg-gray-100 text-gray-600"}`}>
-                          {l.plan}
+                        <span className={`px-2.5 py-1 rounded-full text-xs font-semibold ${TIER_COLORS[l.plan] ?? "bg-gray-100 text-gray-600"}`}>
+                          {t(`superadmin.tier_${l.plan}`, { defaultValue: l.plan })}
                         </span>
                       </td>
-                      <td className="px-5 py-3.5 text-gray-600">{new Date(l.issued_at).toLocaleDateString()}</td>
-                      <td className="px-5 py-3.5 text-gray-600">{new Date(l.expires_at).toLocaleDateString()}</td>
+                      <td className="px-5 py-3.5 text-gray-600">{new Date(l.issued_at).toLocaleDateString(loc)}</td>
+                      <td className="px-5 py-3.5 text-gray-600">{new Date(l.expires_at).toLocaleDateString(loc)}</td>
                       <td className="px-5 py-3.5">
                         <span className={`px-2.5 py-1 rounded-full text-xs font-semibold ${statusStyle}`}>
                           {statusLabel}
@@ -1785,7 +1820,7 @@ function LicensesTab() {
                               ? "border-green-200 text-green-700 hover:bg-green-50"
                               : "border-red-200 text-red-700 hover:bg-red-50"
                           }`}>
-                          {statusChangingId === l.id ? "…" : revoked ? "Reactivate" : "Revoke"}
+                          {statusChangingId === l.id ? "…" : revoked ? t("superadmin.reactivate") : t("superadmin.revoke")}
                         </button>
                       </td>
                     </tr>
@@ -1794,7 +1829,7 @@ function LicensesTab() {
               </tbody>
             </table>
           </div>
-          <p className="text-xs text-gray-400 mt-3">{licenses.length} license{licenses.length !== 1 ? "s" : ""} issued</p>
+          <p className="text-xs text-gray-400 mt-3">{t("superadmin.licenses_issued", { count: licenses.length })}</p>
         </div>
       )}
     </div>
@@ -1821,6 +1856,7 @@ function AdminChatPanel({
   ticketId,
   onChatUpdate,
 }: { ticketId: string; onChatUpdate: (s: ChatSessionData) => void }) {
+  const { t } = useTranslation();
   const [msgs, setMsgs] = useState<{ id: string; content: string; is_support: boolean; sender_name: string; created_at: string }[]>([]);
   const [input, setInput]   = useState("");
   const [wsReady, setWsReady] = useState(false);
@@ -1861,13 +1897,13 @@ function AdminChatPanel({
     <div className="flex flex-col h-72 border border-blue-200 rounded-xl overflow-hidden mt-4">
       <div className="flex items-center gap-2 px-3 py-2 bg-blue-600 text-white">
         <Video className="w-4 h-4" />
-        <span className="text-sm font-semibold flex-1">Live Chat</span>
-        {wsReady ? <span className="flex items-center gap-1 text-xs text-blue-200"><span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />Live</span>
-          : <span className="text-xs text-blue-300">Connecting…</span>}
-        <button onClick={end} className="p-1 rounded-lg hover:bg-blue-700" title="End chat"><PhoneOff className="w-4 h-4" /></button>
+        <span className="text-sm font-semibold flex-1">{t("superadmin.live_chat")}</span>
+        {wsReady ? <span className="flex items-center gap-1 text-xs text-blue-200"><span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />{t("superadmin.live")}</span>
+          : <span className="text-xs text-blue-300">{t("support.connecting")}</span>}
+        <button onClick={end} className="p-1 rounded-lg hover:bg-blue-700" title={t("superadmin.end_chat")} aria-label={t("superadmin.end_chat")}><PhoneOff className="w-4 h-4" /></button>
       </div>
       <div className="flex-1 overflow-y-auto p-3 space-y-2 bg-gray-50">
-        {msgs.length === 0 && <p className="text-center text-xs text-gray-400 mt-6">Chat started — write to the user.</p>}
+        {msgs.length === 0 && <p className="text-center text-xs text-gray-400 mt-6">{t("superadmin.chat_started")}</p>}
         {msgs.map(m => (
           <div key={m.id} className={`flex ${m.is_support ? "justify-end" : "justify-start"}`}>
             <div className={`max-w-xs px-3 py-2 rounded-2xl text-sm ${m.is_support ? "bg-blue-600 text-white" : "bg-white border border-gray-200"}`}>
@@ -1880,9 +1916,9 @@ function AdminChatPanel({
       </div>
       <div className="flex items-center gap-2 px-3 py-2 border-t border-gray-100 bg-white">
         <input value={input} onChange={e => setInput(e.target.value)} onKeyDown={e => e.key === "Enter" && send()}
-          placeholder="Reply to user…" disabled={!wsReady}
+          placeholder={t("superadmin.reply_placeholder")} disabled={!wsReady}
           className="flex-1 border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-        <button onClick={send} disabled={!wsReady || !input.trim()} className="p-2 bg-blue-600 text-white rounded-xl hover:bg-blue-700 disabled:opacity-50">
+        <button onClick={send} disabled={!wsReady || !input.trim()} aria-label={t("support.send")} className="p-2 bg-blue-600 text-white rounded-xl hover:bg-blue-700 disabled:opacity-50">
           <Send className="w-4 h-4" />
         </button>
       </div>
@@ -1893,6 +1929,8 @@ function AdminChatPanel({
 function SupportTicketDetail({ ticket: init, onBack, onUpdated }: {
   ticket: SupportTicketDetail; onBack: () => void; onUpdated: (t: SupportTicketDetail) => void;
 }) {
+  const { t, i18n } = useTranslation();
+  const loc = i18n.language === "ar" ? "ar-u-nu-latn" : i18n.language === "fr" ? "fr-FR" : "en-US";
   const [ticket, setTicket]   = useState(init);
   const [newMsg, setNewMsg]   = useState("");
   const [sending, setSending] = useState(false);
@@ -1903,7 +1941,7 @@ function SupportTicketDetail({ ticket: init, onBack, onUpdated }: {
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: "smooth" }); }, [ticket.messages]);
 
   async function reload() {
-    try { const t = await supportApi.get(ticket.id); setTicket(t); setChat(t.chat_session); onUpdated(t); } catch { /* ignore */ }
+    try { const tk = await supportApi.get(ticket.id); setTicket(tk); setChat(tk.chat_session); onUpdated(tk); } catch { /* ignore */ }
   }
 
   async function sendMsg(e: React.FormEvent) {
@@ -1918,7 +1956,7 @@ function SupportTicketDetail({ ticket: init, onBack, onUpdated }: {
   }
 
   async function updateStatus(s: TicketStatus) {
-    try { const t = await supportApi.update(ticket.id, { status: s }); setTicket(t); onUpdated(t); } catch { /* ignore */ }
+    try { const tk = await supportApi.update(ticket.id, { status: s }); setTicket(tk); onUpdated(tk); } catch { /* ignore */ }
   }
 
   async function startChat() {
@@ -1926,36 +1964,36 @@ function SupportTicketDetail({ ticket: init, onBack, onUpdated }: {
     try { const s = await supportApi.requestChat(ticket.id); setChat(s); } catch { /* ignore */ } finally { setReqChat(false); }
   }
 
-  const fmtDate = (iso: string) => new Date(iso).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
+  const fmtDate = (iso: string) => new Date(iso).toLocaleString(loc, { dateStyle: "medium", timeStyle: "short" });
 
   return (
     <div className="flex flex-col h-full">
       <div className="flex items-center gap-3 mb-4">
-        <button onClick={onBack} className="p-1.5 rounded-lg hover:bg-gray-100"><ChevronRight className="w-4 h-4 rotate-180 text-gray-500" /></button>
+        <button onClick={onBack} aria-label={t("common.back")} className="p-1.5 rounded-lg hover:bg-gray-100"><ChevronRight className="w-4 h-4 rotate-180 text-gray-500" /></button>
         <div className="flex-1">
           <h3 className="font-bold text-gray-900">{ticket.title}</h3>
-          <p className="text-xs text-gray-400">{ticket.user.first_name} {ticket.user.last_name} · {ticket.user.role} · {fmtDate(ticket.created_at)}</p>
+          <p className="text-xs text-gray-400">{ticket.user.first_name} {ticket.user.last_name} · {t(`company_admin.roles.${ticket.user.role}_label`, { defaultValue: ticket.user.role })} · {fmtDate(ticket.created_at)}</p>
         </div>
-        <button onClick={reload} className="p-1.5 rounded-lg hover:bg-gray-100" title="Refresh"><RefreshCw className="w-4 h-4 text-gray-400" /></button>
+        <button onClick={reload} className="p-1.5 rounded-lg hover:bg-gray-100" title={t("common.refresh")} aria-label={t("common.refresh")}><RefreshCw className="w-4 h-4 text-gray-400" /></button>
       </div>
 
       <div className="flex items-center gap-2 mb-4 flex-wrap">
-        <span className={`px-2 py-0.5 rounded-full text-xs font-semibold capitalize ${STATUS_STYLES[ticket.status]}`}>{ticket.status.replace("_"," ")}</span>
-        <span className={`px-2 py-0.5 rounded-full text-xs font-semibold capitalize ${PRIORITY_STYLES[ticket.priority]}`}>{ticket.priority}</span>
+        <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${STATUS_STYLES[ticket.status]}`}>{t(`support.statuses.${ticket.status}`, { defaultValue: ticket.status.replace("_"," ") })}</span>
+        <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${PRIORITY_STYLES[ticket.priority]}`}>{t(`support.priorities.${ticket.priority}`, { defaultValue: ticket.priority })}</span>
         <div className="flex-1" />
         {/* Status controls */}
         {(["open","in_progress","waiting_user","resolved","closed"] as TicketStatus[]).map(s => (
           s !== ticket.status && (
             <button key={s} onClick={() => updateStatus(s)}
-              className="px-2 py-1 text-xs font-semibold rounded-lg border border-gray-200 hover:bg-gray-100 capitalize">
-              → {s.replace("_"," ")}
+              className="px-2 py-1 text-xs font-semibold rounded-lg border border-gray-200 hover:bg-gray-100">
+              <span className="rtl:inline-block rtl:rotate-180">→</span> {t(`support.statuses.${s}`)}
             </button>
           )
         ))}
       </div>
 
       <div className="bg-gray-50 rounded-xl px-4 py-3 mb-4">
-        <p className="text-xs font-semibold text-gray-400 mb-1">Description</p>
+        <p className="text-xs font-semibold text-gray-400 mb-1">{t("common.description")}</p>
         <p className="text-sm text-gray-700 whitespace-pre-wrap">{ticket.description}</p>
       </div>
 
@@ -1964,25 +2002,25 @@ function SupportTicketDetail({ ticket: init, onBack, onUpdated }: {
         <button onClick={startChat} disabled={reqChat}
           className="flex items-center gap-2 px-4 py-2 mb-3 bg-blue-50 text-blue-700 border border-blue-200 rounded-xl text-sm font-semibold hover:bg-blue-100 disabled:opacity-60">
           {reqChat ? <Loader2 className="w-4 h-4 animate-spin" /> : <Video className="w-4 h-4" />}
-          Request Live Chat
+          {t("superadmin.request_live_chat")}
         </button>
       )}
       {chatSession && chatSession.status === "pending" && (
         <div className="flex items-center gap-2 bg-amber-50 border border-amber-200 rounded-xl px-4 py-2.5 mb-3">
           <Video className="w-4 h-4 text-amber-600" />
-          <p className="text-sm text-amber-800 font-semibold flex-1">Chat request sent — waiting for user to accept…</p>
+          <p className="text-sm text-amber-800 font-semibold flex-1">{t("superadmin.chat_request_sent")}</p>
         </div>
       )}
       {chatSession && chatSession.status === "active" && <AdminChatPanel ticketId={ticket.id} onChatUpdate={setChat} />}
 
       {/* Messages */}
       <div className="flex-1 overflow-y-auto space-y-3 pr-1 mb-3">
-        {ticket.messages.length === 0 && <p className="text-center text-sm text-gray-400 py-6">No messages yet.</p>}
+        {ticket.messages.length === 0 && <p className="text-center text-sm text-gray-400 py-6">{t("superadmin.no_messages")}</p>}
         {ticket.messages.map(msg => (
           <div key={msg.id} className={`flex ${msg.is_support ? "justify-end" : "justify-start"}`}>
             <div className={`max-w-[80%] rounded-2xl px-4 py-3 ${msg.is_support ? "bg-blue-600 text-white" : "bg-white border border-gray-200"}`}>
               <div className={`text-xs font-semibold mb-1 ${msg.is_support ? "text-blue-200" : "text-blue-600"}`}>
-                {msg.is_support ? "Support" : `${msg.sender.first_name} ${msg.sender.last_name}`} · {fmtDate(msg.created_at)}
+                {msg.is_support ? t("support.title") : `${msg.sender.first_name} ${msg.sender.last_name}`} · {fmtDate(msg.created_at)}
               </div>
               <p className="text-sm whitespace-pre-wrap">{msg.content}</p>
             </div>
@@ -1992,11 +2030,11 @@ function SupportTicketDetail({ ticket: init, onBack, onUpdated }: {
       </div>
 
       <form onSubmit={sendMsg} className="flex gap-2">
-        <input value={newMsg} onChange={e => setNewMsg(e.target.value)} placeholder="Reply to user…"
+        <input value={newMsg} onChange={e => setNewMsg(e.target.value)} placeholder={t("superadmin.reply_placeholder")}
           className="flex-1 border border-gray-200 rounded-xl px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
         <button type="submit" disabled={sending || !newMsg.trim()}
           className="px-4 py-2 bg-blue-600 text-white rounded-xl hover:bg-blue-700 disabled:opacity-50 flex items-center gap-1 text-sm font-semibold">
-          {sending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />} Reply
+          {sending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />} {t("superadmin.reply")}
         </button>
       </form>
     </div>
@@ -2012,6 +2050,8 @@ function SupportTab({
   onMarkRead: (id: string) => void;
   onTicketUpdate: (ticketId: string) => void;
 }) {
+  const { t, i18n } = useTranslation();
+  const loc = i18n.language === "ar" ? "ar-u-nu-latn" : i18n.language === "fr" ? "fr-FR" : "en-US";
   const [tickets, setTickets]   = useState<SupportTicketListItem[]>([]);
   const [selected, setSelected] = useState<SupportTicketDetail | null>(null);
   const [loading, setLoading]   = useState(true);
@@ -2029,8 +2069,8 @@ function SupportTab({
   // Refresh ticket list when a new message arrives (from parent WS)
   useEffect(() => {
     if (unread.size > 0) {
-      setTickets(prev => prev.map(t =>
-        unread.has(t.id) ? { ...t, message_count: t.message_count + 1 } : t
+      setTickets(prev => prev.map(tk =>
+        unread.has(tk.id) ? { ...tk, message_count: tk.message_count + 1 } : tk
       ));
     }
   }, [unread]);
@@ -2042,14 +2082,14 @@ function SupportTab({
     } catch { /* ignore */ }
   }
 
-  const fmtDate = (iso: string) => new Date(iso).toLocaleString(undefined, { dateStyle: "short", timeStyle: "short" });
+  const fmtDate = (iso: string) => new Date(iso).toLocaleString(loc, { dateStyle: "short", timeStyle: "short" });
   const totalUnread = unread.size;
 
   return (
     <div className="space-y-3">
       {totalUnread > 0 && (
         <div className="flex items-center gap-2 px-3 py-2 bg-blue-50 border border-blue-200 rounded-xl text-sm text-blue-700 font-semibold">
-          <Bell className="w-4 h-4" />{totalUnread} ticket{totalUnread > 1 ? "s" : ""} with new user replies
+          <Bell className="w-4 h-4" />{t("superadmin.tickets_new_replies", { count: totalUnread })}
         </div>
       )}
       <div className="grid lg:grid-cols-5 gap-6 h-[calc(100vh-200px)]">
@@ -2058,8 +2098,8 @@ function SupportTab({
           <div className="flex gap-1 flex-wrap">
             {["all","open","in_progress","waiting_user","resolved","closed"].map(s => (
               <button key={s} onClick={() => setStatus(s)}
-                className={`px-2.5 py-1 rounded-full text-xs font-semibold capitalize transition-colors ${statusFilter === s ? "bg-indigo-600 text-white" : "bg-white border border-gray-200 text-gray-600 hover:bg-gray-50"}`}>
-                {s.replace("_"," ")}
+                className={`px-2.5 py-1 rounded-full text-xs font-semibold transition-colors ${statusFilter === s ? "bg-indigo-600 text-white" : "bg-white border border-gray-200 text-gray-600 hover:bg-gray-50"}`}>
+                {t(`support.statuses.${s}`)}
               </button>
             ))}
           </div>
@@ -2067,30 +2107,30 @@ function SupportTab({
             <div className="flex justify-center py-12"><Loader2 className="w-6 h-6 animate-spin text-indigo-500" /></div>
           ) : tickets.length === 0 ? (
             <div className="text-center py-12 text-gray-400">
-              <Headphones className="w-8 h-8 mx-auto mb-2 opacity-30" /><p className="text-sm">No tickets</p>
+              <Headphones className="w-8 h-8 mx-auto mb-2 opacity-30" /><p className="text-sm">{t("superadmin.no_tickets")}</p>
             </div>
           ) : (
             <div className="overflow-y-auto space-y-2">
-              {tickets.map(t => {
-                const hasUnread = unread.has(t.id);
+              {tickets.map(tk => {
+                const hasUnread = unread.has(tk.id);
                 return (
-                  <button key={t.id} onClick={() => open(t.id)}
-                    className={`w-full text-left border rounded-xl px-4 py-3 hover:shadow-sm transition-all ${selected?.id === t.id ? "border-indigo-400 bg-indigo-50" : hasUnread ? "border-blue-300 bg-blue-50/50" : "border-gray-200 bg-white"}`}>
+                  <button key={tk.id} onClick={() => open(tk.id)}
+                    className={`w-full text-start border rounded-xl px-4 py-3 hover:shadow-sm transition-all ${selected?.id === tk.id ? "border-indigo-400 bg-indigo-50" : hasUnread ? "border-blue-300 bg-blue-50/50" : "border-gray-200 bg-white"}`}>
                     <div className="flex items-start justify-between gap-2 mb-1.5">
                       <div className="flex items-center gap-2 flex-1 min-w-0">
                         {hasUnread && <span className="flex-shrink-0 w-2 h-2 rounded-full bg-blue-500 animate-pulse" />}
-                        <p className="font-semibold text-gray-900 text-sm leading-snug truncate">{t.title}</p>
+                        <p className="font-semibold text-gray-900 text-sm leading-snug truncate">{tk.title}</p>
                       </div>
-                      <ChevronRight className="w-4 h-4 text-gray-400 flex-shrink-0" />
+                      <ChevronRight className="w-4 h-4 text-gray-400 flex-shrink-0 rtl:rotate-180" />
                     </div>
-                    <p className="text-xs text-gray-500 mb-1.5">{t.user.first_name} {t.user.last_name}</p>
+                    <p className="text-xs text-gray-500 mb-1.5">{tk.user.first_name} {tk.user.last_name}</p>
                     <div className="flex gap-1.5 flex-wrap">
-                      <span className={`px-1.5 py-0.5 rounded-full text-xs font-semibold capitalize ${STATUS_STYLES[t.status]}`}>{t.status.replace("_"," ")}</span>
-                      <span className={`px-1.5 py-0.5 rounded-full text-xs font-semibold capitalize ${PRIORITY_STYLES[t.priority]}`}>{t.priority}</span>
-                      {hasUnread && <span className="flex items-center gap-0.5 text-xs text-blue-600 font-semibold"><Bell className="w-3 h-3" />New reply</span>}
-                      {t.has_chat && <span className="flex items-center gap-0.5 text-xs text-blue-600 font-semibold"><Video className="w-3 h-3" />Chat</span>}
+                      <span className={`px-1.5 py-0.5 rounded-full text-xs font-semibold ${STATUS_STYLES[tk.status]}`}>{t(`support.statuses.${tk.status}`, { defaultValue: tk.status.replace("_"," ") })}</span>
+                      <span className={`px-1.5 py-0.5 rounded-full text-xs font-semibold ${PRIORITY_STYLES[tk.priority]}`}>{t(`support.priorities.${tk.priority}`, { defaultValue: tk.priority })}</span>
+                      {hasUnread && <span className="flex items-center gap-0.5 text-xs text-blue-600 font-semibold"><Bell className="w-3 h-3" />{t("support.new_reply")}</span>}
+                      {tk.has_chat && <span className="flex items-center gap-0.5 text-xs text-blue-600 font-semibold"><Video className="w-3 h-3" />{t("superadmin.chat")}</span>}
                     </div>
-                    <p className="text-xs text-gray-400 mt-1.5">{fmtDate(t.updated_at)} · {t.message_count} msgs</p>
+                    <p className="text-xs text-gray-400 mt-1.5">{fmtDate(tk.updated_at)} · {t("superadmin.msgs_count", { count: tk.message_count })}</p>
                   </button>
                 );
               })}
@@ -2103,16 +2143,16 @@ function SupportTab({
           {selected ? (
             <div className="bg-white border border-gray-200 rounded-2xl p-5 h-full flex flex-col">
               <SupportTicketDetail ticket={selected} onBack={() => setSelected(null)}
-                onUpdated={(t) => {
-                  setSelected(t);
-                  onTicketUpdate(t.id);
-                  setTickets(prev => prev.map(x => x.id === t.id ? { ...x, status: t.status, message_count: t.messages.length } : x));
+                onUpdated={(tk) => {
+                  setSelected(tk);
+                  onTicketUpdate(tk.id);
+                  setTickets(prev => prev.map(x => x.id === tk.id ? { ...x, status: tk.status, message_count: tk.messages.length } : x));
                 }} />
             </div>
           ) : (
             <div className="flex bg-gray-50 border border-gray-200 rounded-2xl h-full items-center justify-center text-gray-400 flex-col gap-3">
               <MessageSquare className="w-8 h-8 opacity-30" />
-              <p className="text-sm font-semibold">Select a ticket</p>
+              <p className="text-sm font-semibold">{t("superadmin.select_ticket")}</p>
             </div>
           )}
         </div>
@@ -2135,20 +2175,23 @@ const LOG_ACTION_STYLE: Record<string, { color: string; bg: string; icon: React.
 const LOG_ENTITY_TYPES = ["risk","vendor","audit","policy","compliance","asset","incident"];
 const LOG_ACTION_TYPES  = ["create","update","delete","login","export","import"];
 
-function timeAgoStr(dateStr: string): string {
+function timeAgoStr(dateStr: string, t: (key: string, opts?: Record<string, unknown>) => string, loc: string): string {
   const diff = Math.max(0, Date.now() - new Date(dateStr).getTime());
   const s = Math.floor(diff / 1000);
-  if (s < 60)  return "just now";
+  if (s < 60)  return t("activity_log.time_just_now");
   const m = Math.floor(s / 60);
-  if (m < 60)  return `${m}m ago`;
+  if (m < 60)  return t("settings.rel_minutes_ago", { count: m });
   const h = Math.floor(m / 60);
-  if (h < 24)  return `${h}h ago`;
+  if (h < 24)  return t("settings.rel_hours_ago", { count: h });
   const d = Math.floor(h / 24);
-  if (d < 30)  return `${d}d ago`;
-  return new Date(dateStr).toLocaleDateString();
+  if (d < 30)  return t("settings.rel_days_ago", { count: d });
+  return new Date(dateStr).toLocaleDateString(loc);
 }
 
 function ActivityLogTab() {
+  const { t, i18n } = useTranslation();
+  const loc = i18n.language === "ar" ? "ar-u-nu-latn" : i18n.language === "fr" ? "fr-FR" : "en-US";
+  const tStr = (key: string, opts?: Record<string, unknown>): string => { return String(t(key, opts as never)); };
   const [items, setItems] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -2191,9 +2234,9 @@ function ActivityLogTab() {
             onChange={e => setEntityFilter(e.target.value)}
             className="border border-gray-200 rounded-xl text-sm px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
-            <option value="">All Entities</option>
+            <option value="">{t("activity_log.all_entities")}</option>
             {LOG_ENTITY_TYPES.map(et => (
-              <option key={et} value={et}>{et.charAt(0).toUpperCase() + et.slice(1)}</option>
+              <option key={et} value={et}>{t(`superadmin.entity.${et}`)}</option>
             ))}
           </select>
           <select
@@ -2201,9 +2244,9 @@ function ActivityLogTab() {
             onChange={e => setActionFilter(e.target.value)}
             className="border border-gray-200 rounded-xl text-sm px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
-            <option value="">All Actions</option>
+            <option value="">{t("activity_log.all_actions")}</option>
             {LOG_ACTION_TYPES.map(a => (
-              <option key={a} value={a}>{a.charAt(0).toUpperCase() + a.slice(1)}</option>
+              <option key={a} value={a}>{t(`superadmin.action.${a}`)}</option>
             ))}
           </select>
         </div>
@@ -2218,7 +2261,7 @@ function ActivityLogTab() {
         ) : items.length === 0 ? (
           <div className="text-center py-16 text-gray-400">
             <Activity className="w-10 h-10 mx-auto mb-3 opacity-50" />
-            <p className="text-sm">No activity entries found</p>
+            <p className="text-sm">{t("activity_log.no_entries")}</p>
           </div>
         ) : (
           <div className="relative">
@@ -2235,20 +2278,20 @@ function ActivityLogTab() {
                     <div className="flex-1 min-w-0">
                       <div className="flex items-start justify-between gap-2">
                         <p className="text-sm text-gray-900">
-                          <span className="font-medium">{entry.user_email || "System"}</span>{" "}
+                          <span className="font-medium">{entry.user_email || t("activity_log.actor_system")}</span>{" "}
                           <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-semibold border ${style.bg} ${style.color}`}>
-                            {entry.action}
+                            {t(`activity_log.actions.${entry.action}`, { defaultValue: entry.action })}
                           </span>{" "}
                           {entry.entity_type && (
                             <span className="text-gray-500">
-                              {entry.entity_type}
+                              {t(`activity_log.entities.${entry.entity_type}`, { defaultValue: entry.entity_type })}
                               {entry.entity_name && <> &mdash; <span className="font-medium text-gray-700">{entry.entity_name}</span></>}
                             </span>
                           )}
                         </p>
                         <span className="flex items-center gap-1 text-xs text-gray-400 whitespace-nowrap">
                           <Clock className="w-3 h-3" />
-                          {entry.timestamp || entry.created_at ? timeAgoStr(entry.timestamp || entry.created_at) : "-"}
+                          {entry.timestamp || entry.created_at ? timeAgoStr(entry.timestamp || entry.created_at, tStr, loc) : "-"}
                         </span>
                       </div>
                       {entry.details && (
@@ -2271,7 +2314,7 @@ function ActivityLogTab() {
                   className="inline-flex items-center gap-2 text-sm text-blue-600 hover:text-blue-700 font-medium disabled:opacity-50"
                 >
                   {loadingMore && <Loader2 className="w-4 h-4 animate-spin" />}
-                  Load more
+                  {t("activity_log.load_more")}
                 </button>
               </div>
             )}
@@ -2286,19 +2329,21 @@ function ActivityLogTab() {
 
 type TabId = "users" | "access" | "frameworks" | "subscriptions" | "licenses" | "ai-access" | "support" | "logs" | "settings";
 
-const TABS: { id: TabId; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
-  { id: "users",         label: "Users",           icon: Users      },
-  { id: "access",        label: "Access Control",  icon: Shield     },
-  { id: "frameworks",    label: "Frameworks",      icon: BookOpen   },
-  { id: "subscriptions", label: "Subscriptions",   icon: CreditCard },
-  { id: "licenses",      label: "Licenses",        icon: KeyRound   },
-  { id: "ai-access",     label: "AI Requests",     icon: Sparkles   },
-  { id: "support",       label: "Support Tickets", icon: Headphones },
-  { id: "logs",          label: "Activity Logs",   icon: Activity   },
-  { id: "settings",      label: "Settings",        icon: Settings   },
+// `label` / `subtitle` are i18n keys, resolved with t() at render.
+const TABS: { id: TabId; label: string; subtitle: string; icon: React.ComponentType<{ className?: string }> }[] = [
+  { id: "users",         label: "superadmin.tab_users",         subtitle: "superadmin.sub_users",         icon: Users      },
+  { id: "access",        label: "superadmin.tab_access",        subtitle: "superadmin.sub_access",        icon: Shield     },
+  { id: "frameworks",    label: "superadmin.tab_frameworks",    subtitle: "superadmin.sub_frameworks",    icon: BookOpen   },
+  { id: "subscriptions", label: "superadmin.tab_subscriptions", subtitle: "superadmin.sub_subscriptions", icon: CreditCard },
+  { id: "licenses",      label: "superadmin.tab_licenses",      subtitle: "superadmin.sub_licenses",      icon: KeyRound   },
+  { id: "ai-access",     label: "superadmin.tab_ai_access",     subtitle: "superadmin.sub_ai_access",     icon: Sparkles   },
+  { id: "support",       label: "superadmin.tab_support",       subtitle: "superadmin.sub_support",       icon: Headphones },
+  { id: "logs",          label: "superadmin.tab_logs",          subtitle: "superadmin.sub_logs",          icon: Activity   },
+  { id: "settings",      label: "superadmin.tab_settings",      subtitle: "superadmin.sub_settings",      icon: Settings   },
 ];
 
 export default function SuperAdminPage() {
+  const { t } = useTranslation();
   const [activeTab, setActiveTab] = useState<TabId>("users");
   const [supportUnread, setSupportUnread] = useState<Set<string>>(new Set());
   const navigate = useNavigate();
@@ -2335,7 +2380,7 @@ export default function SuperAdminPage() {
             osc.start(ctx.currentTime); osc.stop(ctx.currentTime + 0.4);
           } catch { /* ignore */ }
           if (typeof Notification !== "undefined" && Notification.permission === "granted") {
-            new Notification("User replied to ticket", {
+            new Notification(t("superadmin.notif_user_replied"), {
               body: `"${data.ticket_title}" — ${data.sender_name}: ${data.content}`,
               icon: "/favicon.ico",
             });
@@ -2360,7 +2405,7 @@ export default function SuperAdminPage() {
       {/* Sidebar */}
       <aside className="w-56 flex flex-col bg-slate-900 shadow-2xl flex-shrink-0 fixed h-full" style={{ left: 0, right: "auto" }}>
         <div className="flex flex-col items-center px-4 py-5 border-b border-slate-700/60">
-          <img src="/logo-vertical.png" alt="GRCEye — Governance, Risk & Compliance Platform" className="h-24 w-auto object-contain bg-white/95 rounded-xl p-2" />
+          <img src="/logo-vertical.png" alt={t("auth_layout.logo_alt")} className="h-24 w-auto object-contain bg-white/95 rounded-xl p-2" />
         </div>
 
         <nav className="flex-1 px-3 py-4 space-y-1">
@@ -2393,7 +2438,7 @@ export default function SuperAdminPage() {
                     </span>
                   )}
                 </div>
-                {label}
+                {t(label)}
                 {isSupportWithBadge && (
                   <span className="ml-auto px-1.5 py-0.5 bg-red-500 text-white text-[10px] font-bold rounded-full">
                     {supportUnreadCount}
@@ -2418,7 +2463,7 @@ export default function SuperAdminPage() {
             className="flex items-center gap-3 px-3 py-2.5 w-full rounded-xl text-sm font-medium text-slate-400 hover:bg-red-500/10 hover:text-red-400 transition-all"
           >
             <LogOut className="w-4 h-4" />
-            Sign Out
+            {t("nav.sign_out")}
           </button>
         </div>
       </aside>
@@ -2428,23 +2473,15 @@ export default function SuperAdminPage() {
         {/* Header */}
         <header className="bg-white border-b border-gray-100 px-8 py-4 flex items-center justify-between sticky top-0 z-10">
           <div>
-            <h1 className="text-lg font-bold text-gray-900 capitalize">
-              {TABS.find(t => t.id === activeTab)?.label}
+            <h1 className="text-lg font-bold text-gray-900">
+              {(() => { const tab = TABS.find(x => x.id === activeTab); return tab ? t(tab.label) : ""; })()}
             </h1>
             <p className="text-xs text-gray-400 mt-0.5">
-              {activeTab === "users"      && "Manage users and roles across all tenants"}
-              {activeTab === "access"     && "Control which modules each tenant can access"}
-              {activeTab === "frameworks" && "Upload and manage compliance frameworks"}
-              {activeTab === "subscriptions" && "Manage tenant plans, statuses, and trial expiry dates"}
-              {activeTab === "licenses"     && "Generate and track license keys for self-hosted client installations"}
-              {activeTab === "ai-access"    && "Review and approve AI feature access requests"}
-              {activeTab === "support"      && "View and respond to user support tickets"}
-              {activeTab === "logs"         && "Full audit trail of all user actions across all tenants"}
-              {activeTab === "settings"     && "Platform configuration and credentials"}
+              {(() => { const tab = TABS.find(x => x.id === activeTab); return tab ? t(tab.subtitle) : ""; })()}
             </p>
           </div>
           <div className="flex items-center gap-2">
-            <span className="px-2.5 py-1 bg-red-50 text-red-600 text-xs font-semibold rounded-full border border-red-100">Super Admin</span>
+            <span className="px-2.5 py-1 bg-red-50 text-red-600 text-xs font-semibold rounded-full border border-red-100">{t("company_admin.roles.super_admin_label")}</span>
           </div>
         </header>
 

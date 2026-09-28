@@ -310,7 +310,7 @@ export default function OnboardingTour() {
                   type="button"
                   onClick={dismiss}
                   className="flex-shrink-0 w-6 h-6 rounded-full hover:bg-gray-100 flex items-center justify-center text-gray-400 hover:text-gray-600 transition-colors"
-                  aria-label="Close tour"
+                  aria-label={t("tour.close")}
                 >
                   <X className="w-3.5 h-3.5" />
                 </button>
@@ -342,7 +342,7 @@ export default function OnboardingTour() {
                       ? "w-2 h-2 bg-indigo-300"
                       : "w-2 h-2 bg-gray-200"
                   }`}
-                  aria-label={`Go to step ${i + 1}`}
+                  aria-label={t("tour.go_to_step", { step: i + 1 })}
                 />
               ))}
             </div>

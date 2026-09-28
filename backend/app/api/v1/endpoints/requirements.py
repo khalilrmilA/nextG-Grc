@@ -54,6 +54,7 @@ from app.api.v1.dependencies.auth import get_current_user, get_tenant_id
 # One-directional — governance.py does not import this module.
 from app.api.v1.endpoints.governance import _DOCUMENT_ELEVATED_ROLES
 from app.core.database import get_db
+from app.services.content_translation import get_display_language, localize_fields
 from app.models.control_applicability import APPLICABILITY_VALUES, ControlApplicability
 from app.models.framework import Framework, FrameworkControl
 from app.models.governance import GovernanceDocument, GovernanceDocumentAccess
@@ -94,6 +95,11 @@ class RequirementOut(BaseModel):
     status: str | None               # the silo's own lifecycle status, when it has one
     framework_id: str | None
     created_at: datetime | None
+    # Machine translation of a framework requirement / feed regulatory item for
+    # display (content_translations). Stored text in original_*.
+    translated: bool = False
+    original_title: str | None = None
+    original_description: str | None = None
     model_config = {"from_attributes": True}
 
 
@@ -478,6 +484,7 @@ async def list_requirements(
     scope: str = Query("selected", pattern="^(selected|all)$"),
     limit: int = Query(50, ge=1, le=500),
     offset: int = Query(0, ge=0),
+    lang: str = Depends(get_display_language),
 ):
     """The whole referential as one list — every source, one shape, one filter set.
 
@@ -505,8 +512,14 @@ async def list_requirements(
         .limit(limit)
         .offset(offset)
     )).all()
+    items = [RequirementOut.model_validate(dict(r._mapping)) for r in rows]
+    # Only platform/feed text ever has a cached translation (built-in requirements,
+    # feed regulatory items); policies and governance documents are tenant-authored.
+    await localize_fields(db, lang, [
+        (it, {"title": it.title, "description": it.description or ""})
+        for it in items if it.source_kind in ("framework_control", "regulatory_update")])
     return RequirementListOut(
-        items=[RequirementOut.model_validate(dict(r._mapping)) for r in rows],
+        items=items,
         total=total,
         limit=limit,
         offset=offset,

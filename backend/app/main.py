@@ -24,11 +24,20 @@ from app.services.risk_snapshot_scheduler import start_risk_snapshot_scheduler
 from app.services.license_phone_home import start_license_phone_home
 from app.services.notification_generator import start_notification_scheduler
 from app.services.trend_snapshot_scheduler import start_trend_snapshot_scheduler
+from app.services.translation_worker import start_translation_worker
 from app.core.activity_middleware import ActivityLogMiddleware
 from app.core.license_middleware import LicenseEnforcementMiddleware
 from app.core.security_middleware import SecurityHeadersMiddleware
 from app.core.rate_limit import limiter, rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
+from fastapi import HTTPException, Request
+from fastapi.exception_handlers import (
+    http_exception_handler as _default_http_exception_handler,
+    request_validation_exception_handler as _default_validation_exception_handler,
+)
+from fastapi.exceptions import RequestValidationError
+from starlette.exceptions import HTTPException as StarletteHTTPException
+from app.core.i18n_messages import request_language, translate_detail, translate_validation_errors
 
 logger = structlog.get_logger()
 
@@ -82,6 +91,11 @@ async def lifespan(application: FastAPI):
     # for risk only. Same claim-in-the-database design as the risk snapshotter, so
     # the 2 uvicorn workers cannot both write the same day's row.
     _trend_snapshot_task = asyncio.create_task(start_trend_snapshot_scheduler())
+    # Automatic EN/FR/AR machine translation of system content (threat catalogue and
+    # feeds, regulatory feed items, built-in frameworks and requirements, CVEs on
+    # demand). Bounded per cycle; only ONE of the uvicorn workers runs it (flock
+    # singleton, see translation_worker). Kill switch: ENABLE_TRANSLATION_WORKER=0.
+    _translation_task = asyncio.create_task(start_translation_worker())
 
     yield
 
@@ -99,7 +113,8 @@ async def lifespan(application: FastAPI):
     _file_retention_task.cancel()
     _notification_task.cancel()
     _trend_snapshot_task.cancel()
-    for _task in (_scheduler_task, _report_task, _cve_task, _vuln_scanner_task, _audit_recurrence_task, _archiving_task, _risk_snapshot_task, _license_phone_home_task, _file_retention_task, _notification_task, _trend_snapshot_task):
+    _translation_task.cancel()
+    for _task in (_scheduler_task, _report_task, _cve_task, _vuln_scanner_task, _audit_recurrence_task, _archiving_task, _risk_snapshot_task, _license_phone_home_task, _file_retention_task, _notification_task, _trend_snapshot_task, _translation_task):
         try:
             await _task
         except asyncio.CancelledError:
@@ -108,6 +123,34 @@ async def lifespan(application: FastAPI):
 
     logger.info("Shutting down GRC Platform")
     await engine.dispose()
+
+
+async def localized_http_exception_handler(request: Request, exc: StarletteHTTPException):
+    """FastAPI's default HTTPException handler, with the human text of ``detail``
+    localised to the request's UI language (Accept-Language: en | fr | ar).
+
+    Status code, headers and response shape are unchanged; in a dict ``detail`` only
+    ``message``/``detail``/``msg``/``hint`` are translated (``error``, ``feature``,
+    codes stay machine-readable). English requests and unknown strings go through
+    untouched, so English responses are byte-identical to FastAPI's default."""
+    lang = request_language(request)
+    if lang != "en":
+        detail = translate_detail(exc.detail, lang)
+        if detail != exc.detail:
+            exc = HTTPException(exc.status_code, detail=detail, headers=getattr(exc, "headers", None))
+    return await _default_http_exception_handler(request, exc)
+
+
+async def localized_validation_exception_handler(request: Request, exc: RequestValidationError):
+    """FastAPI's default 422 handler with each error ``msg`` localised by pydantic
+    error ``type`` (``loc``/``type``/``input``/``ctx`` untouched)."""
+    lang = request_language(request)
+    if lang != "en":
+        errors = exc.errors()
+        localized = translate_validation_errors(list(errors), lang)
+        if localized != list(errors):
+            exc = RequestValidationError(localized, body=getattr(exc, "body", None))
+    return await _default_validation_exception_handler(request, exc)
 
 
 def create_application() -> FastAPI:
@@ -125,6 +168,9 @@ def create_application() -> FastAPI:
     # Rate limiter (slowapi) — register before routes so route decorators see it.
     application.state.limiter = limiter
     application.add_exception_handler(RateLimitExceeded, rate_limit_exceeded_handler)
+    # Localised error text (fr/ar) for HTTPException details and 422 validation messages.
+    application.add_exception_handler(StarletteHTTPException, localized_http_exception_handler)
+    application.add_exception_handler(RequestValidationError, localized_validation_exception_handler)
 
     # Middleware — CORSMiddleware must be added last (outermost layer)
     application.add_middleware(GZipMiddleware, minimum_size=1000)

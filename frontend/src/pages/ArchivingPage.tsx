@@ -12,6 +12,14 @@ import { archivingApi } from "@/api/endpoints";
 // objects wrap — never a bare fetch/axios.
 import { apiClient } from "@/api/client";
 import type { ArchiveRecord, ArchiveContent, ArchivedEvidence } from "@/types";
+import appI18n from "@/i18n";
+
+/** Intl locale for the current UI language (Arabic keeps Latin digits). */
+function uiLocale(): string {
+  const l = appI18n.language || "en";
+  return l.startsWith("fr") ? "fr-FR" : l.startsWith("ar") ? "ar-u-nu-latn" : "en-US";
+}
+
 
 const ENTITY_TYPES = ["risk", "policy", "audit", "control", "assessment", "document", "vulnerability"];
 
@@ -180,7 +188,7 @@ function ArchiveDetailDrawer({ archiveId, onClose }: { archiveId: string; onClos
                 </div>
                 <div>
                   <p className="text-xs text-gray-400">{t("archiving.archived_on")}</p>
-                  <p className="text-sm text-gray-900">{record.archived_at ? new Date(record.archived_at).toLocaleString() : "—"}</p>
+                  <p className="text-sm text-gray-900">{record.archived_at ? new Date(record.archived_at).toLocaleString(uiLocale()) : "—"}</p>
                 </div>
                 <div>
                   <p className="text-xs text-gray-400">{t("archiving.archived_by")}</p>
@@ -189,7 +197,7 @@ function ArchiveDetailDrawer({ archiveId, onClose }: { archiveId: string; onClos
                 <div>
                   <p className="text-xs text-gray-400">{t("archiving.retention_until")}</p>
                   <p className="text-sm text-gray-900">
-                    {record.retention_until ? new Date(record.retention_until).toLocaleDateString() : t("archiving.indefinite")}
+                    {record.retention_until ? new Date(record.retention_until).toLocaleDateString(uiLocale()) : t("archiving.indefinite")}
                   </p>
                 </div>
                 <div className="col-span-2">
@@ -602,8 +610,8 @@ export default function ArchivingPage() {
                     <td className="px-6 py-4"><span className="inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold border bg-gray-100 text-gray-600 capitalize">{it.entity_type}</span></td>
                     <td className="px-6 py-4 text-gray-900 font-medium max-w-xs truncate" title={archivedName(it)}>{archivedName(it)}</td>
                     <td className="px-6 py-4 text-gray-600 max-w-xs truncate" title={it.reason ?? ""}>{it.reason || "—"}</td>
-                    <td className="px-6 py-4 text-gray-500">{it.archived_at ? new Date(it.archived_at).toLocaleDateString() : "—"}</td>
-                    <td className="px-6 py-4 text-gray-500">{it.retention_until ? new Date(it.retention_until).toLocaleDateString() : t("archiving.indefinite", "indefinite")}</td>
+                    <td className="px-6 py-4 text-gray-500">{it.archived_at ? new Date(it.archived_at).toLocaleDateString(uiLocale()) : "—"}</td>
+                    <td className="px-6 py-4 text-gray-500">{it.retention_until ? new Date(it.retention_until).toLocaleDateString(uiLocale()) : t("archiving.indefinite", "indefinite")}</td>
                     <td className="px-6 py-4 text-right">
                       <button
                         onClick={() => setDetailId(it.id)}
@@ -733,8 +741,8 @@ export default function ArchivingPage() {
                       )}
                     </td>
                     <td className="px-6 py-4 text-gray-500">{r.retention_days ?? "—"}</td>
-                    <td className="px-6 py-4 text-gray-500">{r.next_run_at ? new Date(r.next_run_at).toLocaleString() : "—"}</td>
-                    <td className="px-6 py-4 text-gray-500">{r.last_run_at ? new Date(r.last_run_at).toLocaleString() : t("archiving.rules.never", "Never")}</td>
+                    <td className="px-6 py-4 text-gray-500">{r.next_run_at ? new Date(r.next_run_at).toLocaleString(uiLocale()) : "—"}</td>
+                    <td className="px-6 py-4 text-gray-500">{r.last_run_at ? new Date(r.last_run_at).toLocaleString(uiLocale()) : t("archiving.rules.never", "Never")}</td>
                     <td className="px-6 py-4 text-gray-500 max-w-xs truncate" title={r.last_result || ""}>{r.last_result || "—"}</td>
                     <td className="px-6 py-4 text-right">
                       <button onClick={() => deleteRule(r.id)} disabled={ruleDeleteBusy === r.id} className="text-gray-400 hover:text-red-600 disabled:opacity-50" aria-label={t("archiving.rules.delete", "Delete rule")} title={t("archiving.rules.delete", "Delete rule")}>

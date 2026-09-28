@@ -65,6 +65,8 @@ class AdminUserResponse(BaseModel):
     # with a default so CreateUserAdminResponse, which inherits this model, is
     # unaffected.
     expires_at: datetime | None = None
+    # Per-user Elite Pack grant (see User.elite_access).
+    elite_access: bool = False
 
     model_config = {"from_attributes": True}
 
@@ -72,6 +74,9 @@ class AdminUserResponse(BaseModel):
 class UpdateUserRequest(BaseModel):
     is_active: bool | None = None
     role: str | None = None
+    # Grant or revoke the Elite Pack for this one user, independent of the
+    # tenant's subscription tier.
+    elite_access: bool | None = None
     # The platform-side way back from an expired account. login() refuses one
     # (auth.py), the tenant console refuses to touch a super_admin at all
     # (users.py update_user), and nothing else in the application can clear the
@@ -153,6 +158,7 @@ async def list_all_users(
             role=u.role.value,
             is_active=u.is_active,
             expires_at=u.expires_at,
+            elite_access=bool(u.elite_access),
             tenant_id=u.tenant_id,
             tenant_name=tenant_name,
             created_at=u.created_at.isoformat() if u.created_at else "",
@@ -235,7 +241,7 @@ async def update_user(
     db: Annotated[AsyncSession, Depends(get_db)],
     _: Annotated[User, Depends(_require_super_admin())],
 ):
-    """Toggle active status or change role for any user."""
+    """Toggle active status, change role, or grant/revoke Elite for any user."""
     result = await db.execute(select(User).where(User.id == user_id))
     user = result.scalar_one_or_none()
     if not user:
@@ -252,6 +258,8 @@ async def update_user(
         user.is_active = body.is_active
     if "expires_at" in body.model_fields_set:
         user.expires_at = body.expires_at
+    if body.elite_access is not None:
+        user.elite_access = body.elite_access
     if body.role is not None:
         try:
             new_role = UserRole(body.role)
@@ -278,6 +286,7 @@ async def update_user(
         role=user.role.value,
         is_active=user.is_active,
         expires_at=user.expires_at,
+        elite_access=bool(user.elite_access),
         tenant_id=user.tenant_id,
         tenant_name=tenant.name if tenant else "",
         created_at=user.created_at.isoformat() if user.created_at else "",
@@ -765,7 +774,7 @@ class SubscriptionAdminResponse(BaseModel):
 
 
 class UpdateSubscriptionRequest(BaseModel):
-    tier: str | None = None          # starter | professional | enterprise
+    tier: str | None = None          # starter | professional | enterprise | elite
     status: str | None = None        # trialing | active | past_due | canceled | paused
     trial_ends_at: str | None = None # ISO datetime string, or null to clear
 

@@ -228,6 +228,13 @@ async def start_threat_scheduler() -> None:
             # It files watch items, not pending threats — the old wording
             # survived the move to the watch table and misreads the log.
             logger.info("Threat scheduler: filed %d new threat-watch item(s)", created)
+            if created:
+                # Machine translation of what just arrived is the job of the
+                # translation worker (singleton across uvicorn workers); wake it
+                # if it runs in this process, otherwise its next cycle finds the
+                # new rows. Rows already translated are reused by text hash.
+                from app.services.translation_worker import nudge
+                nudge()
         except asyncio.CancelledError:
             raise
         except Exception as exc:   # noqa: BLE001 — never let the loop die

@@ -73,6 +73,11 @@ class User(Base):
     is_external: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="0")
     external_org: Mapped[str | None] = mapped_column(String(200), nullable=True)
 
+    # Per-user Elite Pack grant, set by a super admin. Unlocks every Elite
+    # feature for this one user even when the tenant's own pack is lower;
+    # honored by require_feature and the entitlements endpoint.
+    elite_access: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="0")
+
     # Tenant-defined roles held by this user (see models/access_governance.py).
     # Expanded to their built-in roles by get_effective_roles, so custom roles
     # need no change to any require_roles check.

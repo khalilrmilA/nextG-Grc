@@ -42,14 +42,14 @@ class ErrorBoundary extends React.Component<
     if (this.state.error) {
       return (
         <div style={{ padding: 40, fontFamily: "monospace", background: "#1e1e2e", color: "#ff5555", minHeight: "100vh" }}>
-          <h2 style={{ color: "#ff79c6" }}>React Render Error</h2>
+          <h2 style={{ color: "#ff79c6" }}>{i18n.t("main.render_error")}</h2>
           <pre style={{ whiteSpace: "pre-wrap", fontSize: 13 }}>{this.state.error.message}</pre>
           <pre style={{ whiteSpace: "pre-wrap", fontSize: 11, color: "#888", marginTop: 12 }}>{this.state.error.stack}</pre>
           <button
             onClick={() => { this.setState({ error: null }); }}
             style={{ marginTop: 20, padding: "8px 16px", background: "#6272a4", color: "#fff", border: "none", borderRadius: 6, cursor: "pointer" }}
           >
-            Retry
+            {i18n.t("common.retry")}
           </button>
         </div>
       );

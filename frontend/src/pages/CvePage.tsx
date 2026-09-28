@@ -4,6 +4,7 @@ import {
   ShieldCheck, Wrench, ExternalLink, Bug, CalendarDays, Flame,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import { AutoTranslatedBadge, TranslatedText, pickText } from "@/components/common/AutoTranslatedBadge";
 import { cveApi, assetsApi } from "@/api/endpoints";
 import { MultiSelect, type MultiSelectOption } from "@/components/common/MultiSelect";
 
@@ -82,7 +83,7 @@ function CveSheet({
   onClose: () => void;
   onSaved: (updated: any) => void;
 }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const [cve, setCve] = useState<any | null>(null);
   const [loading, setLoading] = useState(true);
   const [relevance, setRelevance] = useState("to_watch");
@@ -90,6 +91,8 @@ function CveSheet({
   const [linkedAssetIds, setLinkedAssetIds] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  // NVD text is machine-translated into the UI language on demand by the API.
+  const [showOriginal, setShowOriginal] = useState(false);
 
   useEffect(() => {
     let alive = true;
@@ -123,6 +126,12 @@ function CveSheet({
   }
 
   const decoded = decodeVector(cve?.cvss_vector, (k, fb) => String(t(k as never, fb)));
+  // NVD reference tags ("Patch", "Vendor Advisory", …) are feed data; the common
+  // ones get a translated label, anything else is shown as NVD wrote it.
+  const refTagLabel = (tag: string) => {
+    const k = `cve_ui.ref_tags.${String(tag).toLowerCase().replace(/[^a-z0-9]+/g, "_")}`;
+    return i18n.exists(k) ? String(t(k as never)) : tag;
+  };
   const refs: any[] = cve?.references || [];
 
   return (
@@ -166,14 +175,17 @@ function CveSheet({
                   {cve.kev_due_date && (
                     <p className="text-red-700">{t("cve.kev_due", "Remediation due {{date}}", { date: cve.kev_due_date })}</p>
                   )}
-                  {cve.kev_action && <p className="text-red-700 mt-1">{cve.kev_action}</p>}
+                  {cve.kev_action && <p className="text-red-700 mt-1">{pickText(cve, "kev_action", showOriginal)}</p>}
                 </div>
               </div>
             )}
 
             <section>
               <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-400 mb-2">{t("cve.col_desc", "Description")}</h3>
-              <p className="text-sm text-gray-700 leading-relaxed">{cve?.description || "—"}</p>
+              <p className="text-sm text-gray-700 leading-relaxed">{pickText(cve, "description", showOriginal) || "—"}</p>
+              {cve?.translated && (
+                <AutoTranslatedBadge className="mt-2" showingOriginal={showOriginal} onToggle={() => setShowOriginal(v => !v)} />
+              )}
             </section>
 
             {decoded.length > 0 && (
@@ -272,7 +284,7 @@ function CveSheet({
                               REF_TAG_STYLE[String(tag).toLowerCase()] || "bg-gray-100 text-gray-500 border-gray-200"
                             }`}
                           >
-                            {tag}
+                            {refTagLabel(tag)}
                           </span>
                         ))}
                       </div>
@@ -332,7 +344,7 @@ function CveSheet({
 }
 
 export default function CvePage() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const [items, setItems] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [q, setQ] = useState("");
@@ -391,7 +403,8 @@ export default function CvePage() {
       setHasMore(d.length === PAGE_SIZE);
     } catch { /* keep what we have */ } finally { setLoadingMore(false); }
   }
-  useEffect(() => { load(); /* eslint-disable-next-line */ }, [relFilter, minCvss, kevOnly]);
+  // i18n.language: descriptions come back in the UI language (translated on demand).
+  useEffect(() => { load(); /* eslint-disable-next-line */ }, [relFilter, minCvss, kevOnly, i18n.language]);
 
   useEffect(() => {
     assetsApi.options().then((d: any) => {
@@ -499,9 +512,9 @@ export default function CvePage() {
         />
         <select value={minCvss} onChange={(e) => { setMinCvss(e.target.value); }} className={inputCls}>
           <option value="">{t("cve.any_cvss", "Any CVSS")}</option>
-          <option value="9">≥ 9.0 (critical)</option>
-          <option value="7">≥ 7.0 (high+)</option>
-          <option value="4">≥ 4.0 (medium+)</option>
+          <option value="9">{t("cve_ui.cvss_min_9", "≥ 9.0 (critical)")}</option>
+          <option value="7">{t("cve_ui.cvss_min_7", "≥ 7.0 (high+)")}</option>
+          <option value="4">{t("cve_ui.cvss_min_4", "≥ 4.0 (medium+)")}</option>
         </select>
         <button
           type="button"
@@ -575,7 +588,7 @@ export default function CvePage() {
                           </div>
                         )}
                       </td>
-                      <td className="px-6 py-4 text-gray-600 max-w-md"><span className="line-clamp-2">{c.description || "—"}</span></td>
+                      <td className="px-6 py-4 text-gray-600 max-w-md"><TranslatedText item={c} field="description" className="line-clamp-2">{c.description || "—"}</TranslatedText></td>
                       <td className="px-6 py-4 text-xs text-gray-500 whitespace-nowrap">{fmtDate(c.published_at)}</td>
                       <td className="px-6 py-4">
                         <select

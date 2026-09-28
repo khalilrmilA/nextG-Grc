@@ -28,7 +28,7 @@ export default function MfaPanel() {
   async function startEnroll() {
     setBusy(true); setError("");
     try { setEnroll(await mfaApi.enroll()); }
-    catch (e: any) { setError(e?.response?.data?.detail || "Could not start enrollment"); }
+    catch (e: any) { setError(e?.response?.data?.detail || t("mfa.err_enroll")); }
     finally { setBusy(false); }
   }
   async function verify(e: React.FormEvent) {
@@ -38,7 +38,7 @@ export default function MfaPanel() {
       await mfaApi.verify(code.trim());
       setEnroll(null); setCode("");
       loadStatus();
-    } catch (err: any) { setError(err?.response?.data?.detail || "Invalid code"); }
+    } catch (err: any) { setError(err?.response?.data?.detail || t("mfa.invalid_code")); }
     finally { setBusy(false); }
   }
   // Turning a confirmed second factor off takes a current code from it.

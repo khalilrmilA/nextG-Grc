@@ -455,6 +455,10 @@ async def vendor_send_message(
                         entity_type="collab_message",
                         link=f"/vendors/collaboration/{_collab_id}",
                         severity="info",
+                        title_key="notifications.collab_vendor_message.title",
+                        message_key="notifications.collab_vendor_message.message",
+                        params={"sender": body.sender_name, "vendor": _vendor_name,
+                                "preview": preview},
                     )
             await db.commit()
     except Exception:  # noqa: BLE001 — never block the message response on a notification failure

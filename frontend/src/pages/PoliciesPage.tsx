@@ -21,6 +21,25 @@ const CAT_COLORS: Record<string, string> = {
 };
 
 const CATEGORY_OPTIONS = ["Security", "HR", "Data Governance", "Vendor Risk", "BCP / DR", "Legal & Compliance", "Privacy", "Physical Security"];
+/** Category VALUES are stored as-is on the policy (English); only their display label is translated. */
+const CATEGORY_LABEL_KEYS: Record<string, string> = {
+  Security:             "policies_ui.categories.security",
+  HR:                   "policies_ui.categories.hr",
+  "Data Governance":    "policies_ui.categories.data_governance",
+  "Vendor Risk":        "policies_ui.categories.vendor_risk",
+  "BCP / DR":           "policies_ui.categories.bcp_dr",
+  "Legal & Compliance": "policies_ui.categories.legal_compliance",
+  Privacy:              "policies_ui.categories.privacy",
+  "Physical Security":  "policies_ui.categories.physical_security",
+};
+function categoryLabel(cat: string | null | undefined): string {
+  if (!cat) return "—";
+  const key = CATEGORY_LABEL_KEYS[cat];
+  return key ? i18n.t(key) : cat;
+}
+/** Display locale for dates: Latin digits in Arabic, French day-month order in French. */
+const dateLocale = (lang: string) => (lang?.startsWith("fr") ? "fr-FR" : lang?.startsWith("ar") ? "ar-u-nu-latn" : "en-US");
+
 const STATUS_KEYS = ["draft", "in_review", "approved", "published", "retired"];
 const REVIEW_FREQUENCIES = [
   { value: 6,  labelKey: "policies.review_6mo"  },
@@ -102,7 +121,7 @@ function NewPolicyModal({ onClose, onSaved }: { readonly onClose: () => void; re
               <label htmlFor="pol-category" className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">{t("policies.category_label")}</label>
               <select id="pol-category" className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
                 value={form.category} onChange={e => setForm(f => ({ ...f, category: e.target.value }))}>
-                {CATEGORY_OPTIONS.map(o => <option key={o} value={o}>{o}</option>)}
+                {CATEGORY_OPTIONS.map(o => <option key={o} value={o}>{categoryLabel(o)}</option>)}
               </select>
             </div>
             <div>
@@ -585,7 +604,7 @@ function PolicyDetailModal({ policy, onClose, onStatusChange, onDelete, onUpdate
               <div>
                 <h2 className="font-semibold text-gray-900 leading-snug">{policy.title}</h2>
                 <div className="flex items-center gap-2 mt-1.5 flex-wrap">
-                  <span className={`text-xs font-medium px-2 py-0.5 rounded-md ${CAT_COLORS[policy.category ?? ""] ?? "bg-gray-50 text-gray-600"}`}>{policy.category}</span>
+                  <span className={`text-xs font-medium px-2 py-0.5 rounded-md ${CAT_COLORS[policy.category ?? ""] ?? "bg-gray-50 text-gray-600"}`}>{categoryLabel(policy.category)}</span>
                   <span className={`inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full ${s.color}`}>
                     <StatusIcon className="w-3 h-3" />{s.label}
                   </span>
@@ -670,7 +689,7 @@ function PolicyDetailModal({ policy, onClose, onStatusChange, onDelete, onUpdate
                 </div>
                 <div>
                   <p className="text-xs text-gray-400 flex items-center gap-1"><Link2 className="w-3 h-3" />{t("policies.review_cycle")}</p>
-                  <p className="text-sm font-medium text-gray-700 mt-0.5">{policy.review_frequency_months} months</p>
+                  <p className="text-sm font-medium text-gray-700 mt-0.5">{t("policies_ui.review_months", { n: policy.review_frequency_months })}</p>
                 </div>
                 <div>
                   <p className="text-xs text-gray-400 flex items-center gap-1"><Calendar className="w-3 h-3" />{t("policies.effective_date_label", "Effective Date")}</p>
@@ -840,7 +859,7 @@ function PolicyDetailModal({ policy, onClose, onStatusChange, onDelete, onUpdate
                         )}
                       </div>
                       <span className="text-xs text-gray-400 flex-shrink-0 ml-2">
-                        {new Date(v.created_at).toLocaleDateString()}
+                        {new Date(v.created_at).toLocaleDateString(dateLocale(i18n.language))}
                       </span>
                     </button>
                     {expandedVer === v.id && (
@@ -949,7 +968,7 @@ function PolicyDetailModal({ policy, onClose, onStatusChange, onDelete, onUpdate
                           </p>
                           {a.due_date && (
                             <p className="text-xs text-gray-400 mt-0.5">
-                              {t("policies.attest_due_date")}: {new Date(a.due_date).toLocaleDateString()}
+                              {t("policies.attest_due_date")}: {new Date(a.due_date).toLocaleDateString(dateLocale(i18n.language))}
                             </p>
                           )}
                         </div>
@@ -968,7 +987,7 @@ function PolicyDetailModal({ policy, onClose, onStatusChange, onDelete, onUpdate
                             </span>
                           )}
                           {a.acknowledged_at && (
-                            <span className="text-xs text-gray-400">{new Date(a.acknowledged_at).toLocaleDateString()}</span>
+                            <span className="text-xs text-gray-400">{new Date(a.acknowledged_at).toLocaleDateString(dateLocale(i18n.language))}</span>
                           )}
                         </div>
                       </div>
@@ -1185,7 +1204,7 @@ export default function PoliciesPage() {
                     </td>
                     <td className="px-4 py-4">
                       <span className={`text-xs font-medium px-2 py-0.5 rounded-md ${CAT_COLORS[p.category ?? ""] ?? "bg-gray-50 text-gray-600"}`}>
-                        {p.category ?? "—"}
+                        {categoryLabel(p.category)}
                       </span>
                     </td>
                     <td className="px-4 py-4">

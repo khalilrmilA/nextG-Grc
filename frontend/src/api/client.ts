@@ -143,7 +143,7 @@ class ApiClient {
         const isAuthEndpoint = (config.url ?? "").includes("/auth/");
         if (this.isViewerRole() && writeMethods.includes(method) && !isAuthEndpoint) {
           window.dispatchEvent(new CustomEvent("demo-block"));
-          const err = new Error("You have read-only access. Contact your administrator to request additional permissions.") as Error & { isDemoBlock: boolean };
+          const err = new Error(String(i18n.t("api_client.read_only", { defaultValue: "You have read-only access. Contact your administrator to request additional permissions." }))) as Error & { isDemoBlock: boolean };
           err.isDemoBlock = true;
           return Promise.reject(err);
         }

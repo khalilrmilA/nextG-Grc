@@ -23,6 +23,8 @@ from app.models.audit import Audit
 from app.models.policy import Policy
 from app.models.vendor import Vendor
 from app.services import email_service
+from app.services.notification_i18n import render_pair
+from app.services.user_language import recipient_language
 
 logger = logging.getLogger(__name__)
 
@@ -143,6 +145,7 @@ def notify_risk_created(self, risk_id: str, created_by_user_id: str):
                         severity=risk.severity,
                         org=recipient.email.split("@")[-1],
                         risk_url=f"{settings.FRONTEND_URL}/risks",
+                        lang=await recipient_language(db, recipient.id, tenant_id=recipient.tenant_id),
                     )
 
             await db.commit()
@@ -183,6 +186,7 @@ def notify_audit_assigned(self, audit_id: str, assignee_user_id: str):
                     due_date=due,
                     org=user.email.split("@")[-1],
                     audit_url=f"{settings.FRONTEND_URL}/audits",
+                    lang=await recipient_language(db, user.id, tenant_id=user.tenant_id),
                 )
 
             await db.commit()
@@ -237,6 +241,7 @@ def notify_compliance_score_drop(
                         new_score=new_score,
                         org=user.email.split("@")[-1],
                         url=f"{settings.FRONTEND_URL}/compliance/{assessment_id}",
+                        lang=await recipient_language(db, user.id, tenant_id=user.tenant_id),
                     )
 
             await db.commit()
@@ -314,6 +319,7 @@ def send_policy_review_reminders():
                             policy_name=policy.title,
                             due_date=due_str,
                             policy_url=f"{settings.FRONTEND_URL}/policies",
+                            lang=await recipient_language(db, user.id, tenant_id=user.tenant_id),
                         )
 
             await db.commit()
@@ -399,6 +405,7 @@ def send_weekly_digest():
                     open_findings=open_findings,
                     policies_due=policies_due,
                     dashboard_url=f"{settings.FRONTEND_URL}/dashboard",
+                    lang=await recipient_language(db, admin.id, tenant_id=admin.tenant_id),
                 )
 
             await db.commit()
@@ -432,11 +439,14 @@ def notify_framework_new(self, framework_id: str, framework_name: str):
                     )
 
                 if await _user_wants(db, user.id, ntype, NotificationChannel.EMAIL):
+                    lang = await recipient_language(db, user.id, tenant_id=user.tenant_id)
+                    subj, text = render_pair("notifications.framework_new", lang, {"framework": framework_name}, title, message)
                     await email_service.send_notification_email(
                         to_email=user.email,
-                        subject=title,
-                        body=message,
+                        subject=subj,
+                        body=text,
                         action_url=f"{settings.FRONTEND_URL}/frameworks",
+                        lang=lang,
                     )
 
             await db.commit()
@@ -472,11 +482,14 @@ def notify_framework_updated(self, framework_id: str, framework_name: str):
                     )
 
                 if await _user_wants(db, user.id, ntype, NotificationChannel.EMAIL):
+                    lang = await recipient_language(db, user.id, tenant_id=user.tenant_id)
+                    subj, text = render_pair("notifications.framework_updated", lang, {"framework": framework_name}, title, message)
                     await email_service.send_notification_email(
                         to_email=user.email,
-                        subject=title,
-                        body=message,
+                        subject=subj,
+                        body=text,
                         action_url=f"{settings.FRONTEND_URL}/frameworks",
+                        lang=lang,
                     )
 
             await db.commit()
@@ -511,11 +524,14 @@ def notify_ai_access_approved(self, user_id: str, user_email: str):
                 )
 
             if await _user_wants(db, user.id, ntype, NotificationChannel.EMAIL):
+                lang = await recipient_language(db, user.id, tenant_id=user.tenant_id)
+                subj, text = render_pair("notifications.ai_access_approved", lang, {}, title, message)
                 await email_service.send_notification_email(
                     to_email=user_email,
-                    subject=title,
-                    body=message,
+                    subject=subj,
+                    body=text,
                     action_url=f"{settings.FRONTEND_URL}/settings?tab=ai-access",
+                    lang=lang,
                 )
 
             await db.commit()
@@ -569,11 +585,18 @@ def notify_ai_access_request(self, request_id: str, user_name: str, user_email: 
                     )
 
                 if await _user_wants(db, admin.id, ntype, NotificationChannel.EMAIL):
+                    lang = await recipient_language(db, admin.id, tenant_id=admin.tenant_id)
+                    subj, text = render_pair(
+                        "notifications.ai_access_request", lang,
+                        {"user": user_name, "email": user_email, "feature": feature.replace('-', ' ')},
+                        title, message,
+                    )
                     await email_service.send_notification_email(
                         to_email=admin.email,
-                        subject=title,
-                        body=f"{message}\n\nReason: {reason}",
+                        subject=subj,
+                        body=f"{text}\n\n{email_service.email_text(lang, 'reason')}: {reason}",
                         action_url=f"{settings.FRONTEND_URL}/super-admin?tab=ai-access",
+                        lang=lang,
                     )
 
             await db.commit()
