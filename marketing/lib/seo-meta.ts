@@ -11,7 +11,7 @@ interface PageMeta {
 type LocalizedPageMeta = Record<Locale, PageMeta>;
 
 export const PAGE_META: Record<
-  "home" | "blog" | "contact" | "faq" | "featuresLanding" | "frameworks" | "howItWorks" | "news" | "solutions",
+  "home" | "blog" | "changelog" | "contact" | "faq" | "featuresLanding" | "frameworks" | "howItWorks" | "news" | "solutions",
   LocalizedPageMeta
 > = {
   home: {
@@ -259,6 +259,35 @@ export const PAGE_META: Record<
       ogTitle: "الأخبار التنظيمية وتحديثات المعايير | GRCEye",
       ogDescription:
         "تابع أحدث التغييرات التنظيمية في مجال الحوكمة والمخاطر والامتثال: قانون الاتحاد الأوروبي للذكاء الاصطناعي، NIST CSF 2.0، تطبيق GDPR، مواعيد NIS2 النهائية، تحديثات ISO 27001 ومحطات DORA.",
+    },
+  },
+  changelog: {
+    en: {
+      title: "Changelog | What's New in GRCEye",
+      description:
+        "The full GRCEye release timeline: risk quantification, TPRM, asset cartography, MFA, on-premises licensing and every major feature shipped since launch.",
+      keywords: "GRCEye changelog, GRC platform updates, product release notes, what's new GRCEye",
+      ogTitle: "Changelog | What's New in GRCEye",
+      ogDescription:
+        "The full GRCEye release timeline: risk quantification, TPRM, asset cartography, MFA, on-premises licensing and every major feature shipped since launch.",
+    },
+    fr: {
+      title: "Journal des Mises à Jour | Nouveautés GRCEye",
+      description:
+        "La chronologie complète des versions GRCEye : quantification des risques, TPRM, cartographie des actifs, MFA, licences on-premise et toutes les fonctionnalités majeures livrées depuis le lancement.",
+      keywords: "journal des modifications GRCEye, mises à jour plateforme GRC, notes de version, nouveautés GRCEye",
+      ogTitle: "Journal des Mises à Jour | Nouveautés GRCEye",
+      ogDescription:
+        "La chronologie complète des versions GRCEye : quantification des risques, TPRM, cartographie des actifs, MFA, licences on-premise et toutes les fonctionnalités majeures livrées depuis le lancement.",
+    },
+    ar: {
+      title: "سجل التحديثات | ما الجديد في GRCEye",
+      description:
+        "الجدول الزمني الكامل لإصدارات GRCEye: تقدير المخاطر، إدارة مخاطر الموردين، رسم خرائط الأصول، المصادقة الثنائية، الترخيص المحلي وكل ميزة رئيسية تم إطلاقها منذ الانطلاق.",
+      keywords: "سجل تحديثات GRCEye, تحديثات منصة GRC, ملاحظات الإصدار, ما الجديد في GRCEye",
+      ogTitle: "سجل التحديثات | ما الجديد في GRCEye",
+      ogDescription:
+        "الجدول الزمني الكامل لإصدارات GRCEye: تقدير المخاطر، إدارة مخاطر الموردين، رسم خرائط الأصول، المصادقة الثنائية، الترخيص المحلي وكل ميزة رئيسية تم إطلاقها منذ الانطلاق.",
     },
   },
   solutions: {

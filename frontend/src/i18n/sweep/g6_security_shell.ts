@@ -142,6 +142,7 @@ const bundle: { en: Record<string, any>; fr: Record<string, any>; ar: Record<str
       "search_hint": "Type to search every guide, step and tip.",
       "back_to_app": "Back to app",
       "sign_in": "Sign in",
+      "go_back": "Go back",
       "docs": "Docs",
       "open_in_app": "Open this page in the app",
       "previous": "Previous",

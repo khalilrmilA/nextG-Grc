@@ -16,7 +16,7 @@ export const menuEn = {
 };
 export const menuFr = {
   docsite: {
-    docs: "Docs", back_to_app: "Retour à l’application", sign_in: "Se connecter", search_placeholder: "Rechercher dans la documentation…",
+    docs: "Docs", back_to_app: "Retour à l’application", sign_in: "Se connecter", go_back: "Retour", search_placeholder: "Rechercher dans la documentation…",
     search_hint: "Tapez pour rechercher dans tous les guides, étapes et conseils.", no_results: "Aucun résultat pour cette recherche.",
     on_this_page: "Sur cette page", previous: "Précédent", next: "Suivant", open_in_app: "Ouvrir cette page dans l’application",
     intro_crumb: "Bienvenue", intro_title: "Documentation GRCeye",
@@ -42,7 +42,7 @@ export const menuFr = {
 };
 export const menuAr = {
   docsite: {
-    docs: "التوثيق", back_to_app: "العودة إلى التطبيق", sign_in: "تسجيل الدخول", search_placeholder: "ابحث في التوثيق…",
+    docs: "التوثيق", back_to_app: "العودة إلى التطبيق", sign_in: "تسجيل الدخول", go_back: "رجوع", search_placeholder: "ابحث في التوثيق…",
     search_hint: "اكتب للبحث في جميع الأدلة والخطوات والنصائح.", no_results: "لا توجد نتائج لهذا البحث.",
     on_this_page: "في هذه الصفحة", previous: "السابق", next: "التالي", open_in_app: "فتح هذه الصفحة في التطبيق",
     intro_crumb: "مرحبًا", intro_title: "توثيق GRCeye",

@@ -219,9 +219,15 @@ export default function App() {
         <Route path="help" element={<HelpPage />} />
       </Route>
 
-      {/* ── Documentation site (public, full screen, own layout) ── */}
+      {/* ── Documentation site (public, full screen, own layout) ──
+          Locale-prefixed variants exist so /en/docs, /fr/docs, /ar/docs are
+          real, indexable, shareable URLs (see MARKETING_PAGE_ROOTS in the
+          marketing app's middleware.ts, which proxies them here) — DocsSite
+          reads the :locale param to set the page's language on load. */}
       <Route path="/docs" element={<DocsSite />} />
       <Route path="/docs/:pageId" element={<DocsSite />} />
+      <Route path="/:locale/docs" element={<DocsSite />} />
+      <Route path="/:locale/docs/:pageId" element={<DocsSite />} />
 
       {/* ── Main app routes (protected) ── */}
       <Route

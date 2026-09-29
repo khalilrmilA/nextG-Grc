@@ -11,8 +11,12 @@ const PAGES: { path: string; changeFrequency: "weekly" | "monthly"; priority: nu
   { path: "/solutions",        changeFrequency: "monthly", priority: 0.9 },
   { path: "/blog",             changeFrequency: "weekly",  priority: 0.8 },
   { path: "/news",             changeFrequency: "weekly",  priority: 0.8 },
+  { path: "/changelog",        changeFrequency: "weekly",  priority: 0.7 },
   { path: "/faq",              changeFrequency: "monthly", priority: 0.7 },
   { path: "/contact",          changeFrequency: "monthly", priority: 0.7 },
+  // Rendered by the Vite SPA rather than a Next page, but locale-mapped like
+  // every other marketing root — see MARKETING_PAGE_ROOTS in middleware.ts.
+  { path: "/docs",             changeFrequency: "monthly", priority: 0.7 },
   // Company + legal. /about carries real weight here: it is the page that
   // states the brand name in prose and names the related company, which is
   // what Google needs to treat "GRCEye" as an entity rather than a typo.

@@ -11,6 +11,8 @@ Allow: /blog
 Allow: /news
 Allow: /faq
 Allow: /contact
+Allow: /docs
+Allow: /changelog
 Allow: /about
 Allow: /security
 Allow: /privacy

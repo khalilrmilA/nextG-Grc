@@ -21,6 +21,7 @@ import LanguageSwitcher from "../components/LanguageSwitcher";
 import { useAuthStore } from "../store/auth";
 import { articlesFor } from "../kb";
 import type { KbArticle } from "../kb/types";
+import { LANGUAGES, saveLanguage, applyDirection, type Language } from "../i18n";
 
 // ── Page model ────────────────────────────────────────────────────────────────
 
@@ -231,7 +232,7 @@ function searchDocs(pages: Record<string, DocPage>, q: string): Hit[] {
   return hits.sort((a, b) => b.score - a.score).slice(0, 12);
 }
 
-function SearchDialog({ pages, onClose }: { pages: Record<string, DocPage>; onClose: () => void }) {
+function SearchDialog({ pages, onClose, base }: { pages: Record<string, DocPage>; onClose: () => void; base: string }) {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const [q, setQ] = useState("");
@@ -239,7 +240,7 @@ function SearchDialog({ pages, onClose }: { pages: Record<string, DocPage>; onCl
   const hits = useMemo(() => searchDocs(pages, q), [pages, q]);
   useEffect(() => { setSel(0); }, [q]);
 
-  const go = (h: Hit) => { navigate(`/docs/${h.id}${h.anchor ? `#${h.anchor}` : ""}`); onClose(); };
+  const go = (h: Hit) => { navigate(`${base}/${h.id}${h.anchor ? `#${h.anchor}` : ""}`); onClose(); };
 
   return (
     <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-start justify-center pt-[10vh] px-4" onMouseDown={onClose}>
@@ -317,7 +318,7 @@ function Screenshot({ src, alt, route }: { src: string; alt: string; route?: str
 
 // ── Left navigation tree ──────────────────────────────────────────────────────
 
-function SideNav({ nav, current, onNavigate }: { nav: NavNode[]; current: string; onNavigate: () => void }) {
+function SideNav({ nav, current, onNavigate, base }: { nav: NavNode[]; current: string; onNavigate: () => void; base: string }) {
   const { t } = useTranslation();
   const holder = nav.find(n => n.kind === "group" && (n.id === current || n.children.some(c => c.id === current)));
   const [open, setOpen] = useState<Record<string, boolean>>({});
@@ -338,7 +339,7 @@ function SideNav({ nav, current, onNavigate }: { nav: NavNode[]; current: string
         if (n.kind === "page") {
           const Icon = n.Icon;
           return (
-            <Link key={n.id} to={`/docs/${n.id}`} onClick={onNavigate} className={itemCls(current === n.id)}>
+            <Link key={n.id} to={`${base}/${n.id}`} onClick={onNavigate} className={itemCls(current === n.id)}>
               {Icon && <Icon className="w-4 h-4 flex-shrink-0 opacity-70" />}<span className="truncate">{n.title}</span>
             </Link>
           );
@@ -347,7 +348,7 @@ function SideNav({ nav, current, onNavigate }: { nav: NavNode[]; current: string
         return (
           <div key={n.id}>
             <div className={`${itemCls(current === n.id)} !pe-1`}>
-              <Link to={`/docs/${n.id}`} onClick={() => { setOpen(o => ({ ...o, [n.id]: true })); onNavigate(); }} className="flex-1 truncate">{n.title}</Link>
+              <Link to={`${base}/${n.id}`} onClick={() => { setOpen(o => ({ ...o, [n.id]: true })); onNavigate(); }} className="flex-1 truncate">{n.title}</Link>
               <button type="button" aria-label={t("docsite.toggle_section")} aria-expanded={isOpen} onClick={() => setOpen(o => ({ ...o, [n.id]: !o[n.id] }))}
                 className="p-1 rounded-md hover:bg-gray-200/60 dark:hover:bg-slate-700">
                 <ChevronRight className={`w-3.5 h-3.5 transition-transform rtl:rotate-180 ${isOpen ? "rotate-90 rtl:rotate-90" : ""}`} />
@@ -356,7 +357,7 @@ function SideNav({ nav, current, onNavigate }: { nav: NavNode[]; current: string
             {isOpen && (
               <div className="ms-4 ps-2 border-s border-gray-200 dark:border-slate-700 my-0.5 space-y-0.5">
                 {n.children.map(c => (
-                  <Link key={c.id} to={`/docs/${c.id}`} onClick={onNavigate} className={itemCls(current === c.id)}>
+                  <Link key={c.id} to={`${base}/${c.id}`} onClick={onNavigate} className={itemCls(current === c.id)}>
                     <span className="truncate">{c.title}</span>
                   </Link>
                 ))}
@@ -372,15 +373,55 @@ function SideNav({ nav, current, onNavigate }: { nav: NavNode[]; current: string
 // ── Main component ────────────────────────────────────────────────────────────
 
 export default function DocsSite() {
-  const { t } = useTranslation();
-  const { pageId } = useParams();
+  const { t, i18n } = useTranslation();
+  const { locale: localeParam, pageId } = useParams();
   const location = useLocation();
   const navigate = useNavigate();
   const { pages, nav, order } = useDocs();
-  // Public site: signed-out visitors get "Sign in" where members get "Back to app".
+
+  // /en/docs, /fr/docs, /ar/docs are real routes (see App.tsx) so the docs site
+  // has one canonical, indexable URL per language instead of a single URL whose
+  // language silently depends on whatever this browser last saved.
+  const activeLocale = localeParam && LANGUAGES.some(l => l.code === localeParam) ? (localeParam as Language) : undefined;
+  const base = activeLocale ? `/${activeLocale}/docs` : "/docs";
+
+  // An unrecognized first segment isn't a locale — send it to the unprefixed
+  // site instead of rendering docs under a bogus locale.
+  useEffect(() => {
+    if (localeParam && !activeLocale) navigate(`/docs/${pageId ?? "introduction"}`, { replace: true });
+  }, [localeParam, activeLocale, pageId, navigate]);
+
+  // URL → language: loading /fr/docs shows French even if this browser last
+  // saved a different language.
+  useEffect(() => {
+    if (activeLocale && activeLocale !== i18n.language) {
+      i18n.changeLanguage(activeLocale);
+      saveLanguage(activeLocale);
+      applyDirection(activeLocale);
+    }
+  }, [activeLocale, i18n]);
+
+  // Language → URL: switching language from the in-page switcher while on a
+  // locale-prefixed URL keeps the URL in sync, instead of leaving it pointed
+  // at a locale the page is no longer showing.
+  useEffect(() => {
+    function onLanguageChanged(lng: string) {
+      const code = lng.split("-")[0];
+      if (activeLocale && code !== activeLocale && LANGUAGES.some(l => l.code === code)) {
+        navigate(location.pathname.replace(/^\/[a-z]{2}\/docs/, `/${code}/docs`) + location.hash, { replace: true });
+      }
+    }
+    i18n.on("languageChanged", onLanguageChanged);
+    return () => { i18n.off("languageChanged", onLanguageChanged); };
+  }, [activeLocale, i18n, navigate, location.pathname, location.hash]);
+
+  // Signed-in members get "Back to app" (→ the dashboard). Signed-out visitors
+  // almost always arrived from the marketing site (e.g. the nav's Docs link),
+  // just browsing before deciding to sign up — so their button reads "Go back"
+  // and returns them to wherever they came from instead of prompting a login.
   const signedIn = useAuthStore(u => !!u);
-  const appHref = signedIn ? "/dashboard" : "/login";
-  const appLabel = signedIn ? t("docsite.back_to_app", "Back to app") : t("docsite.sign_in", "Sign in");
+  const appLabel = signedIn ? t("docsite.back_to_app", "Back to app") : t("docsite.go_back", "Go back");
+  const handleAppNav = () => { if (!signedIn) navigate(-1); };
 
   const page = pages[pageId ?? "introduction"];
   const [searchOpen, setSearchOpen] = useState(false);
@@ -391,7 +432,7 @@ export default function DocsSite() {
   useEffect(() => { try { localStorage.setItem("grc_docs_theme", dark ? "dark" : "light"); } catch { /* ignore */ } }, [dark]);
 
   // Unknown page → introduction.
-  useEffect(() => { if (!page) navigate("/docs/introduction", { replace: true }); }, [page, navigate]);
+  useEffect(() => { if (!page) navigate(`${base}/introduction`, { replace: true }); }, [page, navigate, base]);
 
   // Ctrl/⌘ + K opens search.
   useEffect(() => {
@@ -454,7 +495,7 @@ export default function DocsSite() {
             <button type="button" onClick={() => setDrawer(true)} className="lg:hidden p-2 -ms-2 rounded-lg text-gray-500 hover:bg-gray-100 dark:hover:bg-slate-800" aria-label={t("docsite.menu")}>
               <Menu className="w-5 h-5" />
             </button>
-            <Link to="/docs/introduction" className="flex items-center gap-2 flex-shrink-0">
+            <Link to={`${base}/introduction`} className="flex items-center gap-2 flex-shrink-0">
               <span className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-600 to-indigo-600 text-white flex items-center justify-center font-bold text-sm">G</span>
               <span className="font-semibold text-gray-900 dark:text-white">GRCeye</span>
               <span className="text-gray-400 dark:text-slate-500 font-medium hidden sm:inline">{t("docsite.docs", "Docs")}</span>
@@ -476,9 +517,15 @@ export default function DocsSite() {
               <button type="button" onClick={() => setDark(d => !d)} className="p-2 rounded-lg text-gray-500 dark:text-slate-400 hover:bg-gray-100 dark:hover:bg-slate-800" aria-label={t("docsite.theme")}>
                 {dark ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
               </button>
-              <Link to={appHref} className="hidden sm:inline-flex items-center gap-1.5 ms-1 px-3 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700">
-                <ArrowLeft className="w-4 h-4 rtl:rotate-180" /> {appLabel}
-              </Link>
+              {signedIn ? (
+                <Link to="/dashboard" className="hidden sm:inline-flex items-center gap-1.5 ms-1 px-3 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700">
+                  <ArrowLeft className="w-4 h-4 rtl:rotate-180" /> {appLabel}
+                </Link>
+              ) : (
+                <button type="button" onClick={handleAppNav} className="hidden sm:inline-flex items-center gap-1.5 ms-1 px-3 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700">
+                  <ArrowLeft className="w-4 h-4 rtl:rotate-180" /> {appLabel}
+                </button>
+              )}
             </div>
           </div>
         </header>
@@ -487,7 +534,7 @@ export default function DocsSite() {
           {/* ── Left tree (desktop) ── */}
           <div className="hidden lg:block w-72 flex-shrink-0 border-e border-gray-100 dark:border-slate-800">
             <div className="sticky top-16 h-[calc(100vh-4rem)] overflow-y-auto px-4 py-6">
-              <SideNav nav={nav} current={page.id} onNavigate={closeDrawer} />
+              <SideNav nav={nav} current={page.id} onNavigate={closeDrawer} base={base} />
             </div>
           </div>
 
@@ -500,10 +547,16 @@ export default function DocsSite() {
                   <span className="font-semibold text-gray-900 dark:text-white">{t("docsite.docs", "Docs")}</span>
                   <button type="button" onClick={closeDrawer} className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-800"><X className="w-4 h-4" /></button>
                 </div>
-                <Link to={appHref} className="sm:hidden flex items-center gap-2 px-3 py-2 mb-2 rounded-lg bg-blue-600 text-white text-sm font-medium">
-                  <ArrowLeft className="w-4 h-4 rtl:rotate-180" /> {appLabel}
-                </Link>
-                <SideNav nav={nav} current={page.id} onNavigate={closeDrawer} />
+                {signedIn ? (
+                  <Link to="/dashboard" className="sm:hidden flex items-center gap-2 px-3 py-2 mb-2 rounded-lg bg-blue-600 text-white text-sm font-medium">
+                    <ArrowLeft className="w-4 h-4 rtl:rotate-180" /> {appLabel}
+                  </Link>
+                ) : (
+                  <button type="button" onClick={() => { handleAppNav(); closeDrawer(); }} className="sm:hidden flex items-center gap-2 px-3 py-2 mb-2 rounded-lg bg-blue-600 text-white text-sm font-medium">
+                    <ArrowLeft className="w-4 h-4 rtl:rotate-180" /> {appLabel}
+                  </button>
+                )}
+                <SideNav nav={nav} current={page.id} onNavigate={closeDrawer} base={base} />
               </div>
             </div>
           )}
@@ -528,7 +581,7 @@ export default function DocsSite() {
                   {page.cards.map(c => {
                     const Icon = c.Icon;
                     return (
-                      <Link key={c.id} to={`/docs/${c.id}`}
+                      <Link key={c.id} to={`${base}/${c.id}`}
                         className="group block p-5 rounded-2xl border border-gray-200 dark:border-slate-800 hover:border-blue-300 dark:hover:border-blue-500/50 hover:shadow-sm transition-all">
                         {c.image && (
                           <div className="-mx-5 -mt-5 mb-4 aspect-[16/9] overflow-hidden rounded-t-2xl border-b border-gray-100 dark:border-slate-800 bg-gray-50 dark:bg-slate-900">
@@ -599,13 +652,13 @@ export default function DocsSite() {
               {/* Previous / next */}
               <div className="mt-16 pt-8 border-t border-gray-100 dark:border-slate-800 grid grid-cols-1 sm:grid-cols-2 gap-4">
                 {prev ? (
-                  <Link to={`/docs/${prev.id}`} className="group p-4 rounded-xl border border-gray-200 dark:border-slate-800 hover:border-blue-300 dark:hover:border-blue-500/50">
+                  <Link to={`${base}/${prev.id}`} className="group p-4 rounded-xl border border-gray-200 dark:border-slate-800 hover:border-blue-300 dark:hover:border-blue-500/50">
                     <p className="text-xs text-gray-400 flex items-center gap-1"><ChevronLeft className="w-3.5 h-3.5 rtl:rotate-180" />{t("docsite.previous", "Previous")}</p>
                     <p className="mt-1 font-medium text-gray-900 dark:text-white group-hover:text-blue-700 dark:group-hover:text-blue-300 truncate">{prev.title}</p>
                   </Link>
                 ) : <span />}
                 {next && (
-                  <Link to={`/docs/${next.id}`} className="group p-4 rounded-xl border border-gray-200 dark:border-slate-800 hover:border-blue-300 dark:hover:border-blue-500/50 text-end">
+                  <Link to={`${base}/${next.id}`} className="group p-4 rounded-xl border border-gray-200 dark:border-slate-800 hover:border-blue-300 dark:hover:border-blue-500/50 text-end">
                     <p className="text-xs text-gray-400 flex items-center gap-1 justify-end">{t("docsite.next", "Next")}<ChevronRight className="w-3.5 h-3.5 rtl:rotate-180" /></p>
                     <p className="mt-1 font-medium text-gray-900 dark:text-white group-hover:text-blue-700 dark:group-hover:text-blue-300 truncate">{next.title}</p>
                   </Link>
@@ -645,7 +698,7 @@ export default function DocsSite() {
         </div>
       </div>
 
-      {searchOpen && <SearchDialog pages={pages} onClose={() => setSearchOpen(false)} />}
+      {searchOpen && <SearchDialog pages={pages} onClose={() => setSearchOpen(false)} base={base} />}
     </div>
   );
 }

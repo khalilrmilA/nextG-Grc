@@ -19,11 +19,19 @@ const LOCALE_COOKIE = "grceye_lang";
 // small and stable, so allow-listing it is the safer list to maintain as the
 // SPA grows.
 const MARKETING_PAGE_ROOTS = [
-  "contact", "frameworks", "news", "blog", "faq", "how-it-works", "solutions", "features-landing",
+  "contact", "frameworks", "news", "blog", "changelog", "faq", "how-it-works", "solutions", "features-landing",
   // Company + legal pages. These were previously absent, so the footer's links
   // to them fell through to the SPA proxy: /en/terms answered 200 with the Vite
   // shell and bare /terms answered 500.
   "about", "privacy", "terms", "security",
+  // /docs is the one root here that isn't a Next page — it's public
+  // documentation rendered by the Vite SPA (proxied via next.config.js's
+  // fallback rewrite, same as the dashboard). It still belongs in this list,
+  // not the "everything else" bucket below: App.tsx (frontend) was given
+  // matching /:locale/docs routes specifically so this path is safe to
+  // locale-prefix and won't 404 on a hard navigation the way /en/dashboard
+  // would (see the comment above on why that's normally unsafe).
+  "docs",
 ];
 
 function hasLocalePrefix(pathname: string): boolean {

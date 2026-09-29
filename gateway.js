@@ -34,15 +34,34 @@ const BACKEND = { host: "127.0.0.1", port: 8000 };
 // fallback rewrite (for anything it doesn't recognize) points right back to this
 // gateway, so treating an unrecognized path as "must be marketing" here would bounce
 // the request between the two forever instead of 404ing cleanly.
-// KEEP IN SYNC with MARKETING_PAGE_ROOTS in marketing/middleware.ts. A page that
-// exists in Next but is missing from this set is unreachable in production: the
-// gateway is the load balancer's target, so it decides before Next ever sees the
-// request, and an unlisted path gets served the dashboard SPA shell instead.
+// KEEP IN SYNC with MARKETING_PAGE_ROOTS in marketing/middleware.ts, with ONE
+// deliberate exception: "docs". marketing/middleware.ts lists "docs" too (so a
+// standalone `next dev` of the marketing app, with no gateway in front of it,
+// still locale-redirects /docs correctly), but it must stay OUT of this set.
+// /docs is real documentation rendered by the dashboard SPA (App.tsx has
+// matching /:locale/docs routes), not a Next page — adding it here would
+// route it to marketing, whose own fallback rewrite points right back at this
+// gateway, i.e. exactly the bounce loop the paragraph above warns about.
+// Leaving it out here means isMarketingPath() below already returns false for
+// it, so it falls into the normal "serve from the static build" branch; see
+// isDocsPath()/serveDashboard() for how it still gets to be indexable there
+// despite that branch existing to keep the rest of the dashboard OUT of
+// search results.
 const MARKETING_PAGE_ROOTS = new Set([
-  "", "contact", "frameworks", "news", "blog", "faq", "how-it-works", "solutions", "features-landing",
+  "", "contact", "frameworks", "news", "blog", "changelog", "faq", "how-it-works", "solutions", "features-landing",
   "about", "privacy", "terms", "security",
 ]);
 const LOCALES = new Set(["en", "fr", "ar"]);
+
+/** /docs, /en/docs, /fr/docs, /ar/docs (and their sub-pages) — the one part of
+ *  the dashboard SPA build that's public documentation rather than
+ *  authenticated app, so it's the one exception to the noindex tag every
+ *  other static-build response gets in serveDashboard(). */
+function isDocsPath(pathname) {
+  const segments = pathname.split("/").filter(Boolean);
+  const first = LOCALES.has(segments[0]) ? segments[1] : segments[0];
+  return first === "docs";
+}
 
 // Root-level files that are always the marketing app's, never the dashboard's.
 const MARKETING_OWNED_FILES = new Set([
@@ -96,6 +115,7 @@ function serveDashboard(res, urlPath) {
     res.writeHead(403);
     return res.end();
   }
+  const indexable = isDocsPath(clean);
   fs.stat(filePath, (err, st) => {
     if (err || st.isDirectory()) filePath = DASH_INDEX;
     const ext = path.extname(filePath).toLowerCase();
@@ -111,7 +131,8 @@ function serveDashboard(res, urlPath) {
         // SPA shell and the shell's own <title>, so a crawler sees unlimited
         // distinct URLs that all look like the same page. robots.txt already
         // disallows the known app routes; this covers the ones no list predicts.
-        "x-robots-tag": "noindex, nofollow",
+        // /docs is the one real exception — see isDocsPath().
+        ...(indexable ? {} : { "x-robots-tag": "noindex, nofollow" }),
         "cache-control": isHashedAsset
           ? "public, max-age=31536000, immutable"
           : "no-store, no-cache, must-revalidate, max-age=0",

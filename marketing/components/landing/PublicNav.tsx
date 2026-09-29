@@ -2,7 +2,7 @@
 import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ArrowRight, Menu, X, ChevronDown, BookOpen, Newspaper, HelpCircle, MessageSquare } from "lucide-react";
+import { ArrowRight, Menu, X, ChevronDown, BookOpen, FileText, Newspaper, HelpCircle, MessageSquare, History } from "lucide-react";
 import LanguageSwitcher from "../LanguageSwitcher";
 import { useI18n } from "../../i18n";
 
@@ -31,8 +31,10 @@ function buildNavItems(t: (key: string) => string): NavItem[] {
       kind: "dropdown",
       label: t("public.nav.resources"),
       items: [
-        { to: "/blog", label: t("public.nav.blog"),            description: t("public.nav.blog_desc"), icon: BookOpen  },
-        { to: "/news", label: t("public.nav.regulatory_news"), description: t("public.nav.news_desc"), icon: Newspaper },
+        { to: "/docs",      label: t("public.nav.docs"),            description: t("public.nav.docs_desc"),      icon: FileText  },
+        { to: "/changelog", label: t("public.nav.changelog"),       description: t("public.nav.changelog_desc"), icon: History   },
+        { to: "/blog",      label: t("public.nav.blog"),            description: t("public.nav.blog_desc"),      icon: BookOpen  },
+        { to: "/news",      label: t("public.nav.regulatory_news"), description: t("public.nav.news_desc"),      icon: Newspaper },
       ],
     },
     {
