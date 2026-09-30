@@ -923,8 +923,8 @@ export default function Layout() {
         <TrialBanner />
 
         {/* Top bar */}
-        <header className="bg-white border-b border-gray-100 px-4 sm:px-8 py-3.5 flex items-center justify-between flex-shrink-0">
-          <div className="flex items-center gap-3 text-sm">
+        <header className="bg-white border-b border-gray-100 px-3 sm:px-8 py-3.5 flex items-center justify-between gap-2 flex-shrink-0">
+          <div className="flex items-center gap-2 sm:gap-3 text-sm min-w-0">
             {/* Mobile hamburger */}
             <button
               type="button"
@@ -937,16 +937,16 @@ export default function Layout() {
             <div className="flex items-center gap-2">
               <span className="hidden sm:inline text-gray-400">GRC Eye</span>
               <ChevronRight className="hidden sm:inline w-3.5 h-3.5 text-gray-300" />
-              <span className="text-gray-900 font-semibold">{pageLabel}</span>
+              <span className="text-gray-900 font-semibold truncate max-w-[8.5rem] sm:max-w-none">{pageLabel}</span>
             </div>
             {primaryFramework && (
-              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-blue-50 border border-blue-100 text-xs font-semibold text-blue-700">
+              <span className="hidden sm:inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-blue-50 border border-blue-100 text-xs font-semibold text-blue-700">
                 <Shield className="w-3 h-3" />
                 {primaryFramework.short_name}
               </span>
             )}
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-1 sm:gap-3 flex-shrink-0">
             {/* Language switcher */}
             <LanguageSwitcher />
             {/* Help for the current page — opens its Knowledge Base article */}
@@ -963,7 +963,7 @@ export default function Layout() {
             {/* Live notification bell */}
             <NotificationBell />
             {/* Avatar */}
-            <div className="flex items-center gap-2.5 pl-3 rtl:pl-0 rtl:pr-3 border-l rtl:border-l-0 rtl:border-r border-gray-100">
+            <div className="flex items-center gap-2.5 pl-2 sm:pl-3 rtl:pl-0 rtl:pr-2 sm:rtl:pr-3 border-l rtl:border-l-0 rtl:border-r border-gray-100">
               <div className={`w-8 h-8 rounded-full bg-gradient-to-br ${roleColor} flex items-center justify-center text-white shadow-sm`}>
                 {user ? (
                   <span className="text-sm font-bold">{initials}</span>

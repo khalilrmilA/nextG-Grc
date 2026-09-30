@@ -5,14 +5,14 @@ const routes = ["dashboard","assets","asset-graph","analytics","risks","risk-sce
   const b = await chromium.launch({ executablePath: "/usr/bin/google-chrome", args: ["--no-sandbox"] });
   const ctx = await b.newContext({ viewport: { width: W, height: 844 }, deviceScaleFactor: 1, isMobile: true, hasTouch: true });
   const p = await ctx.newPage();
-  await p.goto("http://localhost:4000/login", { waitUntil: "networkidle" });
+  await p.goto(`http://localhost:${process.env.PORT||4000}/login`, { waitUntil: "networkidle" });
   await p.screenshot({ path: `${OUT}/login.png` });
   await p.fill('input[type=email]', "admin@demo.com"); await p.fill('input[type=password]', "demo123");
   await p.click('button[type=submit]'); await p.waitForTimeout(3000);
   console.log("after login:", p.url());
   for (const r of routes) {
     try {
-      await p.goto(`http://localhost:4000/${r}`, { waitUntil: "networkidle", timeout: 20000 });
+      await p.goto(`http://localhost:${process.env.PORT||4000}/${r}`, { waitUntil: "networkidle", timeout: 20000 });
       await p.waitForTimeout(800);
       const res = await p.evaluate(() => {
         const vw = document.documentElement.clientWidth, bad = [];

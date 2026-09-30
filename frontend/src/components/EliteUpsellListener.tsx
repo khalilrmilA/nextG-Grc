@@ -29,7 +29,7 @@ export default function EliteUpsellListener() {
   if (!message) return null;
 
   return (
-    <div className="fixed bottom-6 left-1/2 -translate-x-1/2 rtl:left-auto rtl:right-1/2 rtl:translate-x-1/2 z-[200] flex items-start gap-3 bg-gradient-to-r from-yellow-500 to-orange-500 text-white px-5 py-3.5 rounded-2xl shadow-2xl max-w-md">
+    <div className="fixed bottom-6 left-1/2 -translate-x-1/2 rtl:left-auto rtl:right-1/2 rtl:translate-x-1/2 z-[200] flex items-start gap-3 bg-gradient-to-r from-yellow-500 to-orange-500 text-white px-5 py-3.5 rounded-2xl shadow-2xl max-w-md w-[calc(100vw-2rem)] sm:w-auto">
       <Crown className="w-5 h-5 flex-shrink-0 mt-0.5" />
       <div className="text-sm">
         <p className="font-semibold">{t("elite.upsell_title", "Elite Pack feature")}</p>

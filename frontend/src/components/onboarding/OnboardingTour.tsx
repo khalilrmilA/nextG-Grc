@@ -101,9 +101,14 @@ function getElementRect(selector: string): Rect {
 
 // ── Tooltip placement ─────────────────────────────────────────────────────────
 function tooltipStyle(rect: Rect, placement: TourStep["placement"], vw: number, vh: number): React.CSSProperties {
-  const TW = 340; // tooltip width approx
+  const TW = Math.min(340, vw - 16); // tooltip width approx, never wider than the screen
   const TH = 220; // tooltip height approx
   const GAP = 16;
+
+  // Phones: the sidebar/targets are off-canvas, so dock the card as a bottom sheet.
+  if (vw < 640) {
+    return { position: "fixed", left: 8, right: 8, bottom: 8, width: "auto" };
+  }
 
   if (placement === "center" || rect === NONE || (rect.width === 0 && rect.height === 0)) {
     return {
@@ -328,8 +333,8 @@ export default function OnboardingTour() {
 
           {/* Footer */}
           <div className="px-5 pb-4 flex items-center justify-between gap-3">
-            {/* Dots */}
-            <div className="flex items-center gap-1">
+            {/* Dots (33 of them overflow a phone; the "Step n of N" label covers it there) */}
+            <div className="hidden sm:flex items-center gap-1">
               {TOUR_STEPS.map((_, i) => (
                 <button
                   key={i}
@@ -348,7 +353,7 @@ export default function OnboardingTour() {
             </div>
 
             {/* Buttons */}
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 ms-auto">
               {!isFirst && (
                 <button
                   type="button"

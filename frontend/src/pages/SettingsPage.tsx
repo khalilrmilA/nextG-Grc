@@ -1644,17 +1644,17 @@ export default function SettingsPage() {
         </div>
       </div>
 
-      <div className="flex gap-6">
-        {/* Sidebar tabs */}
-        <aside className="w-52 flex-shrink-0">
-          <nav className="space-y-0.5">
+      <div className="flex flex-col md:flex-row gap-4 md:gap-6">
+        {/* Sidebar tabs — horizontal scroller on phones, side rail from md up */}
+        <aside className="md:w-52 md:flex-shrink-0 min-w-0">
+          <nav className="flex md:block gap-1 md:gap-0 md:space-y-0.5 overflow-x-auto md:overflow-visible pb-1 md:pb-0">
             {visibleTabs.map(({ id, icon: Icon, label, superAdminOnly }) => {
               const required   = TAB_MIN_PLAN[id];
               const isLocked   = !isAdmin && !isSuperAdmin && required !== undefined && !planAllows(plan, required);
               const isActive   = activeTab === id;
               return (
                 <button key={id} type="button" onClick={() => setActiveTab(id)}
-                  className={`flex items-center gap-2.5 w-full px-3 py-2.5 rounded-xl text-sm font-medium transition-all ${
+                  className={`flex items-center gap-2.5 md:w-full flex-shrink-0 whitespace-nowrap px-3 py-2.5 rounded-xl text-sm font-medium transition-all ${
                     isActive
                       ? "bg-blue-600 text-white shadow-sm"
                       : "text-gray-600 hover:bg-gray-100"

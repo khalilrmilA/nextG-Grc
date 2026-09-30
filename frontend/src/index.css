@@ -564,3 +564,37 @@ aside:hover ::-webkit-scrollbar-thumb:hover {
 
 /* ── Auth pages: mirror the split brand/form panels ── */
 [dir="rtl"] .auth-shell { flex-direction: row-reverse; }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   Phone layout (≤640px) — page-level rules applied to every screen in <main>.
+   Scoped to unprefixed utilities, so anything a page already made responsive
+   with sm:/md:/lg: is untouched. Opt a grid out with the `keep-grid` class.
+   ══════════════════════════════════════════════════════════════════════════ */
+@media (max-width: 640px) {
+  /* Page gutters: 32px is too much of a 390px screen */
+  main .p-8 { padding: 1rem; }
+  main .px-8 { padding-left: 1rem; padding-right: 1rem; }
+  main .py-8 { padding-top: 1rem; padding-bottom: 1rem; }
+
+  /* KPI / stat grids: 3–4 across is unreadable at phone width */
+  main .grid.grid-cols-3:not(.keep-grid),
+  main .grid.grid-cols-4:not(.keep-grid) { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+
+  /* Page header row (title + actions) and toolbars: let actions drop under the title */
+  main [class*="space-y-"] > .flex.justify-between:first-child { flex-wrap: wrap; gap: 0.75rem; }
+  main [class*="space-y-"] > .flex.justify-between:first-child > .flex { flex-wrap: wrap; }
+  main [class*="space-y-"] > .flex.gap-2:not(.flex-col):not(.overflow-x-auto),
+  main [class*="space-y-"] > .flex.gap-3:not(.flex-col):not(.overflow-x-auto) { flex-wrap: wrap; }
+  main h1 { overflow-wrap: anywhere; }
+
+  /* Forms: 16px stops iOS zooming on focus; 44px targets */
+  input:not([type=checkbox]):not([type=radio]), select, textarea { font-size: 16px; }
+  input:not([type=checkbox]):not([type=radio]), select { min-height: 44px; }
+
+  /* Modals never taller than the screen */
+  .fixed.inset-0.backdrop-blur-sm > div { max-height: 92dvh; overflow-y: auto; }
+}
+/* Keep floating actions clear of the iPhone home indicator */
+@supports (padding: env(safe-area-inset-bottom)) {
+  body { padding-bottom: env(safe-area-inset-bottom); }
+}

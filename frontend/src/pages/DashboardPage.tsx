@@ -2385,14 +2385,14 @@ function OverviewDashboard({
   return (
     <div className="space-y-8">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">{t("dashboard.grc_overview")}</h1>
           <p className="text-gray-500 text-sm mt-0.5">
             {t("dashboard.frameworks_count", { count: frameworks.length })} · {t("dashboard.select_to_drill")}
           </p>
         </div>
-        <div className="flex flex-wrap items-center justify-end gap-2">
+        <div className="flex flex-wrap items-center sm:justify-end gap-2">
           {unavailable && (
             <span className="flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 bg-amber-50 border border-amber-200 rounded-lg text-amber-700">
               <Activity className="w-3.5 h-3.5" /> {t("moduledash.error_title")}
@@ -2634,12 +2634,12 @@ function DashboardStages() {
 function WelcomeCard() {
   const { t } = useTranslation();
   return (
-    <div className="bg-gradient-to-br from-blue-600 to-indigo-700 rounded-2xl p-7 text-white">
-      <div className="flex items-start gap-4">
+    <div className="bg-gradient-to-br from-blue-600 to-indigo-700 rounded-2xl p-5 sm:p-7 text-white">
+      <div className="flex flex-wrap sm:flex-nowrap items-start gap-4">
         <div className="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center flex-shrink-0">
           <Shield className="w-6 h-6 text-white" />
         </div>
-        <div className="flex-1">
+        <div className="flex-1 min-w-[12rem]">
           <h1 className="text-2xl font-bold mb-1">{t("dashboard.welcome_title")}</h1>
           <p className="text-blue-100 text-sm leading-relaxed max-w-2xl">
             {t("dashboard.welcome_desc")}
