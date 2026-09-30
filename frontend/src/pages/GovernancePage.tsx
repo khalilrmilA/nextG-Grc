@@ -149,9 +149,9 @@ function GovernanceTrend() {
           <div className="h-44">
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={series} margin={{ top: 8, right: 8, bottom: 0, left: -20 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-                <XAxis dataKey="month" tick={{ fontSize: 11, fill: "#94a3b8" }} tickLine={false} axisLine={false} />
-                <YAxis allowDecimals={false} tick={{ fontSize: 11, fill: "#94a3b8" }} tickLine={false} axisLine={false} />
+                <CartesianGrid strokeDasharray="3 3" stroke="#ECECE9" />
+                <XAxis dataKey="month" tick={{ fontSize: 11, fill: "#8E9299" }} tickLine={false} axisLine={false} />
+                <YAxis allowDecimals={false} tick={{ fontSize: 11, fill: "#8E9299" }} tickLine={false} axisLine={false} />
                 <Tooltip
                   formatter={(value: number | string) => [value, t("moduledash.trend_count")]}
                   labelFormatter={(label: string) => `${t("moduledash.trend_month")} ${label}`}

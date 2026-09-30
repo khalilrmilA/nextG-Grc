@@ -15,7 +15,7 @@ const bundle: { en: Record<string, any>; fr: Record<string, any>; ar: Record<str
       "controls_count_other": "{{count}} controls"
     },
     "auditor_portal": {
-      "logo_alt": "GRCEye — Governance, Risk & Compliance Platform"
+      "logo_alt": "GRC Eye — Governance, Risk & Compliance Platform"
     },
     "auditor": {
       "title": "Audit Portal",
@@ -150,7 +150,7 @@ const bundle: { en: Record<string, any>; fr: Record<string, any>; ar: Record<str
       "controls_count_other": "{{count}} contrôles"
     },
     "auditor_portal": {
-      "logo_alt": "GRCEye — Plateforme de gouvernance, risques et conformité"
+      "logo_alt": "GRC Eye — Plateforme de gouvernance, risques et conformité"
     },
     "auditor": {
       "title": "Portail d'audit",
@@ -288,7 +288,7 @@ const bundle: { en: Record<string, any>; fr: Record<string, any>; ar: Record<str
       "controls_count_other": "{{count}} ضابط"
     },
     "auditor_portal": {
-      "logo_alt": "GRCEye — منصة الحوكمة والمخاطر والامتثال"
+      "logo_alt": "GRC Eye — منصة الحوكمة والمخاطر والامتثال"
     },
     "auditor": {
       "title": "بوابة التدقيق",

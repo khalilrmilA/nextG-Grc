@@ -8,7 +8,7 @@
  *     path="/solutions"
  *   />
  *
- * - title is auto-suffixed with the brand ("Solutions | GRCEye"). Pass titleOverride to bypass.
+ * - title is auto-suffixed with the brand ("Solutions | GRC Eye"). Pass titleOverride to bypass.
  * - canonical is built from `path` + SITE_URL.
  * - og:image defaults to /logo.png on the production domain.
  * - jsonLd accepts any Schema.org payload (object or array).
@@ -16,10 +16,10 @@
 import { Helmet } from "react-helmet-async";
 
 export const SITE_URL = "https://grceye.com";
-export const SITE_NAME = "GRCEye";
+export const SITE_NAME = "GRC Eye";
 export const DEFAULT_OG_IMAGE = `${SITE_URL}/logo.png`;
 const DEFAULT_DESCRIPTION =
-  "GRCEye is the all-in-one GRC SaaS platform: 70+ compliance frameworks, AI gap analysis, risk quantification, audits, policies, vendor risk and a public trust center.";
+  "GRC Eye is the all-in-one GRC SaaS platform: 70+ compliance frameworks, AI gap analysis, risk quantification, audits, policies, vendor risk and a public trust center.";
 
 interface SEOProps {
   title: string;
@@ -27,7 +27,7 @@ interface SEOProps {
   path?: string;          // e.g. "/solutions" — used to build canonical + og:url
   ogImage?: string;       // absolute URL preferred
   noIndex?: boolean;      // mark page as noindex,nofollow
-  titleOverride?: boolean; // when true, do NOT append " | GRCEye"
+  titleOverride?: boolean; // when true, do NOT append " | GRC Eye"
   jsonLd?: object | object[];
   keywords?: string;
 }

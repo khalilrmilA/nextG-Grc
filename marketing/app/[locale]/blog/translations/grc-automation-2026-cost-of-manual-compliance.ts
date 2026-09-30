@@ -38,7 +38,7 @@ Le résultat est un programme systématiquement en retard de six semaines sur la
 
 L'automatisation GRC remplace le cycle manuel de collecte de preuves par une surveillance continue et automatisée des contrôles. Les contrôles sont testés automatiquement (vérifications de configuration, revues d'accès, attestations de politiques) et les preuves sont rattachées au contrôle concerné en temps réel. Le responsable conformité passe du rôle de collecteur de preuves à celui de pilote du programme.
 
-D'après les données clients de GRCEye sur plus de 200 déploiements, les organisations qui automatisent leur programme GRC réduisent leurs coûts opérationnels de conformité totaux de **40 % en moyenne dès la première année**. Pour une entreprise dépensant 500 000 € par an en conformité (personnel, outils, audits externes), cela représente 200 000 € reversés à l'activité, non pas sous forme de réduction d'effectifs, mais de capacité redirigée vers des tâches à plus forte valeur ajoutée : améliorer l'environnement de contrôle, s'étendre à de nouveaux référentiels et soutenir les due diligences commerciales.
+D'après les données clients de GRC Eye sur plus de 200 déploiements, les organisations qui automatisent leur programme GRC réduisent leurs coûts opérationnels de conformité totaux de **40 % en moyenne dès la première année**. Pour une entreprise dépensant 500 000 € par an en conformité (personnel, outils, audits externes), cela représente 200 000 € reversés à l'activité, non pas sous forme de réduction d'effectifs, mais de capacité redirigée vers des tâches à plus forte valeur ajoutée : améliorer l'environnement de contrôle, s'étendre à de nouveaux référentiels et soutenir les due diligences commerciales.
 
 ### 2. Accélération des cycles de vente : conclure les contrats grands comptes 3 à 5 semaines plus vite
 
@@ -46,7 +46,7 @@ Les acheteurs grands comptes et les contreparties réglementées demandent syst�
 
 Un programme automatisé produit un Trust Center en direct : une page de conformité publique affichant en temps réel le statut des référentiels, les certifications disponibles et une synthèse de la sécurité. Quand un prospect demande « êtes-vous certifiés ISO 27001 ? », la réponse est un lien, pas un projet annexe de six semaines.
 
-Les clients de GRCEye rapportent une réduction moyenne de **3 à 5 semaines des cycles de vente grands comptes** grâce à des preuves de conformité immédiates et crédibles. Pour une entreprise avec une taille moyenne de contrat de 150 000 € et un pipeline de 20 affaires, récupérer ne serait-ce qu'un contrat par trimestre bloqué pour des raisons de conformité représente 600 000 € de revenus annuels.
+Les clients de GRC Eye rapportent une réduction moyenne de **3 à 5 semaines des cycles de vente grands comptes** grâce à des preuves de conformité immédiates et crédibles. Pour une entreprise avec une taille moyenne de contrat de 150 000 € et un pipeline de 20 affaires, récupérer ne serait-ce qu'un contrat par trimestre bloqué pour des raisons de conformité représente 600 000 € de revenus annuels.
 
 ### 3. Réduction du coût des incidents : détecter la dérive des contrôles avant qu'elle ne devienne une violation
 
@@ -138,7 +138,7 @@ La question pour les PDG en 2026 n'est pas de savoir s'il faut automatiser la GR
 
 تستبدل أتمتة GRC دورة جمع الأدلة اليدوية بمراقبة مستمرة وآلية للضوابط. تُختبر الضوابط تلقائيًا (فحوصات الإعداد، مراجعات الوصول، إقرارات السياسات) وتُرفق الأدلة بالضابط المعني في الوقت الفعلي. يتحول مدير الامتثال من جامع أدلة إلى مالك للبرنامج.
 
-استنادًا إلى بيانات عملاء GRCEye عبر أكثر من 200 عملية نشر، تخفض المؤسسات التي تُؤتمت برنامج GRC الخاص بها إجمالي تكاليف تشغيل الامتثال بمعدل **40% في المتوسط خلال السنة الأولى**. بالنسبة لشركة تنفق 500,000 يورو سنويًا على الامتثال (الموظفون، الأدوات، التدقيق الخارجي)، يعني ذلك عودة 200,000 يورو إلى النشاط، ليس عبر خفض عدد الموظفين، بل عبر إعادة توجيه القدرات نحو عمل أعلى قيمة: تحسين بيئة الضوابط، والتوسع إلى أطر عمل جديدة، ودعم العناية الواجبة التجارية.
+استنادًا إلى بيانات عملاء GRC Eye عبر أكثر من 200 عملية نشر، تخفض المؤسسات التي تُؤتمت برنامج GRC الخاص بها إجمالي تكاليف تشغيل الامتثال بمعدل **40% في المتوسط خلال السنة الأولى**. بالنسبة لشركة تنفق 500,000 يورو سنويًا على الامتثال (الموظفون، الأدوات، التدقيق الخارجي)، يعني ذلك عودة 200,000 يورو إلى النشاط، ليس عبر خفض عدد الموظفين، بل عبر إعادة توجيه القدرات نحو عمل أعلى قيمة: تحسين بيئة الضوابط، والتوسع إلى أطر عمل جديدة، ودعم العناية الواجبة التجارية.
 
 ### 2. تسريع دورة المبيعات: إغلاق صفقات المؤسسات الكبرى أسرع بـ 3 إلى 5 أسابيع
 
@@ -146,7 +146,7 @@ La question pour les PDG en 2026 n'est pas de savoir s'il faut automatiser la GR
 
 ينتج البرنامج المؤتمت مركز ثقة (Trust Center) حيًا: صفحة امتثال عامة تعرض حالة الأطر في الوقت الفعلي، والشهادات المتاحة، ولمحة عن الأمن. عندما يسأل عميل محتمل "هل أنتم معتمدون وفق ISO 27001؟"، يكون الجواب رابطًا، لا مشروعًا جانبيًا يستغرق ستة أسابيع.
 
-يفيد عملاء GRCEye بتحقيق متوسط تخفيض قدره **3 إلى 5 أسابيع في دورات مبيعات المؤسسات الكبرى** بفضل أدلة امتثال فورية وموثوقة. بالنسبة لشركة بمتوسط حجم صفقة 150,000 يورو وخط أنابيب مبيعات من 20 صفقة، فإن استرجاع صفقة واحدة فقط كل ربع سنة كانت متعثرة بسبب الامتثال يعادل 600,000 يورو من الإيرادات السنوية.
+يفيد عملاء GRC Eye بتحقيق متوسط تخفيض قدره **3 إلى 5 أسابيع في دورات مبيعات المؤسسات الكبرى** بفضل أدلة امتثال فورية وموثوقة. بالنسبة لشركة بمتوسط حجم صفقة 150,000 يورو وخط أنابيب مبيعات من 20 صفقة، فإن استرجاع صفقة واحدة فقط كل ربع سنة كانت متعثرة بسبب الامتثال يعادل 600,000 يورو من الإيرادات السنوية.
 
 ### 3. خفض تكلفة الحوادث: رصد انحراف الضوابط قبل أن يتحول إلى اختراق
 

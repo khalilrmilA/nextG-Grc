@@ -4,8 +4,8 @@
   "description": "All-in-one GRC SaaS — 70+ frameworks, AI gap analysis, risk quantification, audits, policies, vendor risk and a public trust center.",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#0f1729",
-  "theme_color": "#2563eb",
+  "background_color": "#15181C",
+  "theme_color": "#0F74C5",
   "icons": [
     {
       "src": "/android-chrome-192x192.png",

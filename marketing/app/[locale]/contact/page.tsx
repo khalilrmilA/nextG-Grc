@@ -13,7 +13,7 @@ export async function generateMetadata(props: { params: Promise<{ locale: Locale
     keywords: m.keywords,
     alternates: { canonical: canonicalUrl(params.locale, "/contact"), languages: hreflangAlternates("/contact") },
     openGraph: {
-      siteName: "GRCEye",
+      siteName: "GRC Eye",
       title: m.ogTitle,
       description: m.ogDescription,
       url: canonicalUrl(params.locale, "/contact"),
@@ -28,8 +28,8 @@ const contactJsonLd = {
   "@context": "https://schema.org",
   "@type": "ContactPage",
   url: "https://grceye.com/contact",
-  name: "Contact GRCEye",
-  description: "Get in touch with the GRCEye team: sales, support, partnerships.",
+  name: "Contact GRC Eye",
+  description: "Get in touch with the GRC Eye team: sales, support, partnerships.",
 };
 
 export default function ContactPage() {

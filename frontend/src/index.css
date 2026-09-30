@@ -1,3 +1,10 @@
+/* GRC Eye brand type — Geist (text) + Geist Mono (data). Self-hosted. */
+@font-face { font-family: "Geist"; font-weight: 400; font-display: swap; src: url("/fonts/Geist-Regular.woff2") format("woff2"); }
+@font-face { font-family: "Geist"; font-weight: 500; font-display: swap; src: url("/fonts/Geist-Medium.woff2") format("woff2"); }
+@font-face { font-family: "Geist"; font-weight: 600; font-display: swap; src: url("/fonts/Geist-SemiBold.woff2") format("woff2"); }
+@font-face { font-family: "Geist"; font-weight: 700; font-display: swap; src: url("/fonts/Geist-Bold.woff2") format("woff2"); }
+@font-face { font-family: "Geist Mono"; font-weight: 500; font-display: swap; src: url("/fonts/GeistMono-Medium.woff2") format("woff2"); }
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -5,53 +12,59 @@
 @layer base {
   :root {
     --background: 0 0% 100%;
-    --foreground: 222.2 84% 4.9%;
+    --foreground: 216 15% 10%;
     --card: 0 0% 100%;
-    --card-foreground: 222.2 84% 4.9%;
-    --primary: 222.2 47.4% 11.2%;
-    --primary-foreground: 210 40% 98%;
-    --secondary: 210 40% 96.1%;
-    --secondary-foreground: 222.2 47.4% 11.2%;
-    --muted: 210 40% 96.1%;
-    --muted-foreground: 215.4 16.3% 46.9%;
-    --accent: 210 40% 96.1%;
-    --accent-foreground: 222.2 47.4% 11.2%;
+    --card-foreground: 216 15% 10%;
+    --primary: 216 15% 10%;
+    --primary-foreground: 60 6% 96%;
+    --secondary: 60 6% 96%;
+    --secondary-foreground: 216 15% 10%;
+    --muted: 60 6% 96%;
+    --muted-foreground: 216 6% 39%;
+    --accent: 60 6% 96%;
+    --accent-foreground: 216 15% 10%;
     --destructive: 0 84.2% 60.2%;
     --destructive-foreground: 210 40% 98%;
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
-    --ring: 222.2 84% 4.9%;
+    --border: 60 4% 85%;
+    --input: 60 4% 85%;
+    --ring: 207 86% 42%;
     --radius: 0.5rem;
   }
 
   /* ── Dark mode ── */
   .dark {
-    --background: 222 47% 8%;
-    --foreground: 213 31% 91%;
-    --card: 222 47% 11%;
-    --card-foreground: 213 31% 91%;
-    --primary: 210 40% 98%;
-    --primary-foreground: 222 47% 8%;
-    --secondary: 222 47% 15%;
-    --secondary-foreground: 213 31% 91%;
-    --muted: 223 47% 14%;
-    --muted-foreground: 215 20% 55%;
-    --accent: 222 47% 15%;
-    --accent-foreground: 213 31% 91%;
+    --background: 216 15% 8%;
+    --foreground: 60 6% 96%;
+    --card: 216 15% 11%;
+    --card-foreground: 60 6% 96%;
+    --primary: 60 6% 96%;
+    --primary-foreground: 216 15% 10%;
+    --secondary: 216 12% 16%;
+    --secondary-foreground: 60 6% 96%;
+    --muted: 216 12% 14%;
+    --muted-foreground: 216 6% 58%;
+    --accent: 216 12% 16%;
+    --accent-foreground: 60 6% 96%;
     --destructive: 0 63% 31%;
     --destructive-foreground: 210 40% 98%;
-    --border: 222 47% 18%;
-    --input: 222 47% 18%;
-    --ring: 216 34% 17%;
+    --border: 216 10% 20%;
+    --input: 216 10% 20%;
+    --ring: 207 86% 42%;
   }
 
   * {
     @apply border-border;
   }
 
+  h1 { font-weight: 700; letter-spacing: -0.03em; line-height: 1.1; }
+  h2 { font-weight: 600; letter-spacing: -0.02em; line-height: 1.2; }
+  h3, h4 { letter-spacing: -0.01em; }
+  code, kbd, samp, pre { font-family: 'Geist Mono', ui-monospace, monospace; }
+  [dir="rtl"] h1, [dir="rtl"] h2, [dir="rtl"] h3, [dir="rtl"] h4 { letter-spacing: 0; }
+
   body {
     @apply bg-background text-foreground;
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    font-family: "Geist", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
     transition: background-color 0.2s ease, color 0.2s ease;
   }
 }
@@ -270,7 +283,7 @@ aside:hover ::-webkit-scrollbar-thumb:hover {
 .animation-delay-4000 { animation-delay: 4000ms; }
 
 .gradient-text-animated {
-  background: linear-gradient(270deg, #2563eb, #4f46e5, #0ea5e9, #06b6d4, #2563eb);
+  background: linear-gradient(270deg, #0F74C5, #4f46e5, #3F92D6, #72B0E4, #0F74C5);
   background-size: 400% 400%;
   -webkit-background-clip: text;
   background-clip: text;
@@ -279,7 +292,7 @@ aside:hover ::-webkit-scrollbar-thumb:hover {
 }
 
 .shimmer-text {
-  background: linear-gradient(90deg, #1e40af 0%, #60a5fa 40%, #0ea5e9 60%, #1e40af 100%);
+  background: linear-gradient(90deg, #0B4A7E 0%, #60a5fa 40%, #3F92D6 60%, #0B4A7E 100%);
   background-size: 200% auto;
   -webkit-background-clip: text;
   background-clip: text;
@@ -308,7 +321,7 @@ aside:hover ::-webkit-scrollbar-thumb:hover {
 
 
 .typing-cursor {
-  border-right: 2.5px solid #2563eb;
+  border-right: 2.5px solid #0F74C5;
   animation: typing-cursor 0.9s ease infinite;
   padding-right: 2px;
 }
@@ -347,7 +360,7 @@ aside:hover ::-webkit-scrollbar-thumb:hover {
 
 /* Arabic font stack */
 [dir="rtl"] {
-  font-family: 'Segoe UI', 'Tahoma', 'Arial', system-ui, sans-serif;
+  font-family: 'Geist', 'Segoe UI', 'Tahoma', 'Arial', system-ui, sans-serif;
 }
 
 /* ── Global text alignment ── */

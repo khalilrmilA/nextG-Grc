@@ -23,19 +23,19 @@ function intlLocale(lang: string): string {
 
 const STATUS_COLORS: Record<string, string> = {
   implemented: "#15803d",
-  partially_implemented: "#92400e",
-  not_implemented: "#991b1b",
-  not_applicable: "#6b7280",
-  not_started: "#6b7280",
-  in_progress: "#1d4ed8",
+  partially_implemented: "#665A29",
+  not_implemented: "#772829",
+  not_applicable: "#5B6068",
+  not_started: "#5B6068",
+  in_progress: "#0C5D9E",
 };
 
 const STATUS_BG: Record<string, string> = {
   implemented: "#dcfce7",
-  partially_implemented: "#fef9c3",
-  not_implemented: "#fee2e2",
-  not_applicable: "#f3f4f6",
-  not_started: "#f3f4f6",
+  partially_implemented: "#FBF6E3",
+  not_implemented: "#F9E1E1",
+  not_applicable: "#ECECE9",
+  not_started: "#ECECE9",
   in_progress: "#dbeafe",
 };
 
@@ -75,45 +75,45 @@ export default function AssignControlModal({ ca, gap, assessmentName, frameworkN
   <title>${t("assign_control.doc_type")} — ${ca.control_identifier}</title>
   <style>
     *{margin:0;padding:0;box-sizing:border-box}
-    body{font-family:-apple-system,Arial,sans-serif;color:#111827;padding:48px;font-size:13px;line-height:1.65}
-    .logo-bar{display:flex;align-items:center;justify-content:space-between;margin-bottom:32px;padding-bottom:16px;border-bottom:3px solid #2563eb}
-    .logo-title{font-size:22px;font-weight:800;color:#1e40af;letter-spacing:-0.5px}
-    .logo-sub{font-size:11px;color:#6b7280;margin-top:2px}
-    .doc-type{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:#9ca3af}
-    .control-header{background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;padding:20px;margin-bottom:24px}
-    .control-id{font-size:11px;font-weight:700;color:#2563eb;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:4px}
-    .control-title{font-size:18px;font-weight:700;color:#111827;margin-bottom:8px;line-height:1.3}
+    body{font-family:-apple-system,Arial,sans-serif;color:#15181C;padding:48px;font-size:13px;line-height:1.65}
+    .logo-bar{display:flex;align-items:center;justify-content:space-between;margin-bottom:32px;padding-bottom:16px;border-bottom:3px solid #0F74C5}
+    .logo-title{font-size:22px;font-weight:800;color:#0B4A7E;letter-spacing:-0.5px}
+    .logo-sub{font-size:11px;color:#5B6068;margin-top:2px}
+    .doc-type{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:#8E9299}
+    .control-header{background:#F6F6F4;border:1px solid #D9DAD6;border-radius:12px;padding:20px;margin-bottom:24px}
+    .control-id{font-size:11px;font-weight:700;color:#0F74C5;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:4px}
+    .control-title{font-size:18px;font-weight:700;color:#15181C;margin-bottom:8px;line-height:1.3}
     .control-meta{display:flex;gap:12px;flex-wrap:wrap}
-    .meta-chip{font-size:11px;background:#e2e8f0;color:#475569;padding:3px 10px;border-radius:999px;font-weight:500}
+    .meta-chip{font-size:11px;background:#D9DAD6;color:#3D4249;padding:3px 10px;border-radius:999px;font-weight:500}
     .status-chip{font-size:11px;padding:3px 12px;border-radius:999px;font-weight:700}
     .section{margin-bottom:22px}
-    .section-title{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:0.08em;color:#9ca3af;margin-bottom:10px;display:flex;align-items:center;gap:6px}
-    .section-title::after{content:"";flex:1;height:1px;background:#f1f5f9}
+    .section-title{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:0.08em;color:#8E9299;margin-bottom:10px;display:flex;align-items:center;gap:6px}
+    .section-title::after{content:"";flex:1;height:1px;background:#ECECE9}
     .info-grid{display:grid;grid-template-columns:160px 1fr;gap:6px 12px}
-    .info-label{font-weight:600;color:#374151;font-size:12px}
-    .info-value{color:#111827;font-size:12px}
-    .ai-box{background:#f0f9ff;border:1px solid #bae6fd;border-radius:10px;padding:14px;font-size:12px;color:#0c4a6e;line-height:1.7}
-    .gap-box{background:#fff1f2;border:1px solid #fecdd3;border-radius:10px;padding:14px}
-    .gap-severity{display:inline-block;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;padding:2px 8px;border-radius:4px;margin-bottom:8px;background:#fee2e2;color:#991b1b}
-    .gap-desc{font-size:12px;color:#991b1b;line-height:1.6}
-    .remediation{font-size:12px;color:#374151;margin-top:8px;padding-top:8px;border-top:1px solid #fecdd3}
+    .info-label{font-weight:600;color:#3D4249;font-size:12px}
+    .info-value{color:#15181C;font-size:12px}
+    .ai-box{background:#E8F3FC;border:1px solid #bae6fd;border-radius:10px;padding:14px;font-size:12px;color:#0c4a6e;line-height:1.7}
+    .gap-box{background:#fff1f2;border:1px solid #F3C3C2;border-radius:10px;padding:14px}
+    .gap-severity{display:inline-block;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;padding:2px 8px;border-radius:4px;margin-bottom:8px;background:#F9E1E1;color:#772829}
+    .gap-desc{font-size:12px;color:#772829;line-height:1.6}
+    .remediation{font-size:12px;color:#3D4249;margin-top:8px;padding-top:8px;border-top:1px solid #F3C3C2}
     .assign-box{background:#eff6ff;border:2px solid #bfdbfe;border-radius:12px;padding:18px}
-    .assign-name{font-size:18px;font-weight:700;color:#1e40af;margin-bottom:4px}
-    .assign-meta{font-size:12px;color:#3b82f6;margin-bottom:12px}
-    .footer{margin-top:40px;padding-top:16px;border-top:1px solid #f1f5f9;display:flex;justify-content:space-between;align-items:center;font-size:10px;color:#9ca3af}
-    .confidential{font-weight:700;color:#ef4444;letter-spacing:0.06em;text-transform:uppercase;font-size:10px}
+    .assign-name{font-size:18px;font-weight:700;color:#0B4A7E;margin-bottom:4px}
+    .assign-meta{font-size:12px;color:#2185D3;margin-bottom:12px}
+    .footer{margin-top:40px;padding-top:16px;border-top:1px solid #ECECE9;display:flex;justify-content:space-between;align-items:center;font-size:10px;color:#8E9299}
+    .confidential{font-weight:700;color:#DB4241;letter-spacing:0.06em;text-transform:uppercase;font-size:10px}
     @media print{body{padding:24px}button{display:none}}
   </style>
 </head>
 <body>
   <div class="logo-bar">
     <div>
-      <div class="logo-title">GRCEye</div>
+      <div class="logo-title">GRC Eye</div>
       <div class="logo-sub">${assessmentName} · ${frameworkName}</div>
     </div>
     <div style="text-align:right">
       <div class="doc-type">${t("assign_control.doc_type")}</div>
-      <div style="font-size:11px;color:#9ca3af;margin-top:2px">${fmtDate(new Date())}</div>
+      <div style="font-size:11px;color:#8E9299;margin-top:2px">${fmtDate(new Date())}</div>
     </div>
   </div>
 
@@ -122,8 +122,8 @@ export default function AssignControlModal({ ca, gap, assessmentName, frameworkN
     <div class="control-title">${ca.control_title}</div>
     <div class="control-meta">
       ${ca.control_category ? `<span class="meta-chip">${ca.control_category}</span>` : ""}
-      ${ca.is_mandatory ? '<span class="meta-chip" style="background:#fee2e2;color:#991b1b">' + t("compliance.mandatory_badge") + '</span>' : ""}
-      <span class="status-chip" style="background:${STATUS_BG[status] ?? "#f3f4f6"};color:${STATUS_COLORS[status] ?? "#6b7280"}">${statusLabel(status)}</span>
+      ${ca.is_mandatory ? '<span class="meta-chip" style="background:#F9E1E1;color:#772829">' + t("compliance.mandatory_badge") + '</span>' : ""}
+      <span class="status-chip" style="background:${STATUS_BG[status] ?? "#ECECE9"};color:${STATUS_COLORS[status] ?? "#5B6068"}">${statusLabel(status)}</span>
       ${ca.ai_confidence != null ? `<span class="meta-chip">${t("compliance.ai_confidence")}: ${Math.round(ca.ai_confidence * 100)}%</span>` : ""}
     </div>
   </div>
@@ -131,7 +131,7 @@ export default function AssignControlModal({ ca, gap, assessmentName, frameworkN
   ${ca.control_description ? `
   <div class="section">
     <div class="section-title">${t("assign_control.control_description")}</div>
-    <p style="font-size:12px;color:#374151;line-height:1.7">${ca.control_description}</p>
+    <p style="font-size:12px;color:#3D4249;line-height:1.7">${ca.control_description}</p>
   </div>` : ""}
 
   ${ca.implementation_notes ? `
@@ -166,7 +166,7 @@ export default function AssignControlModal({ ca, gap, assessmentName, frameworkN
   </div>
 
   <div class="footer">
-    <span>GRCEye — ${t("assign_control.record")}</span>
+    <span>GRC Eye — ${t("assign_control.record")}</span>
     <span class="confidential">${t("assign_control.confidential")}</span>
   </div>
 

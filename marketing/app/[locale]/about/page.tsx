@@ -7,19 +7,19 @@ import { ORG_ID, OG_IMAGE } from "@/lib/brand";
 
 const META: Record<Locale, { title: string; description: string }> = {
   en: {
-    title: "About GRCEye | The Company Behind the GRC Platform",
+    title: "About GRC Eye | The Company Behind the GRC Platform",
     description:
-      "GRCEye is a governance, risk and compliance platform built for security teams. Learn who builds it, where it runs, and how it relates to SilentWolf.",
+      "GRC Eye is a governance, risk and compliance platform built for security teams. Learn who builds it, where it runs, and how it relates to SilentWolf.",
   },
   fr: {
-    title: "À propos de GRCEye | L'entreprise derrière la plateforme GRC",
+    title: "À propos de GRC Eye | L'entreprise derrière la plateforme GRC",
     description:
-      "GRCEye est une plateforme de gouvernance, risques et conformité conçue pour les équipes sécurité. Découvrez qui la développe et son lien avec SilentWolf.",
+      "GRC Eye est une plateforme de gouvernance, risques et conformité conçue pour les équipes sécurité. Découvrez qui la développe et son lien avec SilentWolf.",
   },
   ar: {
-    title: "عن GRCEye | الشركة وراء منصة الحوكمة والمخاطر والامتثال",
+    title: "عن GRC Eye | الشركة وراء منصة الحوكمة والمخاطر والامتثال",
     description:
-      "GRCEye منصة للحوكمة والمخاطر والامتثال مصممة لفرق الأمن. تعرّف على من يطوّرها وعلاقتها بشركة SilentWolf.",
+      "GRC Eye منصة للحوكمة والمخاطر والامتثال مصممة لفرق الأمن. تعرّف على من يطوّرها وعلاقتها بشركة SilentWolf.",
   },
 };
 
@@ -34,7 +34,7 @@ export async function generateMetadata(props: { params: Promise<{ locale: Locale
       languages: hreflangAlternates("/about"),
     },
     openGraph: {
-      siteName: "GRCEye",
+      siteName: "GRC Eye",
       title: m.title,
       description: m.description,
       url: canonicalUrl(params.locale, "/about"),
@@ -54,7 +54,7 @@ const ABOUT_JSON_LD = {
   "@context": "https://schema.org",
   "@type": "AboutPage",
   "@id": `${SITE_URL}/#about`,
-  name: "About GRCEye",
+  name: "About GRC Eye",
   mainEntity: { "@id": ORG_ID },
 };
 
@@ -68,13 +68,13 @@ export default async function AboutPage(props: { params: Promise<{ locale: Local
         dangerouslySetInnerHTML={{ __html: JSON.stringify(ABOUT_JSON_LD) }}
       />
       <LegalPage
-        title="About GRCEye"
+        title="About GRC Eye"
         subtitle="The governance, risk and compliance platform built for security teams that are tired of spreadsheets."
       >
-        <h2>What GRCEye is</h2>
+        <h2>What GRC Eye is</h2>
         <p>
-          <strong>GRCEye</strong> (pronounced &ldquo;GRC eye&rdquo;, and sometimes written
-          GRCeye or GRC-Eye) is an all-in-one <strong>governance, risk and compliance</strong>{" "}
+          <strong>GRC Eye</strong> (pronounced &ldquo;GRC Eye&rdquo;, and sometimes written
+          GRC Eye or GRC-Eye) is an all-in-one <strong>governance, risk and compliance</strong>{" "}
           SaaS platform. It gives CISOs, compliance leads and security teams a single
           system for the work that is usually scattered across dozens of spreadsheets,
           shared drives and email threads.
@@ -120,7 +120,7 @@ export default async function AboutPage(props: { params: Promise<{ locale: Local
 
         <h2>Where the AI runs</h2>
         <p>
-          GRCEye&apos;s AI features run on your own infrastructure. The platform uses a
+          GRC Eye&apos;s AI features run on your own infrastructure. The platform uses a
           locally hosted model rather than sending your control evidence, contracts or
           policies to a third-party API. For regulated customers, and for anyone whose
           compliance posture would be undermined by shipping audit evidence to an external
@@ -128,9 +128,9 @@ export default async function AboutPage(props: { params: Promise<{ locale: Local
           vendor review.
         </p>
 
-        <h2>Who builds GRCEye</h2>
+        <h2>Who builds GRC Eye</h2>
         <p>
-          GRCEye is built and operated from <strong>Tunisia</strong>, and is developed
+          GRC Eye is built and operated from <strong>Tunisia</strong>, and is developed
           alongside{" "}
           <a href="https://silentwolf.io/" target="_blank" rel="noopener noreferrer">
             SilentWolf
@@ -152,7 +152,7 @@ export default async function AboutPage(props: { params: Promise<{ locale: Local
         </p>
         <p>
           If you want to see it rather than read about it,{" "}
-          <Link href={to("/how-it-works")}>walk through how GRCEye works</Link> or{" "}
+          <Link href={to("/how-it-works")}>walk through how GRC Eye works</Link> or{" "}
           <Link href="/register">start a free trial</Link> &mdash; no credit card required.
         </p>
       </LegalPage>

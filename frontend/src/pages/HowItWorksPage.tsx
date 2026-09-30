@@ -81,7 +81,7 @@ export default function HowItWorksPage() {
             AI that runs inside your infrastructure — not outside it
           </div>
           <h1 className="text-4xl sm:text-5xl font-extrabold text-gray-900 leading-tight mb-6">
-            How GRCEye works —{" "}
+            How GRC Eye works —{" "}
             <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-indigo-600">
               powered by AI
             </span>
@@ -137,7 +137,7 @@ export default function HowItWorksPage() {
             </div>
             <span className="text-sm font-semibold text-blue-700 uppercase tracking-wide">Vendor AI Chat</span>
           </div>
-          <h2 className="text-2xl sm:text-3xl font-extrabold text-gray-900 mb-4">Chat with your vendors inside GRCEye</h2>
+          <h2 className="text-2xl sm:text-3xl font-extrabold text-gray-900 mb-4">Chat with your vendors inside GRC Eye</h2>
           <p className="text-gray-500 mb-10 max-w-2xl">
             Share a secure vendor portal link and negotiate contracts inside the platform. Every message, version, and clause annotation is logged automatically. No email threads.
           </p>
@@ -222,10 +222,10 @@ export default function HowItWorksPage() {
       </section>
 
       {/* ── Global AI impact ── */}
-      <section className="py-20 px-4 sm:px-6 bg-[#f0f9ff]">
+      <section className="py-20 px-4 sm:px-6 bg-[#E8F3FC]">
         <div className="max-w-5xl mx-auto">
           <div className="text-center mb-12">
-            <h2 className="text-2xl sm:text-3xl font-extrabold text-gray-900 mb-4">AI embedded across every part of GRCEye</h2>
+            <h2 className="text-2xl sm:text-3xl font-extrabold text-gray-900 mb-4">AI embedded across every part of GRC Eye</h2>
             <p className="text-gray-500 max-w-2xl mx-auto">This is not a chatbot bolted on as an afterthought. AI is the execution layer of the entire platform.</p>
           </div>
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">

@@ -28,7 +28,7 @@ export default function AuditorLayout() {
 
         {/* Logo */}
         <div className="flex flex-col items-center px-4 py-4 border-b border-slate-700/60">
-          <img src="/logo-vertical.png" alt={t("auditor_portal.logo_alt")} className="h-24 w-auto object-contain bg-white/95 rounded-xl p-2" />
+          <img src="/logo-vertical-white.png" alt={t("auditor_portal.logo_alt")} className="h-24 w-auto object-contain" />
         </div>
 
         {/* Company badge */}

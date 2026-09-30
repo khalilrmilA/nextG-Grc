@@ -6,7 +6,7 @@ export default function PublicFooter() {
       <div className="max-w-7xl mx-auto">
         <div className="grid grid-cols-1 md:grid-cols-4 gap-10 mb-12">
           <div className="md:col-span-2">
-            <img src="/logo-horizontal.png" alt="GRCEye" className="h-12 w-auto object-contain bg-white/95 rounded-xl px-3 py-1.5 mb-4" />
+            <img src="/logowhite.png" alt="GRC Eye" className="h-10 w-auto object-contain mb-4" />
             <p className="text-sm text-slate-500 leading-relaxed max-w-sm">
               Enterprise GRC platform for security teams. Risk management, compliance tracking, audit workflows, and AI-powered document generation — all in one place.
             </p>
@@ -50,7 +50,7 @@ export default function PublicFooter() {
         </div>
 
         <div className="border-t border-slate-800 pt-8 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-slate-600">
-          <p>© {new Date().getFullYear()} GRCEye, Inc. All rights reserved.</p>
+          <p>© {new Date().getFullYear()} GRC Eye, Inc. All rights reserved.</p>
           <p>
             Powered by{" "}
             <a

@@ -197,26 +197,26 @@ export interface ReportData {
 }
 
 function severityBg(s: string) {
-  if (s === "critical") return "#fee2e2";
+  if (s === "critical") return "#F9E1E1";
   if (s === "high") return "#ffedd5";
-  if (s === "medium") return "#fef9c3";
-  return "#f3f4f6";
+  if (s === "medium") return "#FBF6E3";
+  return "#ECECE9";
 }
 function severityColor(s: string) {
-  if (s === "critical") return "#991b1b";
+  if (s === "critical") return "#772829";
   if (s === "high") return "#9a3412";
-  if (s === "medium") return "#854d0e";
-  return "#374151";
+  if (s === "medium") return "#665A29";
+  return "#3D4249";
 }
 
 /** Builds the printable compliance report as a standalone HTML document. */
 export function buildComplianceReportHtml(data: ReportData): string {
   const lang = currentLang();
   const dir = lang === "ar" ? "rtl" : "ltr";
-  const scoreColor = data.complianceScore == null ? "#6b7280"
-    : data.complianceScore >= 80 ? "#166534"
-    : data.complianceScore >= 60 ? "#854d0e"
-    : "#991b1b";
+  const scoreColor = data.complianceScore == null ? "#5B6068"
+    : data.complianceScore >= 80 ? "#31613F"
+    : data.complianceScore >= 60 ? "#665A29"
+    : "#772829";
 
   // Build a lookup map: control_identifier → gap details
   const gapMap = new Map(data.gaps.map((g) => [g.control_identifier, g]));
@@ -250,10 +250,10 @@ export function buildComplianceReportHtml(data: ReportData): string {
   function renderCompliantRow(c: ControlExportRow) {
     return `
       <tr>
-        <td style="font-family:monospace;font-size:11px;white-space:nowrap;color:#166534;font-weight:600">${c.control_identifier}</td>
+        <td style="font-family:monospace;font-size:11px;white-space:nowrap;color:#31613F;font-weight:600">${c.control_identifier}</td>
         <td style="font-size:12px;font-weight:500">${c.control_title}</td>
-        <td style="font-size:11px;color:#6b7280">${c.control_category ?? "—"}</td>
-        <td style="font-size:11px;color:#374151">${c.implementation_notes || c.notes || "—"}</td>
+        <td style="font-size:11px;color:#5B6068">${c.control_category ?? "—"}</td>
+        <td style="font-size:11px;color:#3D4249">${c.implementation_notes || c.notes || "—"}</td>
       </tr>`;
   }
 
@@ -261,12 +261,12 @@ export function buildComplianceReportHtml(data: ReportData): string {
     const gap = gapMap.get(c.control_identifier);
     return `
       <tr>
-        <td style="font-family:monospace;font-size:11px;white-space:nowrap;color:#92400e;font-weight:600">${c.control_identifier}</td>
+        <td style="font-family:monospace;font-size:11px;white-space:nowrap;color:#665A29;font-weight:600">${c.control_identifier}</td>
         <td style="font-size:12px;font-weight:500">${c.control_title}</td>
-        <td style="font-size:11px;color:#6b7280">${c.control_category ?? "—"}</td>
-        <td style="font-size:11px;color:#374151">${c.implementation_notes || c.notes || "—"}</td>
-        <td style="font-size:11px;color:#92400e">${gap?.gap_description ?? "—"}</td>
-        <td style="font-size:11px;color:#6b7280">${gap?.remediation_steps ?? "—"}</td>
+        <td style="font-size:11px;color:#5B6068">${c.control_category ?? "—"}</td>
+        <td style="font-size:11px;color:#3D4249">${c.implementation_notes || c.notes || "—"}</td>
+        <td style="font-size:11px;color:#665A29">${gap?.gap_description ?? "—"}</td>
+        <td style="font-size:11px;color:#5B6068">${gap?.remediation_steps ?? "—"}</td>
       </tr>`;
   }
 
@@ -276,29 +276,29 @@ export function buildComplianceReportHtml(data: ReportData): string {
     const blocker = gap?.is_certification_blocker === true;
     return `
       <tr>
-        <td style="font-family:monospace;font-size:11px;white-space:nowrap;color:#991b1b;font-weight:600">
+        <td style="font-family:monospace;font-size:11px;white-space:nowrap;color:#772829;font-weight:600">
           ${c.control_identifier}
-          ${blocker ? `<br/><span style="background:#fee2e2;color:#991b1b;padding:1px 5px;border-radius:3px;font-size:9px;font-weight:700;text-transform:uppercase">${tr("report_pdf.blocker")}</span>` : ""}
+          ${blocker ? `<br/><span style="background:#F9E1E1;color:#772829;padding:1px 5px;border-radius:3px;font-size:9px;font-weight:700;text-transform:uppercase">${tr("report_pdf.blocker")}</span>` : ""}
         </td>
         <td style="font-size:12px;font-weight:500">${c.control_title}</td>
-        <td style="font-size:11px;color:#6b7280">${c.control_category ?? "—"}</td>
+        <td style="font-size:11px;color:#5B6068">${c.control_category ?? "—"}</td>
         <td>
           <span style="background:${severityBg(sev)};color:${severityColor(sev)};padding:2px 7px;border-radius:4px;font-size:10px;font-weight:700;text-transform:uppercase">
             ${trEnum(`compliance.severities.${sev}`, sev)}
           </span>
         </td>
-        <td style="font-size:11px;color:#374151">${gap?.gap_description ?? c.notes ?? "—"}</td>
-        <td style="font-size:11px;color:#6b7280">${gap?.remediation_steps ?? "—"}</td>
+        <td style="font-size:11px;color:#3D4249">${gap?.gap_description ?? c.notes ?? "—"}</td>
+        <td style="font-size:11px;color:#5B6068">${gap?.remediation_steps ?? "—"}</td>
       </tr>`;
   }
 
   function renderNaRow(c: ControlExportRow) {
     return `
       <tr>
-        <td style="font-family:monospace;font-size:11px;white-space:nowrap;color:#6b7280;font-weight:600">${c.control_identifier}</td>
+        <td style="font-family:monospace;font-size:11px;white-space:nowrap;color:#5B6068;font-weight:600">${c.control_identifier}</td>
         <td style="font-size:12px;font-weight:500">${c.control_title}</td>
-        <td style="font-size:11px;color:#6b7280">${c.control_category ?? "—"}</td>
-        <td style="font-size:11px;color:#9ca3af">${c.notes ?? "—"}</td>
+        <td style="font-size:11px;color:#5B6068">${c.control_category ?? "—"}</td>
+        <td style="font-size:11px;color:#8E9299">${c.notes ?? "—"}</td>
       </tr>`;
   }
 
@@ -308,13 +308,13 @@ export function buildComplianceReportHtml(data: ReportData): string {
         <span style="font-size:18px">${icon}</span>
         <div>
           <div style="font-size:15px;font-weight:700;color:${color}">${title}</div>
-          <div style="font-size:11px;color:#6b7280;margin-top:1px">${tr("report_pdf.controls_count", { count })}</div>
+          <div style="font-size:11px;color:#5B6068;margin-top:1px">${tr("report_pdf.controls_count", { count })}</div>
         </div>
       </div>`;
   }
 
   function emptyRow(colspan: number, msg: string) {
-    return `<tr><td colspan="${colspan}" style="text-align:center;color:#9ca3af;padding:20px;font-style:italic">${msg}</td></tr>`;
+    return `<tr><td colspan="${colspan}" style="text-align:center;color:#8E9299;padding:20px;font-style:italic">${msg}</td></tr>`;
   }
 
   // ── Sections HTML ────────────────────────────────────────────────────────────
@@ -336,7 +336,7 @@ export function buildComplianceReportHtml(data: ReportData): string {
     : emptyRow(4, tr("report_pdf.empty_na"));
 
   const s5html = notAssessed.length > 0
-    ? `${sectionHeader("#6b7280","#f9fafb",tr("report_pdf.sec_not_assessed"), notAssessed.length, "⏳")}
+    ? `${sectionHeader("#5B6068","#F6F6F4",tr("report_pdf.sec_not_assessed"), notAssessed.length, "⏳")}
        <table>
          <thead><tr>
            <th>${hId}</th><th>${hTitle}</th><th>${hCat}</th><th>${hNotes}</th>
@@ -352,24 +352,24 @@ export function buildComplianceReportHtml(data: ReportData): string {
   <title>${tr("report_pdf.doc_title", { name: data.assessmentName })}</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Tahoma, sans-serif; color: #111827; background: #fff; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Tahoma, sans-serif; color: #15181C; background: #fff; }
     .page { max-width: 1100px; margin: 0 auto; padding: 40px 32px; }
-    h1 { font-size: 26px; font-weight: 700; color: #1e3a5f; }
-    .meta { color: #6b7280; font-size: 13px; margin-top: 4px; }
+    h1 { font-size: 26px; font-weight: 700; color: #0A3B63; }
+    .meta { color: #5B6068; font-size: 13px; margin-top: 4px; }
     .score-row { display: flex; gap: 12px; margin: 24px 0 8px; flex-wrap: wrap; }
-    .card { background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 10px; padding: 14px 18px; flex: 1; min-width: 120px; text-align: center; }
+    .card { background: #F6F6F4; border: 1px solid #D9DAD6; border-radius: 10px; padding: 14px 18px; flex: 1; min-width: 120px; text-align: center; }
     .card .num { font-size: 26px; font-weight: 700; }
-    .card .lbl { font-size: 11px; color: #6b7280; margin-top: 3px; }
+    .card .lbl { font-size: 11px; color: #5B6068; margin-top: 3px; }
     .progress-wrap { margin: 8px 0 24px; }
-    .progress-bar-bg { height: 12px; background: #f3f4f6; border-radius: 6px; overflow: hidden; }
-    .progress-bar-fill { height: 100%; border-radius: 6px; background: linear-gradient(to ${dir === "rtl" ? "left" : "right"}, #22c55e, #86efac); width: ${barFill}%; }
-    .progress-label { font-size: 11px; color: #6b7280; margin-top: 4px; text-align: end; }
+    .progress-bar-bg { height: 12px; background: #ECECE9; border-radius: 6px; overflow: hidden; }
+    .progress-bar-fill { height: 100%; border-radius: 6px; background: linear-gradient(to ${dir === "rtl" ? "left" : "right"}, #5BBD74, #86efac); width: ${barFill}%; }
+    .progress-label { font-size: 11px; color: #5B6068; margin-top: 4px; text-align: end; }
     table { width: 100%; border-collapse: collapse; font-size: 13px; }
-    th { background: #f3f4f6; text-align: start; padding: 8px 10px; font-size: 10px; font-weight: 700; text-transform: uppercase; color: #6b7280; letter-spacing: ${lang === "ar" ? "0" : ".05em"}; }
-    td { padding: 8px 10px; border-bottom: 1px solid #f3f4f6; vertical-align: top; }
+    th { background: #ECECE9; text-align: start; padding: 8px 10px; font-size: 10px; font-weight: 700; text-transform: uppercase; color: #5B6068; letter-spacing: ${lang === "ar" ? "0" : ".05em"}; }
+    td { padding: 8px 10px; border-bottom: 1px solid #ECECE9; vertical-align: top; }
     tr:last-child td { border-bottom: none; }
     tr:hover td { background: #fafafa; }
-    .footer { margin-top: 48px; border-top: 1px solid #e5e7eb; padding-top: 16px; font-size: 11px; color: #9ca3af; text-align: center; }
+    .footer { margin-top: 48px; border-top: 1px solid #D9DAD6; padding-top: 16px; font-size: 11px; color: #8E9299; text-align: center; }
     @media print {
       .page { padding: 20px; }
       tr { page-break-inside: avoid; }
@@ -380,15 +380,15 @@ export function buildComplianceReportHtml(data: ReportData): string {
 <div class="page">
 
   <!-- Header -->
-  <div style="display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid #1e3a5f;padding-bottom:16px;margin-bottom:20px">
+  <div style="display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid #0A3B63;padding-bottom:16px;margin-bottom:20px">
     <div>
       <h1>${tr("report_pdf.heading")}</h1>
       <p class="meta">${data.assessmentName} &nbsp;·&nbsp; ${data.frameworkName}</p>
     </div>
     <div style="text-align:end">
-      <div style="font-size:11px;color:#9ca3af">${tr("report_pdf.generated")}</div>
+      <div style="font-size:11px;color:#8E9299">${tr("report_pdf.generated")}</div>
       <div style="font-size:13px;font-weight:600">${data.generatedAt}</div>
-      ${data.org ? `<div style="font-size:12px;color:#6b7280;margin-top:2px">${data.org}</div>` : ""}
+      ${data.org ? `<div style="font-size:12px;color:#5B6068;margin-top:2px">${data.org}</div>` : ""}
     </div>
   </div>
 
@@ -398,23 +398,23 @@ export function buildComplianceReportHtml(data: ReportData): string {
       <div class="num" style="color:${scoreColor}">${data.complianceScore != null ? data.complianceScore + "%" : "—"}</div>
       <div class="lbl">${tr("report_pdf.compliance_score")}</div>
     </div>
-    <div class="card" style="border-top:3px solid #166534">
-      <div class="num" style="color:#166534">${data.statusCounts.implemented}</div>
+    <div class="card" style="border-top:3px solid #31613F">
+      <div class="num" style="color:#31613F">${data.statusCounts.implemented}</div>
       <div class="lbl">✅ ${tr("report_pdf.compliant")}</div>
     </div>
-    <div class="card" style="border-top:3px solid #d97706">
-      <div class="num" style="color:#d97706">${data.statusCounts.partially_implemented}</div>
+    <div class="card" style="border-top:3px solid #AE983F">
+      <div class="num" style="color:#AE983F">${data.statusCounts.partially_implemented}</div>
       <div class="lbl">⚠️ ${tr("report_pdf.partial")}</div>
     </div>
-    <div class="card" style="border-top:3px solid #dc2626">
-      <div class="num" style="color:#dc2626">${data.statusCounts.not_implemented}</div>
+    <div class="card" style="border-top:3px solid #DB4241">
+      <div class="num" style="color:#DB4241">${data.statusCounts.not_implemented}</div>
       <div class="lbl">❌ ${tr("report_pdf.non_compliant")}</div>
     </div>
-    <div class="card" style="border-top:3px solid #9ca3af">
-      <div class="num" style="color:#6b7280">${data.statusCounts.not_applicable}</div>
+    <div class="card" style="border-top:3px solid #8E9299">
+      <div class="num" style="color:#5B6068">${data.statusCounts.not_applicable}</div>
       <div class="lbl">${tr("report_pdf.na")}</div>
     </div>
-    <div class="card" style="border-top:3px solid #6366f1">
+    <div class="card" style="border-top:3px solid #3F92D6">
       <div class="num">${data.statusCounts.total}</div>
       <div class="lbl">${tr("report_pdf.total_controls")}</div>
     </div>
@@ -427,7 +427,7 @@ export function buildComplianceReportHtml(data: ReportData): string {
   </div>
 
   <!-- SECTION 1: Compliant -->
-  ${sectionHeader("#166534", "#f0fdf4", tr("report_pdf.sec_compliant"), compliant.length, "✅")}
+  ${sectionHeader("#31613F", "#f0fdf4", tr("report_pdf.sec_compliant"), compliant.length, "✅")}
   <table>
     <thead><tr>
       <th style="width:100px">${hId}</th>
@@ -439,7 +439,7 @@ export function buildComplianceReportHtml(data: ReportData): string {
   </table>
 
   <!-- SECTION 2: Partial -->
-  ${sectionHeader("#d97706", "#fffbeb", tr("report_pdf.sec_partial"), partial.length, "⚠️")}
+  ${sectionHeader("#AE983F", "#fffbeb", tr("report_pdf.sec_partial"), partial.length, "⚠️")}
   <table>
     <thead><tr>
       <th style="width:100px">${hId}</th>
@@ -453,7 +453,7 @@ export function buildComplianceReportHtml(data: ReportData): string {
   </table>
 
   <!-- SECTION 3: Non-Compliant / Gaps -->
-  ${sectionHeader("#dc2626", "#fef2f2", tr("report_pdf.sec_gaps"), nonCompliant.length, "❌")}
+  ${sectionHeader("#DB4241", "#FCF0F0", tr("report_pdf.sec_gaps"), nonCompliant.length, "❌")}
   <table>
     <thead><tr>
       <th style="width:110px">${hId}</th>
@@ -467,7 +467,7 @@ export function buildComplianceReportHtml(data: ReportData): string {
   </table>
 
   <!-- SECTION 4: Not Applicable -->
-  ${sectionHeader("#6b7280", "#f9fafb", tr("report_pdf.sec_na"), notApplicable.length, "➖")}
+  ${sectionHeader("#5B6068", "#F6F6F4", tr("report_pdf.sec_na"), notApplicable.length, "➖")}
   <table>
     <thead><tr>
       <th style="width:100px">${hId}</th>
@@ -482,7 +482,7 @@ export function buildComplianceReportHtml(data: ReportData): string {
   ${s5html}
 
   <div class="footer">
-    GRCEye &nbsp;·&nbsp; ${tr("report_pdf.footer_report", { fw: data.frameworkShortName })} &nbsp;·&nbsp; ${data.generatedAt}
+    GRC Eye &nbsp;·&nbsp; ${tr("report_pdf.footer_report", { fw: data.frameworkShortName })} &nbsp;·&nbsp; ${data.generatedAt}
     &nbsp;·&nbsp; ${tr("report_pdf.footer_total", { count: data.statusCounts.total })}
   </div>
 </div>
@@ -542,7 +542,7 @@ export function buildDdAHtml(data: DdAData): string {
   const notApplicable= data.controls.filter((c) => c.status === "not_applicable");
   const total        = data.controls.length;
   const pct          = data.complianceScore;
-  const scoreColor   = pct == null ? "#6b7280" : pct >= 80 ? "#166534" : pct >= 60 ? "#d97706" : "#dc2626";
+  const scoreColor   = pct == null ? "#5B6068" : pct >= 80 ? "#31613F" : pct >= 60 ? "#AE983F" : "#DB4241";
 
   function statusLabel(s: string): string {
     if (s === "implemented")           return tr("dda.st_implemented");
@@ -561,16 +561,16 @@ export function buildDdAHtml(data: DdAData): string {
     return "⬜";
   }
   function statusStyle(s: string): string {
-    if (s === "implemented")           return "background:#dcfce7;color:#166534";
-    if (s === "partially_implemented") return "background:#fef9c3;color:#854d0e";
-    if (s === "not_implemented")       return "background:#fee2e2;color:#991b1b";
-    if (s === "in_progress")           return "background:#dbeafe;color:#1e40af";
-    return "background:#f3f4f6;color:#6b7280";
+    if (s === "implemented")           return "background:#dcfce7;color:#31613F";
+    if (s === "partially_implemented") return "background:#FBF6E3;color:#665A29";
+    if (s === "not_implemented")       return "background:#F9E1E1;color:#772829";
+    if (s === "in_progress")           return "background:#dbeafe;color:#0B4A7E";
+    return "background:#ECECE9;color:#5B6068";
   }
   function applicableStyle(s: string): string {
     return s === "not_applicable"
-      ? "background:#f3f4f6;color:#6b7280"
-      : "background:#eff6ff;color:#1d4ed8";
+      ? "background:#ECECE9;color:#5B6068"
+      : "background:#eff6ff;color:#0C5D9E";
   }
   function applicableLabel(s: string): string {
     return s === "not_applicable" ? tr("dda.no") : tr("dda.yes");
@@ -588,10 +588,10 @@ export function buildDdAHtml(data: DdAData): string {
     const catControls = data.controls.filter((c) => (c.control_category || general) === cat);
     const rows = catControls.map((c) => `
       <tr>
-        <td style="font-family:monospace;font-size:11px;font-weight:700;white-space:nowrap;color:#1e3a5f">${c.control_identifier}</td>
+        <td style="font-family:monospace;font-size:11px;font-weight:700;white-space:nowrap;color:#0A3B63">${c.control_identifier}</td>
         <td style="font-size:12px">${c.control_title}
-          ${c.is_mandatory ? `<span style="background:#fef3c7;color:#92400e;font-size:9px;font-weight:700;padding:1px 5px;border-radius:3px;margin-inline-start:4px;vertical-align:middle;text-transform:uppercase">${tr("dda.mandatory")}</span>` : ""}
-          ${c.control_description ? `<div style="font-size:10px;color:#9ca3af;margin-top:2px;max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${c.control_description.slice(0,120)}${c.control_description.length > 120 ? "…" : ""}</div>` : ""}
+          ${c.is_mandatory ? `<span style="background:#fef3c7;color:#665A29;font-size:9px;font-weight:700;padding:1px 5px;border-radius:3px;margin-inline-start:4px;vertical-align:middle;text-transform:uppercase">${tr("dda.mandatory")}</span>` : ""}
+          ${c.control_description ? `<div style="font-size:10px;color:#8E9299;margin-top:2px;max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${c.control_description.slice(0,120)}${c.control_description.length > 120 ? "…" : ""}</div>` : ""}
         </td>
         <td style="text-align:center">
           <span style="${applicableStyle(c.status)};padding:2px 8px;border-radius:4px;font-size:11px;font-weight:700">${applicableLabel(c.status)}</span>
@@ -599,14 +599,14 @@ export function buildDdAHtml(data: DdAData): string {
         <td style="text-align:center">
           <span style="${statusStyle(c.status)};padding:2px 8px;border-radius:4px;font-size:10px;font-weight:600">${statusIcon(c.status)} ${statusLabel(c.status)}</span>
         </td>
-        <td style="font-size:11px;color:#374151;max-width:260px">${justification(c)}</td>
+        <td style="font-size:11px;color:#3D4249;max-width:260px">${justification(c)}</td>
       </tr>`).join("");
 
     return `
       <tr>
-        <td colspan="5" style="padding:10px 12px 4px;background:#f8fafc;border-top:2px solid #e2e8f0">
-          <span style="font-size:12px;font-weight:700;color:#1e3a5f;text-transform:uppercase;letter-spacing:${lang === "ar" ? "0" : ".05em"}">${cat}</span>
-          <span style="font-size:11px;color:#94a3b8;margin-inline-start:6px">${tr("dda.controls_count", { count: catControls.length })}</span>
+        <td colspan="5" style="padding:10px 12px 4px;background:#F6F6F4;border-top:2px solid #D9DAD6">
+          <span style="font-size:12px;font-weight:700;color:#0A3B63;text-transform:uppercase;letter-spacing:${lang === "ar" ? "0" : ".05em"}">${cat}</span>
+          <span style="font-size:11px;color:#8E9299;margin-inline-start:6px">${tr("dda.controls_count", { count: catControls.length })}</span>
         </td>
       </tr>
       ${rows}`;
@@ -622,10 +622,10 @@ export function buildDdAHtml(data: DdAData): string {
     body { font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Tahoma,sans-serif; color:#0f172a; background:#fff; }
     .page { max-width:1150px; margin:0 auto; padding:40px 32px; }
     table { width:100%; border-collapse:collapse; }
-    th { background:#1e3a5f; color:#fff; text-align:start; padding:9px 12px; font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:${lang === "ar" ? "0" : ".06em"}; }
-    td { padding:9px 12px; border-bottom:1px solid #f1f5f9; vertical-align:top; }
+    th { background:#0A3B63; color:#fff; text-align:start; padding:9px 12px; font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:${lang === "ar" ? "0" : ".06em"}; }
+    td { padding:9px 12px; border-bottom:1px solid #ECECE9; vertical-align:top; }
     tr:hover td { background:#fafbff; }
-    .footer { margin-top:40px; border-top:2px solid #e2e8f0; padding-top:14px; font-size:11px; color:#94a3b8; display:flex; justify-content:space-between; }
+    .footer { margin-top:40px; border-top:2px solid #D9DAD6; padding-top:14px; font-size:11px; color:#8E9299; display:flex; justify-content:space-between; }
     @media print {
       .page { padding:16px; }
       tr { page-break-inside:avoid; }
@@ -637,55 +637,55 @@ export function buildDdAHtml(data: DdAData): string {
 <div class="page">
 
   <!-- Official header -->
-  <div style="border:2px solid #1e3a5f;border-radius:8px;padding:20px 24px;margin-bottom:28px">
+  <div style="border:2px solid #0A3B63;border-radius:8px;padding:20px 24px;margin-bottom:28px">
     <div style="display:flex;justify-content:space-between;align-items:flex-start">
       <div>
-        <div style="font-size:11px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:${lang === "ar" ? "0" : ".08em"};margin-bottom:4px">
+        <div style="font-size:11px;font-weight:700;color:#5B6068;text-transform:uppercase;letter-spacing:${lang === "ar" ? "0" : ".08em"};margin-bottom:4px">
           ${tr("dda.kicker")}
         </div>
-        <h1 style="font-size:24px;font-weight:800;color:#1e3a5f;line-height:1.2">
+        <h1 style="font-size:24px;font-weight:800;color:#0A3B63;line-height:1.2">
           ${tr("dda.heading")}
         </h1>
-        <div style="font-size:13px;color:#475569;margin-top:3px">
+        <div style="font-size:13px;color:#3D4249;margin-top:3px">
           ${tr("dda.subtitle", { fw: data.frameworkName })}
         </div>
       </div>
       <div style="text-align:end;min-width:200px">
         <div style="font-size:20px;font-weight:800;color:${scoreColor}">${pct != null ? pct+"%" : "—"}</div>
-        <div style="font-size:10px;color:#94a3b8;margin-bottom:8px">${tr("dda.compliance_score")}</div>
-        <div style="font-size:12px;color:#374151"><b>${tr("dda.organisation")}</b> ${data.org || "—"}</div>
-        <div style="font-size:12px;color:#374151"><b>${tr("dda.date")}</b> ${generatedAt}</div>
-        <div style="font-size:12px;color:#374151"><b>${tr("dda.assessment")}</b> ${data.assessmentName}</div>
+        <div style="font-size:10px;color:#8E9299;margin-bottom:8px">${tr("dda.compliance_score")}</div>
+        <div style="font-size:12px;color:#3D4249"><b>${tr("dda.organisation")}</b> ${data.org || "—"}</div>
+        <div style="font-size:12px;color:#3D4249"><b>${tr("dda.date")}</b> ${generatedAt}</div>
+        <div style="font-size:12px;color:#3D4249"><b>${tr("dda.assessment")}</b> ${data.assessmentName}</div>
       </div>
     </div>
 
     <!-- Summary stats row -->
     <div style="display:flex;gap:10px;margin-top:16px;flex-wrap:wrap">
       <div style="flex:1;min-width:90px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:10px;text-align:center">
-        <div style="font-size:20px;font-weight:800;color:#166534">${applicable.filter(c=>c.status==="implemented").length}</div>
-        <div style="font-size:10px;color:#166534;font-weight:600">✅ ${tr("dda.st_implemented")}</div>
+        <div style="font-size:20px;font-weight:800;color:#31613F">${applicable.filter(c=>c.status==="implemented").length}</div>
+        <div style="font-size:10px;color:#31613F;font-weight:600">✅ ${tr("dda.st_implemented")}</div>
       </div>
       <div style="flex:1;min-width:90px;background:#fefce8;border:1px solid #fde68a;border-radius:8px;padding:10px;text-align:center">
-        <div style="font-size:20px;font-weight:800;color:#854d0e">${applicable.filter(c=>c.status==="partially_implemented").length}</div>
-        <div style="font-size:10px;color:#854d0e;font-weight:600">⚠️ ${tr("dda.st_partial")}</div>
+        <div style="font-size:20px;font-weight:800;color:#665A29">${applicable.filter(c=>c.status==="partially_implemented").length}</div>
+        <div style="font-size:10px;color:#665A29;font-weight:600">⚠️ ${tr("dda.st_partial")}</div>
       </div>
-      <div style="flex:1;min-width:90px;background:#fef2f2;border:1px solid #fecaca;border-radius:8px;padding:10px;text-align:center">
-        <div style="font-size:20px;font-weight:800;color:#dc2626">${applicable.filter(c=>c.status==="not_implemented").length}</div>
-        <div style="font-size:10px;color:#dc2626;font-weight:600">❌ ${tr("dda.st_not_implemented")}</div>
+      <div style="flex:1;min-width:90px;background:#FCF0F0;border:1px solid #fecaca;border-radius:8px;padding:10px;text-align:center">
+        <div style="font-size:20px;font-weight:800;color:#DB4241">${applicable.filter(c=>c.status==="not_implemented").length}</div>
+        <div style="font-size:10px;color:#DB4241;font-weight:600">❌ ${tr("dda.st_not_implemented")}</div>
       </div>
-      <div style="flex:1;min-width:90px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:10px;text-align:center">
-        <div style="font-size:20px;font-weight:800;color:#6b7280">${notApplicable.length}</div>
-        <div style="font-size:10px;color:#6b7280;font-weight:600">➖ ${tr("dda.st_not_applicable")}</div>
+      <div style="flex:1;min-width:90px;background:#F6F6F4;border:1px solid #D9DAD6;border-radius:8px;padding:10px;text-align:center">
+        <div style="font-size:20px;font-weight:800;color:#5B6068">${notApplicable.length}</div>
+        <div style="font-size:10px;color:#5B6068;font-weight:600">➖ ${tr("dda.st_not_applicable")}</div>
       </div>
-      <div style="flex:1;min-width:90px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:10px;text-align:center">
-        <div style="font-size:20px;font-weight:800;color:#1e3a5f">${total}</div>
-        <div style="font-size:10px;color:#475569;font-weight:600">${tr("dda.total_controls")}</div>
+      <div style="flex:1;min-width:90px;background:#F6F6F4;border:1px solid #D9DAD6;border-radius:8px;padding:10px;text-align:center">
+        <div style="font-size:20px;font-weight:800;color:#0A3B63">${total}</div>
+        <div style="font-size:10px;color:#3D4249;font-weight:600">${tr("dda.total_controls")}</div>
       </div>
     </div>
   </div>
 
   <!-- Intro paragraph (ISO 27001 standard wording) -->
-  <div style="background:#f8fafc;border-inline-start:4px solid #1e3a5f;padding:12px 16px;margin-bottom:24px;font-size:12px;color:#374151;line-height:1.6">
+  <div style="background:#F6F6F4;border-inline-start:4px solid #0A3B63;padding:12px 16px;margin-bottom:24px;font-size:12px;color:#3D4249;line-height:1.6">
     <b>${tr("dda.intro_label")}</b> ${tr("dda.intro", { fw: data.frameworkName, assessment: data.assessmentName, date: generatedAt })}
   </div>
 
@@ -707,21 +707,21 @@ export function buildDdAHtml(data: DdAData): string {
 
   <!-- Signature block -->
   <div style="margin-top:40px;display:flex;gap:32px">
-    <div style="flex:1;border:1px solid #e2e8f0;border-radius:8px;padding:16px">
-      <div style="font-size:11px;font-weight:700;color:#6b7280;text-transform:uppercase;margin-bottom:12px">${tr("dda.approved_by")}</div>
-      <div style="border-bottom:1px solid #94a3b8;margin-bottom:6px;height:32px"></div>
-      <div style="font-size:11px;color:#94a3b8">${tr("dda.signature")} &nbsp;&nbsp;&nbsp;&nbsp;&nbsp; ${tr("dda.date_line")}</div>
+    <div style="flex:1;border:1px solid #D9DAD6;border-radius:8px;padding:16px">
+      <div style="font-size:11px;font-weight:700;color:#5B6068;text-transform:uppercase;margin-bottom:12px">${tr("dda.approved_by")}</div>
+      <div style="border-bottom:1px solid #8E9299;margin-bottom:6px;height:32px"></div>
+      <div style="font-size:11px;color:#8E9299">${tr("dda.signature")} &nbsp;&nbsp;&nbsp;&nbsp;&nbsp; ${tr("dda.date_line")}</div>
     </div>
-    <div style="flex:1;border:1px solid #e2e8f0;border-radius:8px;padding:16px">
-      <div style="font-size:11px;font-weight:700;color:#6b7280;text-transform:uppercase;margin-bottom:12px">${tr("dda.validated_by")}</div>
-      <div style="border-bottom:1px solid #94a3b8;margin-bottom:6px;height:32px"></div>
-      <div style="font-size:11px;color:#94a3b8">${tr("dda.signature")} &nbsp;&nbsp;&nbsp;&nbsp;&nbsp; ${tr("dda.date_line")}</div>
+    <div style="flex:1;border:1px solid #D9DAD6;border-radius:8px;padding:16px">
+      <div style="font-size:11px;font-weight:700;color:#5B6068;text-transform:uppercase;margin-bottom:12px">${tr("dda.validated_by")}</div>
+      <div style="border-bottom:1px solid #8E9299;margin-bottom:6px;height:32px"></div>
+      <div style="font-size:11px;color:#8E9299">${tr("dda.signature")} &nbsp;&nbsp;&nbsp;&nbsp;&nbsp; ${tr("dda.date_line")}</div>
     </div>
-    <div style="flex:1;border:1px solid #e2e8f0;border-radius:8px;padding:16px">
-      <div style="font-size:11px;font-weight:700;color:#6b7280;text-transform:uppercase;margin-bottom:12px">${tr("dda.doc_version")}</div>
-      <div style="font-size:13px;color:#374151;margin-top:4px">${tr("dda.version")}</div>
-      <div style="font-size:12px;color:#374151">${tr("dda.issue_date", { date: generatedAt })}</div>
-      <div style="font-size:12px;color:#374151">${tr("dda.framework", { fw: data.frameworkShortName })}</div>
+    <div style="flex:1;border:1px solid #D9DAD6;border-radius:8px;padding:16px">
+      <div style="font-size:11px;font-weight:700;color:#5B6068;text-transform:uppercase;margin-bottom:12px">${tr("dda.doc_version")}</div>
+      <div style="font-size:13px;color:#3D4249;margin-top:4px">${tr("dda.version")}</div>
+      <div style="font-size:12px;color:#3D4249">${tr("dda.issue_date", { date: generatedAt })}</div>
+      <div style="font-size:12px;color:#3D4249">${tr("dda.framework", { fw: data.frameworkShortName })}</div>
     </div>
   </div>
 
@@ -918,11 +918,11 @@ export async function exportChartAsPng(
     `<rect width="100%" height="100%" fill="${background}"/>` +
     (title
       ? `<text x="${textX}" y="${padding + 14}" text-anchor="${anchor}" font-family="Helvetica, Arial, sans-serif" ` +
-        `font-size="14" font-weight="600" fill="#111827">${escapeXml(title)}</text>`
+        `font-size="14" font-weight="600" fill="#15181C">${escapeXml(title)}</text>`
       : "") +
     (subtitle
       ? `<text x="${textX}" y="${padding + (title ? 32 : 14)}" text-anchor="${anchor}" font-family="Helvetica, Arial, sans-serif" ` +
-        `font-size="11" fill="#6b7280">${escapeXml(subtitle)}</text>`
+        `font-size="11" fill="#5B6068">${escapeXml(subtitle)}</text>`
       : "") +
     serialised +
     `</svg>`;
@@ -940,8 +940,8 @@ function escapeXml(value: string): string {
 }
 
 const CHART_PALETTE = [
-  "#3b82f6", "#6366f1", "#10b981", "#f59e0b",
-  "#f43f5e", "#8b5cf6", "#06b6d4", "#f97316",
+  "#2185D3", "#3F92D6", "#5BBD74", "#E4C64F",
+  "#DB4241", "#0C5D9E", "#72B0E4", "#EF852E",
 ];
 
 export interface BarChartEntry {
@@ -990,10 +990,10 @@ export function buildBarChartSvg(
       return (
         `<text x="${labelX}" y="${y + 15}" text-anchor="${rtl ? "end" : "start"}" font-family="Helvetica, Arial, sans-serif" ` +
         `font-size="11" fill="#4b5563">${escapeXml(entry.label)}</text>` +
-        `<rect x="${trackX}" y="${y + 6}" width="${trackWidth}" height="10" rx="5" fill="#f3f4f6"/>` +
+        `<rect x="${trackX}" y="${y + 6}" width="${trackWidth}" height="10" rx="5" fill="#ECECE9"/>` +
         `<rect x="${barX}" y="${y + 6}" width="${barWidth}" height="10" rx="5" fill="${colour}"/>` +
         `<text x="${valueX}" y="${y + 15}" text-anchor="${rtl ? "start" : "end"}" font-family="Helvetica, Arial, sans-serif" ` +
-        `font-size="11" font-weight="600" fill="#111827">${escapeXml(String(value))}</text>`
+        `font-size="11" font-weight="600" fill="#15181C">${escapeXml(String(value))}</text>`
       );
     })
     .join("");
@@ -1005,10 +1005,10 @@ export function buildBarChartSvg(
     `viewBox="0 0 ${width} ${height}"${rtl ? ' direction="rtl"' : ""}>` +
     `<rect width="100%" height="100%" fill="${background}"/>` +
     `<text x="${titleX}" y="${padding + 8}" text-anchor="${anchor}" font-family="Helvetica, Arial, sans-serif" ` +
-    `font-size="14" font-weight="600" fill="#111827">${escapeXml(title)}</text>` +
+    `font-size="14" font-weight="600" fill="#15181C">${escapeXml(title)}</text>` +
     (subtitle
       ? `<text x="${titleX}" y="${padding + 26}" text-anchor="${anchor}" font-family="Helvetica, Arial, sans-serif" ` +
-        `font-size="11" fill="#6b7280">${escapeXml(subtitle)}</text>`
+        `font-size="11" fill="#5B6068">${escapeXml(subtitle)}</text>`
       : "") +
     rows +
     `</svg>`;

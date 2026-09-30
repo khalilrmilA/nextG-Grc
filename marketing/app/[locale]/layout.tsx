@@ -10,7 +10,7 @@ import {
   OG_IMAGE, OG_IMAGE_WIDTH, OG_IMAGE_HEIGHT,
 } from "../../lib/brand";
 
-const TITLE        = "GRCEye | Governance, Risk & Compliance Platform";
+const TITLE        = "GRC Eye | Governance, Risk & Compliance Platform";
 const DESCRIPTION  =
   "All-in-one GRC SaaS: 70+ frameworks, AI gap analysis, risk quantification, audits, policies, vendor risk and a public trust center.";
 
@@ -19,7 +19,7 @@ export function generateStaticParams() {
 }
 
 export const viewport: Viewport = {
-  themeColor: "#2563eb",
+  themeColor: "#0F74C5",
   width: "device-width",
   initialScale: 1,
 };
@@ -30,7 +30,7 @@ export const metadata: Metadata = {
   /* ── Title ────────────────────────────────────────────────── */
   title: {
     default: TITLE,
-    template: "%s | GRCEye",
+    template: "%s | GRC Eye",
   },
 
   /* ── Core SEO ─────────────────────────────────────────────── */
@@ -80,7 +80,7 @@ export const metadata: Metadata = {
         url:    OG_IMAGE,
         width:  OG_IMAGE_WIDTH,
         height: OG_IMAGE_HEIGHT,
-        alt:    "GRCEye | Governance, Risk & Compliance Platform",
+        alt:    "GRC Eye | Governance, Risk & Compliance Platform",
       },
     ],
     locale: "en_US",
@@ -118,8 +118,8 @@ export const metadata: Metadata = {
    three angles instead of three unrelated islands that each have to earn
    recognition on their own.
 
-   alternateName is the load-bearing addition: "GRCEye" is an invented word, so
-   a query for "grceye" currently gets rewritten to "GRC eye". Declaring the
+   alternateName is the load-bearing addition: "GRC Eye" is an invented word, so
+   a query for "grceye" currently gets rewritten to "GRC Eye". Declaring the
    spelling variants is how we tell Google they are one entity, not a typo. */
 function buildJsonLd(locale: Language) {
   const org = {

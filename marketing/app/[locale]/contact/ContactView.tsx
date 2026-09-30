@@ -58,7 +58,7 @@ export default function ContactView() {
   }
 
   return (
-    <div className="min-h-screen bg-[#f0f9ff] text-gray-900">
+    <div className="min-h-screen bg-[#E8F3FC] text-gray-900">
       <PublicNav />
 
       <section className="max-w-4xl mx-auto px-6 pt-12 pb-8 text-center">

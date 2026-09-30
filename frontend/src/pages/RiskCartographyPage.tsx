@@ -31,9 +31,9 @@ const DEFAULT_GRID_PRESETS: Record<string, CartographyDefinition> = {
     likelihood_labels: ["Low", "Medium", "High"],
     impact_labels: ["Low", "Medium", "High"],
     risk_levels: [
-      { name: "Low",      color: "#22c55e", min_score: 1, max_score: 3 },
-      { name: "Medium",   color: "#eab308", min_score: 4, max_score: 6 },
-      { name: "High",     color: "#f97316", min_score: 7, max_score: 9 },
+      { name: "Low",      color: "#5BBD74", min_score: 1, max_score: 3 },
+      { name: "Medium",   color: "#E4C64F", min_score: 4, max_score: 6 },
+      { name: "High",     color: "#EF852E", min_score: 7, max_score: 9 },
     ],
   },
   "4": {
@@ -41,10 +41,10 @@ const DEFAULT_GRID_PRESETS: Record<string, CartographyDefinition> = {
     likelihood_labels: ["Unlikely", "Possible", "Likely", "Almost Certain"],
     impact_labels: ["Negligible", "Minor", "Moderate", "Major"],
     risk_levels: [
-      { name: "Low",      color: "#22c55e", min_score: 1,  max_score: 4  },
-      { name: "Medium",   color: "#eab308", min_score: 5,  max_score: 9  },
-      { name: "High",     color: "#f97316", min_score: 10, max_score: 13 },
-      { name: "Critical", color: "#ef4444", min_score: 14, max_score: 16 },
+      { name: "Low",      color: "#5BBD74", min_score: 1,  max_score: 4  },
+      { name: "Medium",   color: "#E4C64F", min_score: 5,  max_score: 9  },
+      { name: "High",     color: "#EF852E", min_score: 10, max_score: 13 },
+      { name: "Critical", color: "#DB4241", min_score: 14, max_score: 16 },
     ],
   },
   "5": {
@@ -52,10 +52,10 @@ const DEFAULT_GRID_PRESETS: Record<string, CartographyDefinition> = {
     likelihood_labels: ["Rare", "Unlikely", "Possible", "Likely", "Almost Certain"],
     impact_labels: ["Negligible", "Minor", "Moderate", "Major", "Catastrophic"],
     risk_levels: [
-      { name: "Low",      color: "#22c55e", min_score: 1,  max_score: 5  },
-      { name: "Medium",   color: "#eab308", min_score: 6,  max_score: 12 },
-      { name: "High",     color: "#f97316", min_score: 13, max_score: 18 },
-      { name: "Critical", color: "#ef4444", min_score: 19, max_score: 25 },
+      { name: "Low",      color: "#5BBD74", min_score: 1,  max_score: 5  },
+      { name: "Medium",   color: "#E4C64F", min_score: 6,  max_score: 12 },
+      { name: "High",     color: "#EF852E", min_score: 13, max_score: 18 },
+      { name: "Critical", color: "#DB4241", min_score: 19, max_score: 25 },
     ],
   },
 };
@@ -108,7 +108,7 @@ function zoneColor(score: number, riskLevels: CartographyRiskLevel[]): string {
   for (const lvl of [...riskLevels].sort((a, b) => a.min_score - b.min_score)) {
     if (score >= lvl.min_score && score <= lvl.max_score) return lvl.color;
   }
-  return "#f3f4f6";
+  return "#ECECE9";
 }
 
 function hexToRgba(hex: string, alpha = 0.15): string {

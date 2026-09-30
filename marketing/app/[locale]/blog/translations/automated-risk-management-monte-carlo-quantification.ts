@@ -3,7 +3,7 @@ import type { PostTranslations } from "./types";
 const translations: PostTranslations = {
   fr: {
     title: "Gestion automatisée des risques : du registre des risques à Monte Carlo en un clic",
-    metaTitle: "Gestion automatisée des risques et quantification Monte Carlo | GRCEye",
+    metaTitle: "Gestion automatisée des risques et quantification Monte Carlo | GRC Eye",
     metaDescription: "Arrêtez de noter vos risques sur une échelle de 1 à 5 à laquelle votre conseil ne fait pas confiance. La quantification automatisée traduit le risque cyber en euros grâce à Monte Carlo.",
     keywords: "gestion automatisée des risques, quantification des risques Monte Carlo, automatisation du registre des risques, risque ALE SLE, quantification du risque cyber, logiciel de gestion des risques, plateforme GRC risque",
     excerpt: "Arrêtez de noter vos risques sur une échelle de 1 à 5 à laquelle votre conseil ne fait pas confiance. La quantification automatisée des risques par simulation Monte Carlo traduit le risque cyber en euros, fournit aux directeurs financiers des chiffres ALE/SLE compréhensibles, et remplace les cartographies fondées sur l'opinion par une rigueur statistique.",
@@ -54,7 +54,7 @@ Les règles de la SEC (pour les sociétés cotées aux États-Unis) et les exige
 
 Historiquement, l'analyse Monte Carlo des risques exigeait des outils spécialisés (souvent des tableurs Excel avec des macros personnalisées), une expertise actuarielle importante et des semaines de préparation par risque. Les plateformes GRC modernes ont complètement changé la donne.
 
-Dans GRCEye, le flux de quantification fonctionne comme suit :
+Dans GRC Eye, le flux de quantification fonctionne comme suit :
 
 **Définir le scénario de risque.** Le gestionnaire de risques décrit la menace (rançongiciel via hameçonnage), l'actif vulnérable (base de données de production) et le processus métier affecté (application destinée aux clients).
 
@@ -99,7 +99,7 @@ Le registre des risques est le fondement d'un programme de gestion des risques q
   },
   ar: {
     title: "الإدارة الآلية للمخاطر: من سجل المخاطر إلى محاكاة مونت كارلو بنقرة واحدة",
-    metaTitle: "الإدارة الآلية للمخاطر وتقدير المخاطر بمحاكاة مونت كارلو | GRCEye",
+    metaTitle: "الإدارة الآلية للمخاطر وتقدير المخاطر بمحاكاة مونت كارلو | GRC Eye",
     metaDescription: "توقفوا عن تقييم المخاطر على مقياس من 1 إلى 5 لا يثق به مجلس الإدارة. التقدير الآلي للمخاطر يترجم المخاطر السيبرانية إلى أرقام مالية بمنهجية مونت كارلو.",
     keywords: "الإدارة الآلية للمخاطر, تقدير المخاطر بمحاكاة مونت كارلو, أتمتة سجل المخاطر, مؤشرا ALE وSLE, تقدير المخاطر السيبرانية, برنامج إدارة المخاطر, منصة حوكمة ومخاطر وامتثال",
     excerpt: "توقفوا عن تقييم المخاطر على مقياس من 1 إلى 5 لا يثق به مجلس الإدارة. التقدير الآلي للمخاطر بمحاكاة مونت كارلو يترجم المخاطر السيبرانية إلى قيم مالية، ويمنح المديرين الماليين أرقام ALE وSLE المفهومة لديهم، ويستبدل الخرائط الحرارية القائمة على الرأي الشخصي بدقة إحصائية.",
@@ -150,7 +150,7 @@ Le registre des risques est le fondement d'un programme de gestion des risques q
 
 تاريخيًا، كان تحليل مونت كارلو للمخاطر يتطلب أدوات متخصصة (غالبًا جداول إكسل مزودة بماكرو مخصص)، وخبرة اكتوارية كبيرة، وأسابيع من التحضير لكل خطر. غيّرت منصات الحوكمة والمخاطر والامتثال الحديثة هذا الواقع تمامًا.
 
-في GRCEye، يعمل مسار التقدير الكمي كما يلي:
+في GRC Eye، يعمل مسار التقدير الكمي كما يلي:
 
 **تحديد سيناريو الخطر.** يصف مدير المخاطر التهديد (برمجيات فدية عبر التصيّد الاحتيالي)، والأصل المعرَّض للخطر (قاعدة بيانات الإنتاج)، والعملية التجارية المتأثرة (التطبيق الموجه للعملاء).
 

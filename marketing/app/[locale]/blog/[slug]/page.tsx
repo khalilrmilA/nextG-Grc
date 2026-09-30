@@ -15,9 +15,9 @@ export function generateStaticParams() {
 }
 
 const ARTICLE_UI = {
-  en: { faq: "Frequently asked questions", ctaTitle: "Ready to operationalize this?", ctaBody: "GRCEye gives security teams a single platform for risk, compliance, audit, vendor risk, and policy, with AI that runs on your own infrastructure.", ctaTrial: "Start free trial", ctaTalk: "Talk to us", continueReading: "Continue reading", allArticles: "All articles" },
-  fr: { faq: "Questions fréquentes", ctaTitle: "Prêt à passer à l'action ?", ctaBody: "GRCEye offre aux équipes sécurité une plateforme unique pour les risques, la conformité, l'audit, le risque fournisseur et les politiques, avec une IA qui s'exécute sur votre propre infrastructure.", ctaTrial: "Démarrer l'essai gratuit", ctaTalk: "Nous contacter", continueReading: "Poursuivre la lecture", allArticles: "Tous les articles" },
-  ar: { faq: "الأسئلة الشائعة", ctaTitle: "هل أنت مستعد لتطبيق ذلك؟", ctaBody: "توفر GRCEye لفرق الأمن منصة واحدة للمخاطر والامتثال والتدقيق ومخاطر الموردين والسياسات، بذكاء اصطناعي يعمل على بنيتك التحتية الخاصة.", ctaTrial: "ابدأ التجربة المجانية", ctaTalk: "تواصل معنا", continueReading: "تابع القراءة", allArticles: "جميع المقالات" },
+  en: { faq: "Frequently asked questions", ctaTitle: "Ready to operationalize this?", ctaBody: "GRC Eye gives security teams a single platform for risk, compliance, audit, vendor risk, and policy, with AI that runs on your own infrastructure.", ctaTrial: "Start free trial", ctaTalk: "Talk to us", continueReading: "Continue reading", allArticles: "All articles" },
+  fr: { faq: "Questions fréquentes", ctaTitle: "Prêt à passer à l'action ?", ctaBody: "GRC Eye offre aux équipes sécurité une plateforme unique pour les risques, la conformité, l'audit, le risque fournisseur et les politiques, avec une IA qui s'exécute sur votre propre infrastructure.", ctaTrial: "Démarrer l'essai gratuit", ctaTalk: "Nous contacter", continueReading: "Poursuivre la lecture", allArticles: "Tous les articles" },
+  ar: { faq: "الأسئلة الشائعة", ctaTitle: "هل أنت مستعد لتطبيق ذلك؟", ctaBody: "توفر GRC Eye لفرق الأمن منصة واحدة للمخاطر والامتثال والتدقيق ومخاطر الموردين والسياسات، بذكاء اصطناعي يعمل على بنيتك التحتية الخاصة.", ctaTrial: "ابدأ التجربة المجانية", ctaTalk: "تواصل معنا", continueReading: "تابع القراءة", allArticles: "جميع المقالات" },
 } as const;
 
 export async function generateMetadata(props: { params: Promise<{ slug: string; locale: Locale }> }): Promise<Metadata> {
@@ -33,7 +33,7 @@ export async function generateMetadata(props: { params: Promise<{ slug: string; 
     alternates: { canonical: canonicalUrl(params.locale, path), languages: hreflangAlternates(path) },
     authors: [{ name: post.author }],
     openGraph: {
-      siteName: "GRCEye",
+      siteName: "GRC Eye",
       title: post.metaTitle,
       description: post.metaDescription,
       url: canonicalUrl(params.locale, path),
@@ -78,7 +78,7 @@ export default async function ArticlePage(props: { params: Promise<{ slug: strin
     },
     publisher: {
       "@type": "Organization",
-      name: "GRCEye",
+      name: "GRC Eye",
       logo: { "@type": "ImageObject", url: "https://grceye.com/logo-horizontal.png" },
     },
     mainEntityOfPage: { "@type": "WebPage", "@id": url },

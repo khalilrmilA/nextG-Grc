@@ -1382,12 +1382,12 @@ function GenericDashboard({ d, unavailable, pending }: {
           <div ref={trendChartRef}>
           <ResponsiveContainer width="100%" height={180}>
             <BarChart data={riskTrend} barSize={20}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" vertical={false} />
-              <XAxis dataKey="period" tickFormatter={monthLabel} tick={{ fontSize: 11, fill: "#9ca3af" }} axisLine={false} tickLine={false} />
-              <YAxis tick={{ fontSize: 11, fill: "#9ca3af" }} axisLine={false} tickLine={false} />
+              <CartesianGrid strokeDasharray="3 3" stroke="#ECECE9" vertical={false} />
+              <XAxis dataKey="period" tickFormatter={monthLabel} tick={{ fontSize: 11, fill: "#8E9299" }} axisLine={false} tickLine={false} />
+              <YAxis tick={{ fontSize: 11, fill: "#8E9299" }} axisLine={false} tickLine={false} />
               <Tooltip labelFormatter={monthLabel} />
-              <Bar dataKey="critical" stackId="a" fill="#ef4444" />
-              <Bar dataKey="high" stackId="a" fill="#f97316" radius={[4,4,0,0]} />
+              <Bar dataKey="critical" stackId="a" fill="#DB4241" />
+              <Bar dataKey="high" stackId="a" fill="#EF852E" radius={[4,4,0,0]} />
             </BarChart>
           </ResponsiveContainer>
           </div>
@@ -1540,7 +1540,7 @@ function FrameworkOverviewCard({ fw, onSelect }: { fw: any; onSelect: () => void
 // module dashboard and is only requested when the tenant is entitled to it —
 // asking for it otherwise would fire the Elite upsell toast on every visit.
 
-const BUCKET_COLORS = ["#3b82f6", "#f59e0b", "#10b981", "#f43f5e", "#8b5cf6", "#06b6d4"];
+const BUCKET_COLORS = ["#2185D3", "#E4C64F", "#5BBD74", "#DB4241", "#0C5D9E", "#72B0E4"];
 
 function useBucketLabel() {
   const { t, i18n } = useTranslation();

@@ -78,21 +78,11 @@ const NAV_GROUPS = [
     ],
   },
   {
-    id: "vulnerability", label: "Vulnerability Management", icon: Bug,
+    id: "exposure", label: "Exposure Management", icon: Radar,
     items: [
       { to: "/vulnerabilities", icon: Bug,      label: "Vulnerabilities",   module: "vulnerabilities", roles: null },
       { to: "/cve",             icon: Database,  label: "CVE Knowledge Base", module: "cve",            roles: null },
-    ],
-  },
-  {
-    id: "threat", label: "Threat Management", icon: Radar,
-    items: [
       { to: "/threats",         icon: Radar,    label: "Threat Library",    module: "threats",         roles: ["tenant_admin","ciso","risk_manager","compliance_manager","control_owner","business_owner","security_analyst","viewer","executive"] },
-    ],
-  },
-  {
-    id: "incident", label: "Incident Management", icon: Siren,
-    items: [
       { to: "/incidents",       icon: Siren,     label: "Incidents",          module: "incidents",         roles: ["tenant_admin","ciso","risk_manager","compliance_manager","control_owner","business_owner","security_analyst","viewer","executive"] },
     ],
   },
@@ -728,7 +718,7 @@ export default function Layout() {
       >
         {/* Logo + mobile close */}
         <div className={`flex items-center justify-between px-4 py-4 border-b ${sc.divider}`}>
-          <img src="/logowhite.png" alt={t("layout_ui.logo_alt")} className="h-20 w-auto object-contain" />
+          <img src="/logowhite.png" alt={t("layout_ui.logo_alt")} className="h-9 w-auto object-contain" />
           <button
             type="button"
             onClick={() => setMobileSidebarOpen(false)}
@@ -945,7 +935,7 @@ export default function Layout() {
               <Menu className="w-5 h-5" />
             </button>
             <div className="flex items-center gap-2">
-              <span className="hidden sm:inline text-gray-400">GRCEye</span>
+              <span className="hidden sm:inline text-gray-400">GRC Eye</span>
               <ChevronRight className="hidden sm:inline w-3.5 h-3.5 text-gray-300" />
               <span className="text-gray-900 font-semibold">{pageLabel}</span>
             </div>

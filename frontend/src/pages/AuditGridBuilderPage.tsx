@@ -230,7 +230,7 @@ export default function AuditGridBuilderPage() {
   }
 
   function addLevel() {
-    setLevelsDraft((prev) => [...prev, { key: "", label_en: "", label_fr: "", label_ar: "", color: "#94a3b8", weight: 0, is_gap: true }]);
+    setLevelsDraft((prev) => [...prev, { key: "", label_en: "", label_fr: "", label_ar: "", color: "#8E9299", weight: 0, is_gap: true }]);
   }
 
   function removeLevel(index: number) {
@@ -808,7 +808,7 @@ export default function AuditGridBuilderPage() {
                                 <td className="py-2 px-2">
                                   <input
                                     type="color"
-                                    value={lvl.color ?? "#94a3b8"}
+                                    value={lvl.color ?? "#8E9299"}
                                     onChange={(e) => patchLevel(idx, { color: e.target.value })}
                                     className="w-10 h-7 border border-gray-200 rounded"
                                     aria-label={t("audit_grid.level_color")}

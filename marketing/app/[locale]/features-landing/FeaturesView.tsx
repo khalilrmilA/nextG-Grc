@@ -134,10 +134,10 @@ export default function FeaturesView() {
   const mod = MODULES.find(m => m.id === active)!;
 
   return (
-    <div className="min-h-screen bg-[#f0f9ff] text-gray-900">
+    <div className="min-h-screen bg-[#E8F3FC] text-gray-900">
       <PublicNav />
 
-      <section className="relative pt-16 pb-20 px-6 text-center overflow-hidden bg-gradient-to-b from-sky-100 via-[#f0f9ff] to-[#f0f9ff]">
+      <section className="relative pt-16 pb-20 px-6 text-center overflow-hidden bg-gradient-to-b from-sky-100 via-[#E8F3FC] to-[#E8F3FC]">
         <div className="absolute -top-20 -left-20 w-96 h-96 bg-blue-200/30 rounded-full blur-3xl animate-blob pointer-events-none" />
         <div className="absolute top-10 -right-10 w-80 h-80 bg-indigo-200/20 rounded-full blur-3xl animate-blob animation-delay-2000 pointer-events-none" />
         <div className="relative max-w-3xl mx-auto">
@@ -178,7 +178,7 @@ export default function FeaturesView() {
         </div>
       </section>
 
-      <section className="py-24 px-6 bg-[#f0f9ff]">
+      <section className="py-24 px-6 bg-[#E8F3FC]">
         <div className="max-w-7xl mx-auto">
           <Reveal>
             <div className="text-center mb-12">
@@ -252,7 +252,7 @@ export default function FeaturesView() {
           <Reveal delay={80}>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               {[1,2,3,4,5,6,7,8,9,10,11,12].map(n => (
-                <div key={n} className="flex items-start gap-3 bg-[#f0f9ff] rounded-xl p-4 border border-sky-100">
+                <div key={n} className="flex items-start gap-3 bg-[#E8F3FC] rounded-xl p-4 border border-sky-100">
                   <CheckCircle className="w-4 h-4 text-green-500 flex-shrink-0 mt-0.5" />
                   <p className="text-sm text-gray-700">{t(`public.fp.cap${n}`)}</p>
                 </div>
@@ -262,7 +262,7 @@ export default function FeaturesView() {
         </div>
       </section>
 
-      <section className="py-24 px-6 bg-[#f0f9ff]">
+      <section className="py-24 px-6 bg-[#E8F3FC]">
         <div className="max-w-4xl mx-auto">
           <Reveal>
             <div className="text-center mb-12">

@@ -64,7 +64,7 @@ import { hasAnyRole, useAuthStore, type AuthUser } from "@/store/auth";
 import { exportBarChartAsPng, safeFileName, type BarChartEntry } from "@/utils/exportUtils";
 
 const BAR_COLORS = ["bg-blue-500", "bg-indigo-500", "bg-emerald-500", "bg-amber-500", "bg-rose-500", "bg-violet-500", "bg-cyan-500", "bg-orange-500"];
-const CHART_COLORS = ["#3b82f6", "#6366f1", "#10b981", "#f59e0b", "#f43f5e", "#8b5cf6", "#06b6d4", "#f97316"];
+const CHART_COLORS = ["#2185D3", "#3F92D6", "#5BBD74", "#E4C64F", "#DB4241", "#0C5D9E", "#72B0E4", "#EF852E"];
 
 /** Buckets that carry a criticality signal — the only ones the severity filter
  *  touches, and the only ones that raise a visual alert. Filtering "by_type" by
@@ -453,19 +453,19 @@ function TrendCard({
       ) : (
         <div className="overflow-x-auto">
           <svg viewBox={`0 0 ${width} ${height}`} className="w-full min-w-[320px]" role="img" aria-label={t("dashboard.risk_trend")}>
-            <line x1={pad} y1={height - pad} x2={width - pad} y2={height - pad} stroke="#e5e7eb" strokeWidth="1" />
-            <polyline points={line((p) => p.high)} fill="none" stroke="#f59e0b" strokeWidth="2" />
-            <polyline points={line((p) => p.critical)} fill="none" stroke="#f43f5e" strokeWidth="2" />
+            <line x1={pad} y1={height - pad} x2={width - pad} y2={height - pad} stroke="#D9DAD6" strokeWidth="1" />
+            <polyline points={line((p) => p.high)} fill="none" stroke="#E4C64F" strokeWidth="2" />
+            <polyline points={line((p) => p.critical)} fill="none" stroke="#DB4241" strokeWidth="2" />
             {series.map((p, i) => (
               <g key={p.period}>
-                <circle cx={x(i)} cy={y(p.high)} r="2.5" fill="#f59e0b">
+                <circle cx={x(i)} cy={y(p.high)} r="2.5" fill="#E4C64F">
                   <title>{`${monthLabel(p.period)} · ${t("vocab.high")} · ${p.high}`}</title>
                 </circle>
-                <circle cx={x(i)} cy={y(p.critical)} r="2.5" fill="#f43f5e">
+                <circle cx={x(i)} cy={y(p.critical)} r="2.5" fill="#DB4241">
                   <title>{`${monthLabel(p.period)} · ${t("vocab.critical")} · ${p.critical}`}</title>
                 </circle>
                 {i % labelEvery === 0 && (
-                  <text x={x(i)} y={height - pad + 14} textAnchor="middle" fontSize="10" fill="#9ca3af">
+                  <text x={x(i)} y={height - pad + 14} textAnchor="middle" fontSize="10" fill="#8E9299">
                     {monthLabel(p.period)}
                   </text>
                 )}

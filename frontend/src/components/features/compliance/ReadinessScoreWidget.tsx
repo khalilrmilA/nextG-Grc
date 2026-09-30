@@ -9,10 +9,10 @@ interface Props {
 }
 
 function scoreColor(s: number): string {
-  if (s >= 80) return "#22c55e";
-  if (s >= 60) return "#eab308";
-  if (s >= 40) return "#f97316";
-  return "#ef4444";
+  if (s >= 80) return "#5BBD74";
+  if (s >= 60) return "#E4C64F";
+  if (s >= 40) return "#EF852E";
+  return "#DB4241";
 }
 
 export default function ReadinessScoreWidget({
@@ -39,9 +39,9 @@ export default function ReadinessScoreWidget({
   const color = scoreColor(score);
 
   const breakdown = [
-    { label: t("compliance.readiness_compliance_score"), pct: compliancePct, weight: "50%", color: "#3b82f6" },
-    { label: t("compliance.readiness_documentation"),    pct: docPct,        weight: "30%", color: "#8b5cf6" },
-    { label: t("compliance.readiness_blockers_resolved"),pct: blockerPct,    weight: "20%", color: "#22c55e" },
+    { label: t("compliance.readiness_compliance_score"), pct: compliancePct, weight: "50%", color: "#2185D3" },
+    { label: t("compliance.readiness_documentation"),    pct: docPct,        weight: "30%", color: "#0C5D9E" },
+    { label: t("compliance.readiness_blockers_resolved"),pct: blockerPct,    weight: "20%", color: "#5BBD74" },
   ];
 
   const milestones = [
@@ -62,7 +62,7 @@ export default function ReadinessScoreWidget({
             <path
               d={`M ${CX - R} ${CY} A ${R} ${R} 0 0 1 ${CX + R} ${CY}`}
               fill="none"
-              stroke="#f3f4f6"
+              stroke="#ECECE9"
               strokeWidth={14}
               strokeLinecap="round"
             />
@@ -82,7 +82,7 @@ export default function ReadinessScoreWidget({
             <text x={CX} y={CY - 6} textAnchor="middle" fontSize={28} fontWeight="800" fill={color}>
               {score}
             </text>
-            <text x={CX} y={CY + 10} textAnchor="middle" fontSize={10} fill="#9ca3af">
+            <text x={CX} y={CY + 10} textAnchor="middle" fontSize={10} fill="#8E9299">
               / 100
             </text>
             {/* Status label */}

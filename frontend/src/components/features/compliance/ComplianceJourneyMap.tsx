@@ -90,7 +90,7 @@ export default function ComplianceJourneyMap({
               <line
                 key={`line-${i}`}
                 x1={x1} y1={midY} x2={x2} y2={midY}
-                stroke={done ? "#22c55e" : milestones[i - 1].done ? "#93c5fd" : "#e5e7eb"}
+                stroke={done ? "#5BBD74" : milestones[i - 1].done ? "#93c5fd" : "#D9DAD6"}
                 strokeWidth={3}
                 strokeDasharray={done ? undefined : "6 3"}
               />
@@ -100,8 +100,8 @@ export default function ComplianceJourneyMap({
           {/* Milestone nodes */}
           {milestones.map((m, i) => {
             const cx = padX + i * step;
-            const fill = m.done ? "#22c55e" : m.active ? "#3b82f6" : "#e5e7eb";
-            const textColor = m.done ? "#15803d" : m.active ? "#1d4ed8" : "#9ca3af";
+            const fill = m.done ? "#5BBD74" : m.active ? "#2185D3" : "#D9DAD6";
+            const textColor = m.done ? "#15803d" : m.active ? "#0C5D9E" : "#8E9299";
 
             return (
               <g key={`milestone-${i}`}>
@@ -121,7 +121,7 @@ export default function ComplianceJourneyMap({
                 <text x={cx} y={midY + 30} textAnchor="middle" fontSize={10} fill={textColor} fontWeight="600">
                   {m.label}
                 </text>
-                <text x={cx} y={midY + 42} textAnchor="middle" fontSize={9} fill="#9ca3af">
+                <text x={cx} y={midY + 42} textAnchor="middle" fontSize={9} fill="#8E9299">
                   {m.sublabel}
                 </text>
               </g>

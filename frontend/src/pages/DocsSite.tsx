@@ -14,8 +14,8 @@ import { useTranslation } from "react-i18next";
 import {
   Search, Menu, X, ChevronRight, ChevronLeft, ArrowLeft, ArrowRight, Moon, Sun,
   Lightbulb, BookOpen, Rocket, GraduationCap, FileText, UserCog, ExternalLink,
-  LayoutDashboard, Boxes, Bug, CheckSquare, ClipboardList, Building2, Scale, ClipboardCheck,
-  Target, Radar, Siren, ShieldCheck,
+  LayoutDashboard, Boxes, CheckSquare, ClipboardList, Building2, Scale, ClipboardCheck,
+  Target, Radar, ShieldCheck,
 } from "lucide-react";
 import LanguageSwitcher from "../components/LanguageSwitcher";
 import { useAuthStore } from "../store/auth";
@@ -54,9 +54,7 @@ const USER_GROUPS: { id: string; Icon: React.ElementType }[] = [
   { id: "overview", Icon: LayoutDashboard },
   { id: "assets", Icon: Boxes },
   { id: "risk", Icon: Target },
-  { id: "vulnerability", Icon: Bug },
-  { id: "threat", Icon: Radar },
-  { id: "incident", Icon: Siren },
+  { id: "exposure", Icon: Radar },
   { id: "compliance", Icon: CheckSquare },
   { id: "controls", Icon: ShieldCheck },
   { id: "audit", Icon: ClipboardList },
@@ -119,8 +117,8 @@ function useDocs() {
     }));
     pages["introduction"] = {
       id: "introduction", crumb: S("intro_crumb", "Welcome"),
-      title: S("intro_title", "GRCeye documentation"),
-      summary: S("intro_summary", "Everything you need to run governance, risk and compliance on GRCeye — from your first login to audits, third parties and reporting."),
+      title: S("intro_title", "GRC Eye documentation"),
+      summary: S("intro_summary", "Everything you need to run governance, risk and compliance on GRC Eye — from your first login to audits, third parties and reporting."),
       sections: [],
       image: shot(lang, "dashboard"),
       cards: [
@@ -448,7 +446,7 @@ export default function DocsSite() {
   useEffect(() => {
     if (!page) return;
     const prev = document.title;
-    document.title = `${page.title} · GRCeye ${t("docsite.docs", "Docs")}`;
+    document.title = `${page.title} · GRC Eye ${t("docsite.docs", "Docs")}`;
     return () => { document.title = prev; };
   }, [page, t]);
 
@@ -497,7 +495,7 @@ export default function DocsSite() {
             </button>
             <Link to={`${base}/introduction`} className="flex items-center gap-2 flex-shrink-0">
               <span className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-600 to-indigo-600 text-white flex items-center justify-center font-bold text-sm">G</span>
-              <span className="font-semibold text-gray-900 dark:text-white">GRCeye</span>
+              <span className="font-semibold text-gray-900 dark:text-white">GRC Eye</span>
               <span className="text-gray-400 dark:text-slate-500 font-medium hidden sm:inline">{t("docsite.docs", "Docs")}</span>
             </Link>
 

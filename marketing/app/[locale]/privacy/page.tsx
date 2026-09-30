@@ -6,9 +6,9 @@ import { OG_IMAGE } from "@/lib/brand";
 
 export async function generateMetadata(props: { params: Promise<{ locale: Locale }> }): Promise<Metadata> {
   const params = await props.params;
-  const title = "Privacy Policy | GRCEye";
+  const title = "Privacy Policy | GRC Eye";
   const description =
-    "How GRCEye collects, uses, stores and protects personal data, and the rights you have over it under the GDPR.";
+    "How GRC Eye collects, uses, stores and protects personal data, and the rights you have over it under the GDPR.";
   return {
     title: { absolute: title },
     description,
@@ -17,7 +17,7 @@ export async function generateMetadata(props: { params: Promise<{ locale: Locale
       languages: hreflangAlternates("/privacy"),
     },
     openGraph: {
-      siteName: "GRCEye",
+      siteName: "GRC Eye",
       title,
       description,
       url: canonicalUrl(params.locale, "/privacy"),
@@ -34,13 +34,13 @@ export default async function PrivacyPage(props: { params: Promise<{ locale: Loc
   return (
     <LegalPage
       title="Privacy Policy"
-      subtitle="How GRCEye handles personal data, and what rights you have over it."
+      subtitle="How GRC Eye handles personal data, and what rights you have over it."
       updated="8 September 2026"
     >
       <h2>1. Who we are</h2>
       <p>
-        GRCEye provides a governance, risk and compliance (GRC) SaaS platform. This policy
-        explains what personal data we process when you visit grceye.com or use the GRCEye
+        GRC Eye provides a governance, risk and compliance (GRC) SaaS platform. This policy
+        explains what personal data we process when you visit grceye.com or use the GRC Eye
         application, why we process it, and how you can exercise your rights.
       </p>
       <p>
@@ -74,7 +74,7 @@ export default async function PrivacyPage(props: { params: Promise<{ locale: Loc
         <li>
           <strong>Activity logs</strong> &mdash; the platform records actions taken in your
           tenant. This is a compliance feature: an audit trail is required by most of the
-          frameworks GRCEye supports.
+          frameworks GRC Eye supports.
         </li>
         <li>
           <strong>Technical data</strong> &mdash; IP address, browser and device type, and
@@ -108,7 +108,7 @@ export default async function PrivacyPage(props: { params: Promise<{ locale: Loc
 
       <h2>4. AI processing</h2>
       <p>
-        GRCEye&apos;s AI features run on infrastructure under our or your control rather
+        GRC Eye&apos;s AI features run on infrastructure under our or your control rather
         than being sent to a third-party AI provider. Content you submit to an AI feature
         &mdash; a contract for review, a policy to generate, controls to analyse &mdash; is
         processed to return that result and is not shared with an external model vendor.
@@ -150,7 +150,7 @@ export default async function PrivacyPage(props: { params: Promise<{ locale: Loc
         month. You may also complain to your local supervisory authority.
       </p>
       <p>
-        If you are an end user of a GRCEye customer, direct your request to that
+        If you are an end user of a GRC Eye customer, direct your request to that
         organisation first &mdash; they are the controller of the data in their tenant, and
         we act on their instructions.
       </p>

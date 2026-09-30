@@ -21,7 +21,7 @@ export default function LegalPage({
   readonly children: React.ReactNode;
 }) {
   return (
-    <div className="min-h-screen bg-[#f0f9ff] text-gray-900">
+    <div className="min-h-screen bg-[#E8F3FC] text-gray-900">
       <PublicNav />
       <section className="px-4 sm:px-6 pt-14 pb-8">
         <div className="max-w-3xl mx-auto">

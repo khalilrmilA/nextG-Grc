@@ -1,10 +1,10 @@
 import { SITE_URL, SITE_NAME } from "../app/constants";
 
 /**
- * Single source of truth for the GRCEye brand entity.
+ * Single source of truth for the GRC Eye brand entity.
  *
- * Why this file exists: Google does not currently recognise "GRCEye" as an
- * entity. A search for "grceye" gets rewritten to "GRC eye" / "GRC" and returns
+ * Why this file exists: Google does not currently recognise "GRC Eye" as an
+ * entity. A search for "grceye" gets rewritten to "GRC" / "GRC eye" and returns
  * generic governance-risk-compliance results, because an invented word with no
  * external citations and no self-declared identity has nothing to anchor to.
  * Everything below is the on-site half of fixing that: state the name, its
@@ -16,7 +16,7 @@ import { SITE_URL, SITE_NAME } from "../app/constants";
  */
 
 /**
- * Canonical brand casing. "GRCEye" — capital G, R, C, E, then lowercase "ye".
+ * Canonical brand name: "GRC Eye" (two words, brand kit v1.0, Sept 2026; previously "GRCEye").
  * Enforced across i18n dictionaries, metadata and JSON-LD. Mixed casing across
  * a site is a weak but real signal that the string is a common noun rather than
  * a name, which is exactly the confusion we are trying to undo.
@@ -25,15 +25,15 @@ export const BRAND = SITE_NAME;
 
 /**
  * Spelling variants Google should collapse into the same entity. This is the
- * direct countermeasure to the "grceye" -> "GRC eye" query rewrite: declaring
+ * direct countermeasure to the "grceye" -> "GRC" query rewrite: declaring
  * the variants tells Google they denote one thing rather than a typo to correct.
  */
-export const BRAND_ALTERNATE_NAMES = ["GRCeye", "GRC Eye", "GRC-Eye", "GRCEYE"];
+export const BRAND_ALTERNATE_NAMES = ["GRC Eye", "GRCEye", "GRC-Eye", "GRCEYE"];
 
 /**
  * External profiles that corroborate the entity.
  *
- * ONLY add URLs that actually resolve and actually belong to GRCEye. A sameAs
+ * ONLY add URLs that actually resolve and actually belong to GRC Eye. A sameAs
  * pointing at a 404 or at someone else's profile is worse than an empty array:
  * it is a false claim about identity and Google discounts the whole block.
  *
@@ -58,7 +58,7 @@ export const BRAND_COUNTRY = "TN";
 
 /**
  * Topical scope. Helps Google associate the entity with the subject area it
- * should rank for, rather than leaving "GRCEye" as an unattached string.
+ * should rank for, rather than leaving "GRC Eye" as an unattached string.
  */
 export const KNOWS_ABOUT = [
   "Governance, Risk and Compliance",

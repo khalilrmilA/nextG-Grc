@@ -169,7 +169,7 @@ function DashboardMockup() {
           <div className="w-3 h-3 rounded-full bg-red-400" />
           <div className="w-3 h-3 rounded-full bg-yellow-400" />
           <div className="w-3 h-3 rounded-full bg-green-400" />
-          <span className="ml-2 text-xs font-semibold text-slate-400">GRCEye Dashboard</span>
+          <span className="ml-2 text-xs font-semibold text-slate-400">GRC Eye Dashboard</span>
         </div>
         <div className="flex items-center gap-2">
           <Bell className="w-3.5 h-3.5 text-slate-500" />
@@ -305,9 +305,9 @@ function ComplianceMockup() {
           </div>
           <div className="relative w-12 h-12">
             <svg className="w-12 h-12 -rotate-90" viewBox="0 0 36 36">
-              <circle cx="18" cy="18" r="15.9" fill="none" stroke="#e5e7eb" strokeWidth="3" />
+              <circle cx="18" cy="18" r="15.9" fill="none" stroke="#D9DAD6" strokeWidth="3" />
               <circle cx="18" cy="18" r="15.9" fill="none" stroke="url(#grad)" strokeWidth="3" strokeDasharray="64 36" strokeLinecap="round" />
-              <defs><linearGradient id="grad" x1="0%" y1="0%" x2="100%" y2="0%"><stop offset="0%" stopColor="#3b82f6"/><stop offset="100%" stopColor="#6366f1"/></linearGradient></defs>
+              <defs><linearGradient id="grad" x1="0%" y1="0%" x2="100%" y2="0%"><stop offset="0%" stopColor="#2185D3"/><stop offset="100%" stopColor="#3F92D6"/></linearGradient></defs>
             </svg>
             <span className="absolute inset-0 flex items-center justify-center text-[10px] font-black text-blue-600">64%</span>
           </div>
@@ -454,7 +454,7 @@ function AIMockup() {
           </div>
         ))}
         <div className="flex gap-2 items-center mt-2 pt-2 border-t border-gray-100">
-          <div className="flex-1 bg-gray-50 border border-gray-200 rounded-xl px-3 py-1.5 text-[10px] text-gray-400">Ask GRCEye AI…</div>
+          <div className="flex-1 bg-gray-50 border border-gray-200 rounded-xl px-3 py-1.5 text-[10px] text-gray-400">Ask GRC Eye AI…</div>
           <div className="w-7 h-7 bg-gradient-to-br from-blue-600 to-indigo-600 rounded-xl flex items-center justify-center shadow-sm"><Send className="w-3 h-3 text-white" /></div>
         </div>
       </div>
@@ -549,14 +549,14 @@ export default function LandingView() {
   ]);
 
   return (
-    <div className="min-h-screen bg-[#f0f9ff] text-gray-900">
+    <div className="min-h-screen bg-[#E8F3FC] text-gray-900">
       <ScrollProgress />
 
       <PublicNav />
 
       <section className="relative pt-12 sm:pt-16 pb-16 sm:pb-24 px-4 sm:px-6 text-center overflow-hidden">
         <div className="absolute inset-0 opacity-[0.04] pointer-events-none [background-image:linear-gradient(rgba(99,102,241,.2)_1px,transparent_1px),linear-gradient(90deg,rgba(99,102,241,.2)_1px,transparent_1px)] [background-size:40px_40px]" />
-        <div className="absolute inset-0 bg-gradient-to-b from-sky-100/80 via-[#f0f9ff]/90 to-[#f0f9ff] pointer-events-none" />
+        <div className="absolute inset-0 bg-gradient-to-b from-sky-100/80 via-[#E8F3FC]/90 to-[#E8F3FC] pointer-events-none" />
         <div className="absolute -top-32 -left-32 w-[500px] h-[500px] bg-blue-300/30 rounded-full blur-3xl animate-blob pointer-events-none" />
         <div className="absolute top-20 -right-24 w-[400px] h-[400px] bg-indigo-300/25 rounded-full blur-3xl animate-blob animation-delay-2000 pointer-events-none" />
         <div className="absolute bottom-0 left-1/3 w-[350px] h-[350px] bg-cyan-300/20 rounded-full blur-3xl animate-blob animation-delay-4000 pointer-events-none" />
@@ -641,7 +641,7 @@ export default function LandingView() {
         </div>
       </section>
 
-      <section id="how-it-works" className="py-24 px-4 sm:px-6 bg-[#f0f9ff]">
+      <section id="how-it-works" className="py-24 px-4 sm:px-6 bg-[#E8F3FC]">
         <div className="max-w-5xl mx-auto">
           <Reveal>
             <div className="text-center mb-16">
@@ -791,7 +791,7 @@ export default function LandingView() {
         </div>
       </section>
 
-      <section className="py-24 px-4 sm:px-6 bg-[#f0f9ff]">
+      <section className="py-24 px-4 sm:px-6 bg-[#E8F3FC]">
         <div className="max-w-7xl mx-auto">
           <Reveal>
             <div className="text-center mb-14">

@@ -144,7 +144,7 @@ function Kpi({ label, value, sub, icon: Icon, bg, badge, badgePos }: {
 
 // ── section: overview ─────────────────────────────────────────────────────────
 
-const PIE_COLORS = ["#22c55e", "#3b82f6", "#f59e0b", "#e5e7eb"];
+const PIE_COLORS = ["#5BBD74", "#2185D3", "#E4C64F", "#D9DAD6"];
 
 const CustomTip = ({ active, payload, label }: { active?: boolean; payload?: { name: string; value: number; fill: string; stroke: string }[]; label?: string }) => {
   if (!active || !payload?.length) return null;
@@ -220,14 +220,14 @@ function OverviewTab({ dash }: { readonly dash: LoadState<DashSummary> & { reloa
                 medium: d.risk.by_severity["medium"] ?? 0,
                 low: d.risk.by_severity["low"] ?? 0,
               }]} barSize={40}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" vertical={false} />
-                <XAxis dataKey="name" tick={{ fontSize: 11, fill: "#9ca3af" }} axisLine={false} tickLine={false} />
-                <YAxis tick={{ fontSize: 11, fill: "#9ca3af" }} axisLine={false} tickLine={false} />
+                <CartesianGrid strokeDasharray="3 3" stroke="#ECECE9" vertical={false} />
+                <XAxis dataKey="name" tick={{ fontSize: 11, fill: "#8E9299" }} axisLine={false} tickLine={false} />
+                <YAxis tick={{ fontSize: 11, fill: "#8E9299" }} axisLine={false} tickLine={false} />
                 <Tooltip content={<CustomTip />} />
-                <Bar dataKey="critical" name={t("vocab.critical")} fill="#ef4444" radius={[4, 4, 0, 0]} />
-                <Bar dataKey="high" name={t("vocab.high")} fill="#f97316" radius={[4, 4, 0, 0]} />
-                <Bar dataKey="medium" name={t("vocab.medium")} fill="#eab308" radius={[4, 4, 0, 0]} />
-                <Bar dataKey="low" name={t("vocab.low")} fill="#22c55e" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="critical" name={t("vocab.critical")} fill="#DB4241" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="high" name={t("vocab.high")} fill="#EF852E" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="medium" name={t("vocab.medium")} fill="#E4C64F" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="low" name={t("vocab.low")} fill="#5BBD74" radius={[4, 4, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           </div>
@@ -283,16 +283,16 @@ function OverviewTab({ dash }: { readonly dash: LoadState<DashSummary> & { reloa
             ]}>
               <defs>
                 <linearGradient id="cg" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.15} />
-                  <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
+                  <stop offset="5%" stopColor="#2185D3" stopOpacity={0.15} />
+                  <stop offset="95%" stopColor="#2185D3" stopOpacity={0} />
                 </linearGradient>
               </defs>
-              <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" vertical={false} />
-              <XAxis dataKey="m" tick={{ fontSize: 11, fill: "#9ca3af" }} axisLine={false} tickLine={false} />
-              <YAxis tick={{ fontSize: 11, fill: "#9ca3af" }} axisLine={false} tickLine={false} domain={[50, 100]} />
+              <CartesianGrid strokeDasharray="3 3" stroke="#ECECE9" vertical={false} />
+              <XAxis dataKey="m" tick={{ fontSize: 11, fill: "#8E9299" }} axisLine={false} tickLine={false} />
+              <YAxis tick={{ fontSize: 11, fill: "#8E9299" }} axisLine={false} tickLine={false} domain={[50, 100]} />
               <Tooltip content={<CustomTip />} />
-              <Area type="monotone" dataKey="v" name={t("cheatsheet.score")} stroke="#3b82f6" strokeWidth={2}
-                fill="url(#cg)" dot={{ fill: "#3b82f6", r: 3 }} activeDot={{ r: 5 }} />
+              <Area type="monotone" dataKey="v" name={t("cheatsheet.score")} stroke="#2185D3" strokeWidth={2}
+                fill="url(#cg)" dot={{ fill: "#2185D3", r: 3 }} activeDot={{ r: 5 }} />
             </AreaChart>
           </ResponsiveContainer>
         </div>

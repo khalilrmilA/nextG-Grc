@@ -6,9 +6,9 @@ import { OG_IMAGE } from "@/lib/brand";
 
 export async function generateMetadata(props: { params: Promise<{ locale: Locale }> }): Promise<Metadata> {
   const params = await props.params;
-  const title = "Security at GRCEye | How We Protect Your Compliance Data";
+  const title = "Security at GRC Eye | How We Protect Your Compliance Data";
   const description =
-    "The security controls built into GRCEye: multi-factor authentication, role-based access control, tenant isolation, audit logging and self-hosted AI.";
+    "The security controls built into GRC Eye: multi-factor authentication, role-based access control, tenant isolation, audit logging and self-hosted AI.";
   return {
     title: { absolute: title },
     description,
@@ -17,7 +17,7 @@ export async function generateMetadata(props: { params: Promise<{ locale: Locale
       languages: hreflangAlternates("/security"),
     },
     openGraph: {
-      siteName: "GRCEye",
+      siteName: "GRC Eye",
       title,
       description,
       url: canonicalUrl(params.locale, "/security"),
@@ -34,14 +34,14 @@ export default async function SecurityPage(props: { params: Promise<{ locale: Lo
   return (
     <LegalPage
       title="Security"
-      subtitle="A GRC platform holds the evidence of your entire control environment. Here is how GRCEye protects it."
+      subtitle="A GRC platform holds the evidence of your entire control environment. Here is how GRC Eye protects it."
       updated="8 September 2026"
     >
       <h2>Why this page exists</h2>
       <p>
         A governance, risk and compliance platform ends up holding the most sensitive
         summary of your organisation that exists anywhere: your gaps, your findings, your
-        unremediated risks. That makes GRCEye itself a target, and makes our own security
+        unremediated risks. That makes GRC Eye itself a target, and makes our own security
         posture a fair question for any prospect to ask. This page answers it directly.
       </p>
 
@@ -70,7 +70,7 @@ export default async function SecurityPage(props: { params: Promise<{ locale: Lo
 
       <h2>Tenant isolation</h2>
       <p>
-        GRCEye is multi-tenant. Every record carries a tenant identifier, and every API
+        GRC Eye is multi-tenant. Every record carries a tenant identifier, and every API
         endpoint resolves the caller&apos;s tenant from their authenticated session before
         it reads or writes anything. One customer&apos;s data is never reachable from
         another customer&apos;s session.
@@ -80,14 +80,14 @@ export default async function SecurityPage(props: { params: Promise<{ locale: Lo
       <p>
         The platform records user actions &mdash; what was changed, by whom, and when
         &mdash; in an activity log available to tenant administrators. This is both a
-        security control and a compliance feature: most of the frameworks GRCEye supports
+        security control and a compliance feature: most of the frameworks GRC Eye supports
         require an audit trail of changes to the control environment.
       </p>
 
       <h2>AI processing stays with you</h2>
       <p>
         This is the control that matters most for a GRC tool, and the one most competing
-        platforms cannot offer. GRCEye&apos;s AI features &mdash; gap analysis, contract
+        platforms cannot offer. GRC Eye&apos;s AI features &mdash; gap analysis, contract
         review, document generation, vendor prescreening &mdash; run on a locally hosted
         model rather than a third-party AI API.
       </p>
@@ -121,7 +121,7 @@ export default async function SecurityPage(props: { params: Promise<{ locale: Lo
 
       <h2>Deployment options</h2>
       <p>
-        GRCEye can be run as a managed SaaS deployment or installed on-premise in your own
+        GRC Eye can be run as a managed SaaS deployment or installed on-premise in your own
         environment. On-premise deployments give you full data residency: the application,
         the database and the AI model all run on infrastructure you control, with no egress
         to us.
@@ -129,7 +129,7 @@ export default async function SecurityPage(props: { params: Promise<{ locale: Lo
 
       <h2>Reporting a vulnerability</h2>
       <p>
-        If you believe you have found a security issue in GRCEye, email{" "}
+        If you believe you have found a security issue in GRC Eye, email{" "}
         <a href="mailto:security@grceye.com">security@grceye.com</a> with enough detail to
         reproduce it. We will acknowledge your report, keep you updated while we
         investigate, and will not pursue action against researchers who report in good

@@ -88,7 +88,7 @@ export default function PublicNav() {
 
           {/* Logo */}
           <Link href="/" className="flex items-center gap-2 flex-shrink-0">
-            <img src="/logo-horizontal.png" alt="GRCEye" className="h-9 sm:h-10 w-auto object-contain" />
+            <img src="/logo-horizontal.png" alt="GRC Eye" className="h-9 sm:h-10 w-auto object-contain" />
           </Link>
 
           {/* Desktop nav */}
@@ -192,7 +192,7 @@ export default function PublicNav() {
       >
         <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
           <Link href="/" onClick={() => setOpen(false)}>
-            <img src="/logo-horizontal.png" alt="GRCEye" className="h-10 w-auto object-contain" />
+            <img src="/logo-horizontal.png" alt="GRC Eye" className="h-10 w-auto object-contain" />
           </Link>
           <button
             onClick={() => setOpen(false)}

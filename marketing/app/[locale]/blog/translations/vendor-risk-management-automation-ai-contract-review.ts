@@ -3,7 +3,7 @@ import type { PostTranslations } from "./types";
 const translations: PostTranslations = {
   fr: {
     title: "Automatisation de la gestion des risques fournisseurs : revue de contrats par IA et TPRM en temps réel",
-    metaTitle: "Automatisation TPRM & revue de contrats par IA | GRCEye",
+    metaTitle: "Automatisation TPRM & revue de contrats par IA | GRC Eye",
     metaDescription: "60 % des incidents proviennent de tiers. L'analyse de contrats par IA, le suivi TPRM continu et la cartographie à 6 dimensions réduisent l'exposition au risque fournisseur jusqu'à 70 %.",
     keywords: "automatisation gestion des risques fournisseurs, automatisation TPRM, revue de contrats par IA, risque tiers, plateforme de gestion des risques fournisseurs, risque chaîne d'approvisionnement, TPRM automatisé",
     excerpt: "60 % des incidents de sécurité impliquent un tiers, pourtant la plupart des programmes TPRM reposent encore sur des questionnaires annuels. Découvrez comment l'automatisation de la gestion des risques fournisseurs, combinant analyse de contrats par IA, suivi continu et cartographie à 6 dimensions, réduit l'exposition au risque tiers jusqu'à 70 %.",
@@ -30,7 +30,7 @@ Le questionnaire annuel présente quatre problèmes structurels qu'aucune améli
 
 ## À quoi ressemble le TPRM automatisé en pratique
 
-Une plateforme automatisée de gestion des risques fournisseurs remplace le cycle du questionnaire annuel par une évaluation des risques continue et multidimensionnelle. Voici comment cela fonctionne dans GRCEye :
+Une plateforme automatisée de gestion des risques fournisseurs remplace le cycle du questionnaire annuel par une évaluation des risques continue et multidimensionnelle. Voici comment cela fonctionne dans GRC Eye :
 
 ### Inventaire et classification des fournisseurs
 
@@ -71,7 +71,7 @@ Ce workflow garantit qu'aucun fournisseur n'est intégré sans décision de risq
 
 **4,5 M€ de coût moyen d'une violation impliquant un tiers** (IBM Cost of a Data Breach 2025, ajusté pour les entreprises de taille moyenne en UE). C'est le chiffre qui fait de la gestion des risques fournisseurs un sujet de conseil d'administration.
 
-**70 % de réduction de l'exposition au risque fournisseur** obtenue par les clients de GRCEye dans les 12 mois suivant la mise en place d'un TPRM automatisé, mesurée comme la réduction du nombre de fournisseurs évalués à risque élevé ou critique sans plan de remédiation documenté.
+**70 % de réduction de l'exposition au risque fournisseur** obtenue par les clients de GRC Eye dans les 12 mois suivant la mise en place d'un TPRM automatisé, mesurée comme la réduction du nombre de fournisseurs évalués à risque élevé ou critique sans plan de remédiation documenté.
 
 **85 % de réduction du temps de revue contractuelle** lorsque l'analyse de contrats par IA est appliquée. Une équipe juridique qui consacrait auparavant 8 à 12 heures à examiner un contrat fournisseur pour ses clauses de sécurité et de conformité réalise désormais la même revue en 60 à 90 minutes grâce à l'analyse générée par l'IA.
 
@@ -99,14 +99,14 @@ Au jour 30, vous disposez d'un programme de gestion des risques fournisseurs com
 `,
     faqs: [
       { q: "Comment gérer les fournisseurs qui refusent de compléter les questionnaires de sécurité ?", a: "La plateforme permet de signaler l'absence de réponse à un questionnaire comme un constat de risque et de l'escalader via le workflow d'approbation. Les fournisseurs non réactifs peuvent être restreints ou retirés de la liste des fournisseurs approuvés selon votre politique." },
-      { q: "L'IA peut-elle revoir des contrats dans des langues autres que l'anglais ?", a: "La revue de contrats par IA de GRCEye prend actuellement en charge l'anglais et le français, avec un support de langues additionnelles en cours de développement. Les contrats dans d'autres langues peuvent être revus manuellement à l'aide du cadre d'évaluation structuré de la plateforme." },
-      { q: "Comment la plateforme gère-t-elle les fournisseurs relevant du shadow IT ?", a: "GRCEye s'intègre aux fournisseurs d'identité et aux courtiers de sécurité d'accès au cloud (CASB) pour identifier les applications SaaS utilisées dans toute l'organisation. Les applications non enregistrées sont signalées comme relevant du shadow IT en vue d'une revue d'intégration fournisseur." },
-      { q: "Quelle est la taille réaliste d'un programme fournisseurs ?", a: "Les clients de GRCEye gèrent entre 50 et 3 000 fournisseurs sur la plateforme. Le modèle de niveaux de risque garantit que l'effort est proportionnel au risque : les fournisseurs critiques bénéficient d'une surveillance intensive, tandis que les fournisseurs à faible risque font l'objet de revues annuelles allégées." },
+      { q: "L'IA peut-elle revoir des contrats dans des langues autres que l'anglais ?", a: "La revue de contrats par IA de GRC Eye prend actuellement en charge l'anglais et le français, avec un support de langues additionnelles en cours de développement. Les contrats dans d'autres langues peuvent être revus manuellement à l'aide du cadre d'évaluation structuré de la plateforme." },
+      { q: "Comment la plateforme gère-t-elle les fournisseurs relevant du shadow IT ?", a: "GRC Eye s'intègre aux fournisseurs d'identité et aux courtiers de sécurité d'accès au cloud (CASB) pour identifier les applications SaaS utilisées dans toute l'organisation. Les applications non enregistrées sont signalées comme relevant du shadow IT en vue d'une revue d'intégration fournisseur." },
+      { q: "Quelle est la taille réaliste d'un programme fournisseurs ?", a: "Les clients de GRC Eye gèrent entre 50 et 3 000 fournisseurs sur la plateforme. Le modèle de niveaux de risque garantit que l'effort est proportionnel au risque : les fournisseurs critiques bénéficient d'une surveillance intensive, tandis que les fournisseurs à faible risque font l'objet de revues annuelles allégées." },
     ],
   },
   ar: {
     title: "أتمتة إدارة مخاطر الموردين: مراجعة العقود بالذكاء الاصطناعي وإدارة مخاطر الأطراف الثالثة في الوقت الفعلي",
-    metaTitle: "أتمتة إدارة مخاطر الأطراف الثالثة ومراجعة العقود بالذكاء الاصطناعي | GRCEye",
+    metaTitle: "أتمتة إدارة مخاطر الأطراف الثالثة ومراجعة العقود بالذكاء الاصطناعي | GRC Eye",
     metaDescription: "60% من الحوادث الأمنية تنشأ من أطراف ثالثة. تحليل العقود بالذكاء الاصطناعي والمراقبة المستمرة ورسم الخرائط السداسي الأبعاد يخفضان التعرض للمخاطر حتى 70%.",
     keywords: "أتمتة إدارة مخاطر الموردين, أتمتة إدارة مخاطر الأطراف الثالثة, مراجعة العقود بالذكاء الاصطناعي, مخاطر الأطراف الثالثة, منصة إدارة مخاطر الموردين, مخاطر سلسلة التوريد, TPRM آلي",
     excerpt: "60% من الحوادث الأمنية تتضمن طرفًا ثالثًا، ومع ذلك لا تزال معظم برامج إدارة مخاطر الأطراف الثالثة تعتمد على استبيانات سنوية. اكتشف كيف تُسهم أتمتة إدارة مخاطر الموردين، من خلال تحليل العقود بالذكاء الاصطناعي والمراقبة المستمرة ورسم الخرائط السداسي الأبعاد، في خفض التعرض لمخاطر الأطراف الثالثة حتى 70%.",
@@ -133,7 +133,7 @@ Au jour 30, vous disposez d'un programme de gestion des risques fournisseurs com
 
 ## كيف تبدو إدارة مخاطر الأطراف الثالثة الآلية عمليًّا
 
-تستبدل منصة أتمتة إدارة مخاطر الموردين دورة الاستبيان السنوي بتقييم مخاطر مستمر ومتعدد الأبعاد. إليك كيفية عملها في GRCEye:
+تستبدل منصة أتمتة إدارة مخاطر الموردين دورة الاستبيان السنوي بتقييم مخاطر مستمر ومتعدد الأبعاد. إليك كيفية عملها في GRC Eye:
 
 ### جرد الموردين وتصنيفهم
 
@@ -174,7 +174,7 @@ Au jour 30, vous disposez d'un programme de gestion des risques fournisseurs com
 
 **4.5 مليون يورو متوسط تكلفة خرق ناجم عن طرف ثالث** (تقرير IBM Cost of a Data Breach لعام 2025، معدَّل للشركات المتوسطة في الاتحاد الأوروبي). هذا هو الرقم الذي يجعل من إدارة مخاطر الموردين موضوعًا يُطرح على مستوى مجلس الإدارة.
 
-**70% خفض في التعرض لمخاطر الموردين** حققه عملاء GRCEye خلال 12 شهرًا من تطبيق إدارة مخاطر الأطراف الثالثة الآلية، مقاسًا بانخفاض عدد الموردين المصنّفين على أنهم عالو أو حرجو المخاطر دون خطط معالجة موثَّقة.
+**70% خفض في التعرض لمخاطر الموردين** حققه عملاء GRC Eye خلال 12 شهرًا من تطبيق إدارة مخاطر الأطراف الثالثة الآلية، مقاسًا بانخفاض عدد الموردين المصنّفين على أنهم عالو أو حرجو المخاطر دون خطط معالجة موثَّقة.
 
 **85% خفض في زمن مراجعة العقود** عند تطبيق تحليل العقود بالذكاء الاصطناعي. فريق قانوني كان يقضي سابقًا 8 إلى 12 ساعة في مراجعة عقد مورّد بحثًا عن بنود الأمن والامتثال، أصبح ينجز المراجعة ذاتها في 60 إلى 90 دقيقة باستخدام التحليل المُولَّد بالذكاء الاصطناعي.
 
@@ -202,9 +202,9 @@ Au jour 30, vous disposez d'un programme de gestion des risques fournisseurs com
 `,
     faqs: [
       { q: "كيف نتعامل مع الموردين الذين يرفضون تعبئة استبيانات الأمن؟", a: "تتيح المنصة وسم عدم الرد على الاستبيان كنتيجة مخاطر وتصعيدها عبر سير عمل الموافقة. يمكن تقييد الموردين غير المستجيبين أو إزالتهم من قائمة الموردين المعتمدين وفقًا لسياستك." },
-      { q: "هل يمكن للذكاء الاصطناعي مراجعة عقود بلغات غير الإنجليزية؟", a: "تدعم مراجعة العقود بالذكاء الاصطناعي في GRCEye حاليًّا اللغتين الإنجليزية والفرنسية، مع دعم لغات إضافية قيد التطوير. يمكن مراجعة العقود بلغات أخرى يدويًّا باستخدام إطار التقييم المنظَّم للمنصة." },
-      { q: "كيف تتعامل المنصة مع موردي تقنية المعلومات الخفية (Shadow IT)؟", a: "تتكامل GRCEye مع مزوّدي الهوية ووسطاء أمن الوصول السحابي (CASB) لتحديد تطبيقات SaaS المستخدَمة في جميع أنحاء المؤسسة. تُوسم التطبيقات غير المسجَّلة كتقنية معلومات خفية لمراجعتها ضمن إدماج الموردين." },
-      { q: "ما هو الحجم الواقعي لبرنامج الموردين؟", a: "يدير عملاء GRCEye ما بين 50 و3000 مورّد على المنصة. يضمن نموذج المستويات المتدرجة للمخاطر أن يكون الجهد متناسبًا مع المخاطر: يحصل الموردون الحرجون على مراقبة مكثفة، بينما يخضع الموردون منخفضو المخاطر لمراجعات سنوية خفيفة." },
+      { q: "هل يمكن للذكاء الاصطناعي مراجعة عقود بلغات غير الإنجليزية؟", a: "تدعم مراجعة العقود بالذكاء الاصطناعي في GRC Eye حاليًّا اللغتين الإنجليزية والفرنسية، مع دعم لغات إضافية قيد التطوير. يمكن مراجعة العقود بلغات أخرى يدويًّا باستخدام إطار التقييم المنظَّم للمنصة." },
+      { q: "كيف تتعامل المنصة مع موردي تقنية المعلومات الخفية (Shadow IT)؟", a: "تتكامل GRC Eye مع مزوّدي الهوية ووسطاء أمن الوصول السحابي (CASB) لتحديد تطبيقات SaaS المستخدَمة في جميع أنحاء المؤسسة. تُوسم التطبيقات غير المسجَّلة كتقنية معلومات خفية لمراجعتها ضمن إدماج الموردين." },
+      { q: "ما هو الحجم الواقعي لبرنامج الموردين؟", a: "يدير عملاء GRC Eye ما بين 50 و3000 مورّد على المنصة. يضمن نموذج المستويات المتدرجة للمخاطر أن يكون الجهد متناسبًا مع المخاطر: يحصل الموردون الحرجون على مراقبة مكثفة، بينما يخضع الموردون منخفضو المخاطر لمراجعات سنوية خفيفة." },
     ],
   },
 };

@@ -34,9 +34,9 @@ export default function AuthLayout({ children, maxWidth = "max-w-sm" }: { childr
         <div className="relative z-10 flex flex-col justify-between p-12 xl:p-16 w-full">
           <div>
             <img
-              src="/logo-vertical.png"
+              src="/logo-vertical-white.png"
               alt={t("auth_layout.logo_alt")}
-              className="h-16 w-auto object-contain bg-white/95 rounded-xl p-2.5 shadow-lg shadow-black/30 mb-14"
+              className="h-16 w-auto object-contain mb-14"
             />
 
             <h1 className="text-3xl xl:text-[2.5rem] font-bold text-white leading-tight mb-5">
@@ -82,9 +82,9 @@ export default function AuthLayout({ children, maxWidth = "max-w-sm" }: { childr
           <div className="absolute inset-0 hex-pattern opacity-70" />
           <div className="absolute inset-0 bg-gradient-to-br from-blue-950/50 via-slate-950/80 to-slate-950" />
           <img
-            src="/logo-vertical.png"
+            src="/logo-vertical-white.png"
             alt={t("auth_layout.logo_alt")}
-            className="relative z-10 h-14 w-auto object-contain bg-white/95 rounded-xl p-2 shadow-lg"
+            className="relative z-10 h-14 w-auto object-contain"
           />
         </div>
 

@@ -20,7 +20,7 @@ const INDUSTRIES = [
     border: "border-blue-200",
     label: "SaaS & Technology",
     headline: "Turn SOC 2 and ISO 27001 into a sales asset",
-    ceoValue: "Every enterprise deal that asks for SOC 2 evidence is either closed faster or lost to a competitor who has a Trust Center ready. GRCEye gets you certified, and keeps you there.",
+    ceoValue: "Every enterprise deal that asks for SOC 2 evidence is either closed faster or lost to a competitor who has a Trust Center ready. GRC Eye gets you certified, and keeps you there.",
     metrics: [
       { value: "3–5 weeks", label: "faster enterprise deal cycles" },
       { value: "Day 1", label: "full control library live" },
@@ -43,7 +43,7 @@ const INDUSTRIES = [
     border: "border-rose-200",
     label: "Healthcare & Life Sciences",
     headline: "HIPAA and GDPR, with a complete audit trail",
-    ceoValue: "A single HIPAA breach costs an average of $10.9M. GRCEye keeps your compliance programme continuous and your evidence always audit-ready, so you're never exposed.",
+    ceoValue: "A single HIPAA breach costs an average of $10.9M. GRC Eye keeps your compliance programme continuous and your evidence always audit-ready, so you're never exposed.",
     metrics: [
       { value: "$10.9M", label: "average HIPAA breach cost (avoidable)" },
       { value: "Automated", label: "breach notification workflows" },
@@ -66,7 +66,7 @@ const INDUSTRIES = [
     border: "border-emerald-200",
     label: "Financial Services & FinTech",
     headline: "DORA, PCI DSS, and NIS2 in one platform",
-    ceoValue: "Regulatory overlap is costing FinTechs 2–3x more than it should. GRCEye maps controls once and satisfies multiple regulators simultaneously: one team, one tool, multiple audits.",
+    ceoValue: "Regulatory overlap is costing FinTechs 2–3x more than it should. GRC Eye maps controls once and satisfies multiple regulators simultaneously: one team, one tool, multiple audits.",
     metrics: [
       { value: "60%", label: "reduction in duplicate compliance work" },
       { value: "5 pillars", label: "DORA coverage out of the box" },
@@ -89,7 +89,7 @@ const INDUSTRIES = [
     border: "border-violet-200",
     label: "Enterprise",
     headline: "Multi-framework GRC that scales with complexity",
-    ceoValue: "Large organisations waste millions on fragmented GRC tools, external consultants, and manual reporting. GRCEye consolidates everything (70+ frameworks, 9 roles, unlimited business units) into one cost centre.",
+    ceoValue: "Large organisations waste millions on fragmented GRC tools, external consultants, and manual reporting. GRC Eye consolidates everything (70+ frameworks, 9 roles, unlimited business units) into one cost centre.",
     metrics: [
       { value: "40–45%", label: "lower total compliance cost" },
       { value: "70+", label: "frameworks in one platform" },
@@ -129,7 +129,7 @@ const CEO_BENEFITS = [
     icon: Shield,
     color: "from-rose-500 to-pink-600",
     title: "Regulatory risk is visible, not buried",
-    body: "When a new regulation hits (DORA, NIS2, EU AI Act), GRCEye maps your existing controls to the new framework instantly. Your exposure is quantified before the regulator knocks.",
+    body: "When a new regulation hits (DORA, NIS2, EU AI Act), GRC Eye maps your existing controls to the new framework instantly. Your exposure is quantified before the regulator knocks.",
   },
 ];
 
@@ -238,7 +238,7 @@ export default function SolutionsView() {
             </span>
           </h1>
           <p className="text-xl text-gray-500 leading-relaxed max-w-2xl mx-auto mb-10">
-            GRCEye replaces compliance consultants, audit scrambles, and manual reporting with an automated programme
+            GRC Eye replaces compliance consultants, audit scrambles, and manual reporting with an automated programme
             that cuts costs, accelerates enterprise deals, and gives your board a live view of risk.
           </p>
           <div className="flex flex-col sm:flex-row gap-3 justify-center">
@@ -383,7 +383,7 @@ export default function SolutionsView() {
               One platform: every stakeholder gets what they need
             </h2>
             <p className="text-lg text-gray-500">
-              GRCEye is built so the CEO has a live dashboard, the CISO has a full programme, and the auditor never needs to send an email.
+              GRC Eye is built so the CEO has a live dashboard, the CISO has a full programme, and the auditor never needs to send an email.
             </p>
           </div>
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
@@ -432,9 +432,9 @@ export default function SolutionsView() {
               </div>
               <h2 className="text-2xl sm:text-3xl font-extrabold mb-3">AI that never leaves your infrastructure</h2>
               <p className="text-slate-300 leading-relaxed max-w-2xl mx-auto mb-8">
-                Every AI feature in GRCEye (document generation, contract review, gap analysis, vendor prescreening)
+                Every AI feature in GRC Eye (document generation, contract review, gap analysis, vendor prescreening)
                 runs on your own servers. No data is sent to OpenAI, Anthropic, or any external provider.
-                This makes GRCEye suitable for the most sensitive regulated environments, including EU-only data processing.
+                This makes GRC Eye suitable for the most sensitive regulated environments, including EU-only data processing.
               </p>
               <div className="flex flex-wrap gap-3 justify-center mb-8">
                 {["Zero data egress", "On-premise LLM", "EU AI Act aligned", "Air-gap capable"].map((tag) => (

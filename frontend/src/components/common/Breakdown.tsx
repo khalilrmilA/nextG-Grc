@@ -38,8 +38,8 @@ export const BAR_COLORS = [
 /** Hex mirror of BAR_COLORS for anything that has to draw outside Tailwind
  *  (SVG charts, PNG export). */
 export const CHART_COLORS = [
-  "#3b82f6", "#6366f1", "#10b981", "#f59e0b",
-  "#f43f5e", "#8b5cf6", "#06b6d4", "#f97316",
+  "#2185D3", "#3F92D6", "#5BBD74", "#E4C64F",
+  "#DB4241", "#0C5D9E", "#72B0E4", "#EF852E",
 ];
 
 /**

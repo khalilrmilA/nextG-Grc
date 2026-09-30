@@ -14,9 +14,9 @@ interface GraphEdge { source: string; target: string; kind: string; }
 interface CartographyGraph { nodes: GraphNode[]; edges: GraphEdge[]; stats: Record<string, number>; }
 
 const TYPE_COLOR: Record<string, { fill: string; stroke: string; text: string }> = {
-  entity:  { fill: "#EEF2FF", stroke: "#6366F1", text: "#4338CA" },
-  process: { fill: "#ECFDF5", stroke: "#10B981", text: "#047857" },
-  asset:   { fill: "#FFF7ED", stroke: "#F97316", text: "#C2410C" },
+  entity:  { fill: "#EEF2FF", stroke: "#3F92D6", text: "#4338CA" },
+  process: { fill: "#ECFDF5", stroke: "#5BBD74", text: "#047857" },
+  asset:   { fill: "#FFF7ED", stroke: "#EF852E", text: "#C2410C" },
 };
 
 // ─── Deterministic concentric-ring layout (no physics dependency) ──────────
@@ -84,7 +84,7 @@ function GraphCanvas({ graph }: { graph: CartographyGraph }) {
               <line
                 key={i}
                 x1={a.x} y1={a.y} x2={b.x} y2={b.y}
-                stroke={dim ? "#E5E7EB" : "#94A3B8"}
+                stroke={dim ? "#D9DAD6" : "#8E9299"}
                 strokeWidth={dim ? 1 : 1.5}
                 opacity={dim ? 0.4 : 0.9}
               />

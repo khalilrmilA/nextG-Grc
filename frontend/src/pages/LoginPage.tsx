@@ -207,7 +207,7 @@ export default function LoginPage() {
 
   return (
     <>
-    <SEO title={t("public.login.submit")} description="Sign in to GRCEye." path="/login" noIndex />
+    <SEO title={t("public.login.submit")} description="Sign in to GRC Eye." path="/login" noIndex />
     <AuthLayout>
       {mfaChallengeToken ? (
         <>
@@ -365,7 +365,7 @@ export default function LoginPage() {
             {t("public.login.back_home")}
           </a>
           <p className="text-xs text-gray-400">
-            © {new Date().getFullYear()} GRCEye
+            © {new Date().getFullYear()} GRC Eye
           </p>
         </div>
         <p className="text-center text-xs text-gray-400">

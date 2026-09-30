@@ -7,14 +7,14 @@ const bundle: { en: Record<string, any>; fr: Record<string, any>; ar: Record<str
   "en": {
     "trial_banner": {
       "expired_title": "Trial Expired",
-      "expired_admin": "Your 14-day free trial has ended. Please upgrade to continue using GRCEye.",
-      "expired_user": "Your organization's free trial has ended. Please contact your administrator to continue using GRCEye.",
+      "expired_admin": "Your 14-day free trial has ended. Please upgrade to continue using GRC Eye.",
+      "expired_user": "Your organization's free trial has ended. Please contact your administrator to continue using GRC Eye.",
       "upgrade_now": "Upgrade Now",
       "upgrade": "Upgrade",
       "days_remaining_one": "Free Trial — {{count}} day remaining",
       "days_remaining_other": "Free Trial — {{count}} days remaining",
       "days_remaining": "Free Trial — {{count}} days remaining",
-      "banner_admin": "Upgrade to Professional to keep using GRCEye after your trial ends.",
+      "banner_admin": "Upgrade to Professional to keep using GRC Eye after your trial ends.",
       "banner_user": "Contact your administrator to upgrade your organization's plan."
     },
     "demo_guard": {
@@ -27,7 +27,7 @@ const bundle: { en: Record<string, any>; fr: Record<string, any>; ar: Record<str
       "status": "Service unavailable",
       "checking": "Checking…",
       "try_again": "Try again",
-      "footer": "GRCEye · Error 503"
+      "footer": "GRC Eye · Error 503"
     },
     "main": {
       "render_error": "Render error"
@@ -113,7 +113,7 @@ const bundle: { en: Record<string, any>; fr: Record<string, any>; ar: Record<str
         "err_server": "Server error ({{status}}). Please try again later.",
         "err_generic": "Registration failed. Please check your details and try again.",
         "seo_get_started": "Get started",
-        "seo_description": "Create your free GRCEye account — 14-day trial, no credit card required.",
+        "seo_description": "Create your free GRC Eye account — 14-day trial, no credit card required.",
         "password_placeholder_min12": "Min 12 characters"
       },
       "reset": {
@@ -140,7 +140,7 @@ const bundle: { en: Record<string, any>; fr: Record<string, any>; ar: Record<str
       "step1_manual": "Can't scan? Enter this key manually:"
     },
     "auth_layout": {
-      "logo_alt": "GRCEye — Governance, Risk & Compliance Platform"
+      "logo_alt": "GRC Eye — Governance, Risk & Compliance Platform"
     },
     "sso": {
       "organization": "Organisation"
@@ -437,14 +437,14 @@ const bundle: { en: Record<string, any>; fr: Record<string, any>; ar: Record<str
   "fr": {
     "trial_banner": {
       "expired_title": "Essai expiré",
-      "expired_admin": "Votre essai gratuit de 14 jours est terminé. Veuillez passer à une offre supérieure pour continuer à utiliser GRCEye.",
-      "expired_user": "L'essai gratuit de votre organisation est terminé. Veuillez contacter votre administrateur pour continuer à utiliser GRCEye.",
+      "expired_admin": "Votre essai gratuit de 14 jours est terminé. Veuillez passer à une offre supérieure pour continuer à utiliser GRC Eye.",
+      "expired_user": "L'essai gratuit de votre organisation est terminé. Veuillez contacter votre administrateur pour continuer à utiliser GRC Eye.",
       "upgrade_now": "Mettre à niveau maintenant",
       "upgrade": "Mettre à niveau",
       "days_remaining_one": "Essai gratuit — {{count}} jour restant",
       "days_remaining_other": "Essai gratuit — {{count}} jours restants",
       "days_remaining": "Essai gratuit — {{count}} jours restants",
-      "banner_admin": "Passez à l'offre Professional pour continuer à utiliser GRCEye après la fin de votre essai.",
+      "banner_admin": "Passez à l'offre Professional pour continuer à utiliser GRC Eye après la fin de votre essai.",
       "banner_user": "Contactez votre administrateur pour mettre à niveau l'offre de votre organisation."
     },
     "demo_guard": {
@@ -457,7 +457,7 @@ const bundle: { en: Record<string, any>; fr: Record<string, any>; ar: Record<str
       "status": "Service indisponible",
       "checking": "Vérification…",
       "try_again": "Réessayer",
-      "footer": "GRCEye · Erreur 503"
+      "footer": "GRC Eye · Erreur 503"
     },
     "main": {
       "render_error": "Erreur d'affichage"
@@ -543,7 +543,7 @@ const bundle: { en: Record<string, any>; fr: Record<string, any>; ar: Record<str
         "err_server": "Erreur serveur ({{status}}). Veuillez réessayer plus tard.",
         "err_generic": "L'inscription a échoué. Veuillez vérifier vos informations et réessayer.",
         "seo_get_started": "Commencer",
-        "seo_description": "Créez votre compte GRCEye gratuit — essai de 14 jours, sans carte bancaire.",
+        "seo_description": "Créez votre compte GRC Eye gratuit — essai de 14 jours, sans carte bancaire.",
         "password_placeholder_min12": "12 caractères minimum"
       },
       "reset": {
@@ -570,7 +570,7 @@ const bundle: { en: Record<string, any>; fr: Record<string, any>; ar: Record<str
       "step1_manual": "Impossible de scanner ? Saisissez cette clé manuellement :"
     },
     "auth_layout": {
-      "logo_alt": "GRCEye — Plateforme de gouvernance, risques et conformité"
+      "logo_alt": "GRC Eye — Plateforme de gouvernance, risques et conformité"
     },
     "sso": {
       "organization": "Organisation"
@@ -867,8 +867,8 @@ const bundle: { en: Record<string, any>; fr: Record<string, any>; ar: Record<str
   "ar": {
     "trial_banner": {
       "expired_title": "انتهت الفترة التجريبية",
-      "expired_admin": "انتهت فترتك التجريبية المجانية البالغة 14 يومًا. يُرجى الترقية لمواصلة استخدام GRCEye.",
-      "expired_user": "انتهت الفترة التجريبية المجانية لمؤسستك. يُرجى التواصل مع المسؤول لمواصلة استخدام GRCEye.",
+      "expired_admin": "انتهت فترتك التجريبية المجانية البالغة 14 يومًا. يُرجى الترقية لمواصلة استخدام GRC Eye.",
+      "expired_user": "انتهت الفترة التجريبية المجانية لمؤسستك. يُرجى التواصل مع المسؤول لمواصلة استخدام GRC Eye.",
       "upgrade_now": "الترقية الآن",
       "upgrade": "ترقية",
       "days_remaining_one": "الفترة التجريبية المجانية — الأيام المتبقية: {{count}}",
@@ -878,7 +878,7 @@ const bundle: { en: Record<string, any>; fr: Record<string, any>; ar: Record<str
       "days_remaining_two": "الفترة التجريبية المجانية — الأيام المتبقية: {{count}}",
       "days_remaining_few": "الفترة التجريبية المجانية — الأيام المتبقية: {{count}}",
       "days_remaining_many": "الفترة التجريبية المجانية — الأيام المتبقية: {{count}}",
-      "banner_admin": "قم بالترقية إلى خطة Professional لمواصلة استخدام GRCEye بعد انتهاء الفترة التجريبية.",
+      "banner_admin": "قم بالترقية إلى خطة Professional لمواصلة استخدام GRC Eye بعد انتهاء الفترة التجريبية.",
       "banner_user": "تواصل مع المسؤول لترقية خطة مؤسستك."
     },
     "demo_guard": {
@@ -891,7 +891,7 @@ const bundle: { en: Record<string, any>; fr: Record<string, any>; ar: Record<str
       "status": "الخدمة غير متاحة",
       "checking": "جارٍ التحقق…",
       "try_again": "إعادة المحاولة",
-      "footer": "GRCEye · خطأ 503"
+      "footer": "GRC Eye · خطأ 503"
     },
     "main": {
       "render_error": "خطأ في العرض"
@@ -977,7 +977,7 @@ const bundle: { en: Record<string, any>; fr: Record<string, any>; ar: Record<str
         "err_server": "خطأ في الخادم ({{status}}). يُرجى المحاولة لاحقًا.",
         "err_generic": "فشل التسجيل. يُرجى التحقق من بياناتك والمحاولة مرة أخرى.",
         "seo_get_started": "ابدأ الآن",
-        "seo_description": "أنشئ حسابك المجاني في GRCEye — فترة تجريبية لمدة 14 يومًا دون الحاجة إلى بطاقة ائتمان.",
+        "seo_description": "أنشئ حسابك المجاني في GRC Eye — فترة تجريبية لمدة 14 يومًا دون الحاجة إلى بطاقة ائتمان.",
         "password_placeholder_min12": "12 حرفًا على الأقل"
       },
       "reset": {
@@ -1004,7 +1004,7 @@ const bundle: { en: Record<string, any>; fr: Record<string, any>; ar: Record<str
       "step1_manual": "تعذّر المسح؟ أدخل هذا المفتاح يدويًا:"
     },
     "auth_layout": {
-      "logo_alt": "GRCEye — منصة الحوكمة والمخاطر والامتثال"
+      "logo_alt": "GRC Eye — منصة الحوكمة والمخاطر والامتثال"
     },
     "sso": {
       "organization": "المؤسسة"

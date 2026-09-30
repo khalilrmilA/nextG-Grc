@@ -69,7 +69,7 @@ export default function LicenseActivationPage() {
 
         {/* Logo */}
         <div className="flex flex-col items-center mb-8">
-          <img src="/logo-vertical.png" alt={t("auth_layout.logo_alt")} className="h-44 w-auto object-contain mb-4 drop-shadow-2xl bg-white/95 rounded-2xl p-3" />
+          <img src="/logo-vertical-white.png" alt={t("auth_layout.logo_alt")} className="h-44 w-auto object-contain mb-4" />
           <div className="mt-3"><LanguageSwitcher /></div>
         </div>
 
@@ -184,7 +184,7 @@ export default function LicenseActivationPage() {
         </div>
 
         <p className="mt-6 text-center text-xs text-slate-500">
-          © {new Date().getFullYear()} GRCEye
+          © {new Date().getFullYear()} GRC Eye
         </p>
       </div>
     </div>

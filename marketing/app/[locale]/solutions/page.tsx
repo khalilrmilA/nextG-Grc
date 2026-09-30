@@ -13,7 +13,7 @@ export async function generateMetadata(props: { params: Promise<{ locale: Locale
     keywords: m.keywords,
     alternates: { canonical: canonicalUrl(params.locale, "/solutions"), languages: hreflangAlternates("/solutions") },
     openGraph: {
-      siteName: "GRCEye",
+      siteName: "GRC Eye",
       title: m.ogTitle,
       description: m.ogDescription,
       url: canonicalUrl(params.locale, "/solutions"),

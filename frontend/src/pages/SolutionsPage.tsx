@@ -102,10 +102,10 @@ export default function SolutionsPage() {
   const ind = INDUSTRIES[activeIndustry];
 
   return (
-    <div className="min-h-screen bg-[#f0f9ff] text-gray-900">
+    <div className="min-h-screen bg-[#E8F3FC] text-gray-900">
       <SEO
         title="Solutions"
-        description="GRCEye for SaaS, FinTech, Healthcare and Enterprise. Role-based workflows for CISOs, risk managers, compliance officers, auditors and policy managers."
+        description="GRC Eye for SaaS, FinTech, Healthcare and Enterprise. Role-based workflows for CISOs, risk managers, compliance officers, auditors and policy managers."
         path="/solutions"
         keywords="GRC for SaaS, GRC for FinTech, GRC for Healthcare, CISO software, compliance manager tools, risk manager platform"
       />
@@ -119,7 +119,7 @@ export default function SolutionsPage() {
       ]} />
 
       {/* Hero */}
-      <section className="relative pt-32 pb-20 px-6 text-center overflow-hidden bg-gradient-to-b from-sky-100 via-[#f0f9ff] to-[#f0f9ff]">
+      <section className="relative pt-32 pb-20 px-6 text-center overflow-hidden bg-gradient-to-b from-sky-100 via-[#E8F3FC] to-[#E8F3FC]">
         <div className="absolute -top-20 -left-20 w-96 h-96 bg-blue-200/30 rounded-full blur-3xl animate-blob pointer-events-none" />
         <div className="absolute top-10 -right-10 w-80 h-80 bg-sky-200/25 rounded-full blur-3xl animate-blob animation-delay-2000 pointer-events-none" />
         <div className="relative max-w-3xl mx-auto">
@@ -234,7 +234,7 @@ export default function SolutionsPage() {
                 <div className="bg-gradient-to-br from-blue-600 to-indigo-700 rounded-2xl p-6 text-white">
                   <Star className="w-6 h-6 text-yellow-300 mb-3 fill-yellow-300" />
                   <p className="text-sm leading-relaxed italic mb-4">
-                    "GRCEye cut our ISO 27001 certification prep from 18 months to 6. The AI gap analysis alone identified 34 control gaps we had missed in our manual review."
+                    "GRC Eye cut our ISO 27001 certification prep from 18 months to 6. The AI gap analysis alone identified 34 control gaps we had missed in our manual review."
                   </p>
                   <div>
                     <p className="font-semibold text-sm">Sarah K.</p>
@@ -248,7 +248,7 @@ export default function SolutionsPage() {
       </section>
 
       {/* Use cases */}
-      <section className="py-24 px-6 bg-[#f0f9ff]">
+      <section className="py-24 px-6 bg-[#E8F3FC]">
         <div className="max-w-7xl mx-auto">
           <Reveal>
             <div className="text-center mb-14">
@@ -283,7 +283,7 @@ export default function SolutionsPage() {
           <div className="space-y-6">
             {ROLES.map((role, i) => (
               <Reveal key={role.key} delay={i * 60}>
-                <div className="bg-[#f0f9ff] border border-sky-100 rounded-2xl p-7 grid grid-cols-1 md:grid-cols-3 gap-6 items-start card-hover">
+                <div className="bg-[#E8F3FC] border border-sky-100 rounded-2xl p-7 grid grid-cols-1 md:grid-cols-3 gap-6 items-start card-hover">
                   <div className="md:col-span-1">
                     <div className={`w-12 h-12 bg-gradient-to-br ${role.color} rounded-2xl flex items-center justify-center mb-4 shadow-md`}>
                       <role.icon className="w-6 h-6 text-white" />
@@ -309,7 +309,7 @@ export default function SolutionsPage() {
       </section>
 
       {/* AI section */}
-      <section className="py-24 px-6 bg-[#f0f9ff]">
+      <section className="py-24 px-6 bg-[#E8F3FC]">
         <div className="max-w-5xl mx-auto">
           <Reveal>
             <div className="bg-gradient-to-br from-slate-900 to-indigo-950 rounded-3xl p-10 md:p-14 text-white text-center relative overflow-hidden">
@@ -355,7 +355,7 @@ export default function SolutionsPage() {
               <Link to="/register" className="flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold px-8 py-3.5 rounded-2xl transition-all shadow-lg shadow-blue-500/20 hover:-translate-y-0.5 hover:shadow-blue-500/40">
                 {t("public.nav.start_trial")} <ArrowRight className="w-4 h-4 rtl:rotate-180" />
               </Link>
-              <Link to="/faq" className="flex items-center justify-center gap-2 bg-[#f0f9ff] border border-sky-200 text-gray-700 hover:bg-sky-100 font-semibold px-8 py-3.5 rounded-2xl transition-all hover:-translate-y-0.5">
+              <Link to="/faq" className="flex items-center justify-center gap-2 bg-[#E8F3FC] border border-sky-200 text-gray-700 hover:bg-sky-100 font-semibold px-8 py-3.5 rounded-2xl transition-all hover:-translate-y-0.5">
                 {t("public.faq.hero_title")} <ChevronRight className="w-4 h-4 rtl:rotate-180" />
               </Link>
             </div>

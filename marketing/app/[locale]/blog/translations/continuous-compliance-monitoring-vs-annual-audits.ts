@@ -3,7 +3,7 @@ import type { PostTranslations } from "./types";
 const translations: PostTranslations = {
   fr: {
     title: "Surveillance continue de la conformité : la fin de la panique de l'audit annuel",
-    metaTitle: "Surveillance continue de la conformité vs audits annuels | GRCEye",
+    metaTitle: "Surveillance continue de la conformité vs audits annuels | GRC Eye",
     metaDescription: "Les audits annuels créent six semaines de course contre la montre qui paralysent les équipes techniques. L'automatisation de la conformité continue transforme l'audit en formalité de 5 jours.",
     keywords: "surveillance continue de la conformité, conformité automatisée, alternative à l'audit annuel, automatisation de la conformité, conformité en temps réel, automatisation des audits, surveillance des contrôles",
     excerpt: "Les audits annuels créent six semaines de course contre la montre qui perturbent les équipes techniques et érodent la confiance. L'automatisation de la conformité continue surveille les contrôles 24h/24, détecte les dérives en temps réel et transforme l'audit d'un exercice de pompiers en une formalité de cinq jours. Voici comment opérer ce basculement.",
@@ -36,7 +36,7 @@ Le résultat est un programme de conformité toujours à jour. Lorsqu'un auditeu
 
 La course contre la montre des six semaines d'audit n'est pas seulement un problème de conformité. C'est un problème d'ingénierie. Les équipes de développement sont régulièrement détournées du travail produit pour répondre aux questions d'audit, produire des preuves d'architecture système et mettre en œuvre dans l'urgence des contrôles qui auraient dû être en place toute l'année.
 
-Les clients de GRCEye rapportent en moyenne **180 à 240 heures d'ingénierie par cycle d'audit** consacrées au support conformité lorsqu'ils gèrent des programmes manuels. À un coût d'ingénierie chargé de 100 €/heure, cela représente 18 000 à 24 000 € par audit. Pour les entreprises menant plusieurs audits par an (surveillance ISO 27001, SOC 2 Type II, audits initiés par les clients), le coût d'ingénierie annuel de la conformité manuelle peut dépasser 80 000 €, sans compter le coût d'opportunité du travail produit non réalisé.
+Les clients de GRC Eye rapportent en moyenne **180 à 240 heures d'ingénierie par cycle d'audit** consacrées au support conformité lorsqu'ils gèrent des programmes manuels. À un coût d'ingénierie chargé de 100 €/heure, cela représente 18 000 à 24 000 € par audit. Pour les entreprises menant plusieurs audits par an (surveillance ISO 27001, SOC 2 Type II, audits initiés par les clients), le coût d'ingénierie annuel de la conformité manuelle peut dépasser 80 000 €, sans compter le coût d'opportunité du travail produit non réalisé.
 
 La conformité continue réduit cela à **30-50 heures d'ingénierie par audit**, principalement pour les preuves complexes nécessitant une intervention humaine. L'économie par audit est de 15 000 à 20 000 €.
 
@@ -82,18 +82,18 @@ L'audit lui-même prend trois à quatre jours au lieu de deux à trois semaines.
 
 Le responsable conformité ne passe plus la semaine précédant l'audit en état de panique. Il la consacre à préparer un briefing de 20 minutes pour l'auditeur, car les preuves se construisent d'elles-mêmes depuis 12 mois.
 
-Ce n'est pas une description aspirationnelle de ce que pourrait être la conformité. C'est ainsi que les clients de GRCEye opèrent aujourd'hui.
+Ce n'est pas une description aspirationnelle de ce que pourrait être la conformité. C'est ainsi que les clients de GRC Eye opèrent aujourd'hui.
 `,
     faqs: [
       { q: "Combien de temps faut-il pour passer d'une conformité annuelle à une conformité continue ?", a: "La plupart des organisations atteignent un modèle de conformité continue fonctionnel en 60 à 90 jours. La surveillance automatisée des contrôles est opérationnelle dès les semaines 1 à 4 ; les workflows structurés remplacent la collecte manuelle entre les semaines 4 et 8." },
       { q: "La conformité continue remplace-t-elle les audits externes ?", a: "Non. Les audits externes restent une exigence pour des référentiels comme ISO 27001 et SOC 2. La conformité continue rend ces audits plus rapides, moins coûteux et moins perturbateurs. Elle ne les supprime pas." },
-      { q: "Quelles intégrations sont nécessaires pour la surveillance automatisée des contrôles ?", a: "Les intégrations les plus impactantes sont les fournisseurs cloud (AWS, Azure, GCP), les fournisseurs d'identité (Okta, Azure AD, Google Workspace) et les systèmes de ticketing (Jira, ServiceNow). GRCEye prend en charge toutes les plateformes majeures." },
+      { q: "Quelles intégrations sont nécessaires pour la surveillance automatisée des contrôles ?", a: "Les intégrations les plus impactantes sont les fournisseurs cloud (AWS, Azure, GCP), les fournisseurs d'identité (Okta, Azure AD, Google Workspace) et les systèmes de ticketing (Jira, ServiceNow). GRC Eye prend en charge toutes les plateformes majeures." },
       { q: "Peut-on gérer la conformité continue sur plusieurs référentiels simultanément ?", a: "Oui. La conformité continue est indépendante du référentiel : un même test de contrôle peut satisfaire des exigences dans plusieurs référentiels simultanément, grâce aux mappings de correspondance croisée de la plateforme." },
     ],
   },
   ar: {
     title: "المراقبة المستمرة للامتثال: نهاية هلع التدقيق السنوي",
-    metaTitle: "المراقبة المستمرة للامتثال مقابل التدقيق السنوي | GRCEye",
+    metaTitle: "المراقبة المستمرة للامتثال مقابل التدقيق السنوي | GRC Eye",
     metaDescription: "التدقيق السنوي يخلق ستة أسابيع من الفوضى تعطل فرق الهندسة. أتمتة الامتثال المستمر تراقب الضوابط على مدار الساعة وتحوّل التدقيق إلى إجراء شكلي من 5 أيام.",
     keywords: "المراقبة المستمرة للامتثال, أتمتة الامتثال, بديل التدقيق السنوي, أتمتة الامتثال المؤسسي, الامتثال في الوقت الفعلي, أتمتة عمليات التدقيق, مراقبة الضوابط الرقابية",
     excerpt: "التدقيق السنوي يخلق ستة أسابيع من السباق المحموم تعطّل فرق الهندسة وتضعف الثقة. أتمتة الامتثال المستمر تراقب الضوابط على مدار الساعة، وتكتشف الانحرافات في الوقت الفعلي، وتحوّل التدقيق من عملية طوارئ إلى إجراء شكلي مدته خمسة أيام فقط. إليك كيفية إجراء هذا التحول.",
@@ -126,7 +126,7 @@ Ce n'est pas une description aspirationnelle de ce que pourrait être la conform
 
 سباق الأسابيع الستة قبل التدقيق ليس مجرد مشكلة امتثال، بل مشكلة هندسية أيضًا. فرق التطوير تُنتزع باستمرار من العمل على المنتج للإجابة عن أسئلة التدقيق، وإنتاج أدلة معمارية للأنظمة، وتنفيذ ضوابط طارئة كان يجب أن تكون قائمة طوال العام.
 
-يفيد عملاء GRCEye بأنهم ينفقون في المتوسط **180 إلى 240 ساعة هندسية لكل دورة تدقيق** على دعم الامتثال عند إدارة برامج يدوية. وبتكلفة هندسية محمَّلة تبلغ 100 يورو للساعة، يعني ذلك 18,000 إلى 24,000 يورو لكل تدقيق. أما الشركات التي تُجري عدة عمليات تدقيق سنويًا (مراقبة ISO 27001، وSOC 2 من النوع الثاني، وعمليات تدقيق يطلبها العملاء)، فقد تتجاوز التكلفة الهندسية السنوية للامتثال اليدوي 80,000 يورو، ناهيك عن تكلفة الفرصة البديلة لعمل المنتج الذي لم يُنجز.
+يفيد عملاء GRC Eye بأنهم ينفقون في المتوسط **180 إلى 240 ساعة هندسية لكل دورة تدقيق** على دعم الامتثال عند إدارة برامج يدوية. وبتكلفة هندسية محمَّلة تبلغ 100 يورو للساعة، يعني ذلك 18,000 إلى 24,000 يورو لكل تدقيق. أما الشركات التي تُجري عدة عمليات تدقيق سنويًا (مراقبة ISO 27001، وSOC 2 من النوع الثاني، وعمليات تدقيق يطلبها العملاء)، فقد تتجاوز التكلفة الهندسية السنوية للامتثال اليدوي 80,000 يورو، ناهيك عن تكلفة الفرصة البديلة لعمل المنتج الذي لم يُنجز.
 
 يخفض الامتثال المستمر هذا الرقم إلى **30-50 ساعة هندسية لكل تدقيق**، تُخصَّص أساسًا للأدلة المعقدة التي تتطلب تدخلًا بشريًا. والوفر لكل عملية تدقيق يتراوح بين 15,000 و20,000 يورو.
 
@@ -172,12 +172,12 @@ Ce n'est pas une description aspirationnelle de ce que pourrait être la conform
 
 لم يعد مدير الامتثال يقضي الأسبوع السابق للتدقيق في حالة هلع. بل يقضيه في إعداد إحاطة مدتها 20 دقيقة للمدقق، لأن الأدلة تبني نفسها منذ 12 شهرًا.
 
-هذا ليس وصفًا طموحًا لما يمكن أن يكون عليه الامتثال. إنه بالضبط كيف يعمل عملاء GRCEye اليوم.
+هذا ليس وصفًا طموحًا لما يمكن أن يكون عليه الامتثال. إنه بالضبط كيف يعمل عملاء GRC Eye اليوم.
 `,
     faqs: [
       { q: "كم من الوقت يستغرق الانتقال من الامتثال السنوي إلى الامتثال المستمر؟", a: "تصل معظم المؤسسات إلى نموذج امتثال مستمر فعّال خلال 60 إلى 90 يومًا. تبدأ المراقبة الآلية للضوابط بالعمل خلال الأسابيع 1-4؛ ويحل سير العمل المنظم محل الجمع اليدوي بين الأسابيع 4-8." },
       { q: "هل يحل الامتثال المستمر محل عمليات التدقيق الخارجية؟", a: "لا. تظل عمليات التدقيق الخارجية متطلبًا لأطر مثل ISO 27001 وSOC 2. الامتثال المستمر يجعل هذه العمليات أسرع وأقل تكلفة وأقل إرباكًا، لكنه لا يلغيها." },
-      { q: "ما التكاملات اللازمة للمراقبة الآلية للضوابط؟", a: "أكثر التكاملات تأثيرًا هي مزودو الخدمات السحابية (AWS وAzure وGCP)، ومزودو الهوية (Okta وAzure AD وGoogle Workspace)، وأنظمة إدارة التذاكر (Jira وServiceNow). تدعم GRCEye جميع المنصات الرئيسية." },
+      { q: "ما التكاملات اللازمة للمراقبة الآلية للضوابط؟", a: "أكثر التكاملات تأثيرًا هي مزودو الخدمات السحابية (AWS وAzure وGCP)، ومزودو الهوية (Okta وAzure AD وGoogle Workspace)، وأنظمة إدارة التذاكر (Jira وServiceNow). تدعم GRC Eye جميع المنصات الرئيسية." },
       { q: "هل يمكننا تطبيق الامتثال المستمر على عدة أطر في آن واحد؟", a: "نعم. الامتثال المستمر مستقل عن الإطار المرجعي: يمكن لاختبار ضابط واحد أن يلبي متطلبات في عدة أطر في آن واحد، بفضل خرائط الربط المتقاطع في المنصة." },
     ],
   },

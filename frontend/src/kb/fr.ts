@@ -51,7 +51,7 @@ export const kbFr: KbArticle[] = [
     id: "getting-started",
     route: "/dashboard",
     group: "start",
-    title: "Premiers pas avec GRCeye",
+    title: "Premiers pas avec GRC Eye",
     summary: "Une visite rapide pour votre première connexion : fonctionnement des menus, changement de langue, où trouver de l’aide et quoi mettre en place la première semaine.",
     keywords: ["prise en main", "onboarding", "première connexion", "visite guidée", "navigation", "menu", "barre latérale", "sidebar", "langue", "aide", "arabe", "français"],
     sections: [
@@ -61,7 +61,7 @@ export const kbFr: KbArticle[] = [
       },
       {
         heading: "S’orienter : la barre latérale",
-        body: "La barre latérale gauche est organisée en menus repliables, un par domaine : **Vue d’ensemble**, **Gestion des actifs**, **Gestion des risques**, **Gestion des vulnérabilités**, **Gestion des menaces**, **Gestion des incidents**, **Gestion de la conformité**, **Gestion des contrôles**, **Gestion des audits**, **Politiques et documents**, **Gestion des tiers**, **Gouvernance** et **Rapports et support**. Cliquez sur le nom d’un menu pour l’ouvrir ou le fermer. Vous ne voyez que les pages autorisées par votre rôle. Un élément grisé avec un cadenas signifie que ce module n’est pas activé pour votre organisation. En bas se trouvent **Documentation** (ce site), **Paramètres** et **Aide & Support**.",
+        body: "La barre latérale gauche est organisée en menus repliables, un par domaine : **Vue d’ensemble**, **Gestion des actifs**, **Gestion des risques**, **Gestion de l’Exposition**, **Gestion de la conformité**, **Gestion des contrôles**, **Gestion des audits**, **Politiques et documents**, **Gestion des tiers**, **Gouvernance** et **Rapports et support**. Cliquez sur le nom d’un menu pour l’ouvrir ou le fermer. Vous ne voyez que les pages autorisées par votre rôle. Un élément grisé avec un cadenas signifie que ce module n’est pas activé pour votre organisation. En bas se trouvent **Documentation** (ce site), **Paramètres** et **Aide & Support**.",
       },
       {
         heading: "Langue et aide",
@@ -342,7 +342,7 @@ export const kbFr: KbArticle[] = [
   {
     id: "vulnerabilities",
     route: "/vulnerabilities",
-    group: "vulnerability",
+    group: "exposure",
     title: "Vulnérabilités",
     summary: "Suivez et corrigez les vulnérabilités de sécurité, de la saisie manuelle, de l’import des scanners et des connecteurs automatiques jusqu’à la clôture.",
     keywords: ["CVE", "CVSS", "vulnérabilité", "scan", "scanner", "nessus", "tenable", "qualys", "openvas", "import", "connecteur", "EASM", "surface d’attaque", "correctif", "patch", "remédiation"],
@@ -397,7 +397,7 @@ export const kbFr: KbArticle[] = [
   {
     id: "cve",
     route: "/cve",
-    group: "vulnerability",
+    group: "exposure",
     title: "Base de connaissances CVE",
     summary: "Recherchez dans le catalogue public des CVE du NVD, maintenez-le à jour et décidez quelles CVE concernent votre environnement.",
     keywords: ["CVE", "NVD", "CWE", "KEV", "exploitée", "exploited", "CISA", "tri", "triage", "pertinence", "bulletin", "avis de sécurité", "correctif", "patch"],
@@ -428,7 +428,7 @@ export const kbFr: KbArticle[] = [
   {
     id: "threats",
     route: "/threats",
-    group: "threat",
+    group: "exposure",
     title: "Bibliothèque des menaces",
     summary: "Un catalogue de menaces — intégrées, MITRE ATT&CK et flux en temps réel — que vous adoptez dans votre propre registre et profil.",
     keywords: ["menace", "threat", "MITRE", "ATT&CK", "CISA", "SANS", "flux", "feed", "renseignement sur les menaces", "threat intelligence", "CTI", "profil de menace", "veille"],
@@ -466,7 +466,7 @@ export const kbFr: KbArticle[] = [
   {
     id: "incidents",
     route: "/incidents",
-    group: "incident",
+    group: "exposure",
     title: "Incidents",
     summary: "Enregistrez les incidents de sécurité, mettez-les à jour tout au long de leur cycle de vie et transformez-les en scénarios de risque.",
     keywords: ["incident", "incident de sécurité", "violation de données", "breach", "malware", "logiciel malveillant", "hameçonnage", "phishing", "panne", "notification", "événement de sécurité", "modifier", "statut", "cycle de vie", "chronologie", "cause racine", "post-mortem", "retour d’expérience"],
@@ -1090,7 +1090,7 @@ export const kbFr: KbArticle[] = [
     route: "/webhooks",
     group: "governance",
     title: "Webhooks",
-    summary: "Envoyez en temps réel des notifications d’événements de GRCeye vers vos autres outils.",
+    summary: "Envoyez en temps réel des notifications d’événements de GRC Eye vers vos autres outils.",
     keywords: ["webhook", "intégration", "API", "notification", "événements", "SIEM", "Slack", "Teams"],
     sections: [
       {
@@ -1155,7 +1155,7 @@ export const kbFr: KbArticle[] = [
     sections: [
       {
         heading: "À quoi ça sert",
-        body: "Le Support vous permet de soumettre et de suivre vos demandes auprès de l’équipe GRCeye. Les tickets passent par les statuts Ouvert, En cours, En attente, Résolu et Fermé.",
+        body: "Le Support vous permet de soumettre et de suivre vos demandes auprès de l’équipe GRC Eye. Les tickets passent par les statuts Ouvert, En cours, En attente, Résolu et Fermé.",
       },
       {
         heading: "Comment ouvrir un ticket",

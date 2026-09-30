@@ -31,8 +31,8 @@ const POST_NIS2: BlogPost = {
   excerpt:
     "Two years after publication, NIS2 enforcement is now a daily reality for CISOs across the EU. Here is the practical guide to scope, obligations, deadlines, and how to make the most of the controls you already have.",
   date: "2026-04-22",
-  author: "GRCEye Team",
-  authorRole: "GRCEye Team",
+  author: "GRC Eye Team",
+  authorRole: "GRC Eye Team",
   category: "Compliance",
   readTime: "12 min read",
   region: "EU",
@@ -181,8 +181,8 @@ const POST_ISO_VS_SOC2: BlogPost = {
   excerpt:
     "The two best-known security certifications cover overlapping controls but solve different commercial problems. A practical decision framework for CISOs choosing where to invest the first compliance budget.",
   date: "2026-04-15",
-  author: "GRCEye Team",
-  authorRole: "GRCEye Team",
+  author: "GRC Eye Team",
+  authorRole: "GRC Eye Team",
   category: "Frameworks",
   readTime: "14 min read",
   region: "Global",
@@ -306,8 +306,8 @@ const POST_RISK_QUANT: BlogPost = {
   excerpt:
     "Boards do not buy 'high-medium-low' anymore. Here is how to translate qualitative risk ratings into the financial language your CFO uses, using statistical methods that have been standard in finance for thirty years.",
   date: "2026-04-08",
-  author: "GRCEye Team",
-  authorRole: "GRCEye Team",
+  author: "GRC Eye Team",
+  authorRole: "GRC Eye Team",
   category: "Risk Management",
   readTime: "15 min read",
   region: "Global",
@@ -442,8 +442,8 @@ const POST_DORA: BlogPost = {
   excerpt:
     "DORA officially applied from January 2025, but supervisory expectations have grown sharper through 2026. The five pillars, the practical implications, and what a financial-services CISO should be able to evidence today.",
   date: "2026-04-01",
-  author: "GRCEye Team",
-  authorRole: "GRCEye Team",
+  author: "GRC Eye Team",
+  authorRole: "GRC Eye Team",
   category: "Regulation",
   readTime: "13 min read",
   region: "EU",
@@ -583,8 +583,8 @@ const POST_TPRM: BlogPost = {
   excerpt:
     "Supply-chain attacks now account for one in three major incidents. Modern CISOs treat vendor risk as a continuous discipline, not an onboarding checklist. The structure that scales, and the AI tooling that makes it tractable.",
   date: "2026-03-25",
-  author: "GRCEye Team",
-  authorRole: "GRCEye Team",
+  author: "GRC Eye Team",
+  authorRole: "GRC Eye Team",
   category: "Vendor Risk",
   readTime: "11 min read",
   region: "Global",
@@ -768,8 +768,8 @@ const POST_AI_ACT: BlogPost = {
   excerpt:
     "The AI Act imposes obligations on the deployers and providers of high-risk AI systems, and security teams are increasingly the function that has to operationalize them. A CISO playbook for AI governance that does not throttle product velocity.",
   date: "2026-03-18",
-  author: "GRCEye Team",
-  authorRole: "GRCEye Team",
+  author: "GRC Eye Team",
+  authorRole: "GRC Eye Team",
   category: "Regulation",
   readTime: "10 min read",
   region: "EU",
@@ -916,8 +916,8 @@ const POST_GRC_AUTOMATION_COST: BlogPost = {
   keywords: "GRC automation, compliance automation, manual compliance cost, GRC ROI, compliance software, governance automation, risk management automation",
   excerpt: "Manual GRC processes burn 60% of your compliance team's hours on evidence collection, control testing and audit prep. Discover how GRC automation cuts compliance costs by 40%, eliminates spreadsheet sprawl, and turns your governance program into a measurable business asset.",
   date: "2026-05-08",
-  author: "GRCEye Team",
-  authorRole: "GRCEye Team",
+  author: "GRC Eye Team",
+  authorRole: "GRC Eye Team",
   category: "GRC Automation",
   readTime: "9 min read",
   region: "Global",
@@ -953,7 +953,7 @@ The result is a programme that is always six weeks behind reality, produces docu
 
 GRC automation replaces the manual evidence collection cycle with continuous, automated control monitoring. Controls are tested automatically (configuration checks, access reviews, policy attestations) and evidence is attached to the relevant control in real time. The compliance manager shifts from evidence gatherer to programme owner.
 
-Based on GRCEye customer data across 200+ deployments, organizations that automate their GRC programme reduce total compliance operating costs by an average of **40% in year one**. For a company spending €500,000 per year on compliance (staff, tools, external audits), that is €200,000 returned to the business, not as headcount reduction, but as capacity redirected to higher-value work: improving the control environment, expanding into new frameworks, and supporting commercial due diligence.
+Based on GRC Eye customer data across 200+ deployments, organizations that automate their GRC programme reduce total compliance operating costs by an average of **40% in year one**. For a company spending €500,000 per year on compliance (staff, tools, external audits), that is €200,000 returned to the business, not as headcount reduction, but as capacity redirected to higher-value work: improving the control environment, expanding into new frameworks, and supporting commercial due diligence.
 
 ### 2. Sales cycle acceleration: close enterprise deals 3–5 weeks faster
 
@@ -961,7 +961,7 @@ Enterprise buyers and regulated counterparties routinely ask for compliance evid
 
 An automated programme produces a live Trust Center: a public-facing compliance page that shows real-time framework status, available certifications, and security overview. When a prospect asks "are you ISO 27001 certified?", the answer is a link, not a six-week side-project.
 
-GRCEye customers report an average reduction of **3–5 weeks in enterprise sales cycles** attributable to immediate, credible compliance evidence. For a company with an average deal size of €150,000 and a 20-deal pipeline, recovering even one deal per quarter from compliance-related stalls is worth €600,000 in annual revenue.
+GRC Eye customers report an average reduction of **3–5 weeks in enterprise sales cycles** attributable to immediate, credible compliance evidence. For a company with an average deal size of €150,000 and a 20-deal pipeline, recovering even one deal per quarter from compliance-related stalls is worth €600,000 in annual revenue.
 
 ### 3. Incident cost reduction: catch control drift before it becomes a breach
 
@@ -1023,13 +1023,13 @@ The question for CEOs in 2026 is not whether to automate GRC. It is how quickly 
 const POST_AI_GRC: BlogPost = {
   slug: "ai-powered-grc-automation-iso27001-soc2-nis2",
   title: "How AI-Powered GRC Software Automates ISO 27001, SOC 2 and NIS2 Compliance",
-  metaTitle: "AI-Powered GRC Automation for ISO 27001, SOC 2 & NIS2 | GRCEye",
+  metaTitle: "AI-Powered GRC Automation for ISO 27001, SOC 2 & NIS2 | GRC Eye",
   metaDescription: "AI GRC platforms map controls across 70+ frameworks, auto-generate evidence, and detect compliance gaps before auditors do. Learn how and what ROI to expect in 90 days.",
   keywords: "AI compliance automation, AI GRC software, ISO 27001 automation, SOC 2 automation, NIS2 AI compliance, automated gap analysis, AI risk management",
   excerpt: "Modern GRC platforms use AI to map controls across 70+ frameworks, auto-generate evidence justifications, and detect compliance gaps before auditors do. Learn how AI compliance automation works, what to look for in a GRC tool, and the ROI you can expect in the first 90 days.",
   date: "2026-05-05",
-  author: "GRCEye Team",
-  authorRole: "GRCEye Team",
+  author: "GRC Eye Team",
+  authorRole: "GRC Eye Team",
   category: "AI & Automation",
   readTime: "11 min read",
   region: "Global",
@@ -1076,7 +1076,7 @@ For each gap, the AI generates a draft remediation plan: the specific policy lan
 
 ## The 90-day ROI: what to expect
 
-Based on GRCEye deployment data across 200+ customers, here is what a typical organization achieves in the first 90 days of an AI-powered GRC programme:
+Based on GRC Eye deployment data across 200+ customers, here is what a typical organization achieves in the first 90 days of an AI-powered GRC programme:
 
 | Metric | Before | After 90 days |
 |---|---|---|
@@ -1126,9 +1126,9 @@ Outsourcing to a consultancy is the third option. It is the most expensive per a
 `,
   faqs: [
     { q: "Can AI replace our compliance team?", a: "No, and it should not. AI compresses the time spent on evidence collection and gap analysis so your compliance team can focus on programme improvement, stakeholder engagement, and strategic decisions. The compliance team remains essential; AI removes the grunt work." },
-    { q: "How accurate is AI gap analysis?", a: "GRCEye's AI gap analysis achieves 85–92% accuracy on standard compliance documents, validated against human expert assessments. All AI outputs include confidence scores and the specific evidence cited, so human reviewers can verify and override any finding." },
-    { q: "Does AI work for frameworks beyond the big three (ISO, SOC 2, NIS2)?", a: "Yes. GRCEye's AI is trained on 70+ frameworks including GDPR, DORA, HIPAA, PCI DSS, NIST CSF, CIS Controls, ISO 27701, and many others. Cross-walk mappings between frameworks are pre-loaded and maintained by the GRCEye team." },
-    { q: "What happens when a framework is updated?", a: "GRCEye monitors framework publications and updates the control library when new versions are released. Customers are notified of changes that affect their assessments, and the AI re-analyses affected controls automatically." },
+    { q: "How accurate is AI gap analysis?", a: "GRC Eye's AI gap analysis achieves 85–92% accuracy on standard compliance documents, validated against human expert assessments. All AI outputs include confidence scores and the specific evidence cited, so human reviewers can verify and override any finding." },
+    { q: "Does AI work for frameworks beyond the big three (ISO, SOC 2, NIS2)?", a: "Yes. GRC Eye's AI is trained on 70+ frameworks including GDPR, DORA, HIPAA, PCI DSS, NIST CSF, CIS Controls, ISO 27701, and many others. Cross-walk mappings between frameworks are pre-loaded and maintained by the GRC Eye team." },
+    { q: "What happens when a framework is updated?", a: "GRC Eye monitors framework publications and updates the control library when new versions are released. Customers are notified of changes that affect their assessments, and the AI re-analyses affected controls automatically." },
   ],
 };
 
@@ -1138,13 +1138,13 @@ Outsourcing to a consultancy is the third option. It is the most expensive per a
 const POST_AUTO_RISK: BlogPost = {
   slug: "automated-risk-management-monte-carlo-quantification",
   title: "Automated Risk Management: From Risk Register to Monte Carlo in One Click",
-  metaTitle: "Automated Risk Management & Monte Carlo Risk Quantification | GRCEye",
+  metaTitle: "Automated Risk Management & Monte Carlo Risk Quantification | GRC Eye",
   metaDescription: "Stop scoring risks on a 1–5 scale your board doesn't trust. Automated risk quantification translates cyber risk into dollars with Monte Carlo ALE/SLE numbers CFOs understand.",
   keywords: "automated risk management, Monte Carlo risk quantification, risk register automation, ALE SLE risk, cyber risk quantification, risk management software, GRC risk platform",
   excerpt: "Stop scoring risks on a 1–5 scale your board doesn't trust. Automated risk quantification with Monte Carlo simulation translates cyber risk into dollars, gives CFOs ALE/SLE numbers they understand, and replaces opinion-based heatmaps with statistical rigor.",
   date: "2026-05-02",
-  author: "GRCEye Team",
-  authorRole: "GRCEye Team",
+  author: "GRC Eye Team",
+  authorRole: "GRC Eye Team",
   category: "Risk Management",
   readTime: "10 min read",
   region: "Global",
@@ -1195,7 +1195,7 @@ SEC rules (for US-listed companies) and emerging EU requirements under DORA and 
 
 Historically, Monte Carlo risk analysis required specialized tools (often Excel-based with custom macros), significant actuarial expertise, and weeks of preparation per risk. Modern GRC platforms have changed this completely.
 
-In GRCEye, the quantification workflow works as follows:
+In GRC Eye, the quantification workflow works as follows:
 
 **Define the risk scenario.** The risk manager describes the threat (ransomware via phishing), the vulnerable asset (production database), and the business process affected (customer-facing application).
 
@@ -1245,13 +1245,13 @@ The risk register is the foundation of a quantified risk programme. Here is how 
 const POST_CONTINUOUS_COMPLIANCE: BlogPost = {
   slug: "continuous-compliance-monitoring-vs-annual-audits",
   title: "Continuous Compliance Monitoring: The End of Annual Audit Panic",
-  metaTitle: "Continuous Compliance Monitoring vs Annual Audits | GRCEye",
+  metaTitle: "Continuous Compliance Monitoring vs Annual Audits | GRC Eye",
   metaDescription: "Annual audits create a six-week scramble that disrupts engineering. Continuous compliance automation monitors controls 24/7, turns audits into a 5-day formality. Here's how.",
   keywords: "continuous compliance monitoring, automated compliance, annual audit alternative, compliance automation, real-time compliance, audit automation, control monitoring",
   excerpt: "Annual audits create a six-week scramble that disrupts engineering and erodes trust. Continuous compliance automation monitors controls 24/7, flags drift in real time, and turns audits from a fire drill into a five-day formality. Here's how to make the switch.",
   date: "2026-04-28",
-  author: "GRCEye Team",
-  authorRole: "GRCEye Team",
+  author: "GRC Eye Team",
+  authorRole: "GRC Eye Team",
   category: "Compliance Automation",
   readTime: "8 min read",
   region: "Global",
@@ -1284,7 +1284,7 @@ The result is a compliance programme that is always current. When an auditor arr
 
 The six-week audit scramble is not just a compliance problem. It is an engineering problem. Development teams are regularly pulled from product work to answer audit questions, produce system architecture evidence, and implement emergency controls that should have been in place all year.
 
-GRCEye customers report an average of **180–240 engineering hours per audit cycle** spent on compliance support when running manual programmes. At a fully-loaded engineering cost of €100/hour, that is €18,000–€24,000 per audit. For companies running multiple audits per year (ISO 27001 surveillance, SOC 2 Type II, customer-driven audits), the annual engineering cost of manual compliance can exceed €80,000, not counting the opportunity cost of product work not done.
+GRC Eye customers report an average of **180–240 engineering hours per audit cycle** spent on compliance support when running manual programmes. At a fully-loaded engineering cost of €100/hour, that is €18,000–€24,000 per audit. For companies running multiple audits per year (ISO 27001 surveillance, SOC 2 Type II, customer-driven audits), the annual engineering cost of manual compliance can exceed €80,000, not counting the opportunity cost of product work not done.
 
 Continuous compliance reduces that to **30–50 engineering hours per audit**, primarily for complex evidence that requires human input. The saving per audit is €15,000–€20,000.
 
@@ -1330,12 +1330,12 @@ The audit itself takes three to four days instead of two to three weeks. The aud
 
 The compliance manager does not spend the week before the audit in a panic. They spend it preparing a 20-minute briefing for the auditor, because the evidence has been building itself for 12 months.
 
-This is not an aspirational description of how compliance could work. It is how GRCEye customers operate today.
+This is not an aspirational description of how compliance could work. It is how GRC Eye customers operate today.
 `,
   faqs: [
     { q: "How long does it take to move from annual to continuous compliance?", a: "Most organizations reach a functioning continuous compliance model within 60–90 days. Automated control monitoring goes live in weeks 1–4; structured workflows replace manual collection in weeks 4–8." },
     { q: "Does continuous compliance replace external audits?", a: "No. External audits remain a requirement for frameworks like ISO 27001 and SOC 2. Continuous compliance makes those audits faster, cheaper, and less disruptive. It does not eliminate them." },
-    { q: "What integrations are needed for automated control monitoring?", a: "The most impactful integrations are cloud providers (AWS, Azure, GCP), identity providers (Okta, Azure AD, Google Workspace), and ticketing systems (Jira, ServiceNow). GRCEye supports all major platforms." },
+    { q: "What integrations are needed for automated control monitoring?", a: "The most impactful integrations are cloud providers (AWS, Azure, GCP), identity providers (Okta, Azure AD, Google Workspace), and ticketing systems (Jira, ServiceNow). GRC Eye supports all major platforms." },
     { q: "Can we run continuous compliance across multiple frameworks simultaneously?", a: "Yes. Continuous compliance is framework-agnostic: a single control test can satisfy requirements in multiple frameworks simultaneously, using the platform's cross-walk mappings." },
   ],
 };
@@ -1346,13 +1346,13 @@ This is not an aspirational description of how compliance could work. It is how 
 const POST_VENDOR_RISK_AUTO: BlogPost = {
   slug: "vendor-risk-management-automation-ai-contract-review",
   title: "Vendor Risk Management Automation: AI Contract Review and Real-Time TPRM",
-  metaTitle: "Vendor Risk Management Automation & AI Contract Review | GRCEye",
+  metaTitle: "Vendor Risk Management Automation & AI Contract Review | GRC Eye",
   metaDescription: "Third-party breaches cause 60% of incidents. AI contract analysis, continuous TPRM monitoring and 6-dimension cartography can cut vendor risk exposure by up to 70%.",
   keywords: "vendor risk management automation, TPRM automation, AI contract review, third party risk, vendor risk platform, supply chain risk, automated TPRM",
   excerpt: "Third-party breaches cause 60% of incidents, yet most TPRM programmes still rely on annual questionnaires. Discover how vendor risk automation with AI contract analysis, continuous monitoring and 6-dimension cartography reduces third-party risk exposure by up to 70%.",
   date: "2026-04-22",
-  author: "GRCEye Team",
-  authorRole: "GRCEye Team",
+  author: "GRC Eye Team",
+  authorRole: "GRC Eye Team",
   category: "Vendor Risk",
   readTime: "9 min read",
   region: "Global",
@@ -1379,7 +1379,7 @@ The annual questionnaire has four structural problems that no amount of process 
 
 ## What automated TPRM looks like in practice
 
-An automated vendor risk management platform replaces the annual questionnaire cycle with continuous, multi-dimensional risk assessment. Here is how it works in GRCEye:
+An automated vendor risk management platform replaces the annual questionnaire cycle with continuous, multi-dimensional risk assessment. Here is how it works in GRC Eye:
 
 ### Vendor inventory and classification
 
@@ -1420,7 +1420,7 @@ This workflow ensures that no vendor is onboarded without a documented risk deci
 
 **€4.5M average cost of a third-party breach** (IBM Cost of a Data Breach 2025, adjusted for EU mid-market companies). This is the number that makes vendor risk management a board-level topic.
 
-**70% reduction in vendor risk exposure** achieved by GRCEye customers within 12 months of implementing automated TPRM, measured as the reduction in the number of vendors assessed as high or critical risk without documented remediation plans.
+**70% reduction in vendor risk exposure** achieved by GRC Eye customers within 12 months of implementing automated TPRM, measured as the reduction in the number of vendors assessed as high or critical risk without documented remediation plans.
 
 **85% reduction in contract review time** when AI contract analysis is applied. A legal team that previously spent 8–12 hours reviewing a vendor contract for security and compliance clauses completes the same review in 60–90 minutes using AI-generated analysis.
 
@@ -1448,9 +1448,9 @@ By day 30, you have a complete, monitored vendor risk programme: not an annual q
 `,
   faqs: [
     { q: "How do we handle vendors who refuse to complete security questionnaires?", a: "The platform allows you to flag questionnaire non-responses as a risk finding and escalate them through the approval workflow. Non-responsive vendors can be restricted or removed from the approved vendor list based on your policy." },
-    { q: "Can the AI review contracts in languages other than English?", a: "GRCEye's AI contract review currently supports English and French, with additional language support in development. Contracts in other languages can be reviewed manually using the platform's structured assessment framework." },
-    { q: "How does the platform handle shadow IT vendors?", a: "GRCEye integrates with identity providers and cloud access security brokers (CASBs) to identify SaaS applications in use across the organization. Unregistered applications are flagged as shadow IT for vendor onboarding review." },
-    { q: "What is a realistic vendor programme size?", a: "GRCEye customers manage between 50 and 3,000 vendors on the platform. The tiered risk model ensures that effort is proportional to risk: critical vendors receive intensive monitoring; low-risk vendors receive lightweight annual reviews." },
+    { q: "Can the AI review contracts in languages other than English?", a: "GRC Eye's AI contract review currently supports English and French, with additional language support in development. Contracts in other languages can be reviewed manually using the platform's structured assessment framework." },
+    { q: "How does the platform handle shadow IT vendors?", a: "GRC Eye integrates with identity providers and cloud access security brokers (CASBs) to identify SaaS applications in use across the organization. Unregistered applications are flagged as shadow IT for vendor onboarding review." },
+    { q: "What is a realistic vendor programme size?", a: "GRC Eye customers manage between 50 and 3,000 vendors on the platform. The tiered risk model ensures that effort is proportional to risk: critical vendors receive intensive monitoring; low-risk vendors receive lightweight annual reviews." },
   ],
 };
 
@@ -1460,13 +1460,13 @@ By day 30, you have a complete, monitored vendor risk programme: not an annual q
 const POST_CROSS_FRAMEWORK: BlogPost = {
   slug: "cross-framework-compliance-iso-nist-soc2-gdpr-dora",
   title: "Building a Cross-Framework Compliance Programme: ISO, NIST, SOC 2, GDPR and DORA in One Platform",
-  metaTitle: "Cross-Framework Compliance: ISO 27001, NIST, SOC 2, GDPR & DORA | GRCEye",
+  metaTitle: "Cross-Framework Compliance: ISO 27001, NIST, SOC 2, GDPR & DORA | GRC Eye",
   metaDescription: "Most orgs need 4–6 compliance frameworks but maintain them in silos, duplicating effort. Cross-framework mapping cuts compliance work by 50%. Learn how to design a unified GRC programme.",
   keywords: "cross-framework compliance, multi-framework GRC, ISO 27001 SOC 2 mapping, GDPR DORA compliance, framework mapping, unified GRC programme, compliance programme design",
   excerpt: "Most organizations need 4–6 compliance frameworks but maintain them in silos, duplicating evidence and effort. Learn how cross-framework mapping and shared control libraries cut compliance work by 50%, and how to design a unified GRC programme that scales from startup to enterprise.",
   date: "2026-04-15",
-  author: "GRCEye Team",
-  authorRole: "GRCEye Team",
+  author: "GRC Eye Team",
+  authorRole: "GRC Eye Team",
   category: "Compliance Automation",
   readTime: "12 min read",
   region: "Global",
@@ -1571,7 +1571,7 @@ If you are currently managing multiple frameworks in silos, here is the transiti
 `,
   faqs: [
     { q: "Which framework should we start with?", a: "ISO 27001 is the best foundation for multi-framework compliance: it maps well to SOC 2, NIS2, GDPR, and DORA, and it is recognized globally. If you only have US customers and no EU obligations, SOC 2 is a valid starting point." },
-    { q: "Can we use our existing control spreadsheets as a starting point?", a: "Yes. GRCEye allows you to import existing control libraries and evidence. The platform will identify gaps against your active frameworks and generate a prioritized remediation plan." },
+    { q: "Can we use our existing control spreadsheets as a starting point?", a: "Yes. GRC Eye allows you to import existing control libraries and evidence. The platform will identify gaps against your active frameworks and generate a prioritized remediation plan." },
     { q: "How long does it take to achieve a second framework after ISO 27001?", a: "For SOC 2, 60–90 days to Type I and 12 months to Type II (operating period requirement). For NIS2, 60–90 days to a documented compliance baseline. For DORA, 6–12 months depending on your ICT complexity." },
     { q: "Does unified compliance work for highly regulated industries?", a: "Yes, and it is especially valuable there. Financial services firms managing DORA, ISO 27001, GDPR, and PCI DSS benefit disproportionately from a shared control library because the audit frequency and regulatory scrutiny is higher." },
   ],

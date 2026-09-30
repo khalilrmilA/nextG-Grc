@@ -47,7 +47,7 @@ export const kbEn: KbArticle[] = [
     id: "getting-started",
     route: "/dashboard",
     group: "start",
-    title: "Getting started with GRCeye",
+    title: "Getting started with GRC Eye",
     summary: "A quick tour for your first login: how the menus work, how to switch language, where to find help, and what to set up in your first week.",
     keywords: ["onboarding", "first login", "tour", "navigation", "menu", "sidebar", "language", "help", "arabic", "french"],
     sections: [
@@ -57,7 +57,7 @@ export const kbEn: KbArticle[] = [
       },
       {
         heading: "Finding your way: the sidebar",
-        body: "The left sidebar is organised into collapsible menus, one per domain: **Overview**, **Asset Management**, **Risk Management**, **Vulnerability Management**, **Threat Management**, **Incident Management**, **Compliance Management**, **Control Management**, **Audit Management**, **Policies & Documents**, **Third-Party Management**, **Governance** and **Reports & Support**. Click a menu name to open or close it. You only see the pages your role allows. A greyed-out item with a lock means that module is not enabled for your organisation. At the bottom you will find **Documentation** (this site), **Settings** and **Help**.",
+        body: "The left sidebar is organised into collapsible menus, one per domain: **Overview**, **Asset Management**, **Risk Management**, **Exposure Management**, **Compliance Management**, **Control Management**, **Audit Management**, **Policies & Documents**, **Third-Party Management**, **Governance** and **Reports & Support**. Click a menu name to open or close it. You only see the pages your role allows. A greyed-out item with a lock means that module is not enabled for your organisation. At the bottom you will find **Documentation** (this site), **Settings** and **Help**.",
       },
       {
         heading: "Language and help",
@@ -338,7 +338,7 @@ export const kbEn: KbArticle[] = [
   {
     id: "vulnerabilities",
     route: "/vulnerabilities",
-    group: "vulnerability",
+    group: "exposure",
     title: "Vulnerabilities",
     summary: "Track and remediate security vulnerabilities, from manual entries, scanner imports and automatic scanner connectors through to closure.",
     keywords: ["CVE", "CVSS", "scan", "scanner", "nessus", "tenable", "qualys", "openvas", "import", "connector", "EASM", "patch"],
@@ -393,7 +393,7 @@ export const kbEn: KbArticle[] = [
   {
     id: "cve",
     route: "/cve",
-    group: "vulnerability",
+    group: "exposure",
     title: "CVE Knowledge Base",
     summary: "Search the public NVD CVE catalogue, keep it up to date, and decide which CVEs are relevant to your environment.",
     keywords: ["CVE", "NVD", "CWE", "KEV", "exploited", "CISA", "triage", "advisory", "patch"],
@@ -424,7 +424,7 @@ export const kbEn: KbArticle[] = [
   {
     id: "threats",
     route: "/threats",
-    group: "threat",
+    group: "exposure",
     title: "Threat Library",
     summary: "A catalogue of threats — built-in, MITRE ATT&CK and live feeds — that you adopt into your own register and profile.",
     keywords: ["threat", "MITRE", "ATT&CK", "CISA", "SANS", "feed", "threat intelligence", "threat profile"],
@@ -462,7 +462,7 @@ export const kbEn: KbArticle[] = [
   {
     id: "incidents",
     route: "/incidents",
-    group: "incident",
+    group: "exposure",
     title: "Incidents",
     summary: "Record security incidents, update them through their lifecycle, and turn them into risk scenarios.",
     keywords: ["incident", "breach", "malware", "phishing", "outage", "notification", "security event", "edit", "status", "lifecycle", "timeline", "root cause", "post-mortem"],
@@ -1086,7 +1086,7 @@ export const kbEn: KbArticle[] = [
     route: "/webhooks",
     group: "governance",
     title: "Webhooks",
-    summary: "Send real-time event notifications from GRCeye to your other tools.",
+    summary: "Send real-time event notifications from GRC Eye to your other tools.",
     keywords: ["webhook", "integration", "API", "notification", "events", "SIEM", "Slack", "Teams"],
     sections: [
       {
@@ -1151,7 +1151,7 @@ export const kbEn: KbArticle[] = [
     sections: [
       {
         heading: "What it’s for",
-        body: "Support lets you submit and track requests to the GRCeye team. Tickets move through Open, In Progress, Waiting User, Resolved and Closed.",
+        body: "Support lets you submit and track requests to the GRC Eye team. Tickets move through Open, In Progress, Waiting User, Resolved and Closed.",
       },
       {
         heading: "How to open a ticket",

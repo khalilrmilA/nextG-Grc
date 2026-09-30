@@ -6,9 +6,9 @@ import { OG_IMAGE } from "@/lib/brand";
 
 export async function generateMetadata(props: { params: Promise<{ locale: Locale }> }): Promise<Metadata> {
   const params = await props.params;
-  const title = "Terms of Service | GRCEye";
+  const title = "Terms of Service | GRC Eye";
   const description =
-    "The terms governing use of the GRCEye governance, risk and compliance platform: subscriptions, acceptable use, data ownership and liability.";
+    "The terms governing use of the GRC Eye governance, risk and compliance platform: subscriptions, acceptable use, data ownership and liability.";
   return {
     title: { absolute: title },
     description,
@@ -17,7 +17,7 @@ export async function generateMetadata(props: { params: Promise<{ locale: Locale
       languages: hreflangAlternates("/terms"),
     },
     openGraph: {
-      siteName: "GRCEye",
+      siteName: "GRC Eye",
       title,
       description,
       url: canonicalUrl(params.locale, "/terms"),
@@ -34,12 +34,12 @@ export default async function TermsPage(props: { params: Promise<{ locale: Local
   return (
     <LegalPage
       title="Terms of Service"
-      subtitle="The agreement between you and GRCEye for use of the platform."
+      subtitle="The agreement between you and GRC Eye for use of the platform."
       updated="8 September 2026"
     >
       <h2>1. Agreement</h2>
       <p>
-        These terms govern your access to and use of the GRCEye platform and the grceye.com
+        These terms govern your access to and use of the GRC Eye platform and the grceye.com
         website. By creating an account, or by using the service on behalf of an
         organisation, you accept these terms. If you are accepting on behalf of an
         organisation, you confirm you have authority to bind it.
@@ -47,7 +47,7 @@ export default async function TermsPage(props: { params: Promise<{ locale: Local
 
       <h2>2. The service</h2>
       <p>
-        GRCEye provides a governance, risk and compliance platform covering compliance
+        GRC Eye provides a governance, risk and compliance platform covering compliance
         assessment, risk management and quantification, audit management, policy and
         document generation, third-party risk management and related functionality. We may
         add, change or remove features; we will not materially degrade the core
@@ -109,7 +109,7 @@ export default async function TermsPage(props: { params: Promise<{ locale: Local
         reviews using AI. This output is a drafting and analysis aid, not legal, audit or
         regulatory advice, and it can be wrong. You are responsible for reviewing and
         validating any AI-generated output before relying on it, and for any decision taken
-        on the basis of it. GRCEye does not warrant that use of the platform will result in
+        on the basis of it. GRC Eye does not warrant that use of the platform will result in
         certification against any framework, or in a passed audit.
       </p>
 

@@ -1,9 +1,21 @@
+/* GRC Eye brand type — Geist (text) + Geist Mono (data). Self-hosted. */
+@font-face { font-family: "Geist"; font-weight: 400; font-display: swap; src: url("/fonts/Geist-Regular.woff2") format("woff2"); }
+@font-face { font-family: "Geist"; font-weight: 500; font-display: swap; src: url("/fonts/Geist-Medium.woff2") format("woff2"); }
+@font-face { font-family: "Geist"; font-weight: 600; font-display: swap; src: url("/fonts/Geist-SemiBold.woff2") format("woff2"); }
+@font-face { font-family: "Geist"; font-weight: 700; font-display: swap; src: url("/fonts/Geist-Bold.woff2") format("woff2"); }
+@font-face { font-family: "Geist Mono"; font-weight: 500; font-display: swap; src: url("/fonts/GeistMono-Medium.woff2") format("woff2"); }
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
+h1 { font-weight: 700; letter-spacing: -0.03em; line-height: 1.1; }
+h2 { font-weight: 600; letter-spacing: -0.02em; line-height: 1.2; }
+code, kbd, samp, pre { font-family: 'Geist Mono', ui-monospace, monospace; }
+[dir="rtl"] h1, [dir="rtl"] h2 { letter-spacing: 0; }
+
 body {
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-family: "Geist", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
 }
 
 ::-webkit-scrollbar { width: 5px; height: 5px; }
@@ -76,7 +88,7 @@ body {
 .animation-delay-4000 { animation-delay: 4000ms; }
 
 .gradient-text-animated {
-  background: linear-gradient(270deg, #2563eb, #4f46e5, #0ea5e9, #06b6d4, #2563eb);
+  background: linear-gradient(270deg, #0F74C5, #4f46e5, #3F92D6, #72B0E4, #0F74C5);
   background-size: 400% 400%;
   -webkit-background-clip: text;
   background-clip: text;
@@ -97,7 +109,7 @@ body {
 .glow-btn { animation: glow-pulse 2.5s ease-in-out infinite; }
 
 .typing-cursor {
-  border-right: 2.5px solid #2563eb;
+  border-right: 2.5px solid #0F74C5;
   animation: typing-cursor 0.9s ease infinite;
   padding-right: 2px;
 }

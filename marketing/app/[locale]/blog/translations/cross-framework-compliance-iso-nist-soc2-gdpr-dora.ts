@@ -3,7 +3,7 @@ import type { PostTranslations } from "./types";
 const translations: PostTranslations = {
   fr: {
     title: "Construire un programme de conformité multi-référentiels : ISO, NIST, SOC 2, GDPR et DORA sur une seule plateforme",
-    metaTitle: "Conformité multi-référentiels : ISO 27001, NIST, SOC 2, GDPR & DORA | GRCEye",
+    metaTitle: "Conformité multi-référentiels : ISO 27001, NIST, SOC 2, GDPR & DORA | GRC Eye",
     metaDescription: "La plupart des entreprises gèrent 4 à 6 référentiels de conformité en silos, ce qui duplique les efforts. Le mapping croisé réduit la charge de conformité de 50 %.",
     keywords: "conformité multi-référentiels, GRC multi-normes, cartographie ISO 27001 SOC 2, conformité GDPR DORA, mapping de référentiels, programme GRC unifié, conception de programme de conformité",
     excerpt: "La plupart des organisations doivent gérer 4 à 6 référentiels de conformité, mais les maintiennent en silos, en dupliquant les preuves et les efforts. Découvrez comment le mapping croisé des référentiels et une bibliothèque de contrôles partagée réduisent la charge de conformité de 50 %, et comment concevoir un programme GRC unifié qui évolue de la startup à l'entreprise.",
@@ -108,14 +108,14 @@ Si vous gérez actuellement plusieurs référentiels en silos, voici le chemin d
 `,
     faqs: [
       { q: "Par quel référentiel devrions-nous commencer ?", a: "ISO 27001 est la meilleure fondation pour une conformité multi-référentiels : il se mappe bien avec SOC 2, NIS2, GDPR et DORA, et il est reconnu mondialement. Si vous n'avez que des clients américains et aucune obligation dans l'UE, SOC 2 est un point de départ valable." },
-      { q: "Pouvons-nous utiliser nos feuilles de calcul de contrôles existantes comme point de départ ?", a: "Oui. GRCEye vous permet d'importer des bibliothèques de contrôles et des preuves existantes. La plateforme identifie les écarts par rapport à vos référentiels actifs et génère un plan de remédiation priorisé." },
+      { q: "Pouvons-nous utiliser nos feuilles de calcul de contrôles existantes comme point de départ ?", a: "Oui. GRC Eye vous permet d'importer des bibliothèques de contrôles et des preuves existantes. La plateforme identifie les écarts par rapport à vos référentiels actifs et génère un plan de remédiation priorisé." },
       { q: "Combien de temps faut-il pour obtenir un second référentiel après ISO 27001 ?", a: "Pour SOC 2, 60 à 90 jours pour le Type I et 12 mois pour le Type II (exigence de période d'exploitation). Pour NIS2, 60 à 90 jours pour établir une base de conformité documentée. Pour DORA, 6 à 12 mois selon la complexité de votre infrastructure TIC." },
       { q: "La conformité unifiée fonctionne-t-elle pour les secteurs fortement réglementés ?", a: "Oui, et elle y est particulièrement précieuse. Les établissements financiers gérant DORA, ISO 27001, GDPR et PCI DSS bénéficient de manière disproportionnée d'une bibliothèque de contrôles partagée, car la fréquence des audits et le niveau de contrôle réglementaire y sont plus élevés." },
     ],
   },
   ar: {
     title: "بناء برنامج امتثال متعدد الأطر: ISO وNIST وSOC 2 وGDPR وDORA على منصة واحدة",
-    metaTitle: "الامتثال متعدد الأطر: ISO 27001 وNIST وSOC 2 وGDPR وDORA | GRCEye",
+    metaTitle: "الامتثال متعدد الأطر: ISO 27001 وNIST وSOC 2 وGDPR وDORA | GRC Eye",
     metaDescription: "تحتاج معظم المؤسسات إلى 4-6 أطر امتثال لكنها تديرها بمعزل عن بعضها، مما يكرر الجهد. الربط المتقاطع بين الأطر يخفض عبء الامتثال بنسبة 50%.",
     keywords: "الامتثال متعدد الأطر, حوكمة المخاطر والامتثال متعددة المعايير, مطابقة ISO 27001 وSOC 2, امتثال GDPR وDORA, مطابقة الأطر التنظيمية, برنامج حوكمة موحد, تصميم برنامج الامتثال",
     excerpt: "تحتاج معظم المؤسسات إلى 4-6 أطر امتثال، لكنها تديرها بمعزل عن بعضها البعض، مما يكرر الأدلة والجهد. تعرّف على كيفية أن الربط المتقاطع بين الأطر ومكتبة الضوابط المشتركة يخفضان عبء الامتثال بنسبة 50%، وكيفية تصميم برنامج حوكمة موحد يتوسع من الشركة الناشئة إلى المؤسسة الكبرى.",
@@ -220,7 +220,7 @@ Si vous gérez actuellement plusieurs référentiels en silos, voici le chemin d
 `,
     faqs: [
       { q: "بأي إطار ينبغي أن نبدأ؟", a: "يُعد ISO 27001 الأساس الأفضل للامتثال متعدد الأطر: فهو يتطابق بشكل جيد مع SOC 2 وNIS2 وGDPR وDORA، ومعترف به عالميًا. أما إذا كان لديك عملاء أمريكيون فقط ولا التزامات في الاتحاد الأوروبي، فإن SOC 2 نقطة انطلاق مناسبة." },
-      { q: "هل يمكننا استخدام جداول الضوابط الحالية لدينا كنقطة انطلاق؟", a: "نعم. تتيح لك GRCEye استيراد مكتبات الضوابط والأدلة الحالية. وتحدد المنصة الفجوات مقارنة بأطرك النشطة وتُنشئ خطة معالجة مرتبة حسب الأولوية." },
+      { q: "هل يمكننا استخدام جداول الضوابط الحالية لدينا كنقطة انطلاق؟", a: "نعم. تتيح لك GRC Eye استيراد مكتبات الضوابط والأدلة الحالية. وتحدد المنصة الفجوات مقارنة بأطرك النشطة وتُنشئ خطة معالجة مرتبة حسب الأولوية." },
       { q: "كم يستغرق تحقيق إطار ثانٍ بعد ISO 27001؟", a: "بالنسبة لـ SOC 2، يستغرق الأمر 60 إلى 90 يومًا للحصول على Type I و12 شهرًا للحصول على Type II (بحكم متطلب فترة التشغيل). أما بالنسبة لـ NIS2، فيستغرق 60 إلى 90 يومًا للوصول إلى خط أساس موثّق للامتثال. وبالنسبة لـ DORA، فمن 6 إلى 12 شهرًا حسب تعقيد بنية تقنية المعلومات والاتصالات لديك." },
       { q: "هل يصلح الامتثال الموحد للقطاعات شديدة التنظيم؟", a: "نعم، بل إنه ذو قيمة خاصة فيها. فالمؤسسات المالية التي تدير DORA وISO 27001 وGDPR وPCI DSS تستفيد بشكل غير متناسب من مكتبة ضوابط مشتركة، لأن وتيرة التدقيق ومستوى الرقابة التنظيمية أعلى لديها." },
     ],
