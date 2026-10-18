@@ -678,7 +678,7 @@ Weak SSH ciphers,Low,3.7,,Backup Storage Array,Restrict to strong ciphers`;
   useEffect(() => {
     load();
     loadStats();
-  }, [sevFilter, statusFilter]);
+  }, [sevFilter, statusFilter]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();

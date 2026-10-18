@@ -119,7 +119,7 @@ export default function AuditorPortalPage() {
     setLoading(false);
   }
 
-  useEffect(() => { load(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, []);
+  useEffect(() => { load(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const totals = useMemo(() => {
     const reviewed = engagements.reduce((s, e) => s + metric(e.progress, "items_reviewed"), 0)

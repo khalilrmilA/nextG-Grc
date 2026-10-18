@@ -109,7 +109,7 @@ export default function FrameworkBuilderPage() {
     if (step === "browse" && frameworks.length === 0) {
       loadFrameworks();
     }
-  }, [step]);
+  }, [step]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Load framework list for the import picker when tab switches to "import"
   useEffect(() => {

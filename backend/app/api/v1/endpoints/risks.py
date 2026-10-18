@@ -194,6 +194,9 @@ class RiskResponse(BaseModel):
     severity: RiskSeverity | None
     appetite_threshold: float | None = None
     over_appetite: bool | None = None
+    # The planned target still breaches appetite — the SPA shows a badge and blocks
+    # target validation on it, but the field was never returned.
+    target_over_appetite: bool | None = None
     tags: list
     linked_controls: list
     linked_assets: list
@@ -226,6 +229,7 @@ def _enrich(risk: Risk, definition: dict, matrix_name: str) -> RiskResponse:
         target_risk_score=risk.target_risk_score, target_level=tgt_level,
         risk_matrix_id=getattr(risk, "risk_matrix_id", None), matrix_name=matrix_name,
         severity=risk.severity, appetite_threshold=risk.appetite_threshold, over_appetite=risk.over_appetite,
+        target_over_appetite=risk.target_over_appetite,
         tags=risk.tags or [], linked_controls=risk.linked_controls or [], linked_assets=risk.linked_assets or [],
         next_review_date=risk.next_review_date, last_reviewed_at=risk.last_reviewed_at,
         reopen_reason=risk.reopen_reason,

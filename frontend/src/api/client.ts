@@ -141,7 +141,10 @@ class ApiClient {
         const writeMethods = ["POST", "PUT", "PATCH", "DELETE"];
         // Allow auth endpoints (login, change-password, etc.) to pass through.
         const isAuthEndpoint = (config.url ?? "").includes("/auth/");
-        if (this.isViewerRole() && writeMethods.includes(method) && !isAuthEndpoint) {
+        // Accepting one's own assigned policy is self-service, not data entry —
+        // mirrors _SELF_SERVICE_WRITES in backend dependencies/auth.py.
+        const isSelfService = method === "PATCH" && /\/policies\/[^/]+\/attestations\/[^/]+\/acknowledge\/?$/.test(config.url ?? "");
+        if (this.isViewerRole() && writeMethods.includes(method) && !isAuthEndpoint && !isSelfService) {
           window.dispatchEvent(new CustomEvent("demo-block"));
           const err = new Error(String(i18n.t("api_client.read_only", { defaultValue: "You have read-only access. Contact your administrator to request additional permissions." }))) as Error & { isDemoBlock: boolean };
           err.isDemoBlock = true;

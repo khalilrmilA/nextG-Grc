@@ -356,11 +356,14 @@ async def _db_cases():
     r = await tr.get("/api/v1/cve?page_size=120", headers=H(sadm, "en"))
     assert q1("SELECT count(*) FROM content_translation_requests")[0] == 50       # English source: nothing
     cve_src = next(s for s in SOURCES if s.key == "cve")
+    # The snapshot may already hold Arabic CVE translations made by the live worker,
+    # so "a French request produces no Arabic" is checked as "no new Arabic".
+    ar_before = q1("SELECT count(*) FROM content_translations WHERE entity_type='cve' AND lang='ar'")[0]
     async with mock_model() as c:
         s5 = await W.run_cycle(max_texts=500, client=c, sources=[cve_src])
     assert s5["by_source"].get("cve", 0) >= 50, s5
     assert q1("SELECT count(*) FROM content_translation_requests")[0] == 0         # served and pruned
-    assert q1("SELECT count(*) FROM content_translations WHERE entity_type='cve' AND lang='ar'")[0] == 0
+    assert q1("SELECT count(*) FROM content_translations WHERE entity_type='cve' AND lang='ar'")[0] == ar_before
     r = await tr.get("/api/v1/cve?page_size=120", headers=H(sadm, "fr"))
     trans = [x for x in r.json() if x["translated"]]
     assert len(trans) >= 50 and all(x["description"].startswith("[FR] ") for x in trans)

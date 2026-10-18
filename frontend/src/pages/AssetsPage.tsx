@@ -208,7 +208,7 @@ export default function AssetsPage() {
   useEffect(() => {
     load();
     loadStats();
-    usersApi.list().then((u) => setUsers(u as UserLite[])).catch(() => setUsers([]));
+    usersApi.directory().then((u) => setUsers(u as UserLite[])).catch(() => setUsers([]));
     authApi.getProfile()
       .then((p: any) => setMe({ id: p.id, first_name: p.first_name, last_name: p.last_name, email: p.email }))
       .catch(() => {});

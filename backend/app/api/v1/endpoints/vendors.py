@@ -679,6 +679,12 @@ class VendorListResponse(BaseModel):
     total: int
 
 
+def _to_register_scale(ai_score: float) -> float:
+    """An AI score out of 10 → the register's 1–40 risk score (same ×4 the
+    new-vendor wizard applies to its prescreen)."""
+    return float(round(max(0.0, min(10.0, float(ai_score))) * 4))
+
+
 class VendorApproveAnalysisRequest(BaseModel):
     """Request to approve analysis and update vendor risk score."""
     risk_score: float  # 1-10 scale from AI analysis
@@ -1019,7 +1025,7 @@ async def create_vendor_assessment(
     applied = None
     if body.apply_score:
         applied = body.applied_risk_score if body.applied_risk_score is not None \
-            else float(round(body.initial_risk_score * 4))
+            else _to_register_scale(body.initial_risk_score)
     row = VendorAssessment(
         vendor_id=vendor.id, name="Prescreen questionnaire", kind="prescreen",
         status="approved" if body.apply_score else "completed",
@@ -1166,14 +1172,19 @@ async def approve_vendor_analysis(
 
     # Update risk score + description together — both come from this call's analysis_notes, which
     # the guard above has just confirmed is non-blank, so neither is ever persisted unbacked.
-    vendor.risk_score = body.risk_score
+    # One scale on the register. The AI report scores out of 10 while the
+    # register (and the new-vendor prescreen) uses 1–40 — its colour bands are
+    # 6 / 12 / 20 — so an approved analysis used to make any vendor look "low".
+    # The raw /10 score stays on the assessment row.
+    register_score = _to_register_scale(body.risk_score)
+    vendor.risk_score = register_score
     vendor.description = body.analysis_notes
     # description only ever holds the latest report; the assessment row keeps
     # every approved one (the history used to be overwritten on each run).
     now = datetime.now(timezone.utc).isoformat()
     db.add(VendorAssessment(
         vendor_id=vendor.id, name="AI risk analysis", kind="ai_analysis", status="approved",
-        completed_at=now, assessment_score=body.risk_score, applied_risk_score=body.risk_score,
+        completed_at=now, assessment_score=body.risk_score, applied_risk_score=register_score,
         narrative=body.analysis_notes, assessed_by_id=current_user.id,
         approved_by_id=current_user.id, approved_at=now,
     ))

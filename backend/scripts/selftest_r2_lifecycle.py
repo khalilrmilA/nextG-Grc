@@ -34,6 +34,9 @@ Sections
                reassignment); compliance_manager acts tenant-wide and creates
                assessments; evidence validity flags + 30/7/0-day reminders
                (the AI merge itself: scripts/selftest_compliance_merge.py)
+* follow-ups — user directory for pickers (not auditors), target_over_appetite
+               returned, compliance readable by every /compliance role, read-only
+               profiles may acknowledge their own policies and nothing else
 * audits     — an action raised for a recommendation is linked to its finding:
                finding roll-up counts it and the generated audit report's
                « plan d'action » section lists it
@@ -62,7 +65,7 @@ assert "grc_dev.db" not in settings.DATABASE_URL, settings.DATABASE_URL
 P = settings.API_V1_PREFIX
 PW = "demo123"
 EXTRA_ROLES = ("risk_manager", "business_owner", "control_owner", "compliance_manager",
-               "vendor_manager", "policy_manager", "viewer")
+               "vendor_manager", "policy_manager", "viewer", "executive")
 
 FAILS: list[str] = []
 PASSES = 0
@@ -303,7 +306,7 @@ async def vendors(api: Api) -> None:
     check(s == 200 and [h["kind"] for h in hist] == ["ai_analysis", "prescreen"]
           and hist[0]["narrative"] == "Score: 4/10 report", "AI analysis kept as history, newest first", hist)
     s, vv = await api.req("GET", f"/vendors/{vid}")
-    check(vv["risk_score"] == 4, "vendor score = latest approved analysis")
+    check(vv["risk_score"] == 16, "vendor score = latest approved analysis, on the register's 1–40 scale (4/10 × 4)")
 
     from app.models.vendor import VendorContract
     async with AsyncSessionLocal() as db:
@@ -490,6 +493,40 @@ async def audits(api: Api) -> None:
           "report « plan d'action » lists the action with its finding", text[-400:])
 
 
+async def followups(api: Api) -> None:
+    print("[follow-ups]")
+    s, d = await api.req("GET", "/users/directory")
+    check(s == 200 and any(u["email"] == "ciso@demo.com" for u in d)
+          and not any(u["email"].startswith("system+") for u in d), "CISO reads the user directory", d if s != 200 else "")
+    s, _ = await api.req("GET", "/users/directory", who="auditor@demo.com")
+    check(s == 403, "auditors do not get the directory")
+    s, _ = await api.req("GET", "/users", who=role_email("risk_manager"))
+    check(s == 403, "GET /users stays tenant-admin only")
+
+    _, r = await api.req("POST", "/risks", json={"title": "ST appetite", "likelihood": 5, "impact": 5,
+                                                  "target_likelihood": 4, "target_impact": 4})
+    s, r = await api.req("PUT", f"/risks/{r['id']}/appetite", json={"appetite_threshold": 6})
+    check(s == 200 and r.get("target_over_appetite") is True, "target_over_appetite returned", r)
+    await api.req("DELETE", f"/risks/{r['id']}")
+
+    for who in ("viewer", "executive", "risk_manager"):
+        s, _ = await api.req("GET", "/compliance/assessments", who=role_email(who))
+        check(s == 200, f"{who} can read compliance assessments")
+
+    pm = role_email("policy_manager")
+    _, p = await api.req("POST", "/policies", who=pm, json={"title": "ST read-only ack", "content": "x"})
+    async with AsyncSessionLocal() as db:
+        ids = dict((await db.execute(select(User.email, User.id).where(
+            User.email.in_([role_email("viewer"), role_email("executive")])))).all())
+    s, atts = await api.req("POST", f"/policies/{p['id']}/attestations", who=pm, json={"user_ids": list(ids.values())})
+    for a in atts:
+        who = next(e for e, i in ids.items() if i == a["user_id"])
+        s, r = await api.req("PATCH", f"/policies/{p['id']}/attestations/{a['id']}/acknowledge", who=who)
+        check(s == 200 and r["status"] == "acknowledged", f"{who.split('@')[0]} acknowledges own policy")
+    s, _ = await api.req("POST", "/risks", who=role_email("viewer"), json={"title": "nope"})
+    check(s == 403, "viewer still cannot write anything else")
+
+
 async def http_tests() -> None:
     from app.core.rate_limit import limiter
     limiter.enabled = False
@@ -504,6 +541,7 @@ async def http_tests() -> None:
         await policies(api)
         await compliance(api)
         await audits(api)
+        await followups(api)
 
 
 def main() -> None:

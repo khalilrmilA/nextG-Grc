@@ -208,6 +208,7 @@
   "Not assigned to this assessment": "غير مُعيّن لهذا التقييم",
   "Not assigned to this audit": "غير مُعيّن لهذا التدقيق",
   "Not authenticated": "لم تتم المصادقة",
+  "Not available to auditors": "غير متاح للمدققين",
   "Nothing eligible.": "لا شيء مؤهل.",
   "Notification not found": "لم يتم العثور على الإشعار",
   "OCR is not installed on this server (Pillow missing).": "لم يتم تثبيت OCR على هذا الخادم (Pillow مفقود).",

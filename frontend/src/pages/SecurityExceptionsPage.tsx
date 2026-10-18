@@ -129,7 +129,7 @@ export default function SecurityExceptionsPage() {
   useEffect(() => {
     loadExceptions();
     loadAcceptances();
-    usersApi.list()
+    usersApi.directory()
       .then((us: any) => setUserNames(Object.fromEntries(
         (Array.isArray(us) ? us : []).map((u: any) => [
           u.id, `${u.first_name ?? ""} ${u.last_name ?? ""}`.trim() || u.email,

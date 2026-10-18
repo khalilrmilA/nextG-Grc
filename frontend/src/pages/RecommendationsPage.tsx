@@ -384,7 +384,7 @@ export default function RecommendationsPage() {
     let cancelled = false;
     async function loadDirectory() {
       try {
-        const users = await usersApi.list();
+        const users = await usersApi.directory();
         if (!cancelled) {
           setDirectory(users.map((u) => ({
             id: u.id,

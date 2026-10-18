@@ -56,7 +56,7 @@
    "app/api/v1/endpoints/compliance_scales.py:453"
   ],
   "A risk cannot be created as closed. Create it, then close it.": [
-   "app/api/v1/endpoints/risks.py:327"
+   "app/api/v1/endpoints/risks.py:331"
   ],
   "A source needs a name.": [
    "app/api/v1/endpoints/regulatory.py:1005",
@@ -94,11 +94,11 @@
    "app/api/v1/endpoints/sso.py:306"
   ],
   "Account has expired": [
-   "app/api/v1/dependencies/auth.py:281",
+   "app/api/v1/dependencies/auth.py:295",
    "app/api/v1/endpoints/support.py:239"
   ],
   "Account has expired. Contact your administrator.": [
-   "app/api/v1/dependencies/auth.py:78",
+   "app/api/v1/dependencies/auth.py:92",
    "app/api/v1/endpoints/auth.py:338",
    "app/api/v1/endpoints/auth.py:431",
    "app/api/v1/endpoints/auth.py:918",
@@ -109,12 +109,12 @@
    "app/api/v1/endpoints/auth.py:426"
   ],
   "Action item not found": [
-   "app/api/v1/endpoints/compliance.py:4893",
-   "app/api/v1/endpoints/compliance.py:5068",
-   "app/api/v1/endpoints/compliance.py:5122"
+   "app/api/v1/endpoints/compliance.py:4899",
+   "app/api/v1/endpoints/compliance.py:5074",
+   "app/api/v1/endpoints/compliance.py:5128"
   ],
   "Action-plan attachments are not available until the server has been restarted once (action_item_attachments is created at startup).": [
-   "app/api/v1/endpoints/compliance.py:5215"
+   "app/api/v1/endpoints/compliance.py:5221"
   ],
   "Activation code not found on the licence server.": [
    "app/services/license_client.py:103"
@@ -130,7 +130,7 @@
    "app/api/v1/endpoints/license.py:174"
   ],
   "An AI analysis is running on this assessment; wait for it to finish.": [
-   "app/api/v1/endpoints/compliance.py:2081"
+   "app/api/v1/endpoints/compliance.py:2087"
   ],
   "An endpoint URL is required.": [
    "app/services/ai_provider.py:215"
@@ -145,10 +145,10 @@
    "app/api/v1/endpoints/asset_graph.py:232"
   ],
   "Analysis already in progress": [
-   "app/api/v1/endpoints/compliance.py:2948"
+   "app/api/v1/endpoints/compliance.py:2954"
   ],
   "Analysis started": [
-   "app/api/v1/endpoints/compliance.py:2966"
+   "app/api/v1/endpoints/compliance.py:2972"
   ],
   "Another threat in your register already has this reference and name.": [
    "app/api/v1/endpoints/threats.py:578"
@@ -179,23 +179,23 @@
   "Assessment not found": [
    "app/api/v1/endpoints/auditor_portal.py:1074",
    "app/api/v1/endpoints/auditor_portal.py:900",
-   "app/api/v1/endpoints/compliance.py:1993",
-   "app/api/v1/endpoints/compliance.py:2026",
-   "app/api/v1/endpoints/compliance.py:2139",
-   "app/api/v1/endpoints/compliance.py:2441",
-   "app/api/v1/endpoints/compliance.py:2945",
-   "app/api/v1/endpoints/compliance.py:2985",
-   "app/api/v1/endpoints/compliance.py:3230",
-   "app/api/v1/endpoints/compliance.py:3655",
-   "app/api/v1/endpoints/compliance.py:4278",
-   "app/api/v1/endpoints/compliance.py:4989",
-   "app/api/v1/endpoints/users.py:690"
+   "app/api/v1/endpoints/compliance.py:1999",
+   "app/api/v1/endpoints/compliance.py:2032",
+   "app/api/v1/endpoints/compliance.py:2145",
+   "app/api/v1/endpoints/compliance.py:2447",
+   "app/api/v1/endpoints/compliance.py:2951",
+   "app/api/v1/endpoints/compliance.py:2991",
+   "app/api/v1/endpoints/compliance.py:3236",
+   "app/api/v1/endpoints/compliance.py:3661",
+   "app/api/v1/endpoints/compliance.py:4284",
+   "app/api/v1/endpoints/compliance.py:4995",
+   "app/api/v1/endpoints/users.py:734"
   ],
   "Asset not found": [
    "app/api/v1/endpoints/assets.py:294"
   ],
   "Assignment not found": [
-   "app/api/v1/endpoints/users.py:721"
+   "app/api/v1/endpoints/users.py:765"
   ],
   "At least one affected asset is required (affected_assets must not be empty)": [
    "app/api/v1/endpoints/vulnerabilities.py:115"
@@ -207,15 +207,15 @@
    "app/api/v1/endpoints/audits.py:1677"
   ],
   "At least one role is required": [
-   "app/api/v1/endpoints/users.py:201",
-   "app/api/v1/endpoints/users.py:311"
+   "app/api/v1/endpoints/users.py:245",
+   "app/api/v1/endpoints/users.py:355"
   ],
   "At least one role is required.": [
    "app/api/v1/endpoints/access_governance.py:126"
   ],
   "Attachment not found": [
-   "app/api/v1/endpoints/compliance.py:5285",
-   "app/api/v1/endpoints/compliance.py:5348"
+   "app/api/v1/endpoints/compliance.py:5291",
+   "app/api/v1/endpoints/compliance.py:5354"
   ],
   "Attestation not found": [
    "app/api/v1/endpoints/policies.py:858"
@@ -231,13 +231,13 @@
    "app/api/v1/endpoints/report_schedules.py:143"
   ],
   "Auditor is already assigned to this assessment": [
-   "app/api/v1/endpoints/users.py:697"
+   "app/api/v1/endpoints/users.py:741"
   ],
   "Auditor not found": [
-   "app/api/v1/endpoints/users.py:744"
+   "app/api/v1/endpoints/users.py:788"
   ],
   "Auditor not found in this tenant": [
-   "app/api/v1/endpoints/users.py:687"
+   "app/api/v1/endpoints/users.py:731"
   ],
   "Built-in scales are read-only. Duplicate it to customise it.": [
    "app/api/v1/endpoints/compliance_scales.py:229"
@@ -260,7 +260,7 @@
    "app/api/v1/endpoints/audit_campaigns.py:206"
   ],
   "Can only delete auditor accounts via this endpoint": [
-   "app/api/v1/endpoints/users.py:746"
+   "app/api/v1/endpoints/users.py:790"
   ],
   "Cannot create super admin accounts": [
    "app/api/v1/endpoints/admin.py:197"
@@ -269,26 +269,26 @@
    "app/api/v1/endpoints/access_governance.py:123"
   ],
   "Cannot delete super admin accounts": [
-   "app/api/v1/endpoints/users.py:478"
+   "app/api/v1/endpoints/users.py:522"
   ],
   "Cannot delete your own account": [
    "app/api/v1/endpoints/admin.py:304",
-   "app/api/v1/endpoints/users.py:466"
+   "app/api/v1/endpoints/users.py:510"
   ],
   "Cannot modify a built-in or another tenant's framework": [
    "app/api/v1/endpoints/frameworks.py:1180"
   ],
   "Cannot modify super admin accounts": [
-   "app/api/v1/endpoints/users.py:282"
+   "app/api/v1/endpoints/users.py:326"
   ],
   "Cannot modify your own account": [
-   "app/api/v1/endpoints/users.py:275"
+   "app/api/v1/endpoints/users.py:319"
   ],
   "Cannot promote users to super admin": [
    "app/api/v1/endpoints/admin.py:269"
   ],
   "Cannot reset super admin passwords": [
-   "app/api/v1/endpoints/users.py:425"
+   "app/api/v1/endpoints/users.py:469"
   ],
   "Cartography not found": [
    "app/api/v1/endpoints/risk_cartographies.py:285",
@@ -332,9 +332,9 @@
   "Control assessment not found": [
    "app/api/v1/endpoints/audit_comments.py:346",
    "app/api/v1/endpoints/auditor_portal.py:938",
-   "app/api/v1/endpoints/compliance.py:3036",
-   "app/api/v1/endpoints/compliance.py:3792",
-   "app/api/v1/endpoints/compliance.py:4414"
+   "app/api/v1/endpoints/compliance.py:3042",
+   "app/api/v1/endpoints/compliance.py:3798",
+   "app/api/v1/endpoints/compliance.py:4420"
   ],
   "Control not found": [
    "app/api/v1/endpoints/applied_controls.py:1073",
@@ -379,7 +379,7 @@
    "app/api/v1/endpoints/access_governance.py:119"
   ],
   "Demo accounts are read-only. Upgrade to a full account to use this feature.": [
-   "app/api/v1/dependencies/auth.py:85"
+   "app/api/v1/dependencies/auth.py:99"
   ],
   "Demo connector ready (simulated pull).": [
    "app/services/scanner_connectors.py:573"
@@ -397,10 +397,10 @@
    "app/services/ai_provider.py:222"
   ],
   "Document not found": [
-   "app/api/v1/endpoints/compliance.py:4174",
    "app/api/v1/endpoints/compliance.py:4180",
-   "app/api/v1/endpoints/compliance.py:4220",
-   "app/api/v1/endpoints/compliance.py:4348",
+   "app/api/v1/endpoints/compliance.py:4186",
+   "app/api/v1/endpoints/compliance.py:4226",
+   "app/api/v1/endpoints/compliance.py:4354",
    "app/api/v1/endpoints/governance.py:531",
    "app/api/v1/endpoints/governance.py:572"
   ],
@@ -418,8 +418,8 @@
   ],
   "Email already registered": [
    "app/api/v1/endpoints/admin.py:184",
-   "app/api/v1/endpoints/users.py:198",
-   "app/api/v1/endpoints/users.py:602"
+   "app/api/v1/endpoints/users.py:242",
+   "app/api/v1/endpoints/users.py:646"
   ],
   "Empty file": [
    "app/api/v1/endpoints/auditor_portal.py:1703",
@@ -431,7 +431,7 @@
    "app/api/v1/endpoints/mfa.py:105"
   ],
   "Evaluation grids are not available until the server has been restarted once (compliance_scales is created at startup).": [
-   "app/api/v1/endpoints/compliance.py:912"
+   "app/api/v1/endpoints/compliance.py:918"
   ],
   "Evaluation not found": [
    "app/api/v1/endpoints/control_evaluation.py:236"
@@ -443,8 +443,8 @@
    "app/api/v1/endpoints/auditor_portal.py:1804",
    "app/api/v1/endpoints/audits.py:2337",
    "app/api/v1/endpoints/audits.py:2365",
-   "app/api/v1/endpoints/compliance.py:4054",
-   "app/api/v1/endpoints/compliance.py:4089"
+   "app/api/v1/endpoints/compliance.py:4060",
+   "app/api/v1/endpoints/compliance.py:4095"
   ],
   "Evidence not found in this archive": [
    "app/api/v1/endpoints/archiving.py:609"
@@ -454,61 +454,61 @@
    "app/api/v1/endpoints/security_exceptions.py:244"
   ],
   "Executive accounts are read-only (strategic dashboards / consultation).": [
-   "app/api/v1/dependencies/auth.py:93"
+   "app/api/v1/dependencies/auth.py:107"
   ],
   "Failed to fetch MITRE ATT&CK data": [
    "app/api/v1/endpoints/threats.py:822"
   ],
   "Failed to return the created item": [
-   "app/api/v1/endpoints/compliance.py:5048"
+   "app/api/v1/endpoints/compliance.py:5054"
   ],
   "Failed to return updated item": [
-   "app/api/v1/endpoints/compliance.py:4941"
+   "app/api/v1/endpoints/compliance.py:4947"
   ],
   "File contents do not match the declared PDF type.": [
    "app/api/v1/endpoints/audits.py:2231",
-   "app/api/v1/endpoints/compliance.py:2475",
-   "app/api/v1/endpoints/compliance.py:3831"
+   "app/api/v1/endpoints/compliance.py:2481",
+   "app/api/v1/endpoints/compliance.py:3837"
   ],
   "File contents do not match the declared PNG type.": [
    "app/api/v1/endpoints/audits.py:2235"
   ],
   "File contents do not match the declared XLS type.": [
-   "app/api/v1/endpoints/compliance.py:2479",
-   "app/api/v1/endpoints/compliance.py:3835"
+   "app/api/v1/endpoints/compliance.py:2485",
+   "app/api/v1/endpoints/compliance.py:3841"
   ],
   "File contents do not match the declared XLSX type.": [
    "app/api/v1/endpoints/audits.py:2233",
-   "app/api/v1/endpoints/compliance.py:2477",
-   "app/api/v1/endpoints/compliance.py:3833"
+   "app/api/v1/endpoints/compliance.py:2483",
+   "app/api/v1/endpoints/compliance.py:3839"
   ],
   "File not available on disk": [
-   "app/api/v1/endpoints/compliance.py:5776"
+   "app/api/v1/endpoints/compliance.py:5782"
   ],
   "File not found": [
-   "app/api/v1/endpoints/compliance.py:4125",
-   "app/api/v1/endpoints/compliance.py:4130",
-   "app/api/v1/endpoints/compliance.py:5315",
-   "app/api/v1/endpoints/compliance.py:5319"
+   "app/api/v1/endpoints/compliance.py:4131",
+   "app/api/v1/endpoints/compliance.py:4136",
+   "app/api/v1/endpoints/compliance.py:5321",
+   "app/api/v1/endpoints/compliance.py:5325"
   ],
   "File not found on disk": [
    "app/api/v1/endpoints/auditor_portal.py:1814",
-   "app/api/v1/endpoints/compliance.py:4133",
-   "app/api/v1/endpoints/compliance.py:4183",
-   "app/api/v1/endpoints/compliance.py:5322"
+   "app/api/v1/endpoints/compliance.py:4139",
+   "app/api/v1/endpoints/compliance.py:4189",
+   "app/api/v1/endpoints/compliance.py:5328"
   ],
   "File retention is disabled (FILE_RETENTION_ENABLED=false). Review GET /compliance/files/retention/preview, then enable it.": [
-   "app/api/v1/endpoints/compliance.py:5830"
+   "app/api/v1/endpoints/compliance.py:5836"
   ],
   "File version not found": [
-   "app/api/v1/endpoints/compliance.py:5728",
-   "app/api/v1/endpoints/compliance.py:5760",
-   "app/api/v1/endpoints/compliance.py:5769"
+   "app/api/v1/endpoints/compliance.py:5734",
+   "app/api/v1/endpoints/compliance.py:5766",
+   "app/api/v1/endpoints/compliance.py:5775"
   ],
   "Finding not found": [
    "app/api/v1/endpoints/audit_comments.py:331",
    "app/api/v1/endpoints/audits.py:1760",
-   "app/api/v1/endpoints/compliance.py:5013"
+   "app/api/v1/endpoints/compliance.py:5019"
   ],
   "Finding not found on this audit": [
    "app/api/v1/endpoints/auditor_portal.py:1689"
@@ -520,15 +520,15 @@
   "Framework not found": [
    "app/api/v1/endpoints/audit_grids.py:628",
    "app/api/v1/endpoints/auth.py:761",
-   "app/api/v1/endpoints/compliance.py:1734",
+   "app/api/v1/endpoints/compliance.py:1740",
    "app/api/v1/endpoints/data_io.py:592",
    "app/api/v1/endpoints/frameworks.py:1178",
    "app/api/v1/endpoints/frameworks.py:249",
    "app/api/v1/endpoints/frameworks.py:251"
   ],
   "Gap not found": [
-   "app/api/v1/endpoints/compliance.py:3439",
-   "app/api/v1/endpoints/compliance.py:4976"
+   "app/api/v1/endpoints/compliance.py:3445",
+   "app/api/v1/endpoints/compliance.py:4982"
   ],
   "Generate the report before approving it": [
    "app/api/v1/endpoints/audits.py:1462",
@@ -558,7 +558,7 @@
    "app/api/v1/endpoints/risk_cartographies.py:327"
   ],
   "Inactive user": [
-   "app/api/v1/dependencies/auth.py:73"
+   "app/api/v1/dependencies/auth.py:87"
   ],
   "Incident not found": [
    "app/api/v1/endpoints/incidents.py:234",
@@ -622,15 +622,15 @@
    "app/api/v1/endpoints/auth.py:901"
   ],
   "Invalid token": [
-   "app/api/v1/dependencies/auth.py:269",
-   "app/api/v1/dependencies/auth.py:274"
+   "app/api/v1/dependencies/auth.py:283",
+   "app/api/v1/dependencies/auth.py:288"
   ],
   "Invalid token payload": [
-   "app/api/v1/dependencies/auth.py:62"
+   "app/api/v1/dependencies/auth.py:76"
   ],
   "Invalid token type": [
-   "app/api/v1/dependencies/auth.py:271",
-   "app/api/v1/dependencies/auth.py:54",
+   "app/api/v1/dependencies/auth.py:285",
+   "app/api/v1/dependencies/auth.py:68",
    "app/api/v1/endpoints/support.py:235"
   ],
   "Invalid trial_ends_at date format": [
@@ -701,7 +701,7 @@
    "app/api/v1/endpoints/frameworks.py:2061"
   ],
   "No documents uploaded. Upload at least one document first.": [
-   "app/api/v1/endpoints/compliance.py:2955"
+   "app/api/v1/endpoints/compliance.py:2961"
   ],
   "No existing treatment plan for this risk — use POST /risk-treatment to create one.": [
    "app/api/v1/endpoints/risk_treatment.py:542"
@@ -738,6 +738,9 @@
    "app/api/v1/endpoints/auditor_portal.py:1807",
    "app/api/v1/endpoints/auditor_portal.py:655"
   ],
+  "Not available to auditors": [
+   "app/api/v1/endpoints/users.py:164"
+  ],
   "Nothing eligible.": [
    "app/api/v1/endpoints/activity_log.py:565"
   ],
@@ -751,14 +754,14 @@
    "app/services/ocr_service.py:32"
   ],
   "Only PDF, DOCX, XLSX, XLS, TXT, PNG and JPEG files are supported": [
-   "app/api/v1/endpoints/compliance.py:5173"
+   "app/api/v1/endpoints/compliance.py:5179"
   ],
   "Only PDF, DOCX, XLSX, XLS, and TXT files are supported": [
-   "app/api/v1/endpoints/compliance.py:2466",
-   "app/api/v1/endpoints/compliance.py:3822"
+   "app/api/v1/endpoints/compliance.py:2472",
+   "app/api/v1/endpoints/compliance.py:3828"
   ],
   "Only a compliance manager or the CISO can reassign a requirement.": [
-   "app/api/v1/endpoints/compliance.py:3045"
+   "app/api/v1/endpoints/compliance.py:3051"
   ],
   "Only a report submitted for validation can be approved": [
    "app/api/v1/endpoints/audits.py:1467"
@@ -776,7 +779,7 @@
    "app/api/v1/endpoints/audits.py:1674"
   ],
   "Only draft assessments can be deleted. Archive completed assessments instead.": [
-   "app/api/v1/endpoints/compliance.py:2143"
+   "app/api/v1/endpoints/compliance.py:2149"
   ],
   "Only platform admins can change subscription tier": [
    "app/api/v1/endpoints/subscriptions.py:80"
@@ -788,7 +791,7 @@
    "app/api/v1/endpoints/support.py:388"
   ],
   "Only the action's owner or a CISO can update this action.": [
-   "app/api/v1/endpoints/compliance.py:4638"
+   "app/api/v1/endpoints/compliance.py:4644"
   ],
   "Only the audit team can post an internal note": [
    "app/api/v1/endpoints/audit_comments.py:463"
@@ -873,7 +876,7 @@
   ],
   "Recommendation not found": [
    "app/api/v1/endpoints/audits.py:1043",
-   "app/api/v1/endpoints/compliance.py:5002"
+   "app/api/v1/endpoints/compliance.py:5008"
   ],
   "Registration could not be completed": [
    "app/api/v1/endpoints/auth.py:570"
@@ -882,7 +885,7 @@
    "app/api/v1/endpoints/control_evaluation.py:255"
   ],
   "Reopening a closed risk requires a justification (reopen_reason).": [
-   "app/api/v1/endpoints/risks.py:404"
+   "app/api/v1/endpoints/risks.py:408"
   ],
   "Report file not found on disk": [
    "app/api/v1/endpoints/audits.py:1404"
@@ -902,16 +905,16 @@
   ],
   "Risk not found": [
    "app/api/v1/endpoints/risk_treatment.py:205",
-   "app/api/v1/endpoints/risks.py:359",
-   "app/api/v1/endpoints/risks.py:381",
-   "app/api/v1/endpoints/risks.py:474",
-   "app/api/v1/endpoints/risks.py:693",
-   "app/api/v1/endpoints/risks.py:795",
-   "app/api/v1/endpoints/risks.py:862",
-   "app/api/v1/endpoints/risks.py:962"
+   "app/api/v1/endpoints/risks.py:363",
+   "app/api/v1/endpoints/risks.py:385",
+   "app/api/v1/endpoints/risks.py:478",
+   "app/api/v1/endpoints/risks.py:697",
+   "app/api/v1/endpoints/risks.py:799",
+   "app/api/v1/endpoints/risks.py:866",
+   "app/api/v1/endpoints/risks.py:966"
   ],
   "Risk or Scenario not found": [
-   "app/api/v1/endpoints/risks.py:1053"
+   "app/api/v1/endpoints/risks.py:1057"
   ],
   "Risk scenario not found": [
    "app/api/v1/endpoints/scenario_versions.py:70"
@@ -956,15 +959,15 @@
    "app/api/v1/endpoints/support.py:249"
   ],
   "Session revoked. Please sign in again.": [
-   "app/api/v1/dependencies/auth.py:104",
-   "app/api/v1/dependencies/auth.py:289",
+   "app/api/v1/dependencies/auth.py:118",
+   "app/api/v1/dependencies/auth.py:303",
    "app/api/v1/endpoints/auth.py:936"
   ],
   "Set a target likelihood and impact before validating the treatment target.": [
-   "app/api/v1/endpoints/risks.py:878"
+   "app/api/v1/endpoints/risks.py:882"
   ],
   "Set an appetite threshold before validating the treatment target.": [
-   "app/api/v1/endpoints/risks.py:873"
+   "app/api/v1/endpoints/risks.py:877"
   ],
   "Set exactly one of user_id or role": [
    "app/api/v1/endpoints/governance.py:832"
@@ -973,7 +976,7 @@
    "app/api/v1/endpoints/sso.py:160"
   ],
   "Share link not found": [
-   "app/api/v1/endpoints/compliance.py:5373"
+   "app/api/v1/endpoints/compliance.py:5379"
   ],
   "Source not found": [
    "app/api/v1/endpoints/regulatory.py:975"
@@ -1048,15 +1051,15 @@
   ],
   "The automated-task account cannot be deleted.": [
    "app/api/v1/endpoints/admin.py:316",
-   "app/api/v1/endpoints/users.py:474"
+   "app/api/v1/endpoints/users.py:518"
   ],
   "The automated-task account cannot be given a password.": [
-   "app/api/v1/endpoints/users.py:430"
+   "app/api/v1/endpoints/users.py:474"
   ],
   "The automated-task account cannot be modified.": [
    "app/api/v1/endpoints/access_governance.py:816",
    "app/api/v1/endpoints/admin.py:255",
-   "app/api/v1/endpoints/users.py:285"
+   "app/api/v1/endpoints/users.py:329"
   ],
   "The change could not be saved (database error). Nothing was written — retry in a moment; if it persists, check the backend log.": [
    "app/api/v1/endpoints/applied_controls.py:193"
@@ -1161,13 +1164,13 @@
    "app/api/v1/endpoints/access_governance.py:564"
   ],
   "This risk is the register entry consolidated from a risk scenario. Delete the scenario instead — removing the risk alone would leave it pointing at a row that no longer exists.": [
-   "app/api/v1/endpoints/risks.py:496"
+   "app/api/v1/endpoints/risks.py:500"
   ],
   "This version is already approved.": [
    "app/api/v1/endpoints/policies.py:745"
   ],
   "This would leave the user with no module access.": [
-   "app/api/v1/endpoints/users.py:351"
+   "app/api/v1/endpoints/users.py:395"
   ],
   "Threat not found": [
    "app/api/v1/endpoints/threats.py:1083",
@@ -1222,14 +1225,14 @@
    "app/api/v1/endpoints/regulatory.py:1860"
   ],
   "User not found": [
-   "app/api/v1/dependencies/auth.py:70",
+   "app/api/v1/dependencies/auth.py:84",
    "app/api/v1/endpoints/access_governance.py:814",
    "app/api/v1/endpoints/admin.py:248",
    "app/api/v1/endpoints/admin.py:309",
    "app/api/v1/endpoints/admin.py:747",
-   "app/api/v1/endpoints/users.py:280",
-   "app/api/v1/endpoints/users.py:423",
-   "app/api/v1/endpoints/users.py:476"
+   "app/api/v1/endpoints/users.py:324",
+   "app/api/v1/endpoints/users.py:467",
+   "app/api/v1/endpoints/users.py:520"
   ],
   "User not found in directory.": [
    "app/services/directory_auth.py:476"
@@ -1238,7 +1241,7 @@
    "app/api/v1/endpoints/governance.py:838"
   ],
   "User not found or inactive": [
-   "app/api/v1/dependencies/auth.py:278",
+   "app/api/v1/dependencies/auth.py:292",
    "app/api/v1/endpoints/auth.py:911"
   ],
   "Username and password are required.": [
@@ -1318,8 +1321,8 @@
    "app/api/v1/endpoints/governance.py:671"
   ],
   "action must be 'accept' or 'reject'": [
-   "app/api/v1/endpoints/compliance.py:3426",
-   "app/api/v1/endpoints/compliance.py:3539"
+   "app/api/v1/endpoints/compliance.py:3432",
+   "app/api/v1/endpoints/compliance.py:3545"
   ],
   "action must be accept or end": [
    "app/api/v1/endpoints/support.py:563"
@@ -1367,13 +1370,13 @@
    "app/api/v1/endpoints/audit_comments.py:586"
   ],
   "business_process_id does not belong to this organisation": [
-   "app/api/v1/endpoints/risks.py:312"
+   "app/api/v1/endpoints/risks.py:316"
   ],
   "business_process_id does not exist in this tenant": [
-   "app/api/v1/endpoints/compliance.py:763"
+   "app/api/v1/endpoints/compliance.py:769"
   ],
   "business_process_id is required when scope_type is 'business_process'": [
-   "app/api/v1/endpoints/compliance.py:774"
+   "app/api/v1/endpoints/compliance.py:780"
   ],
   "business_process_id must reference a business process in this tenant": [
    "app/api/v1/endpoints/assets.py:325"
@@ -1413,7 +1416,7 @@
    "app/services/easm_connector.py:148"
   ],
   "finding_id does not match the recommendation's finding": [
-   "app/api/v1/endpoints/compliance.py:5004"
+   "app/api/v1/endpoints/compliance.py:5010"
   ],
   "findings_path is required for an EASM connector (e.g. /api/v1/findings)": [
    "app/services/easm_connector.py:136"
@@ -1425,13 +1428,13 @@
    "app/api/v1/endpoints/archiving.py:777"
   ],
   "give either gap_ids or filter": [
-   "app/api/v1/endpoints/compliance.py:3541"
+   "app/api/v1/endpoints/compliance.py:3547"
   ],
   "host is required": [
    "app/core/db_config.py:152"
   ],
   "in_scope_assets must name at least one asset when scope_type is 'assets'": [
-   "app/api/v1/endpoints/compliance.py:777"
+   "app/api/v1/endpoints/compliance.py:783"
   ],
   "levels must be a non-empty list": [
    "app/api/v1/endpoints/audit_grids.py:227",
@@ -1485,16 +1488,16 @@
    "app/services/report_scheduler.py:207"
   ],
   "not_applicable_justification cannot be empty on a Not Applicable control.": [
-   "app/api/v1/endpoints/compliance.py:3106"
+   "app/api/v1/endpoints/compliance.py:3112"
   ],
   "org_entity_id does not belong to this organisation": [
-   "app/api/v1/endpoints/risks.py:304"
+   "app/api/v1/endpoints/risks.py:308"
   ],
   "org_entity_id does not exist in this tenant": [
-   "app/api/v1/endpoints/compliance.py:754"
+   "app/api/v1/endpoints/compliance.py:760"
   ],
   "org_entity_id is required when scope_type is 'org_entity'": [
-   "app/api/v1/endpoints/compliance.py:771"
+   "app/api/v1/endpoints/compliance.py:777"
   ],
   "org_entity_id must reference an org entity in this tenant": [
    "app/api/v1/endpoints/assets.py:336"
@@ -1528,10 +1531,10 @@
    "app/services/archiving_engine.py:288"
   ],
   "scale_id does not exist or is not available to this tenant": [
-   "app/api/v1/endpoints/compliance.py:916"
+   "app/api/v1/endpoints/compliance.py:922"
   ],
   "scale_id points at a scale that defines no levels": [
-   "app/api/v1/endpoints/compliance.py:918"
+   "app/api/v1/endpoints/compliance.py:924"
   ],
   "schema must be a dict, a pydantic model class, or a typing form": [
    "app/services/ai_structured.py:381",
@@ -1554,7 +1557,7 @@
   ],
   "title is required": [
    "app/api/v1/endpoints/audit_grids.py:524",
-   "app/api/v1/endpoints/compliance.py:4960"
+   "app/api/v1/endpoints/compliance.py:4966"
   ],
   "user_filter must contain the {username} placeholder": [
    "app/api/v1/endpoints/tenants.py:412"
@@ -1563,7 +1566,7 @@
    "app/api/v1/endpoints/admin.py:714"
   ],
   "valid_until cannot be before valid_from.": [
-   "app/api/v1/endpoints/compliance.py:3778"
+   "app/api/v1/endpoints/compliance.py:3784"
   ],
   "xlsx import is unavailable on this server — save the sheet as CSV and re-upload": [
    "app/api/v1/endpoints/frameworks.py:1874"
@@ -1616,7 +1619,7 @@
    "app/api/v1/endpoints/audits.py:1422"
   ],
   "A risk in status '{current_status}' records a decision that was taken and cannot be deleted. Reopen it first if it was created in error.": [
-   "app/api/v1/endpoints/risks.py:485"
+   "app/api/v1/endpoints/risks.py:489"
   ],
   "A stakeholder uploaded \"{safe_display_name}\" ({size_kb} KB){ctrl_display} via share link \"{link_label}\".": [
    "app/api/v1/endpoints/public_upload.py:415"
@@ -1640,11 +1643,11 @@
    "app/api/v1/endpoints/security_exceptions.py:223"
   ],
   "Cannot assign role: {r}": [
-   "app/api/v1/endpoints/users.py:223",
-   "app/api/v1/endpoints/users.py:319"
+   "app/api/v1/endpoints/users.py:267",
+   "app/api/v1/endpoints/users.py:363"
   ],
   "Cannot exclude role: {r}": [
-   "app/api/v1/endpoints/users.py:332"
+   "app/api/v1/endpoints/users.py:376"
   ],
   "Cannot grant role via group: {r}": [
    "app/api/v1/endpoints/groups.py:59"
@@ -1665,8 +1668,8 @@
    "app/services/easm_connector.py:698"
   ],
   "Control '{control_control_id}' is mandatory and cannot be marked as Not Applicable.": [
-   "app/api/v1/endpoints/compliance.py:3069",
-   "app/api/v1/endpoints/compliance.py:3080"
+   "app/api/v1/endpoints/compliance.py:3075",
+   "app/api/v1/endpoints/compliance.py:3086"
   ],
   "Could not reach the licence server: {exc}": [
    "app/services/license_client.py:152"
@@ -1684,13 +1687,13 @@
    "app/services/directory_auth.py:459"
   ],
   "Email domain must match your organization's domain (@{expected_domain})": [
-   "app/api/v1/endpoints/users.py:213"
+   "app/api/v1/endpoints/users.py:257"
   ],
   "File contents do not match the declared {label} type.": [
    "app/api/v1/endpoints/auditor_portal.py:1723"
   ],
   "File contents do not match the declared {mime} type.": [
-   "app/api/v1/endpoints/compliance.py:5185"
+   "app/api/v1/endpoints/compliance.py:5191"
   ],
   "File exceeds {settings_max_upload_size_mb} MB limit": [
    "app/api/v1/endpoints/vuln_import.py:99"
@@ -1704,16 +1707,16 @@
   ],
   "File too large (max {settings_max_upload_size_mb}MB)": [
    "app/api/v1/endpoints/auditor_portal.py:1707",
-   "app/api/v1/endpoints/compliance.py:2471",
-   "app/api/v1/endpoints/compliance.py:3827",
-   "app/api/v1/endpoints/compliance.py:5179"
+   "app/api/v1/endpoints/compliance.py:2477",
+   "app/api/v1/endpoints/compliance.py:3833",
+   "app/api/v1/endpoints/compliance.py:5185"
   ],
   "Framework not found: {unknown_0}": [
    "app/api/v1/endpoints/auth.py:838"
   ],
   "Insufficient permissions. Required roles: {r_value_for_r_in_roles}": [
-   "app/api/v1/dependencies/auth.py:133",
-   "app/api/v1/dependencies/auth.py:196"
+   "app/api/v1/dependencies/auth.py:147",
+   "app/api/v1/dependencies/auth.py:210"
   ],
   "Invalid EASM configuration: {exc}": [
    "app/api/v1/endpoints/vuln_import.py:203"
@@ -1731,7 +1734,7 @@
    "app/api/v1/endpoints/risk_treatment.py:243"
   ],
   "Invalid priority: {priority}": [
-   "app/api/v1/endpoints/compliance.py:4590"
+   "app/api/v1/endpoints/compliance.py:4596"
   ],
   "Invalid role: {body_role}": [
    "app/api/v1/endpoints/admin.py:194",
@@ -1739,15 +1742,15 @@
   ],
   "Invalid role: {r}": [
    "app/api/v1/endpoints/groups.py:57",
-   "app/api/v1/endpoints/users.py:221",
-   "app/api/v1/endpoints/users.py:317",
-   "app/api/v1/endpoints/users.py:330"
+   "app/api/v1/endpoints/users.py:265",
+   "app/api/v1/endpoints/users.py:361",
+   "app/api/v1/endpoints/users.py:374"
   ],
   "Invalid status: {body_status}": [
    "app/api/v1/endpoints/admin.py:835"
   ],
   "Invalid status: {item_status}": [
-   "app/api/v1/endpoints/compliance.py:4595"
+   "app/api/v1/endpoints/compliance.py:4601"
   ],
   "Invalid tier: {body_tier}": [
    "app/api/v1/endpoints/admin.py:829",
@@ -1827,7 +1830,7 @@
    "app/services/directory_auth.py:255"
   ],
   "Target score {risk_target_risk_score} still exceeds the appetite threshold of {risk_appetite_threshold}. Strengthen the treatment plan before validating.": [
-   "app/api/v1/endpoints/risks.py:884"
+   "app/api/v1/endpoints/risks.py:888"
   ],
   "The EASM API answered with a redirect (HTTP {r_status_code}) — use the final API URL as base URL / path (redirects are not followed).": [
    "app/services/easm_connector.py:581"
@@ -1988,7 +1991,7 @@
    "app/api/v1/endpoints/vuln_import.py:91"
   ],
   "Version {n} not found": [
-   "app/api/v1/endpoints/risks.py:703",
+   "app/api/v1/endpoints/risks.py:707",
    "app/api/v1/endpoints/scenario_versions.py:155"
   ],
   "You are no longer the responsible (R) party for '{row_activity}'.": [
@@ -2010,9 +2013,9 @@
    "app/api/v1/endpoints/applied_controls.py:793"
   ],
   "action_type must be one of {list_action_types}": [
-   "app/api/v1/endpoints/compliance.py:3444",
-   "app/api/v1/endpoints/compliance.py:3543",
-   "app/api/v1/endpoints/compliance.py:4583"
+   "app/api/v1/endpoints/compliance.py:3450",
+   "app/api/v1/endpoints/compliance.py:3549",
+   "app/api/v1/endpoints/compliance.py:4589"
   ],
   "approved report file is {status}": [
    "app/services/report_scheduler.py:213"
@@ -2115,8 +2118,8 @@
    "app/api/v1/endpoints/threats.py:344"
   ],
   "recurrence must be one of {list_action_recurrences}": [
-   "app/api/v1/endpoints/compliance.py:3446",
-   "app/api/v1/endpoints/compliance.py:4585"
+   "app/api/v1/endpoints/compliance.py:3452",
+   "app/api/v1/endpoints/compliance.py:4591"
   ],
   "recurrence must be one of {sorted_audit_recurrences}": [
    "app/api/v1/endpoints/audits.py:278"
@@ -2143,7 +2146,7 @@
    "app/services/easm_connector.py:204"
   ],
   "scope_type must be one of {list_scope_types}": [
-   "app/api/v1/endpoints/compliance.py:747"
+   "app/api/v1/endpoints/compliance.py:753"
   ],
   "severity_level must be one of {severity_levels}": [
    "app/api/v1/endpoints/threats.py:308",
@@ -2165,7 +2168,7 @@
    "app/api/v1/endpoints/threats.py:968"
   ],
   "status_key '{body_status_key}' is not a level of this assessment's scale": [
-   "app/api/v1/endpoints/compliance.py:3057"
+   "app/api/v1/endpoints/compliance.py:3063"
   ],
   "task {task} has no JSON schema; only Markdown output is available": [
    "app/services/ai_prompts.py:1062"
@@ -2187,7 +2190,7 @@
    "app/services/ai_prompts.py:1026"
   ],
   "unknown filter '{body_filter}'": [
-   "app/api/v1/endpoints/compliance.py:3562"
+   "app/api/v1/endpoints/compliance.py:3568"
   ],
   "unknown output format {fmt} for task {task}; expected 'json' or 'markdown'": [
    "app/services/ai_prompts.py:1060"
@@ -2266,7 +2269,7 @@
    "app/api/v1/endpoints/audit_grids.py:677"
   ],
   "{name} must be a date (YYYY-MM-DD).": [
-   "app/api/v1/endpoints/compliance.py:3774"
+   "app/api/v1/endpoints/compliance.py:3780"
   ],
   "{plan_eligible_count} entries would be sealed and removed. Re-send with confirm=true to proceed.": [
    "app/api/v1/endpoints/activity_log.py:565"

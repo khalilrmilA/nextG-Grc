@@ -971,11 +971,10 @@ export default function RisksPage() {
     queryKey: ["business-processes"], queryFn: () => assetGraphApi.listProcesses(),
     enabled: hasCartography, retry: false,
   });
-  // Owner picker + owner names. GET /users is administrator-only, so for other
-  // roles this fails and the form keeps the current owner (same degradation as
-  // the compliance owner picker).
+  // Owner picker + owner names, from the tenant directory (any non-auditor role).
+  // If it cannot be read the form keeps the current owner unchanged.
   const { data: tenantUsers, isError: usersError } = useQuery({
-    queryKey: ["tenant-users"], queryFn: () => usersApi.list(), retry: false,
+    queryKey: ["tenant-users"], queryFn: () => usersApi.directory(), retry: false,
   });
   const userOptions = usersError || !tenantUsers ? null : tenantUsers
     .filter((u) => u.is_active)

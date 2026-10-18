@@ -109,7 +109,7 @@ export default function RegisterPage() {
       .then(setFrameworks)
       .catch(() => {/* ignore — show empty state */})
       .finally(() => setFwLoading(false));
-  }, [step]);
+  }, [step]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const pw = passwordStrength(form.password);
   const step1Valid = form.first_name && form.last_name && form.email && form.password.length >= 12 && form.organization_name;

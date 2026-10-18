@@ -358,7 +358,7 @@ function ResultsTab({
   // than the free-text UUID the field used to be.
   useEffect(() => {
     let alive = true;
-    usersApi.list()
+    usersApi.directory()
       .then((list) => { if (alive) setUsers(list.filter((u) => u.is_active)); })
       .catch(() => { /* the picker degrades to "no owner"; never blocks the page */ });
     return () => { alive = false; };
@@ -1256,14 +1256,15 @@ function ResultsTab({
                                     ? <Eye className="w-3 h-3" />
                                     : <EyeOff className="w-3 h-3" />}
                               </button>}
-                              {/* File history (scoped to the control, not this row) */}
-                              <button
+                              {/* File history (scoped to the control, not this row) —
+                                  GET /files/... is CISO / compliance_manager / auditor. */}
+                              {canManage && <button
                                 onClick={() => setHistoryFor({ id: ca.id, label: ca.control_identifier || ca.control_title || t("traceability.control") })}
                                 title={t("compliance.file_history_open", "File history for this control")}
                                 className="flex-shrink-0 text-gray-400 hover:text-gray-600"
                               >
                                 <History className="w-3 h-3" />
-                              </button>
+                              </button>}
                               {/* Delete (CISO-only route) */}
                               {canCiso && <button
                                 onClick={() => handleDeleteEvidence(ca.id, ev.id)}

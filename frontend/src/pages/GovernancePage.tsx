@@ -260,7 +260,7 @@ export default function GovernancePage() {
     // screen states, in the tender's own words, that nothing is recorded, when
     // in fact nothing could be read.
     const [r, d, g, u, c, p] = await Promise.allSettled([
-      governanceApi.raciList(), governanceApi.docsList(), governanceApi.groupsList(), usersApi.list(),
+      governanceApi.raciList(), governanceApi.docsList(), governanceApi.groupsList(), usersApi.directory(),
       governanceApi.committeesList(), policiesApi.list(),
     ]);
     const take = (s: PromiseSettledResult<unknown>): any[] =>
@@ -286,7 +286,7 @@ export default function GovernancePage() {
     setLoadError(failed.length ? t("governance.load_failed", { sections: failed.join(", ") }) : "");
     setLoading(false);
   }
-  useEffect(() => { load(); }, []);
+  useEffect(() => { load(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function addRaci(e: React.FormEvent) {
     e.preventDefault();

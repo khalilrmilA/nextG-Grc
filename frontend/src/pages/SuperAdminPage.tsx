@@ -1629,7 +1629,7 @@ function LicensesTab() {
     superAdminLicensesApi.list()
       .then(data => { setLicenses(data); setLoading(false); })
       .catch(() => { setLoadError(t("superadmin.err_load_licenses")); setLoading(false); });
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault();
@@ -1880,7 +1880,7 @@ function AdminChatPanel({
       } catch { /* ignore */ }
     };
     return () => ws.close();
-  }, [ticketId]);
+  }, [ticketId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function send() {
     const c = input.trim();
@@ -2221,7 +2221,7 @@ function ActivityLogTab() {
     }
   }
 
-  useEffect(() => { load(true); }, [entityFilter, actionFilter]);
+  useEffect(() => { load(true); }, [entityFilter, actionFilter]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <div className="space-y-6">
@@ -2343,15 +2343,21 @@ const TABS: { id: TabId; label: string; subtitle: string; icon: React.ComponentT
 ];
 
 export default function SuperAdminPage() {
+  const user = authSession.getUser();
+  // Guard in a wrapper so the page's hooks always run in the same order (the
+  // SSE useEffect used to sit after this early return — rules-of-hooks).
+  if (!user || user.role !== "super_admin") {
+    return <Navigate to="/login" replace />;
+  }
+  return <SuperAdminPageContent />;
+}
+
+function SuperAdminPageContent() {
   const { t } = useTranslation();
   const [activeTab, setActiveTab] = useState<TabId>("users");
   const [supportUnread, setSupportUnread] = useState<Set<string>>(new Set());
   const navigate = useNavigate();
-  const user = authSession.getUser();
-
-  if (!user || user.role !== "super_admin") {
-    return <Navigate to="/login" replace />;
-  }
+  const user = authSession.getUser()!;
 
   // ── Always-on SSE notification stream (works through any WAF/proxy) ──────────
   useEffect(() => {
@@ -2391,7 +2397,7 @@ export default function SuperAdminPage() {
 
     es.onerror = () => {};
     return () => { es.close(); };
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   function handleLogout() {
     authSession.logout();

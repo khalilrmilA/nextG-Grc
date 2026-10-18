@@ -673,7 +673,7 @@ export default function AuditsPage() {
       frameworksApi.list(),
       auditGridsApi.list({ is_active: true }),
       usersApi.listAuditors(),
-      usersApi.list(),
+      usersApi.directory(),
     ]);
     if (full.status === "fulfilled") {
       const map: Record<string, string> = {};

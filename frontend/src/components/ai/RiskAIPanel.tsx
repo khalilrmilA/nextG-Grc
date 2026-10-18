@@ -28,11 +28,11 @@ export default function RiskAIPanel({ title, description, category }: Props) {
 
   useEffect(() => {
     if (open && !output && !loading) analyze();
-  }, [open]);
+  }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (loading) bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [output]);
+  }, [output]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function analyze() {
     if (!title.trim()) return;

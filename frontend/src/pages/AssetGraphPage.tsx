@@ -198,7 +198,7 @@ export default function AssetGraphPage() {
     setProcesses(procs.status === "fulfilled" ? procs.value : []);
   }
 
-  useEffect(() => { loadGraph(); /* eslint-disable-next-line */ }, [entityFilter, assetTypeFilter]);
+  useEffect(() => { loadGraph(); }, [entityFilter, assetTypeFilter]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { loadSidebars(); }, []);
   useEffect(() => {
     assetsApi.options().then((d: any) => {
@@ -206,7 +206,7 @@ export default function AssetGraphPage() {
       setAssetOptions(list.map((a: any) => ({ id: a.id, label: a.name })));
       setAssetTypes(Array.from(new Set(list.map((a: any) => a.asset_type).filter(Boolean))) as string[]);
     }).catch(() => {});
-    usersApi.list?.().then((d: any) => {
+    usersApi.directory().then((d: any) => {
       const list = Array.isArray(d) ? d : d.items || [];
       setUserOptions(list.map((u: any) => ({ id: u.id, label: `${u.first_name ?? ""} ${u.last_name ?? ""}`.trim() || u.email })));
     }).catch(() => {});

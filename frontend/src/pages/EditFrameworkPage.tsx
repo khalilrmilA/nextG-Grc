@@ -169,7 +169,7 @@ export default function EditFrameworkPage() {
   // Version history prints who changed a control; without this it printed a raw
   // UUID, which nobody can audit.
   useEffect(() => {
-    usersApi.list()
+    usersApi.directory()
       .then(rows => setUserNames(Object.fromEntries(
         rows.map(u => [u.id, `${u.first_name} ${u.last_name}`.trim() || u.email]),
       )))

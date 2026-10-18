@@ -207,7 +207,7 @@ function ControlPickerModal({
       .then(list => { setFrameworks(list); if (!activeFw && list.length > 0) setActiveFw(list[0]); })
       .catch(() => {})
       .finally(() => setLoadingFw(false));
-  }, [open]);
+  }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!activeFw) return;

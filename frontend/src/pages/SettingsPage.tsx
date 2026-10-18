@@ -940,7 +940,7 @@ function DirectoryTab() {
       .then(hydrate)
       .catch((e: any) => setError(e?.response?.data?.detail || t("dir.e_load", "Could not load the directory settings.")))
       .finally(() => setLoading(false));
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   function draftPayload(includePassword: boolean) {
     const map: Record<string, string> = {};

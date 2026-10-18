@@ -102,13 +102,13 @@ export function FrameworkProvider({ children }: { children: React.ReactNode }) {
     const profile = await authApi.updatePrimaryFramework(frameworkId);
     _syncAuthStore(profile);
     reload();
-  }, [reload]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [reload]);
 
   const saveFrameworks = useCallback(async (primaryId: string, selectedIds: string[]) => {
     const profile = await authApi.updateSelectedFrameworks(primaryId, selectedIds);
     _syncAuthStore(profile);
     reload();
-  }, [reload]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [reload]);
 
   return (
     <FrameworkContext.Provider value={{ primaryFramework, selectedFrameworks, allFrameworks, loading, switchFramework, saveFrameworks, reload }}>

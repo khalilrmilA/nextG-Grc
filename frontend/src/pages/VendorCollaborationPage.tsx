@@ -183,7 +183,7 @@ export default function VendorCollaborationPage() {
     } finally {
       setLoading(false);
     }
-  }, [shareToken]);
+  }, [shareToken, t]);
 
   const loadMessages = useCallback(async () => {
     if (!shareToken) return;

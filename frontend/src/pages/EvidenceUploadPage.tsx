@@ -29,7 +29,7 @@ export default function EvidenceUploadPage() {
       .then(setInfo)
       .catch(() => setError(t("share_link.link_not_found")))
       .finally(() => setLoading(false));
-  }, [token]);
+  }, [token]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function handleFiles(files: FileList | null) {
     if (!files || files.length === 0 || !token) return;

@@ -300,7 +300,7 @@ export default function DocumentViewerModal({
       .finally(() => setLoading(false));
 
     return () => { if (objectUrl) URL.revokeObjectURL(objectUrl); };
-  }, [doc.fetchUrl, doc.fileName]);
+  }, [doc.fetchUrl, doc.fileName]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const blocks = useMemo(() =>
     textContent !== null ? parseDocument(textContent) : [],

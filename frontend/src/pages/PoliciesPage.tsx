@@ -1140,7 +1140,7 @@ export default function PoliciesPage() {
 
   const load = useCallback(async () => {
     try {
-      const [polsResult, usrResult] = await Promise.allSettled([policiesApi.list(), usersApi.list()]);
+      const [polsResult, usrResult] = await Promise.allSettled([policiesApi.list(), usersApi.directory()]);
       if (polsResult.status === "fulfilled") setPolicies(polsResult.value);
       if (usrResult.status === "fulfilled") setUsers(usrResult.value);
     } catch { /* ignore */ } finally { setLoading(false); }
@@ -1169,7 +1169,8 @@ export default function PoliciesPage() {
     setSelected(prev => (prev && prev.id === updated.id ? updated : prev));
   }
 
-  const today = new Date();
+  // Stable for the render cycle — a new Date() each render made the filter memo recompute every time.
+  const today = useMemo(() => new Date(), []);
   const overdueCount = policies.filter(p => p.next_review_date && new Date(p.next_review_date) < today).length;
 
   const filtered = useMemo(() => {

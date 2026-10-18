@@ -9,7 +9,6 @@ import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { AlertTriangle, CheckCircle, ChevronDown, ChevronRight, Clock, FileText, Loader2 } from "lucide-react";
 import { policiesApi, type MyPolicyAttestation } from "../api/endpoints";
-import { useIsViewer } from "../store/auth";
 
 const dateLocale = (lang: string) => (lang.startsWith("fr") ? "fr-FR" : lang.startsWith("ar") ? "ar-u-nu-latn" : "en-US");
 
@@ -20,8 +19,6 @@ export default function MyPoliciesPage() {
   const [open, setOpen] = useState<string | null>(null);
   const [accepting, setAccepting] = useState<string | null>(null);
   const [error, setError] = useState("");
-  // The demo viewer role is read-only server-side: no button it cannot use.
-  const readOnly = useIsViewer();
 
   const load = useCallback(async () => {
     setFailed(false);
@@ -96,7 +93,7 @@ export default function MyPoliciesPage() {
             <pre className="mt-4 text-sm text-gray-700 whitespace-pre-wrap font-sans leading-relaxed max-h-[50vh] overflow-y-auto bg-gray-50 rounded-xl p-4">
               {a.content || t("r2.mypolicies.no_content")}
             </pre>
-            {a.status === "pending" && !readOnly && (
+            {a.status === "pending" && (
               <div className="flex justify-end">
                 <button onClick={() => accept(a)} disabled={accepting === a.id}
                   className="inline-flex items-center gap-2 bg-green-600 hover:bg-green-700 disabled:opacity-50 text-white px-4 py-2.5 rounded-xl text-sm font-medium">

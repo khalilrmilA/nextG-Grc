@@ -61,7 +61,7 @@ export default function GapConfirmModal({ gap, assessmentId, onClose, onAccepted
 
   useEffect(() => {
     let alive = true;
-    usersApi.list()
+    usersApi.directory()
       .then((list) => { if (alive) setUsers(list.filter((u) => u.is_active)); })
       .catch(() => { /* the picker degrades to "unassigned"; never blocks the modal */ });
     return () => { alive = false; };

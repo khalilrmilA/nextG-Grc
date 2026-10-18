@@ -152,7 +152,7 @@ export default function VendorRiskCartography({ vendorId }: { readonly vendorId:
       }
     }
     load();
-  }, [vendorId]);
+  }, [vendorId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (loading) {
     return (

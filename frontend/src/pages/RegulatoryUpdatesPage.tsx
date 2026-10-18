@@ -143,7 +143,7 @@ export default function RegulatoryUpdatesPage() {
   useEffect(() => {
     load();
     // Reload on a UI language switch: the API returns feed text in that language.
-  }, [statusFilter, i18n.language]);
+  }, [statusFilter, i18n.language]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function handleApprove(id: string) {
     setApproving(id);

@@ -15,6 +15,20 @@ bearer_scheme_optional = HTTPBearer(auto_error=False)
 # HTTP methods that mutate state — blocked for viewer role.
 _WRITE_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
 
+# Writes a read-only profile (viewer, executive) may still make, because they act
+# on the caller's OWN obligations rather than on the organisation's data: every
+# employee must be able to accept the policies assigned to them (the endpoint
+# itself only finds attestations whose user_id is the caller).
+import re as _re
+_SELF_SERVICE_WRITES = (
+    ("PATCH", _re.compile(r"^/api/v1/policies/[^/]+/attestations/[^/]+/acknowledge/?$")),
+)
+
+
+def _is_self_service(request: Request) -> bool:
+    path = request.url.path
+    return any(m == request.method and rx.match(path) for m, rx in _SELF_SERVICE_WRITES)
+
 # Cache the demo tenant id so we don't query it on every viewer request.
 _demo_tenant_id_cache: str | None = None
 
@@ -79,7 +93,7 @@ async def get_current_user(
         )
 
     # Viewer role is read-only demo access — block all mutating requests.
-    if user.role == UserRole.VIEWER and request.method in _WRITE_METHODS:
+    if user.role == UserRole.VIEWER and request.method in _WRITE_METHODS and not _is_self_service(request):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Demo accounts are read-only. Upgrade to a full account to use this feature.",
@@ -87,7 +101,7 @@ async def get_current_user(
 
     # Executive (Direction Générale) is a strategic read-only profile by RFP
     # design — consultation of dashboards/KPIs only, never data entry.
-    if user.role == UserRole.EXECUTIVE and request.method in _WRITE_METHODS:
+    if user.role == UserRole.EXECUTIVE and request.method in _WRITE_METHODS and not _is_self_service(request):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Executive accounts are read-only (strategic dashboards / consultation).",

@@ -2227,6 +2227,13 @@ export const usersApi = {
       .get<TenantUserRecord[]>("/users")
       .then((r) => r.data),
 
+  /** Active colleagues (id, name, email, role) for owner / assignee / attestation
+   *  pickers — open to every non-auditor role. list() is the tenant-admin
+   *  administration view and returned 403 to everyone else, which left every
+   *  picker in the product empty for CISOs and managers. */
+  directory: () =>
+    apiClient.get<TenantUserRecord[]>("/users/directory").then((r) => r.data),
+
   /** @deprecated use list() */
   listUsers: () => usersApi.list(),
 

@@ -924,7 +924,7 @@ export default function ActionPlanPage() {
 
   useEffect(() => {
     let alive = true;
-    usersApi.list()
+    usersApi.directory()
       .then((list) => { if (alive) setUsers(list.filter((u) => u.is_active)); })
       .catch(() => { /* the owner picker degrades to "unassigned" */ });
     return () => { alive = false; };

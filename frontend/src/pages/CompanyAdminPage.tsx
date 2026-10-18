@@ -727,7 +727,7 @@ function ActivityLogPanel({ users, initialUserId }: { users: TenantUser[]; initi
     }
   }
 
-  useEffect(() => { load(true); }, [userFilter, entityFilter, actionFilter, categoryFilter, dateFrom, dateTo]);
+  useEffect(() => { load(true); }, [userFilter, entityFilter, actionFilter, categoryFilter, dateFrom, dateTo]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const hasFilters = userFilter || entityFilter || actionFilter || categoryFilter || dateFrom || dateTo;
 
@@ -935,11 +935,18 @@ function ActivityLogPanel({ users, initialUserId }: { users: TenantUser[]; initi
 // ── Main Page ─────────────────────────────────────────────────────────────────
 
 export default function CompanyAdminPage() {
-  const { t } = useTranslation();
   const user = useAuthStore(u => u);
-
-  // Only tenant_admin can access this page
+  // Only tenant_admin can access this page. The guard lives in this wrapper so
+  // the page's own hooks always run in the same order (they used to sit after
+  // this early return — a rules-of-hooks violation).
   if (!user || user.role !== "tenant_admin") return <Navigate to="/dashboard" replace />;
+  return <CompanyAdminPageContent />;
+}
+
+function CompanyAdminPageContent() {
+  const { t } = useTranslation();
+  // Non-null: the wrapper only renders this for a signed-in tenant_admin.
+  const user = useAuthStore(u => u)!;
 
   const [activeTab, setActiveTab] = useState<"team" | "groups" | "logs">("team");
   const [logUserId, setLogUserId] = useState<string | undefined>(undefined);
@@ -971,7 +978,7 @@ export default function CompanyAdminPage() {
     } finally {
       setLoading(false);
     }
-  }, [user.tenant_id]);
+  }, [user.tenant_id, t]);
 
   const loadGroups = useCallback(async () => {
     setGroupsLoading(true);
@@ -982,7 +989,7 @@ export default function CompanyAdminPage() {
     } finally {
       setGroupsLoading(false);
     }
-  }, []);
+  }, [t]);
 
   useEffect(() => { loadUsers(); loadGroups(); }, [loadUsers, loadGroups]);
 

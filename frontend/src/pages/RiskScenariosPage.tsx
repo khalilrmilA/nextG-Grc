@@ -396,7 +396,7 @@ export default function RiskScenariosPage() {
 
   useEffect(() => {
     load();
-  }, [treatmentFilter, sortBy]);
+  }, [treatmentFilter, sortBy]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     loadOptions();

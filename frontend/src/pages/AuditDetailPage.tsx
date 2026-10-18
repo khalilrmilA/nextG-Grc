@@ -581,7 +581,7 @@ export default function AuditDetailPage() {
   useEffect(() => {
     let cancelled = false;
     async function loadDirectory() {
-      const [me, users] = await Promise.allSettled([authApi.getProfile(), usersApi.list()]);
+      const [me, users] = await Promise.allSettled([authApi.getProfile(), usersApi.directory()]);
       if (cancelled) return;
       if (me.status === "fulfilled") setProfile(me.value);
       if (users.status === "fulfilled") {

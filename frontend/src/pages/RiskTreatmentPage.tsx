@@ -120,7 +120,7 @@ export default function RiskTreatmentPage() {
     riskScenariosApi.list()
       .then((d: any) => setScenarios(Array.isArray(d) ? d : (d?.items || [])))
       .catch(() => setScenarios([]));
-    usersApi.list()
+    usersApi.directory()
       .then((d: any) => setUsers(Array.isArray(d) ? d : []))
       .catch(() => setUsers([]));
   }, []);

@@ -941,7 +941,7 @@ export default function ThreatLibraryPage() {
     });
   }
 
-  useEffect(() => { load(); }, [catFilter, typeFilter, probFilter, sevFilter, overdueOnly, i18n.language]);
+  useEffect(() => { load(); }, [catFilter, typeFilter, probFilter, sevFilter, overdueOnly, i18n.language]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function loadWatch() {
     try {
@@ -949,7 +949,7 @@ export default function ThreatLibraryPage() {
       setWatch(Array.isArray(d) ? d : []);
     } catch { setWatch([]); }
   }
-  useEffect(() => { loadWatch(); /* eslint-disable-next-line */ }, [watchKind, i18n.language]);
+  useEffect(() => { loadWatch(); }, [watchKind, i18n.language]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function dismissWatch(id: string) {
     setWatchBusy(id);

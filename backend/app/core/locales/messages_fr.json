@@ -209,6 +209,7 @@
   "Not assigned to this assessment": "Non assigné à cette évaluation",
   "Not assigned to this audit": "Non assigné à cet audit",
   "Not authenticated": "Non authentifié",
+  "Not available to auditors": "Non disponible pour les auditeurs",
   "Nothing eligible.": "Aucun élément éligible.",
   "Notification not found": "Notification introuvable",
   "OCR is not installed on this server (Pillow missing).": "L'OCR n'est pas installé sur ce serveur (Pillow manquant).",

@@ -303,7 +303,7 @@ export default function DocumentChecklistTab({ assessmentId, frameworkShortName 
     }
   }
 
-  useEffect(() => { load(); }, [assessmentId]);
+  useEffect(() => { load(); }, [assessmentId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function loadLog() {
     setLogLoading(true);

@@ -404,7 +404,7 @@ export default function CvePage() {
     } catch { /* keep what we have */ } finally { setLoadingMore(false); }
   }
   // i18n.language: descriptions come back in the UI language (translated on demand).
-  useEffect(() => { load(); /* eslint-disable-next-line */ }, [relFilter, minCvss, kevOnly, i18n.language]);
+  useEffect(() => { load(); }, [relFilter, minCvss, kevOnly, i18n.language]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     assetsApi.options().then((d: any) => {

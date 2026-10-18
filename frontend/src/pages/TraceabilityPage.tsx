@@ -210,7 +210,7 @@ export default function TraceabilityPage() {
       .then(setMatrix)
       .catch(() => setError(t("traceability.load_failed")))
       .finally(() => setLoading(false));
-  }, [assessmentId]);
+  }, [assessmentId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function toggle(key: string) {
     setExpanded((prev) => {

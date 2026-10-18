@@ -386,7 +386,7 @@ export default function ArchivingPage() {
   useEffect(() => { loadRules(); }, []);
   // Re-queried server-side rather than filtered in the browser: the list is
   // capped, so a client-side filter would only ever search the first page.
-  useEffect(() => { setLoading(true); load(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [typeFilter]);
+  useEffect(() => { setLoading(true); load(); }, [typeFilter]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function addArchive(e: React.FormEvent) {
     e.preventDefault();

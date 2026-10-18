@@ -135,6 +135,50 @@ class ResetPasswordResponse(BaseModel):
 
 # ── List all users ────────────────────────────────────────────────────────────
 
+class DirectoryEntry(BaseModel):
+    """What a picker needs to name and choose a colleague — nothing else."""
+    id: str
+    email: str
+    first_name: str
+    last_name: str
+    role: str
+    roles: list[str] = []
+    is_active: bool = True
+
+
+@router.get("/directory", response_model=list[DirectoryEntry])
+async def user_directory(
+    db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_user)],
+    tenant_id: Annotated[str, Depends(get_tenant_id)],
+):
+    """The tenant's active colleagues, for owner / assignee / attestation pickers.
+
+    GET /users is the administration view (tenant_admin only, with role
+    exclusions, expiry, external flags), so every picker in the product was empty
+    for the CISO and the managers who actually assign owners. This returns only
+    names and roles of ACTIVE internal accounts. External auditors are not shown
+    the directory, and the automated-task principal never appears in it.
+    """
+    if current_user.role == UserRole.AUDITOR:
+        raise HTTPException(status_code=403, detail="Not available to auditors")
+    rows = (await db.execute(
+        select(User).where(
+            User.tenant_id == tenant_id,
+            User.is_active == True,  # noqa: E712
+            User.email.notlike("system+%@grceye.local"),
+        ).order_by(User.first_name, User.last_name)
+    )).scalars().all()
+    return [
+        DirectoryEntry(
+            id=u.id, email=u.email, first_name=u.first_name or "", last_name=u.last_name or "",
+            role=u.role.value if hasattr(u.role, "value") else str(u.role),
+            roles=list(u.roles or []), is_active=bool(u.is_active),
+        )
+        for u in rows
+    ]
+
+
 @router.get("", response_model=list[UserResponse])
 async def list_users(
     db: Annotated[AsyncSession, Depends(get_db)],

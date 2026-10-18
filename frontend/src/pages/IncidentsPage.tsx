@@ -106,7 +106,7 @@ export default function IncidentsPage() {
     // GET /assets defaults to page_size=20, so this picker offered the FIRST
     // TWENTY assets and silently hid the rest of the inventory. /assets/options
     // exists for exactly this: {id, name, asset_type} for the whole register.
-    usersApi.list()
+    usersApi.directory()
       .then((us: any) => setUserNames(Object.fromEntries(
         (Array.isArray(us) ? us : []).map((u: any) => [
           u.id, `${u.first_name ?? ""} ${u.last_name ?? ""}`.trim() || u.email,
@@ -140,7 +140,7 @@ export default function IncidentsPage() {
   useEffect(() => {
     load();
     loadStats();
-  }, [sevFilter, statusFilter]);
+  }, [sevFilter, statusFilter]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();

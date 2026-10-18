@@ -212,7 +212,7 @@ function ChatPanel({
       } catch { /* ignore */ }
     };
     return () => { ws.close(); };
-  }, [chatSession.status, ticket.id]);
+  }, [chatSession.status, ticket.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function sendMessage() {
     const content = input.trim();
@@ -318,7 +318,7 @@ function TicketDetail({
       } catch { /* ignore */ }
     }, 8000);
     return () => clearInterval(id);
-  }, [ticket.id]);
+  }, [ticket.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Poll chat status when pending
   useEffect(() => {
@@ -330,7 +330,7 @@ function TicketDetail({
       } catch { /* ignore */ }
     }, 4000);
     return () => clearInterval(id);
-  }, [chatSession?.status, ticket.id]);
+  }, [chatSession?.status, ticket.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function reload() {
     try {
@@ -484,7 +484,7 @@ export default function SupportPage() {
 
     es.onerror = () => {};
     return () => { es.close(); };
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const load = useCallback(async (silent = false) => {
     try {

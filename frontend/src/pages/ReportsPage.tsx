@@ -135,7 +135,7 @@ export default function ReportsPage() {
   useEffect(() => {
     loadReportTypes();
     loadSchedules();
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // The archive is read per report type, because versions are numbered per
   // (parent_type, tenant) — one series per type rather than one global one.

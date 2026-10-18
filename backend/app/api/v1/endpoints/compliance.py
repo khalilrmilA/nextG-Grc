@@ -65,7 +65,13 @@ router = APIRouter()
 # open to compliance_manager (tenant-wide) and control_owner (their own rows, via
 # services/perimeter); running the analysis and creating assessments stay with
 # the CISO and compliance_manager. tenant_admin / super_admin auto-pass.
-_READ_ROLES = (UserRole.CISO, UserRole.COMPLIANCE_MANAGER, UserRole.CONTROL_OWNER)
+# Reading follows App.tsx ROUTE_ROLES["/compliance"]: every role the SPA lets onto
+# the compliance pages can read them (they used to land on 403s).
+_READ_ROLES = (
+    UserRole.CISO, UserRole.COMPLIANCE_MANAGER, UserRole.CONTROL_OWNER, UserRole.RISK_MANAGER,
+    UserRole.POLICY_MANAGER, UserRole.BUSINESS_OWNER, UserRole.SECURITY_ANALYST,
+    UserRole.VIEWER, UserRole.EXECUTIVE,
+)
 _ASSESS_ROLES = (UserRole.CISO, UserRole.COMPLIANCE_MANAGER, UserRole.CONTROL_OWNER)
 _MANAGE_ROLES = (UserRole.CISO, UserRole.COMPLIANCE_MANAGER)
 

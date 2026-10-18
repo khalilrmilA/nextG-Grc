@@ -21,5 +21,15 @@
     }
   },
   "include": ["src"],
+  // Next.js copies of the marketing site (next/link, next/navigation) that no SPA
+  // route imports, so Vite never bundles them; the real versions live in
+  // marketing/. Excluded so `tsc` reports only the app's own errors.
+  "exclude": [
+    "src/components/landing/PublicFooter.tsx",
+    "src/components/landing/PublicNav.tsx",
+    "src/components/landing/SupportChat.tsx",
+    "src/pages/HowItWorksPage.tsx",
+    "src/pages/SolutionsPage.tsx"
+  ],
   "references": [{ "path": "./tsconfig.node.json" }]
 }
