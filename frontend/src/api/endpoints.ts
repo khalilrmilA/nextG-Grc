@@ -18,6 +18,7 @@ import type {
   Audit,
   AuditFinding,
   Policy,
+  PolicyReview,
   Vendor,
   DashboardSummary,
   Subscription,
@@ -1557,6 +1558,15 @@ export const policiesApi = {
 
   approveVersion: (policyId: string, versionId: string) =>
     apiClient.patch<PolicyVersion>(`/policies/${policyId}/versions/${versionId}/approve`).then((r) => r.data),
+
+  // ── Periodic review ───────────────────────────────────────────────────────
+  /** Record the review of a published policy (comment required); the next
+   *  review date moves forward by the policy's review cycle. */
+  review: (policyId: string, comment: string) =>
+    apiClient.post<Policy>(`/policies/${policyId}/review`, { comment }).then((r) => r.data),
+
+  listReviews: (policyId: string) =>
+    apiClient.get<PolicyReview[]>(`/policies/${policyId}/reviews`).then((r) => r.data),
 
   // ── Policy ↔ requirement linkage ──────────────────────────────────────────
   /** The requirements this policy claims to cover, resolved for display —

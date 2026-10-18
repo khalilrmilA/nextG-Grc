@@ -29,7 +29,9 @@ Sections
                need the current version approved by a non-author (four-eyes, also
                after restore); a new version sends the policy back to review;
                my-attestations for any role + idempotent acknowledge; review and
-               overdue-acknowledgement reminders
+               overdue-acknowledgement reminders; publish sets the next review date
+               (a hand-set one is kept); mark as reviewed (comment required,
+               published only) moves it, keeps a history, answers the reminders
 * compliance — control_owner reads and self-assesses only rows they own (no
                reassignment); compliance_manager acts tenant-wide and creates
                assessments; evidence validity flags + 30/7/0-day reminders
@@ -332,6 +334,8 @@ async def policies(api: Api) -> None:
           and "approved" not in p["allowed_transitions"], "draft offers review, not approval", p.get("allowed_transitions"))
     s, b = await api.req("PATCH", f"/policies/{pid}", who=pm, lang="fr", json={"status": "published"})
     check(s == 409 and "politique" in str(b), "draft → published refused (fr)", b)
+    s, b = await api.req("POST", f"/policies/{pid}/review", who=pm, json={"comment": "too early"})
+    check(s == 409, "a draft cannot be marked as reviewed", b)
     s, p = await api.req("PATCH", f"/policies/{pid}", who=pm, json={"status": "in_review"})
     check(s == 200 and p["status"] == "in_review", "draft → in_review")
     s, _ = await api.req("PATCH", f"/policies/{pid}", who=pm, json={"status": "approved"})
@@ -348,6 +352,11 @@ async def policies(api: Api) -> None:
     check(s == 200 and p["current_version_approved"] and "published" in p["allowed_transitions"], "in_review → approved")
     s, p = await api.req("PATCH", f"/policies/{pid}", who=pm, json={"status": "published"})
     check(s == 200 and p["status"] == "published", "approved → published")
+    from app.api.v1.endpoints.policies import _add_months
+    from datetime import date as _date
+    in_a_year = _add_months(_date.today(), 12).isoformat()
+    check(p["next_review_date"] == in_a_year and not p["review_due"],
+          "publish sets next review = today + frequency", p.get("next_review_date"))
 
     async with AsyncSessionLocal() as db:
         viewer_id = (await db.execute(select(User.id).where(User.email == viewer))).scalar_one()
@@ -373,6 +382,31 @@ async def policies(api: Api) -> None:
     check(res.get("policy_reviews", 0) >= 1 and res.get("overdue_attestations", 0) >= 1
           and len(keys) == 2, "review + overdue-acknowledgement reminders created", res)
 
+    # Periodic review (follow-up A-2): due → mark as reviewed → date moves, reminder stops.
+    _, p = await api.req("GET", f"/policies/{pid}")
+    check(p["review_due"], "past review date → review due")
+    s, b = await api.req("POST", f"/policies/{pid}/review", who=pm, lang="fr", json={"comment": "  "})
+    check(s == 422 and "commentaire" in str(b), "review without a comment refused (fr)", b)
+    s, _ = await api.req("POST", f"/policies/{pid}/review", who=viewer, json={"comment": "ok"})
+    check(s == 403, "an employee cannot mark a policy reviewed")
+    s, p = await api.req("POST", f"/policies/{pid}/review", who=pm, json={"comment": "Still fit for purpose."})
+    check(s == 200 and p["next_review_date"] == in_a_year and not p["review_due"]
+          and p["last_review_comment"] == "Still fit for purpose." and p["last_reviewed_by_name"],
+          "mark as reviewed moves the date and records who/why", p)
+    s, hist = await api.req("GET", f"/policies/{pid}/reviews", who=viewer)
+    check(s == 200 and len(hist) == 1 and hist[0]["previous_review_date"] == "2020-01-01"
+          and hist[0]["next_review_date"] == in_a_year, "review history", hist)
+    async with AsyncSessionLocal() as db:
+        unread = (await db.execute(select(Notification).where(
+            Notification.tenant_id == tid, Notification.status == "unread",
+            Notification.title_key == "notifications.policy_review_overdue.title"))).scalars().all()
+        unread = [n for n in unread if (n.data or {}).get("entity_id") == pid]
+        res2 = await run_all_checks(db, tenant_id=tid)
+        again = (await db.execute(select(Notification).where(
+            Notification.tenant_id == tid, Notification.type == "policy_review_due"))).scalars().all()
+        fresh = [n for n in again if (n.data or {}).get("entity_id") == pid and n.status.value == "unread"]
+    check(not unread and not fresh, "review answers the reminders; no new one", res2)
+
     s, a = await api.req("PATCH", f"/policies/{pid}/attestations/{aid}/acknowledge", who=viewer)
     check(s == 200 and a["status"] == "acknowledged", "employee acknowledges")
     s, a2 = await api.req("PATCH", f"/policies/{pid}/attestations/{aid}/acknowledge", who=viewer)
@@ -390,13 +424,24 @@ async def policies(api: Api) -> None:
     check(s == 403, "restorer cannot approve the restored version")
     s, _ = await api.req("PATCH", f"/policies/{pid}/versions/{r['id']}/approve", who=pm)
     check(s == 200, "another person approves the restored version")
+    # A date a person chose survives the re-publish; frequency edits go through PATCH.
+    s, p = await api.req("PATCH", f"/policies/{pid}", who=pm, json={
+        "next_review_date": "2031-05-05", "review_frequency_months": 6, "title": "ST Acceptable Use v2"})
+    check(s == 200 and p["next_review_date_manual"] and p["review_frequency_months"] == 6
+          and p["status"] == "in_review", "edit details without changing status")
+    await api.req("PATCH", f"/policies/{pid}", who=pm, json={"status": "approved"})
+    s, p = await api.req("PATCH", f"/policies/{pid}", who=pm, json={"status": "published"})
+    check(s == 200 and p["next_review_date"] == "2031-05-05", "re-publish keeps a hand-set review date", p.get("next_review_date"))
+    s, b = await api.req("PATCH", f"/policies/{pid}", who=pm, json={"next_review_date": "soon"})
+    check(s == 422, "a review date must be a date", b)
     s, p = await api.req("PATCH", f"/policies/{pid}", who=pm, json={"status": "retired"})
     check(s == 200 and p["status"] == "retired" and p["allowed_transitions"] == ["draft"], "retire (only revive left)")
     s, logs = await api.req("GET", "/activity-log", params={"entity_type": "policy", "page_size": 100})
     items = logs.get("items", logs) if isinstance(logs, dict) else logs
     # The middleware files the acknowledgement under the attestation id (last id in the path).
     acts = {x.get("action") for x in items or [] if x.get("entity_id") in (pid, aid)}
-    check({"submit", "approve", "publish", "retire", "acknowledge"} <= acts, "workflow + acknowledge in the activity log", acts)
+    check({"submit", "approve", "publish", "retire", "acknowledge", "review"} <= acts,
+          "workflow + acknowledge + review in the activity log", acts)
 
 
 async def compliance(api: Api) -> None:
@@ -406,7 +451,18 @@ async def compliance(api: Api) -> None:
     s, lst = await api.req("GET", "/compliance/assessments", who=co)
     check(s == 200, "control_owner can list assessments", lst if s != 200 else "")
     items = lst.get("items", lst) if isinstance(lst, dict) else lst
-    aid = next(a["id"] for a in items if (a.get("total_controls") or a.get("control_count") or 1))
+    # A fresh assessment each run: rows from earlier runs carry evidence that would
+    # make the "only evidence expired" check data-dependent, and a freshly built
+    # test database has no assessment at all.
+    from app.models.framework import Framework
+    taken = {a.get("framework_id") for a in items}
+    async with AsyncSessionLocal() as db:
+        fw_ids = (await db.execute(select(Framework.id).where(Framework.is_builtin == True))).scalars().all()  # noqa: E712
+    fw_id = next((f for f in fw_ids if f not in taken), fw_ids[0])
+    s, created = await api.req("POST", "/compliance/assessments", who=role_email("compliance_manager"), json={
+        "framework_id": fw_id, "name": f"ST assessment {uuid.uuid4().hex[:6]}", "scope_type": "tenant"})
+    check(s == 201 and created.get("control_assessments"), "assessment created with its rows", s)
+    aid = created["id"]
     s, a = await api.req("GET", f"/compliance/assessments/{aid}", who=co)
     check(s == 200 and a["control_assessments"], "control_owner reads the detail")
     row, other = a["control_assessments"][0], a["control_assessments"][1]

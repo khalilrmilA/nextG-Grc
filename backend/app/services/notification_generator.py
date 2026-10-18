@@ -726,13 +726,19 @@ async def check_policy_reviews(db: AsyncSession, tenant_id: str | None = None) -
     """Policies whose next_review_date is within 30 days or past (R2: the review
     date was stored and shown but nothing ever reminded anyone of it).
 
-    The owner and the tenant's stakeholders are told; a retired policy is not
-    reviewed. Weekly at most per person and policy.
+    The owner and the tenant's stakeholders are told. Only a published policy
+    is reviewed ("mark as reviewed" needs one), so drafts and retired texts get
+    no reminder. Weekly at most per person and policy.
+
+    Follow-up A-2: once a review is recorded the date moves forward and the
+    reminders stop. With a short frequency the new date can already fall inside
+    the 30-day window — a review made inside that window silences the "due
+    soon" reminder; only an overdue date reminds again.
     """
     created = 0
     today = datetime.utcnow().date()
     policies = (await db.execute(_scoped(
-        select(Policy).where(Policy.next_review_date.isnot(None), Policy.status != PolicyStatus.RETIRED),
+        select(Policy).where(Policy.next_review_date.isnot(None), Policy.status == PolicyStatus.PUBLISHED),
         Policy.tenant_id, tenant_id))).scalars().all()
     for policy in policies:
         try:
@@ -742,6 +748,13 @@ async def check_policy_reviews(db: AsyncSession, tenant_id: str | None = None) -
         days = (due - today).days
         if days > 30:
             continue
+        if days >= 0 and policy.last_reviewed_at:
+            try:
+                reviewed = datetime.fromisoformat(policy.last_reviewed_at[:10]).date()
+            except (ValueError, TypeError):
+                reviewed = None
+            if reviewed and reviewed >= due - timedelta(days=30):
+                continue
         if days < 0:
             severity, key = "high", "notifications.policy_review_overdue"
             title = f"Policy review OVERDUE: {policy.title[:50]}"

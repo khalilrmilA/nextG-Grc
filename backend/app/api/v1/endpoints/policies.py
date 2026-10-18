@@ -1,6 +1,7 @@
 """Policy Management — full policy lifecycle with versioning and attestations."""
 import io
-from datetime import datetime
+import calendar
+from datetime import date, datetime
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
@@ -12,7 +13,8 @@ from app.core.database import get_db
 from app.core.security_utils import assert_user_in_tenant
 from app.api.v1.dependencies.auth import get_current_user, get_tenant_id, require_roles
 from app.models.user import User, UserRole
-from app.models.policy import Policy, PolicyVersion, PolicyAttestation, PolicyStatus, AttestationStatus
+from app.models.policy import Policy, PolicyVersion, PolicyAttestation, PolicyReview, PolicyStatus, AttestationStatus
+from app.models.notification import Notification, NotificationStatus, NotificationType
 from app.models.framework import Framework, FrameworkControl
 from app.models.tenant import Tenant
 from app.models.org_unit import OrgEntity, BusinessProcess
@@ -81,6 +83,39 @@ async def _back_to_review(db, p) -> bool:
     return False
 
 
+# ── Periodic review (R2 follow-up A-2) ──────────────────────────────────
+# A published policy is reviewed every `review_frequency_months`. Publishing
+# sets the next date unless a person chose one; "mark as reviewed" records the
+# review and moves the date forward.
+
+def _add_months(d: date, months: int) -> date:
+    m = d.month - 1 + max(int(months or 0), 0)
+    y, m = d.year + m // 12, m % 12 + 1
+    return date(y, m, min(d.day, calendar.monthrange(y, m)[1]))
+
+
+def _parse_day(value: str | None) -> date | None:
+    try:
+        return date.fromisoformat((value or "")[:10])
+    except ValueError:
+        return None
+
+
+def _review_due(p) -> bool:
+    due = _parse_day(p.next_review_date)
+    return bool(due and p.status == PolicyStatus.PUBLISHED and due <= date.today())
+
+
+def _schedule_review_on_publish(p) -> None:
+    """On (re-)publish: next review = today + frequency, unless a person set a date
+    that is still ahead — that one is kept."""
+    kept = _parse_day(p.next_review_date) if p.next_review_date_manual else None
+    if kept and kept >= date.today():
+        return
+    p.next_review_date = _add_months(date.today(), p.review_frequency_months or 12).isoformat()
+    p.next_review_date_manual = False
+
+
 # ── Schemas ──────────────────────────────────────────────────────────────
 
 class PolicyCreate(BaseModel):
@@ -126,7 +161,24 @@ class PolicyOut(BaseModel):
     # approval by someone other than its author (required for approved/published).
     allowed_transitions: list[str] = []
     current_version_approved: bool = False
+    # Periodic review: the latest one, and whether the next is due (published only).
+    next_review_date_manual: bool | None = False
+    last_reviewed_at: str | None = None
+    last_reviewed_by_id: str | None = None
+    last_reviewed_by_name: str | None = None
+    last_review_comment: str | None = None
+    review_due: bool = False
     created_at: datetime; updated_at: datetime
+    model_config = {"from_attributes": True}
+
+class ReviewCreate(BaseModel):
+    comment: str
+
+class ReviewOut(BaseModel):
+    id: str; policy_id: str
+    reviewed_by_id: str | None; reviewed_by_name: str | None = None
+    reviewed_at: str; comment: str
+    previous_review_date: str | None; next_review_date: str | None
     model_config = {"from_attributes": True}
 
 # « Permet de gérer un référentiel centralisé des […] politiques internes » — the link
@@ -377,7 +429,17 @@ async def _enrich(db, policy):
     o.current_version_approved = _independently_approved(await _current_version(db, policy.id))
     o.allowed_transitions = [t.value for t in _TRANSITIONS.get(policy.status, set())
                              if t not in _NEEDS_APPROVED_VERSION or o.current_version_approved]
+    o.review_due = _review_due(policy)
+    if policy.last_reviewed_by_id:
+        o.last_reviewed_by_name = await _user_name(db, policy.last_reviewed_by_id)
     return o
+
+
+async def _user_name(db, uid: str | None) -> str | None:
+    if not uid:
+        return None
+    u = (await db.execute(select(User).where(User.id == uid))).scalar_one_or_none()
+    return (u.full_name or u.email) if u else None
 
 
 # ── Policy CRUD ──────────────────────────────────────────────────────────
@@ -398,6 +460,7 @@ async def create_policy(body: PolicyCreate, db: AsyncSession = Depends(get_db), 
                linked_controls=await _normalize_linked_controls(db, tenant_id, body.linked_controls, strict=False),
                review_frequency_months=body.review_frequency_months,
                next_review_date=body.next_review_date,
+               next_review_date_manual=bool(body.next_review_date),
                effective_date=body.effective_date, expiration_date=body.expiration_date,
                business_process_id=body.business_process_id, org_entity_id=body.org_entity_id)
     if body.status:
@@ -569,10 +632,23 @@ async def update_policy(pid: str, body: PolicyUpdate, db: AsyncSession = Depends
     if body.linked_controls is not None:
         linked_after = await _normalize_linked_controls(db, tenant_id, body.linked_controls)
 
-    for f in ["title","description","category","owner_id","review_frequency_months","next_review_date",
+    if body.title is not None and not body.title.strip():
+        raise HTTPException(422, "A policy needs a title.")
+    if body.review_frequency_months is not None and not 1 <= body.review_frequency_months <= 120:
+        raise HTTPException(422, "The review frequency must be between 1 and 120 months.")
+    for f in ["title","description","category","owner_id","review_frequency_months",
               "effective_date","expiration_date","business_process_id","org_entity_id"]:
         v = getattr(body, f, None)
-        if v is not None: setattr(p, f, v)
+        if v is None:
+            continue
+        # The Edit details form sends "" to clear an optional field.
+        setattr(p, f, (v.strip() or None) if isinstance(v, str) else v)
+    if body.next_review_date is not None:
+        if body.next_review_date and not _parse_day(body.next_review_date):
+            raise HTTPException(422, "next_review_date must be a date (YYYY-MM-DD).")
+        # A date a person types is theirs: the next publish keeps it.
+        p.next_review_date = body.next_review_date or None
+        p.next_review_date_manual = bool(body.next_review_date)
     if linked_after is not None:
         p.linked_controls = linked_after
     moved: tuple[str, str] | None = None
@@ -588,6 +664,9 @@ async def update_policy(pid: str, body: PolicyUpdate, db: AsyncSession = Depends
                     409, "The current version must be approved by someone other than its author first.")
             moved = (_status_value(p), new_status.value)
             p.status = new_status
+            if new_status == PolicyStatus.PUBLISHED:
+                _schedule_review_on_publish(p)
+                moved = moved + (p.next_review_date,)
     await db.commit(); await db.refresh(p)
 
     # The response is built BEFORE the audit entry: chain_and_add rolls back internally
@@ -605,7 +684,9 @@ async def update_policy(pid: str, body: PolicyUpdate, db: AsyncSession = Depends
                 tenant_id=tenant_id, user_id=user.id, user_email=user.email,
                 action=_TRANSITION_ACTION[PolicyStatus(moved[1])], entity_type="policy",
                 entity_id=p.id, entity_name=(p.title or "")[:255] or None,
-                details={"from": moved[0], "to": moved[1]}, origin="api",
+                details={"from": moved[0], "to": moved[1],
+                         **({"next_review_date": moved[2]} if len(moved) > 2 else {})},
+                origin="api",
             ))
         except Exception:
             pass
@@ -633,6 +714,63 @@ async def update_policy(pid: str, body: PolicyUpdate, db: AsyncSession = Depends
 
     return result
 
+@router.post("/{pid}/review", response_model=PolicyOut)
+async def review_policy(pid: str, body: ReviewCreate, db: AsyncSession = Depends(get_db), user: User = Depends(require_roles(UserRole.POLICY_MANAGER, UserRole.CISO)), tenant_id: str = Depends(get_tenant_id)):
+    """Record the periodic review of a published policy and move its next review date."""
+    p = await _policy(db, pid, tenant_id)
+    comment = (body.comment or "").strip()
+    if not comment:
+        raise HTTPException(422, "A review needs a comment.")
+    if p.status != PolicyStatus.PUBLISHED:
+        raise HTTPException(409, "Only a published policy can be marked as reviewed.")
+    now = datetime.utcnow().isoformat(timespec="seconds")
+    previous = p.next_review_date
+    p.next_review_date = _add_months(date.today(), p.review_frequency_months or 12).isoformat()
+    p.next_review_date_manual = False
+    p.last_reviewed_at, p.last_reviewed_by_id, p.last_review_comment = now, user.id, comment
+    db.add(PolicyReview(tenant_id=tenant_id, policy_id=p.id, reviewed_by_id=user.id, reviewed_at=now,
+                        comment=comment, previous_review_date=previous, next_review_date=p.next_review_date))
+    # The reminders about this review have been answered.
+    await db.execute(
+        Notification.__table__.update()
+        .where(Notification.tenant_id == tenant_id,
+               Notification.type == NotificationType.POLICY_REVIEW_DUE,
+               Notification.status == NotificationStatus.UNREAD,
+               Notification.data["entity_id"].as_string() == p.id)
+        .values(status=NotificationStatus.READ, read_at=datetime.utcnow()))
+    await db.commit(); await db.refresh(p)
+    result = await _enrich(db, p)
+    pid_, title, next_date = p.id, (p.title or "")[:255] or None, p.next_review_date
+    try:
+        await chain_and_add(db, ActivityLog(
+            tenant_id=tenant_id, user_id=user.id, user_email=user.email,
+            action="review", entity_type="policy", entity_id=pid_, entity_name=title,
+            details={"comment": comment[:500], "previous_review_date": previous,
+                     "next_review_date": next_date},
+            origin="api",
+        ))
+    except Exception:
+        pass
+    return result
+
+
+@router.get("/{pid}/reviews", response_model=list[ReviewOut])
+async def list_reviews(pid: str, db: AsyncSession = Depends(get_db), _: User = Depends(get_current_user), tenant_id: str = Depends(get_tenant_id)):
+    await _policy(db, pid, tenant_id)
+    rows = (await db.execute(select(PolicyReview).where(
+        PolicyReview.policy_id == pid, PolicyReview.tenant_id == tenant_id)
+        .order_by(PolicyReview.reviewed_at.desc()))).scalars().all()
+    names: dict[str, str | None] = {}
+    out = []
+    for r in rows:
+        o = ReviewOut.model_validate(r)
+        if r.reviewed_by_id and r.reviewed_by_id not in names:
+            names[r.reviewed_by_id] = await _user_name(db, r.reviewed_by_id)
+        o.reviewed_by_name = names.get(r.reviewed_by_id or "")
+        out.append(o)
+    return out
+
+
 @router.get("/{pid}/controls", response_model=list[LinkedControlOut])
 async def list_policy_controls(pid: str, db: AsyncSession = Depends(get_db), _: User = Depends(get_current_user), tenant_id: str = Depends(get_tenant_id), lang: str = Depends(get_display_language)):
     """The requirements this policy claims to cover, resolved to titles and frameworks.
@@ -652,6 +790,7 @@ async def delete_policy(pid: str, db: AsyncSession = Depends(get_db), user: User
     # Delete child records before the policy to avoid FK constraint errors
     versions = (await db.execute(select(PolicyVersion).where(PolicyVersion.policy_id == pid))).scalars().all()
     attestations = (await db.execute(select(PolicyAttestation).where(PolicyAttestation.policy_id == pid))).scalars().all()
+    reviews = (await db.execute(select(PolicyReview).where(PolicyReview.policy_id == pid))).scalars().all()
 
     # Destroying an approved policy also destroys every version of it and every
     # attestation anyone signed against it — the exact record a bank auditor asks
@@ -680,6 +819,10 @@ async def delete_policy(pid: str, db: AsyncSession = Depends(get_db), user: User
              "acknowledged_at": str(a.acknowledged_at) if a.acknowledged_at else None}
             for a in attestations
         ],
+        "reviews": [
+            {"reviewed_by_id": r.reviewed_by_id, "reviewed_at": r.reviewed_at, "comment": (r.comment or "")[:500]}
+            for r in reviews
+        ],
     }
     title = (p.title or "")[:255] or None
 
@@ -687,6 +830,8 @@ async def delete_policy(pid: str, db: AsyncSession = Depends(get_db), user: User
         await db.delete(v)
     for a in attestations:
         await db.delete(a)
+    for r in reviews:
+        await db.delete(r)
     await db.delete(p)
     await db.commit()
 

@@ -7,7 +7,7 @@ import {
   Edit3, AlertTriangle, Users, Sparkles, StopCircle, Loader2, Save, BookOpen,
 } from "lucide-react";
 import { policiesApi, usersApi, aiApi, assetGraphApi, frameworksApi, type PolicyVersion, type PolicyAttestation } from "../api/endpoints";
-import type { Policy, PolicyLinkedControl, Framework, FrameworkControl } from "../types";
+import type { Policy, PolicyLinkedControl, PolicyReview, Framework, FrameworkControl } from "../types";
 import i18n from "../i18n";
 import { useAuthStore, hasAnyRole, currentUserId } from "../store/auth";
 
@@ -56,6 +56,26 @@ type TenantUser = { id: string; first_name: string; last_name: string; email: st
 function isOverdue(dateStr?: string): boolean {
   if (!dateStr) return false;
   return new Date(dateStr) < new Date();
+}
+
+/** Only a published policy is reviewed periodically — the backend says when one is due. */
+function reviewDue(p: Policy): boolean {
+  return p.review_due ?? (p.status === "published" && isOverdue(p.next_review_date));
+}
+
+/** today + n months, as the backend computes it (day clamped to the month's end). */
+function addMonthsIso(months: number): string {
+  const d = new Date();
+  const target = new Date(d.getFullYear(), d.getMonth() + months, 1);
+  const last = new Date(target.getFullYear(), target.getMonth() + 1, 0).getDate();
+  target.setDate(Math.min(d.getDate(), last));
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${target.getFullYear()}-${pad(target.getMonth() + 1)}-${pad(target.getDate())}`;
+}
+
+function apiError(err: unknown, fallback: string): string {
+  const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
+  return typeof msg === "string" ? msg : fallback;
 }
 
 // ── New Policy Modal ──────────────────────────────────────────────────────────
@@ -188,6 +208,155 @@ function NewPolicyModal({ onClose, onSaved }: { readonly onClose: () => void; re
             <button type="submit" disabled={saving}
               className="flex-1 py-2.5 rounded-lg bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white text-sm font-medium transition-colors">
               {saving ? t("common.saving") : t("policies.create_policy")}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+// ── Edit Policy Details Modal ─────────────────────────────────────────────────
+// PATCH without `status`: the workflow moves stay on their own buttons.
+
+const EDIT_FREQUENCIES = [3, 6, 12, 24, 36];
+
+function EditPolicyModal({ policy, users, onClose, onSaved }: {
+  readonly policy: Policy;
+  readonly users: TenantUser[];
+  readonly onClose: () => void;
+  readonly onSaved: (p: Policy) => void;
+}) {
+  const { t } = useTranslation();
+  const [form, setForm] = useState({
+    title: policy.title, description: policy.description ?? "", category: policy.category ?? "",
+    owner_id: policy.owner_id ?? "", review_frequency_months: policy.review_frequency_months || 12,
+    next_review_date: policy.next_review_date?.slice(0, 10) ?? "",
+    effective_date: policy.effective_date ?? "", expiration_date: policy.expiration_date ?? "",
+    business_process_id: policy.business_process_id ?? "", org_entity_id: policy.org_entity_id ?? "",
+  });
+  const [error, setError] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [entities, setEntities] = useState<any[]>([]);
+  const [processes, setProcesses] = useState<any[]>([]);
+
+  useEffect(() => {
+    Promise.allSettled([assetGraphApi.listEntities(), assetGraphApi.listProcesses()]).then(([e, p]) => {
+      setEntities(e.status === "fulfilled" ? e.value : []);
+      setProcesses(p.status === "fulfilled" ? p.value : []);
+    });
+  }, []);
+
+  const frequencies = EDIT_FREQUENCIES.includes(form.review_frequency_months)
+    ? EDIT_FREQUENCIES : [...EDIT_FREQUENCIES, form.review_frequency_months].sort((a, b) => a - b);
+  const categories = form.category && !CATEGORY_OPTIONS.includes(form.category)
+    ? [...CATEGORY_OPTIONS, form.category] : CATEGORY_OPTIONS;
+  const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) =>
+    setForm(f => ({ ...f, [k]: k === "review_frequency_months" ? +e.target.value : e.target.value }));
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!form.title.trim()) { setError(t("policies.title_required")); return; }
+    setSaving(true); setError("");
+    // "" clears an optional field; an untouched review date is not re-sent, so it
+    // does not become "hand-set" just because the form was saved.
+    const original = policy.next_review_date?.slice(0, 10) ?? "";
+    try {
+      const updated = await policiesApi.update(policy.id, {
+        title: form.title.trim(), description: form.description, category: form.category,
+        owner_id: form.owner_id || undefined, review_frequency_months: form.review_frequency_months,
+        ...(form.next_review_date !== original ? { next_review_date: form.next_review_date } : {}),
+        effective_date: form.effective_date, expiration_date: form.expiration_date,
+        business_process_id: form.business_process_id, org_entity_id: form.org_entity_id,
+      });
+      onSaved(updated); onClose();
+    } catch (err: unknown) {
+      setError(apiError(err, t("r2b.policies.error_save")));
+    } finally { setSaving(false); }
+  }
+
+  const label = "block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1";
+  const input = "w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white";
+  return (
+    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+          <h2 className="font-semibold text-gray-900">{t("r2b.policies.edit_title")}</h2>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600"><X className="w-5 h-5" /></button>
+        </div>
+        <form onSubmit={handleSubmit} className="p-6 space-y-4">
+          {error && <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{error}</p>}
+          <div>
+            <label htmlFor="ed-title" className={label}>{t("policies.policy_title_label")} *</label>
+            <input id="ed-title" className={input} value={form.title} onChange={set("title")} />
+          </div>
+          <div>
+            <label htmlFor="ed-desc" className={label}>{t("common.description")}</label>
+            <textarea id="ed-desc" rows={3} className={`${input} resize-none`} value={form.description} onChange={set("description")} />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label htmlFor="ed-category" className={label}>{t("policies.category_label")}</label>
+              <select id="ed-category" className={input} value={form.category} onChange={set("category")}>
+                <option value="">{t("r2.common.none")}</option>
+                {categories.map(o => <option key={o} value={o}>{categoryLabel(o)}</option>)}
+              </select>
+            </div>
+            <div>
+              <label htmlFor="ed-owner" className={label}>{t("r2b.policies.owner")}</label>
+              <select id="ed-owner" className={input} value={form.owner_id} onChange={set("owner_id")}>
+                {!form.owner_id && <option value="">{t("r2.common.none")}</option>}
+                {users.map(u => <option key={u.id} value={u.id}>{`${u.first_name} ${u.last_name}`.trim() || u.email}</option>)}
+              </select>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label htmlFor="ed-cycle" className={label}>{t("policies.review_cycle")}</label>
+              <select id="ed-cycle" className={input} value={form.review_frequency_months} onChange={set("review_frequency_months")}>
+                {frequencies.map(n => <option key={n} value={n}>{t("policies_ui.review_months", { n })}</option>)}
+              </select>
+            </div>
+            <div>
+              <label htmlFor="ed-next" className={label}>{t("r2b.policies.next_review")}</label>
+              <input id="ed-next" type="date" className={input} value={form.next_review_date} onChange={set("next_review_date")} />
+            </div>
+          </div>
+          <p className="text-xs text-gray-500 -mt-2">{t("r2b.policies.next_review_hint")}</p>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label htmlFor="ed-effective" className={label}>{t("policies.effective_date_label", "Effective Date")}</label>
+              <input id="ed-effective" type="date" className={input} value={form.effective_date} onChange={set("effective_date")} />
+            </div>
+            <div>
+              <label htmlFor="ed-expiration" className={label}>{t("policies.expiration_date_label", "Expiration Date")}</label>
+              <input id="ed-expiration" type="date" className={input} value={form.expiration_date} onChange={set("expiration_date")} />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label htmlFor="ed-process" className={label}>{t("policies.business_process_label", "Business Process")}</label>
+              <select id="ed-process" className={input} value={form.business_process_id} onChange={set("business_process_id")}>
+                <option value="">{t("policies.no_process", "None")}</option>
+                {processes.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+              </select>
+            </div>
+            <div>
+              <label htmlFor="ed-entity" className={label}>{t("policies.org_entity_label", "Org Entity")}</label>
+              <select id="ed-entity" className={input} value={form.org_entity_id} onChange={set("org_entity_id")}>
+                <option value="">{t("policies.no_entity", "None")}</option>
+                {entities.map((en) => <option key={en.id} value={en.id}>{en.name}</option>)}
+              </select>
+            </div>
+          </div>
+          <div className="flex gap-3 pt-2">
+            <button type="button" onClick={onClose}
+              className="flex-1 py-2.5 rounded-lg border border-gray-200 text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors">
+              {t("common.cancel")}
+            </button>
+            <button type="submit" disabled={saving}
+              className="flex-1 py-2.5 rounded-lg bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white text-sm font-medium transition-colors">
+              {saving ? t("common.saving") : t("r2.common.save_changes")}
             </button>
           </div>
         </form>
@@ -434,6 +603,14 @@ function PolicyDetailModal({ policy, onClose, onStatusChange, onDelete, onUpdate
   const [movingTo, setMovingTo] = useState<string | null>(null);
   const [confirm, setConfirm] = useState<null | "delete" | "retired">(null);
   const [approvingVer, setApprovingVer] = useState<string | null>(null);
+  const [editing, setEditing] = useState(false);
+
+  // periodic review
+  const [reviews, setReviews] = useState<PolicyReview[]>([]);
+  const [reviewOpen, setReviewOpen] = useState(false);
+  const [reviewComment, setReviewComment] = useState("");
+  const [reviewError, setReviewError] = useState("");
+  const [savingReview, setSavingReview] = useState(false);
 
   // version state
   const [versions, setVersions] = useState<PolicyVersion[]>([]);
@@ -474,13 +651,29 @@ function PolicyDetailModal({ policy, onClose, onStatusChange, onDelete, onUpdate
     catch { /* ignore */ } finally { setLoadingAtt(false); }
   }, [policy.id]);
 
-  useEffect(() => { loadVersions(); loadAttestations(); }, [loadVersions, loadAttestations]);
+  const loadReviews = useCallback(async () => {
+    try { setReviews(await policiesApi.listReviews(policy.id)); } catch { /* history is optional */ }
+  }, [policy.id]);
+
+  useEffect(() => { loadVersions(); loadAttestations(); loadReviews(); }, [loadVersions, loadAttestations, loadReviews]);
   // Acknowledgements happen elsewhere (My policies) — re-read when the tab opens.
   useEffect(() => { if (tab === "attestations") loadAttestations(); }, [tab, loadAttestations]);
 
   /** Status / allowed moves can change after a version is added, restored or approved. */
   async function refreshPolicy() {
     try { onUpdated(await policiesApi.get(policy.id)); } catch { /* keep what is on screen */ }
+  }
+
+  async function handleReview() {
+    if (!reviewComment.trim()) { setReviewError(t("r2b.policies.comment_required")); return; }
+    setSavingReview(true); setReviewError("");
+    try {
+      onUpdated(await policiesApi.review(policy.id, reviewComment.trim()));
+      setReviewOpen(false); setReviewComment("");
+      await loadReviews();
+    } catch (err: unknown) {
+      setReviewError(apiError(err, t("common.error_generic")));
+    } finally { setSavingReview(false); }
   }
 
   async function moveTo(next: string) {
@@ -664,9 +857,9 @@ function PolicyDetailModal({ policy, onClose, onStatusChange, onDelete, onUpdate
                     <StatusIcon className="w-3 h-3" />{s.label}
                   </span>
                   <span className="text-xs font-mono bg-gray-100 text-gray-600 px-1.5 rounded">v{versionNum}</span>
-                  {isOverdue(policy.next_review_date) && (
+                  {reviewDue(policy) && (
                     <span className="inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full bg-red-100 text-red-600">
-                      <AlertTriangle className="w-3 h-3" />{t("policies.overdue_badge")}
+                      <AlertTriangle className="w-3 h-3" />{t("r2b.policies.review_due")}
                     </span>
                   )}
                 </div>
@@ -738,8 +931,8 @@ function PolicyDetailModal({ policy, onClose, onStatusChange, onDelete, onUpdate
               <div className="grid grid-cols-2 gap-3 pt-2 border-t border-gray-50">
                 <div>
                   <p className="text-xs text-gray-400 flex items-center gap-1"><Calendar className="w-3 h-3" />{t("policies.col_next_review")}</p>
-                  <p className={`text-sm font-medium mt-0.5 ${isOverdue(policy.next_review_date) ? "text-red-600" : "text-gray-700"}`}>
-                    {policy.next_review_date ?? "—"}
+                  <p className={`text-sm font-medium mt-0.5 ${reviewDue(policy) ? "text-red-600" : "text-gray-700"}`}>
+                    {policy.next_review_date?.slice(0, 10) ?? "—"}
                   </p>
                 </div>
                 <div>
@@ -754,6 +947,42 @@ function PolicyDetailModal({ policy, onClose, onStatusChange, onDelete, onUpdate
                   <p className="text-xs text-gray-400 flex items-center gap-1"><Calendar className="w-3 h-3" />{t("policies.expiration_date_label", "Expiration Date")}</p>
                   <p className="text-sm font-medium text-gray-700 mt-0.5">{policy.expiration_date ?? "—"}</p>
                 </div>
+              </div>
+
+              {/* Periodic review: due badge, mark as reviewed, history. */}
+              <div className="pt-3 border-t border-gray-100 space-y-3">
+                <div className="flex items-center justify-between gap-3 flex-wrap">
+                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">{t("r2b.policies.review_history")}</p>
+                  {canManage && policy.status === "published" && (
+                    <button onClick={() => { setReviewOpen(true); setReviewError(""); }}
+                      className={`inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg transition-colors ${
+                        reviewDue(policy) ? "bg-red-600 hover:bg-red-700 text-white" : "border border-gray-200 text-gray-700 hover:bg-gray-50"}`}>
+                      <CheckCircle className="w-3.5 h-3.5" />{t("r2b.policies.mark_reviewed")}
+                    </button>
+                  )}
+                </div>
+                {policy.status !== "published" && !reviews.length && (
+                  <p className="text-xs text-gray-500">{t("r2b.policies.review_published_only")}</p>
+                )}
+                {policy.status === "published" && !reviews.length && (
+                  <p className="text-xs text-gray-500">{t("r2b.policies.never_reviewed")}</p>
+                )}
+                {reviews.length > 0 && (
+                  <ul className="space-y-2">
+                    {reviews.map(r => (
+                      <li key={r.id} className="bg-gray-50 rounded-lg px-3 py-2">
+                        <p className="text-xs text-gray-500">
+                          {t("r2b.policies.last_reviewed", {
+                            date: new Date(r.reviewed_at).toLocaleDateString(dateLocale(i18n.language)),
+                            name: r.reviewed_by_name ?? userName(r.reviewed_by_id) })}
+                          {" · "}
+                          <span>{t("r2b.policies.review_moved", { from: r.previous_review_date ?? "—", to: r.next_review_date ?? "—" })}</span>
+                        </p>
+                        <p className="text-sm text-gray-800 mt-0.5 whitespace-pre-line">{r.comment}</p>
+                      </li>
+                    ))}
+                  </ul>
+                )}
               </div>
 
               <div className="pt-3 border-t border-gray-100">
@@ -807,7 +1036,11 @@ function PolicyDetailModal({ policy, onClose, onStatusChange, onDelete, onUpdate
               </div>
 
               {canManage && (
-                <div className="pt-3 border-t border-gray-100">
+                <div className="pt-3 border-t border-gray-100 flex items-center justify-between gap-3">
+                  <button onClick={() => setEditing(true)}
+                    className="flex items-center gap-2 text-gray-600 hover:text-gray-900 text-sm font-medium transition-colors">
+                    <Edit3 className="w-4 h-4" /> {t("r2b.policies.edit_details")}
+                  </button>
                   <button onClick={() => setConfirm("delete")}
                     className="flex items-center gap-2 text-red-500 hover:text-red-700 text-sm font-medium transition-colors">
                     <Trash2 className="w-4 h-4" /> {t("common.delete")}
@@ -1094,6 +1327,34 @@ function PolicyDetailModal({ policy, onClose, onStatusChange, onDelete, onUpdate
         </div>
       </div>
 
+      {editing && (
+        <EditPolicyModal policy={policy} users={users} onClose={() => setEditing(false)} onSaved={onUpdated} />
+      )}
+
+      {reviewOpen && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 space-y-4">
+            <h3 className="font-semibold text-gray-900">{t("r2b.policies.review_title")}</h3>
+            <p className="text-sm text-gray-600">{t("r2b.policies.review_body", { date: addMonthsIso(policy.review_frequency_months || 12) })}</p>
+            <div>
+              <label htmlFor="pol-review-comment" className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">{t("r2b.policies.review_comment")} *</label>
+              <textarea id="pol-review-comment" rows={4} autoFocus value={reviewComment} onChange={e => setReviewComment(e.target.value)}
+                placeholder={t("r2b.policies.review_comment_placeholder")}
+                className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none" />
+            </div>
+            {reviewError && <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{reviewError}</p>}
+            <div className="flex gap-3">
+              <button onClick={() => setReviewOpen(false)}
+                className="flex-1 py-2.5 rounded-lg border border-gray-200 text-sm font-medium text-gray-600 hover:bg-gray-50">{t("common.cancel")}</button>
+              <button onClick={handleReview} disabled={savingReview || !reviewComment.trim()}
+                className="flex-1 py-2.5 rounded-lg bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white text-sm font-medium inline-flex items-center justify-center gap-2">
+                {savingReview && <Loader2 className="w-4 h-4 animate-spin" />}{t("r2b.policies.mark_reviewed")}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {confirm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 space-y-4" role="alertdialog" aria-modal="true">
@@ -1169,20 +1430,18 @@ export default function PoliciesPage() {
     setSelected(prev => (prev && prev.id === updated.id ? updated : prev));
   }
 
-  // Stable for the render cycle — a new Date() each render made the filter memo recompute every time.
-  const today = useMemo(() => new Date(), []);
-  const overdueCount = policies.filter(p => p.next_review_date && new Date(p.next_review_date) < today).length;
+  const overdueCount = policies.filter(reviewDue).length;
 
   const filtered = useMemo(() => {
     let list = policies;
-    if (statusFilter === "overdue") list = list.filter(p => p.next_review_date && new Date(p.next_review_date) < today);
+    if (statusFilter === "overdue") list = list.filter(reviewDue);
     else if (statusFilter !== "all") list = list.filter(p => p.status === statusFilter);
     if (search.trim()) {
       const q = search.toLowerCase();
       list = list.filter(p => p.title.toLowerCase().includes(q) || (p.category ?? "").toLowerCase().includes(q));
     }
     return list;
-  }, [policies, statusFilter, search, today]);
+  }, [policies, statusFilter, search]);
 
   const published = policies.filter(p => p.status === "published");
 
@@ -1297,7 +1556,7 @@ export default function PoliciesPage() {
                 const vNum = typeof p.version === "number" ? p.version : (p as { version_count?: number }).version_count ?? 0;
                 const owner = users.find(u => u.id === p.owner_id);
                 const ownerName = owner ? `${owner.first_name} ${owner.last_name}`.trim() : null;
-                const overdue = isOverdue(p.next_review_date);
+                const overdue = reviewDue(p);
                 return (
                   <tr key={p.id} onClick={() => setSelected(p)}
                     className="hover:bg-gray-50 cursor-pointer transition-colors group">
@@ -1311,7 +1570,7 @@ export default function PoliciesPage() {
                             <p className="text-sm font-medium text-gray-900 group-hover:text-blue-700 transition-colors">{p.title}</p>
                             {overdue && (
                               <span className="inline-flex items-center gap-0.5 text-xs font-semibold px-1.5 py-0.5 rounded-full bg-red-100 text-red-600">
-                                <AlertTriangle className="w-2.5 h-2.5" />{t("policies.overdue_badge")}
+                                <AlertTriangle className="w-2.5 h-2.5" />{t("r2b.policies.review_due")}
                               </span>
                             )}
                           </div>

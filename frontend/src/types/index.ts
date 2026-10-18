@@ -387,6 +387,25 @@ export interface Policy extends BaseEntity {
   allowed_transitions?: Policy["status"][];
   /** The current version carries an approval by someone other than its author. */
   current_version_approved?: boolean;
+  /** Periodic review: a hand-set date survives a publish; the latest review. */
+  next_review_date_manual?: boolean | null;
+  last_reviewed_at?: string | null;
+  last_reviewed_by_id?: string | null;
+  last_reviewed_by_name?: string | null;
+  last_review_comment?: string | null;
+  /** Published and its next review date has passed. */
+  review_due?: boolean;
+}
+
+export interface PolicyReview {
+  id: string;
+  policy_id: string;
+  reviewed_by_id: string | null;
+  reviewed_by_name?: string | null;
+  reviewed_at: string;
+  comment: string;
+  previous_review_date: string | null;
+  next_review_date: string | null;
 }
 
 // ─── Vendor ──────────────────────────────────

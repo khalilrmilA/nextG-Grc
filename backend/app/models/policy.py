@@ -46,6 +46,15 @@ class Policy(Base):
     # Review schedule
     review_frequency_months: Mapped[int] = mapped_column(Integer, default=12)
     next_review_date: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    # R2 follow-up A-2: True when a person set next_review_date by hand — a
+    # publish then keeps it instead of computing today + frequency.
+    next_review_date_manual: Mapped[bool | None] = mapped_column(Boolean, nullable=True, default=False)
+    # The latest periodic review ("mark as reviewed"); the full trail is in policy_reviews.
+    last_reviewed_at: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    last_reviewed_by_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("users.id"), nullable=True
+    )
+    last_review_comment: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     # Governance lifecycle dates (RFP gap: "date de mise en vigueur" / "date d'expiration"
     # distinct from the review cycle). ISO date strings, matching this codebase's
@@ -100,6 +109,30 @@ class PolicyVersion(Base):
     pdf_s3_key: Mapped[str | None] = mapped_column(String(500), nullable=True)
 
     policy: Mapped["Policy"] = relationship("Policy", back_populates="versions")
+
+
+class PolicyReview(Base):
+    """One periodic review of a published policy (R2 follow-up A-2).
+
+    The reviewer confirms the text is still fit for purpose, says why in a
+    comment, and the next review date moves forward by the policy's frequency.
+    """
+    __tablename__ = "policy_reviews"
+
+    tenant_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("tenants.id"), nullable=False, index=True
+    )
+    policy_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("policies.id"), nullable=False, index=True
+    )
+    reviewed_by_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("users.id"), nullable=True
+    )
+    reviewed_at: Mapped[str] = mapped_column(String(30), nullable=False)
+    comment: Mapped[str] = mapped_column(Text, nullable=False)
+    # The date that was due when the review happened, and the one it set.
+    previous_review_date: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    next_review_date: Mapped[str | None] = mapped_column(String(20), nullable=True)
 
 
 class PolicyAttestation(Base):

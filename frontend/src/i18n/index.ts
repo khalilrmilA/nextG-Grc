@@ -15,6 +15,7 @@ import g5_audit_docs from "./sweep/g5_audit_docs";
 import g6_security_shell from "./sweep/g6_security_shell";
 import g7_exports from "./sweep/g7_exports";
 import r2_lifecycle from "./sweep/r2_lifecycle";
+import r2_followups from "./sweep/r2_followups";
 
 
 export type Language = "en" | "fr" | "ar";
@@ -87,7 +88,7 @@ i18n.addResourceBundle("fr", "translation", fixFr, true, false);
 i18n.addResourceBundle("ar", "translation", fixAr, true, false);
 
 // i18n sweep bundles (one per screen group) — non-destructive: existing strings win.
-for (const b of [g1_admin_account, g2_vendors, g3_compliance, g4_risk_gov, g5_audit_docs, g6_security_shell, g7_exports, r2_lifecycle]) {
+for (const b of [g1_admin_account, g2_vendors, g3_compliance, g4_risk_gov, g5_audit_docs, g6_security_shell, g7_exports, r2_lifecycle, r2_followups]) {
   i18n.addResourceBundle("en", "translation", b.en, true, false);
   i18n.addResourceBundle("fr", "translation", b.fr, true, false);
   i18n.addResourceBundle("ar", "translation", b.ar, true, false);

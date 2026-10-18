@@ -69,6 +69,15 @@ COLUMNS: dict[str, dict[str, dict[str, str]]] = {
     "action_items": {
         "recommendation_id": {"sqlite": "VARCHAR(36)", "postgresql": "VARCHAR(36)"},
     },
+    # Follow-up A-2 — policy periodic review: a hand-set review date survives a
+    # publish, and the latest review is kept on the policy (history: policy_reviews,
+    # a new table created by create_all()).
+    "policies": {
+        "next_review_date_manual": {"sqlite": "BOOLEAN", "postgresql": "BOOLEAN"},
+        "last_reviewed_at":        {"sqlite": "VARCHAR(30)", "postgresql": "VARCHAR(30)"},
+        "last_reviewed_by_id":     {"sqlite": "VARCHAR(36)", "postgresql": "VARCHAR(36)"},
+        "last_review_comment":     {"sqlite": "TEXT", "postgresql": "TEXT"},
+    },
 }
 
 

@@ -30,7 +30,7 @@ from app.models.control_translation import ControlTranslation
 from app.models.content_translation import ContentTranslation, ContentTranslationRequest  # machine-translation cache + on-demand queue
 from app.models.action_item_attachment import ActionItemAttachment
 from app.models.regulatory_feed import RegulatoryFeed, RegulatoryUpdateVersion
-from app.models.policy import Policy, PolicyVersion, PolicyAttestation
+from app.models.policy import Policy, PolicyVersion, PolicyAttestation, PolicyReview
 from app.models.vendor import Vendor, VendorAssessment, VendorRisk, VendorContract
 from app.models.contract_collaboration import ContractCollaboration, ContractMessage
 from app.models.asset import Asset
@@ -95,7 +95,7 @@ __all__ = [
     "ActionItem", "ActionItemStatus", "ActionItemPriority",
     "AuditorAssignment",
     "Audit", "AuditFinding", "AuditEvidence",
-    "Policy", "PolicyVersion", "PolicyAttestation",
+    "Policy", "PolicyVersion", "PolicyAttestation", "PolicyReview",
     "StoredFileVersion",
     "AccessDelegation", "AccessReviewCampaign", "AccessReviewItem", "CustomRole",
     "Vendor", "VendorAssessment", "VendorRisk", "VendorContract",

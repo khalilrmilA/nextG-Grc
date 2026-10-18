@@ -423,7 +423,9 @@ export default function AuditDetailPage() {
   // over the dossier. Read the entitlement instead and fall back to the ids.
   const canReadOrgGraph = hasFeature("asset_cartography");
   const navigate = useNavigate();
-  const { id: auditId = "" } = useParams<{ id: string }>();
+  // The route is `audits/:auditId` (App.tsx). Reading `id` left this empty, so
+  // loadAudit() returned early and the page spun forever (since d565c20).
+  const { auditId = "" } = useParams<{ auditId: string }>();
 
   const [audit, setAudit] = useState<Audit | null>(null);
   const [loading, setLoading] = useState(true);
