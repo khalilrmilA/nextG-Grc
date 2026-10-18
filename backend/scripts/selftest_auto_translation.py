@@ -32,6 +32,10 @@ if str(BACKEND_DIR) not in sys.path:
     sys.path.insert(0, str(BACKEND_DIR))
 
 _TMP = tempfile.mkdtemp(prefix="autotr-")
+# The temp dir holds a full copy of the database (~75 MB); it was never removed,
+# so every run left one behind in /tmp. Remove it on exit, pass or fail.
+import atexit
+atexit.register(shutil.rmtree, _TMP, ignore_errors=True)
 _API_DB = None
 if os.environ.get("GRC_TEST_DB_PATH"):
     _API_DB = os.path.join(_TMP, "api.db")
