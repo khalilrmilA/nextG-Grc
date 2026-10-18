@@ -184,7 +184,13 @@ export default function VendorAIModal({ vendorId, vendorName, vendorIndustry, ve
   async function approveAnalysis() {
     // Extract risk score from output (looks for "Score: X/10")
     const scoreMatch = output.match(/Score:\s*(\d+)\/10/);
-    const riskScore = scoreMatch ? Number.parseInt(scoreMatch[1], 10) : 5;
+    // No score in the report = nothing to approve. A fallback of 5 used to be saved,
+    // making an unassessed vendor look medium-risk.
+    if (!scoreMatch) {
+      setError(t("r2b.vendors.no_score_in_report"));
+      return;
+    }
+    const riskScore = Number.parseInt(scoreMatch[1], 10);
 
     setApproving(true);
     try {

@@ -724,6 +724,7 @@ async def prompt2(api: Api) -> None:
     s, v = await api.req("POST", "/vendors", who=vm, json={"name": "ST C3 Vendor", "country": "TN",
                                                           "contract_expiry": "2026-11-01"})
     vid = v["id"]
+    check(v.get("risk_score") is None, "a vendor created without an assessment has no score (not a default)", v.get("risk_score"))
     s, b = await api.req("POST", "/vendors", who=vm, lang="fr", json={"name": "st c3 vendor"})
     check(s == 409 and "registre" in str(b), "a second vendor with the same name is refused (fr)", b)
     body = b"Master services agreement. Liability capped at 12 months of fees." * 20

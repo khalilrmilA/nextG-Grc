@@ -1063,7 +1063,7 @@ export const kbEn: KbArticle[] = [
           "Click **Add 3rd Party** and enter the company details, services, tier, status, DPA and contract expiry. You can attach the contract for AI review.",
           "Click **Next: Questionnaire** and answer the 15 prescreen questions on security, compliance and operations.",
           "Click **Analyze with AI**, review the AI insights (risk level, strengths, concerns, red flags) and the suggested risk score, then click **Save 3rd Party**.",
-          "If the AI service is unavailable, click **Retry**, or **Continue without AI score**: the answers are saved unscored, you set the risk score yourself, and you can run **Reassess** later. If a later step fails, **Save** again finishes the onboarding without creating a second third party.",
+          "If the AI service is unavailable, click **Retry**, or **Continue without AI score**: the answers are saved unscored and the vendor shows **Not assessed** (no score) unless you enter one yourself; run **Reassess** later. If a later step fails, **Save** again finishes the onboarding without creating a second third party.",
         ],
       },
       {

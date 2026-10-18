@@ -1067,7 +1067,7 @@ export const kbFr: KbArticle[] = [
           "Cliquez sur **Ajouter un tiers** et saisissez les informations de l’entreprise, les services, le niveau, le statut, le DPA et l’expiration du contrat. Vous pouvez joindre le contrat pour une revue par l’IA.",
           "Cliquez sur **Next: Questionnaire** (étape suivante : questionnaire) et répondez aux 15 questions de présélection sur la sécurité, la conformité et les opérations.",
           "Cliquez sur **Analyze with AI** (analyser avec l’IA), examinez les conclusions de l’IA (niveau de risque, points forts, préoccupations, signaux d’alerte) et le score de risque proposé, puis cliquez sur **Save 3rd Party** (enregistrer le tiers).",
-          "Si le service d’IA est indisponible, cliquez sur **Réessayer**, ou **Continuer sans score IA** : les réponses sont enregistrées sans score, vous fixez vous-même le score de risque et pourrez lancer **Réévaluer** plus tard. Si une étape suivante échoue, **Enregistrer** à nouveau termine l’intégration sans créer de second tiers.",
+          "Si le service d’IA est indisponible, cliquez sur **Réessayer**, ou **Continuer sans score IA** : les réponses sont enregistrées sans score et le fournisseur apparaît **Non évalué** (aucun score) sauf si vous en saisissez un ; lancez **Réévaluer** plus tard. Si une étape suivante échoue, **Enregistrer** à nouveau termine l’intégration sans créer de second tiers.",
         ],
       },
       {

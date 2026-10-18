@@ -77,7 +77,10 @@ function AddVendorModal({ onClose, onSaved }: { readonly onClose: () => void; re
   const [step, setStep] = useState<1 | 2 | 3>(1);  // 1=info, 2=questionnaire, 3=AI insights
   const [form, setForm] = useState({
     name: "", industry: "Cloud Infrastructure", country: "", tier: "medium",
-    status: "active", risk_score: 10, dpa: false,
+    // No score until something assesses the vendor (the AI prescreen, or a score the
+    // user enters when the AI is unavailable): a default made an unassessed vendor
+    // look low-risk.
+    status: "active", risk_score: null as number | null, dpa: false,
     contract_expiry: "", services: "", website: "", notes: "",
   });
   const [contractFile, setContractFile] = useState<File | null>(null);
@@ -148,7 +151,7 @@ function AddVendorModal({ onClose, onSaved }: { readonly onClose: () => void; re
         country: form.country.trim().toUpperCase().slice(0, 2),
         risk_tier: form.tier,
         status: form.status,
-        risk_score: form.risk_score,
+        risk_score: form.risk_score ?? undefined,
         services_provided: form.services.trim() || undefined,
         has_data_processing_agreement: form.dpa,
         contract_expiry: form.contract_expiry || undefined,
@@ -162,7 +165,7 @@ function AddVendorModal({ onClose, onSaved }: { readonly onClose: () => void; re
       // AI the answers are kept unscored, to be re-run from Reassess.
       if (!done.current.assessment && (aiResult || skipAi)) {
         await vendorsApi.createAssessment(newVendor.id, aiResult
-          ? prescreenAssessmentPayload(aiResult, responses, form.risk_score)
+          ? prescreenAssessmentPayload(aiResult, responses, form.risk_score ?? prescreenToRegisterScore(aiResult.initial_risk_score))
           : { answers: responses, apply_score: false });
         done.current.assessment = true;
       }
@@ -261,18 +264,6 @@ function AddVendorModal({ onClose, onSaved }: { readonly onClose: () => void; re
             </div>
           </div>
 
-          <div className="bg-gray-50 rounded-xl p-4">
-            <div className="flex items-center justify-between mb-2">
-              <label htmlFor="v-riskscore" className="text-xs font-semibold text-gray-500 uppercase tracking-wide">{t("vendors.risk_score_label")}</label>
-              <span className={`text-sm font-bold px-2 py-0.5 rounded-lg ${riskScoreColor(form.risk_score)}`}>{form.risk_score}</span>
-            </div>
-            <input id="v-riskscore" type="range" min={1} max={40} value={form.risk_score}
-              onChange={e => setForm(f => ({ ...f, risk_score: +e.target.value }))}
-              className="w-full accent-blue-600" />
-            <div className="flex justify-between text-xs text-gray-300 mt-0.5">
-              <span>{t("vendors.risk_score_range")}</span><span>{t("vendors.risk_score_max")}</span>
-            </div>
-          </div>
 
           <div className="grid grid-cols-2 gap-3">
             <div>
@@ -333,14 +324,16 @@ function AddVendorModal({ onClose, onSaved }: { readonly onClose: () => void; re
           {step === 2 && <PrescreenQuestions responses={responses} onChange={setResponses} />}
 
           {/* STEP 3: AI Insights */}
-          {step === 3 && aiResult && <PrescreenInsights result={aiResult} suggestedScore={form.risk_score} />}
+          {step === 3 && aiResult && <PrescreenInsights result={aiResult} suggestedScore={form.risk_score ?? prescreenToRegisterScore(aiResult.initial_risk_score)} />}
           {step === 3 && !aiResult && skipAi && (
             <div className="space-y-3">
               <p className="text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">{t("r2b.vendors.no_ai_notice")}</p>
               <div>
                 <label htmlFor="v-manual-score" className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">{t("r2b.vendors.manual_score")}</label>
-                <input id="v-manual-score" type="number" min={1} max={40} value={form.risk_score}
-                  onChange={e => setForm(f => ({ ...f, risk_score: Math.max(1, Math.min(40, +e.target.value || 1)) }))}
+                {/* Optional: left empty, the vendor is saved with NO score ("Not assessed"). */}
+                <input id="v-manual-score" type="number" min={1} max={40} value={form.risk_score ?? ""}
+                  placeholder={t("r2b.vendors.not_assessed")}
+                  onChange={e => setForm(f => ({ ...f, risk_score: e.target.value === "" ? null : Math.max(1, Math.min(40, +e.target.value || 1)) }))}
                   className="w-32 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
               </div>
             </div>
@@ -605,7 +598,9 @@ function VendorDetailModal({ vendor, onClose, onRunAI, onChanged, onDeleted }: {
           {/* Stats */}
           <div className="grid grid-cols-3 gap-3">
             <div className="bg-gray-50 rounded-xl p-3 text-center">
-              <p className={`text-xl font-bold ${riskScoreColor(vendor.risk_score ?? 0)} rounded-lg px-2 inline-block`}>{vendor.risk_score}</p>
+              {vendor.risk_score == null
+                ? <p className="text-sm font-semibold text-gray-500 bg-gray-100 rounded-lg px-2 py-1 inline-block">{t("r2b.vendors.not_assessed")}</p>
+                : <p className={`text-xl font-bold ${riskScoreColor(vendor.risk_score)} rounded-lg px-2 inline-block`}>{vendor.risk_score}</p>}
               <p className="text-xs text-gray-400 mt-1">{t("vendors.risk_score_label")}</p>
             </div>
             <div className="bg-gray-50 rounded-xl p-3 text-center flex flex-col items-center justify-center">
@@ -812,7 +807,9 @@ export default function VendorsPage() {
     low:      vendors.filter(v => v.risk_tier === "low").length,
   };
   const missingDpa = vendors.filter(v => !v.has_data_processing_agreement).length;
-  const avgScore   = vendors.length > 0 ? Math.round(vendors.reduce((s, v) => s + (v.risk_score || 0), 0) / vendors.length) : 0;
+  // Unassessed vendors are left out of the average (they are not risk 0).
+  const scoredVendors = vendors.filter(v => v.risk_score != null);
+  const avgScore   = scoredVendors.length > 0 ? Math.round(scoredVendors.reduce((s, v) => s + (v.risk_score as number), 0) / scoredVendors.length) : null;
 
   return (
     <div className="p-8 max-w-7xl space-y-6">
@@ -840,7 +837,7 @@ export default function VendorsPage() {
       <div className="grid grid-cols-4 gap-4">
         {[
           { label: t("vendors.kpi_total"),        value: vendors.length,      sub: t("vendors.kpi_total_sub") },
-          { label: t("vendors.kpi_avg_score"),     value: avgScore,            sub: t("vendors.kpi_avg_score_sub") },
+          { label: t("vendors.kpi_avg_score"),     value: avgScore ?? "—",      sub: t("vendors.kpi_avg_score_sub") },
           { label: t("vendors.kpi_missing_dpa"),   value: missingDpa,          sub: t("vendors.kpi_missing_dpa_sub") },
           { label: t("vendors.kpi_under_review"),  value: vendors.filter(v => v.status === "under_review").length, sub: t("vendors.kpi_under_review_sub") },
         ].map(s => (
@@ -931,7 +928,9 @@ export default function VendorsPage() {
                   <td className="px-4 py-4 text-center">
                     <div className="flex items-center justify-center gap-1.5">
                       {(v.risk_score ?? 0) > 20 && <AlertTriangle className="w-3.5 h-3.5 text-red-500 flex-shrink-0" />}
-                      <span className={`text-sm font-bold px-2 py-0.5 rounded-lg ${riskScoreColor(v.risk_score ?? 0)}`}>{v.risk_score}</span>
+                      {v.risk_score == null
+                        ? <span className="text-xs font-medium px-2 py-0.5 rounded-lg bg-gray-100 text-gray-500">{t("r2b.vendors.not_assessed")}</span>
+                        : <span className={`text-sm font-bold px-2 py-0.5 rounded-lg ${riskScoreColor(v.risk_score)}`}>{v.risk_score}</span>}
                     </div>
                   </td>
                 )}
