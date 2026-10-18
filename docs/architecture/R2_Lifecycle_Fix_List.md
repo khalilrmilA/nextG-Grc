@@ -111,3 +111,24 @@ Size: **S** = small (hours to a couple of days), **M** = medium (about a week or
 - Snapshot `backend/grc_dev.db` before testing anything that writes. It holds real data and has no
   backups.
 - Keep the role arrays in `Layout.tsx` and `ROUTE_ROLES` in `App.tsx` in sync if you widen access.
+
+---
+
+## R2 implementation — production run-book (branch `feat/r2-lifecycle`, not deployed)
+
+All scripts are idempotent, dry-run by default (`--apply` writes), take `--db <sqlite path | async URL>`
+and work on SQLite and PostgreSQL. From `backend/`:
+
+1. Snapshot the database first (no scheduled backups exist):
+   `python3 -c "import sqlite3; s=sqlite3.connect('file:grc_dev.db?mode=ro', uri=True); d=sqlite3.connect('grc_dev_pre_r2.db'); s.backup(d)"`
+2. `venv/bin/python -m scripts.migrate_r2_lifecycle` → then `--apply` (22 columns on 6 tables).
+   **Before** restarting the backend: the models already declare these columns.
+3. `venv/bin/python -m scripts.backfill_control_status_source` → `--apply` (marks rows a person set;
+   2 on the 2026-10-18 snapshot). Run before any AI re-run on the new code.
+4. `venv/bin/python -m scripts.backfill_control_assessments` → `--apply` (1456 rows / 24 assessments
+   on the snapshot).
+5. `venv/bin/python -m scripts.backfill_action_item_findings` → `--apply` (0 on the snapshot).
+6. `pm2 restart grceye-backend`, then `cd frontend && npm run build` (the gateway serves `frontend/dist`).
+
+Tests: `scripts/selftest_r2_lifecycle.py` (103 checks) and `scripts/selftest_compliance_merge.py`
+(34 checks) on a migrated snapshot copy.
