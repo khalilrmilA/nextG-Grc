@@ -171,8 +171,11 @@ def _render_text_pdf(text: str, title: str = "Extracted Text", lang: str = "en")
             except Exception:  # noqa: BLE001 — fall back to Helvetica
                 pass
 
+    from app.services.pdf_arabic import BUNDLED_REGULAR
+
     arabic_font = latin_font
     for path in (
+        BUNDLED_REGULAR,  # shipped with the app, so OCR PDFs keep Arabic off the OVA too
         "/usr/share/fonts/opentype/fonts-hosny-amiri/Amiri-Regular.ttf",
         "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
     ):

@@ -254,6 +254,7 @@ CERTIFI_EOF
     --include-package-data=dateutil \
     --include-package-data=tzdata \
     --include-data-dir=app/templates=app/templates \
+    --include-data-dir=app/assets/fonts=app/assets/fonts \
     --nofollow-import-to=numpy \
     --nofollow-import-to=pgvector \
     --nofollow-import-to=pytest \

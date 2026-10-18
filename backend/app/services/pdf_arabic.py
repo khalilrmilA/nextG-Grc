@@ -7,10 +7,13 @@ boxes — every character lost, silently, in the artefact an auditor keeps.
 
 Two separate things have to happen, and neither is optional:
 
-**A font that has the glyphs.** Registered from the host's font set, preferring
-Amiri (a real Arabic typeface) and falling back to DejaVu Sans. If neither is
-present the module reports unavailable and callers keep their Latin font — a
-report that renders French correctly is better than one that fails to build.
+**A font that has the glyphs.** Amiri (a real Arabic typeface, SIL OFL 1.1) is
+bundled with the application under ``app/assets/fonts``, so every package —
+SaaS, Docker images, the appliance, a Windows dev box — renders Arabic without
+depending on what the host happens to have installed. Host fonts (Amiri, DejaVu
+Sans, Noto Sans Arabic) remain fallbacks. If none is present the module reports
+unavailable and callers keep their Latin font — a report that renders French
+correctly is better than one that fails to build.
 
 **Shaping and direction.** Arabic letters change form by position and run
 right-to-left, and ReportLab does neither. ``arabic_reshaper`` selects the
@@ -32,9 +35,21 @@ logger = logging.getLogger(__name__)
 ARABIC_FONT = "GRCArabic"
 ARABIC_FONT_BOLD = "GRCArabic-Bold"
 
-# Preferred first: Amiri is a designed Arabic face. DejaVu is the fallback that
-# ships almost everywhere and covers Arabic adequately.
+# The bundled copy comes first. Before it existed, Arabic PDFs rendered only on
+# the OVA (the one channel that installs fonts-hosny-amiri); every Docker image
+# and Windows host fell through to boxes. The folder is shipped as data by each
+# packaging channel (PyArmor copies non-.py files; Nuitka needs
+# --include-data-dir=app/assets/fonts in build ova/scripts/25-protect-app.sh).
+BUNDLED_FONT_DIR = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "assets", "fonts"
+)
+BUNDLED_REGULAR = os.path.join(BUNDLED_FONT_DIR, "Amiri-Regular.ttf")
+BUNDLED_BOLD = os.path.join(BUNDLED_FONT_DIR, "Amiri-Bold.ttf")
+
+# Then the host's fonts: Amiri is a designed Arabic face; DejaVu is the fallback
+# that ships almost everywhere and covers Arabic adequately.
 _FONT_CANDIDATES = (
+    (BUNDLED_REGULAR, BUNDLED_BOLD),
     ("/usr/share/fonts/opentype/fonts-hosny-amiri/Amiri-Regular.ttf",
      "/usr/share/fonts/opentype/fonts-hosny-amiri/Amiri-Bold.ttf"),
     ("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
@@ -80,7 +95,8 @@ def ensure_fonts() -> bool:
             return True
         logger.warning(
             "No Arabic-capable font found; PDFs will not render Arabic text. "
-            "Install fonts-hosny-amiri or fonts-dejavu-core."
+            "The bundled font is missing from %s (check the packaging channel "
+            "ships app/assets/fonts), and no host font is installed.", BUNDLED_FONT_DIR
         )
     except Exception as exc:  # noqa: BLE001 — never break PDF generation
         logger.warning("Arabic PDF font registration failed: %s", exc)
