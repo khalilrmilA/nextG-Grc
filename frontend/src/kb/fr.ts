@@ -206,7 +206,7 @@ export const kbFr: KbArticle[] = [
         heading: "Comment ajouter un risque",
         steps: [
           "Cliquez sur **Nouveau risque**.",
-          "Saisissez le **Titre du risque** et une description, puis choisissez une catégorie et un statut (Identifié, Évalué, Traitement planifié, Traitement en cours, Traité, Accepté, Clôturé).",
+          "Saisissez le **Titre du risque** et une description, puis choisissez une catégorie et un statut (Identifié, Évalué, Traitement planifié, Traitement en cours, Traité ou Accepté — un risque se clôture ensuite via **Modifier**).",
           "Réglez la vraisemblance et l’impact avec les curseurs et observez la mise à jour du score.",
           "Ajoutez des étiquettes (séparées par des virgules) et enregistrez.",
         ],
@@ -217,6 +217,15 @@ export const kbFr: KbArticle[] = [
           "Cliquez sur un risque pour ouvrir son détail.",
           "Dans **Appétence au risque**, cliquez sur **Modifier** pour définir le seuil d’appétence ainsi que la vraisemblance et l’impact cibles.",
           "Lorsque la cible est dans l’appétence, cliquez sur **Valider la cible** et ajoutez éventuellement des notes de calcul.",
+        ],
+      },
+      {
+        heading: "Comment modifier, clôturer, rouvrir ou supprimer un risque",
+        steps: [
+          "Cliquez sur un risque, puis sur **Modifier**. Le formulaire de création s’ouvre, avec la probabilité/l’impact résiduels et cibles, le propriétaire, la date de revue, les contrôles liés et le département / processus.",
+          "Pour clôturer un risque, passez son statut à **Clôturé** et enregistrez. Pour le rouvrir, choisissez un autre statut : un **Motif de réouverture** est obligatoire et reste dans l’historique.",
+          "**Supprimer** (RSSI uniquement) demande une confirmation. Un risque clôturé ou accepté ne peut pas être supprimé — il consigne une décision ; rouvrez-le d’abord s’il a été créé par erreur.",
+          "L’onglet **Historique** montre qui a changé quoi et quand ; **Voir les modifications** liste chaque champ modifié.",
         ],
       },
       {
@@ -256,6 +265,13 @@ export const kbFr: KbArticle[] = [
           "Cliquez sur **Critères de priorisation** pour définir le poids de la criticité des actifs, le poids de l’exposition réglementaire et le seuil d’alerte. Les scénarios au-dessus du seuil déclenchent une notification aux propriétaires et au RSSI.",
           "Triez la liste par **Priorité** pour voir ce qui compte le plus.",
           "Ouvrez **Historique des versions**, cliquez sur **Créer un instantané**, puis utilisez **Comparer** pour voir ce qui a changé entre deux versions.",
+        ],
+      },
+      {
+        heading: "Comment modifier ou supprimer un scénario",
+        steps: [
+          "Cliquez sur le crayon d’une ligne pour la modifier : réévaluez la probabilité/l’impact actuels et cibles, changez le traitement ou les menaces, vulnérabilités, actifs, incidents et contrôles liés. L’entrée liée du registre est réévaluée aussi.",
+          "Cliquez sur la corbeille pour supprimer un scénario (gestionnaires de risques et RSSI). Son état final est conservé dans le journal d’activité ; l’entrée liée du registre des risques est conservée et peut ensuite être clôturée séparément.",
         ],
       },
       {
@@ -320,7 +336,7 @@ export const kbFr: KbArticle[] = [
           "Cliquez sur **Nouveau traitement** et choisissez le risque.",
           "Liez les scénarios de risque si nécessaire et choisissez l’option : Réduire, Accepter, Transférer ou Éviter.",
           "Saisissez une description, le pourcentage d’avancement, l’échéance et le coût estimé.",
-          "Pour **Transférer**, indiquez à qui le risque est transféré (p. ex. une police d’assurance). Pour **Accepter**, une justification d’acceptation est obligatoire.",
+          "Pour **Transférer**, indiquez à qui le risque est transféré (p. ex. une police d’assurance). Chaque option exige une justification (pour **Accepter**, la justification d’acceptation).",
         ],
       },
       {
@@ -540,6 +556,16 @@ export const kbFr: KbArticle[] = [
         ],
       },
       {
+        heading: "Décisions humaines, propriétaires et validité des preuves",
+        steps: [
+          "Une nouvelle évaluation liste toutes les exigences dès sa création : vous pouvez évaluer à la main avant toute analyse IA.",
+          "Un statut fixé par une personne est marqué **Revue**. Relancer l’IA ne le modifie jamais et ne supprime jamais de preuve : l’avis de l’IA apparaît comme **L’IA suggère …** avec un bouton **Accepter**. Avant une relance, l’onglet de téléversement indique combien de décisions seront conservées.",
+          "Les responsables conformité agissent sur toutes les exigences ; un propriétaire de contrôle évalue et dépose des preuves uniquement pour les exigences qui lui sont attribuées (**Seulement mes exigences**).",
+          "En déposant une preuve, renseignez **Valable jusqu’au**. Des badges signalent les preuves expirées ou bientôt expirées, une exigence dont la seule preuve a expiré est signalée, et des rappels partent 30, 7 et 0 jours avant l’expiration.",
+          "Les RSSI peuvent ouvrir **Fichiers supprimés** pour télécharger toute version de preuve, document ou contrat supprimé.",
+        ],
+      },
+      {
         heading: "Astuces",
         tips: [
           "Une preuve rattachée à un contrôle est automatiquement partagée avec les contrôles équivalents des autres référentiels ; voir l’onglet **Multi-référentiels**.",
@@ -743,6 +769,14 @@ export const kbFr: KbArticle[] = [
         ],
       },
       {
+        heading: "Comment fonctionnent les acceptations de risque",
+        steps: [
+          "Cliquez sur **Nouvelle acceptation de risque**, indiquez un nom, une justification et une date d’expiration, puis choisissez les **Risques acceptés** et les **Scénarios de risque acceptés**.",
+          "Un autre RSSI l’approuve (vous ne pouvez pas statuer sur votre propre demande). À l’approbation, chaque risque couvert passe à **Accepté**.",
+          "**Rejeter** ou **Révoquer** demandent un motif. La révocation (ou l’arrivée de la date d’expiration) remet chaque risque au statut qu’il avait avant, sauf si une autre acceptation active le couvre encore.",
+        ],
+      },
+      {
         heading: "Astuces",
         tips: [
           "Principe des quatre yeux : la personne qui a demandé une exception ne peut pas l’approuver.",
@@ -813,6 +847,13 @@ export const kbFr: KbArticle[] = [
         ],
       },
       {
+        heading: "Comment planifier des actions pour une recommandation",
+        steps: [
+          "Cliquez sur **Ajouter une action** sur une recommandation ouverte (RSSI). L’action est liée au constat de la recommandation.",
+          "Son avancement alimente la recommandation (p. ex. 0/1) et elle figure dans la section **Plan d’action** du rapport d’audit.",
+        ],
+      },
+      {
         heading: "Astuces",
         tips: ["Filtrez par statut, responsable ou audit, ou cochez **En retard uniquement** avant une réunion de suivi."],
       },
@@ -864,7 +905,7 @@ export const kbFr: KbArticle[] = [
         steps: [
           "Cliquez sur **Nouvelle politique**, renseignez les informations et enregistrez.",
           "Dans **Contenu**, rédigez le texte ou utilisez **Rédiger avec l’IA**, puis cliquez sur **Enregistrer nouvelle version** avec un résumé des modifications.",
-          "Dans **Vue d’ensemble**, utilisez le **Workflow d’approbation** : **Soumettre pour révision**, puis **Approuver**, puis **Publier**.",
+          "Dans **Vue d’ensemble**, utilisez le **Workflow d’approbation** : **Soumettre pour révision** ; une fois la version approuvée par une autre personne, **Approuver**, puis **Publier**.",
         ],
       },
       {
@@ -876,11 +917,48 @@ export const kbFr: KbArticle[] = [
         ],
       },
       {
+        heading: "Règles d’approbation et retrait",
+        steps: [
+          "Une version ne peut pas être approuvée par la personne qui l’a rédigée. Dans **Historique des versions**, un autre gestionnaire de politiques ou RSSI ouvre la version actuelle et clique sur **Approuver cette version**.",
+          "**Approuver** et **Publier** n’apparaissent qu’une fois cette seconde approbation obtenue. Ajouter ou restaurer une version renvoie une politique approuvée ou publiée en revue.",
+          "Seules les transitions permises depuis le statut actuel sont proposées (p. ex. **Renvoyer en revue**, **Retirer**). Le retrait demande une confirmation et conserve versions et prises de connaissance ; une politique retirée peut être réactivée en brouillon.",
+          "Les employés acceptent les politiques qui leur sont attribuées depuis **Mes politiques** ; l’onglet **Attestations** se met à jour à chaque ouverture. Des rappels sont envoyés pour les dates de revue et les prises de connaissance en retard.",
+        ],
+      },
+      {
         heading: "Astuces",
         tips: [
           "**Restore this version** (restaurer cette version), dans l’historique des versions, rétablit un texte antérieur.",
           "Utilisez **Exporter en PDF** pour partager une politique en dehors de la plateforme.",
           "Besoin d’un premier jet ? Cliquez sur **Ouvrir le générateur**.",
+        ],
+      },
+    ],
+  },
+  {
+    id: "my-policies",
+    route: "/my-policies",
+    group: "overview",
+    title: "Mes politiques",
+    summary: "Les politiques que vous devez lire et accepter, avec leur texte et leur échéance.",
+    keywords: ["mes politiques", "prise de connaissance", "attestation", "accepter", "lire"],
+    sections: [
+      {
+        heading: "À quoi ça sert",
+        body: "Chaque utilisateur — quel que soit son rôle — trouve ici les politiques dont un gestionnaire lui demande de prendre connaissance : d’abord celles en attente (les retards sont signalés), puis celles déjà acceptées.",
+      },
+      {
+        heading: "Comment accepter une politique",
+        steps: [
+          "Ouvrez **Mes politiques** dans la barre latérale.",
+          "Cliquez sur une politique pour lire la version qui vous a été soumise.",
+          "Cliquez sur **J’ai lu et j’accepte cette politique**. La date est enregistrée et le gestionnaire la voit dans l’onglet Attestations.",
+        ],
+      },
+      {
+        heading: "Astuces",
+        tips: [
+          "Vous recevez un rappel lorsqu’une prise de connaissance dépasse son échéance.",
         ],
       },
     ],
@@ -982,6 +1060,15 @@ export const kbFr: KbArticle[] = [
           "Le RSSI clique sur **Révision des contrats**, ouvre le contrat, lit les conclusions de l’IA et clique sur **Approve Contract** (approuver) ou **Reject Contract** (rejeter ; commentaires obligatoires en cas de rejet).",
           "Une fois le contrat approuvé, cliquez sur **Send to Vendor** (envoyer au fournisseur).",
           "Utilisez **Start Collaboration with Vendor** pour négocier : partagez un lien, travaillez ensemble sur les points ouverts et un plan, échangez par messagerie, cliquez sur **Mark Agreed** (marquer comme convenu), puis les deux parties signent l’accord en saisissant leur nom complet.",
+        ],
+      },
+      {
+        heading: "Comment maintenir un tiers et mettre fin à la relation",
+        steps: [
+          "Ouvrez un tiers et cliquez sur **Modifier** pour changer son profil, son niveau de risque, son statut, l’échéance du contrat ou ses contacts.",
+          "**Téléverser un contrat** ajoute une nouvelle version : elle suit le même parcours de revue IA, revue RSSI et envoi au fournisseur. Saisissez en même temps la nouvelle échéance — elle déclenche les alertes d’expiration.",
+          "Dans l’onglet **Évaluations**, **Réévaluer** relance le questionnaire de présélection. Chaque présélection et analyse IA approuvée y est conservée ; le score suit la plus récente.",
+          "**Mettre fin** clôt la relation avec une date d’effet et un motif (sortie en cours, ou inactif). **Supprimer** est refusé dès qu’un contrat porte une décision du RSSI ou une signature — mettez fin à la relation à la place.",
         ],
       },
       {

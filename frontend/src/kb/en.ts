@@ -202,7 +202,7 @@ export const kbEn: KbArticle[] = [
         heading: "How to add a risk",
         steps: [
           "Click **New Risk**.",
-          "Enter the **Risk Title** and a description, then choose a Category and Status (Identified, Assessed, Treatment Planned, Treatment In Progress, Treated, Accepted, Closed).",
+          "Enter the **Risk Title** and a description, then choose a Category and Status (Identified, Assessed, Treatment Planned, Treatment In Progress, Treated or Accepted — a risk is closed later, from **Edit**).",
           "Set Likelihood and Impact with the sliders and watch the score update.",
           "Add tags (comma-separated) and save.",
         ],
@@ -213,6 +213,15 @@ export const kbEn: KbArticle[] = [
           "Click a risk to open its detail.",
           "In **Risk Appetite**, click **Edit** to set the appetite threshold and the target likelihood and impact.",
           "When the target is within appetite, click **Validate target** and add optional calculation notes.",
+        ],
+      },
+      {
+        heading: "How to edit, close, reopen or delete a risk",
+        steps: [
+          "Click a risk, then **Edit**. The same form as creation opens, with residual and target likelihood/impact, owner, review date, linked controls and department / process.",
+          "To close a risk, set its status to **Closed** and save. To reopen it, choose another status: a **Reason for reopening** is required and is kept in the history.",
+          "**Delete** (CISO only) asks for confirmation. A closed or accepted risk cannot be deleted — it records a decision; reopen it first if it was created in error.",
+          "Open the **History** tab to see who changed what and when; **Show changes** lists every field that moved.",
         ],
       },
       {
@@ -252,6 +261,13 @@ export const kbEn: KbArticle[] = [
           "Click **Prioritisation criteria** to set the asset criticality weight, regulatory exposure weight and the alert threshold. Scenarios above the threshold notify owners and the CISO.",
           "Sort the list by **Priority** to see what matters most.",
           "Open **Version History**, click **Snapshot now**, and use **Compare** to see what changed between two versions.",
+        ],
+      },
+      {
+        heading: "How to edit or delete a scenario",
+        steps: [
+          "Click the pencil on a row to edit it: re-score current and target probability/impact, change the treatment or the linked threats, vulnerabilities, assets, incidents and controls. The linked register entry is re-scored too.",
+          "Click the bin to delete a scenario (risk managers and CISOs). Its final state is kept in the activity log; the linked risk-register entry is kept and can then be closed on its own.",
         ],
       },
       {
@@ -316,7 +332,7 @@ export const kbEn: KbArticle[] = [
           "Click **New treatment** and choose the risk.",
           "Link risk scenarios if relevant and choose the option: Mitigate, Accept, Transfer or Avoid.",
           "Enter a description, progress %, due date and estimated cost.",
-          "For **Transfer**, say who the risk is transferred to (e.g. an insurance policy). For **Accept**, an acceptance justification is required.",
+          "For **Transfer**, say who the risk is transferred to (e.g. an insurance policy). Every option needs a justification (for **Accept**, the acceptance justification).",
         ],
       },
       {
@@ -536,6 +552,16 @@ export const kbEn: KbArticle[] = [
         ],
       },
       {
+        heading: "Human decisions, owners and evidence validity",
+        steps: [
+          "A new assessment lists every requirement from the start, so you can assess by hand before any AI run.",
+          "A status set by a person is marked **Reviewed**. Re-running the AI never changes it and never removes evidence: the AI's opinion appears as **AI suggests …** with an **Accept** button. Before a re-run, the Upload tab says how many decisions will be kept.",
+          "Compliance managers act on every requirement; a control owner assesses and uploads evidence only for the requirements assigned to them (**Only requirements I own**).",
+          "When uploading evidence, set **Valid until**. Badges show expired or soon-expiring proof, a requirement whose only evidence has expired is flagged, and reminders go out 30, 7 and 0 days before expiry.",
+          "CISOs can open **Deleted files** to download any removed evidence, document or contract version.",
+        ],
+      },
+      {
         heading: "Tips",
         tips: [
           "Evidence you attach to one control is shared automatically with equivalent controls in other frameworks; see the **Cross-Framework** tab.",
@@ -739,6 +765,14 @@ export const kbEn: KbArticle[] = [
         ],
       },
       {
+        heading: "How risk acceptances work",
+        steps: [
+          "Click **New Risk Acceptance**, give a name, justification and expiry date, and pick the **Risks accepted** and **Risk scenarios accepted**.",
+          "Another CISO approves it (you cannot decide on your own request). On approval each covered risk moves to **Accepted**.",
+          "**Reject** or **Revoke** both ask for a reason. Revoking (or the expiry date passing) returns each risk to the status it had before, unless another active acceptance still covers it.",
+        ],
+      },
+      {
         heading: "Tips",
         tips: [
           "Four-eyes rule: the person who requested an exception cannot approve it.",
@@ -809,6 +843,13 @@ export const kbEn: KbArticle[] = [
         ],
       },
       {
+        heading: "How to plan actions for a recommendation",
+        steps: [
+          "Click **Add action** on an open recommendation (CISO). The action is linked to the recommendation's finding.",
+          "Its progress feeds the recommendation (e.g. 0/1) and it appears in the **Action Plan** section of the audit report.",
+        ],
+      },
+      {
         heading: "Tips",
         tips: ["Filter by status, owner or audit, or tick **Overdue only** before a follow-up meeting."],
       },
@@ -860,7 +901,7 @@ export const kbEn: KbArticle[] = [
         steps: [
           "Click **New Policy**, fill in the details and save.",
           "On **Content**, write the text or use **Write with AI**, then **Save New Version** with a change summary.",
-          "On **Overview**, use the **Approval Workflow**: **Submit for Review**, then **Approve**, then **Publish**.",
+          "On **Overview**, use the **Approval Workflow**: **Submit for Review**; once another person has approved the version, **Approve**, then **Publish**.",
         ],
       },
       {
@@ -872,11 +913,48 @@ export const kbEn: KbArticle[] = [
         ],
       },
       {
+        heading: "Approval rules and retirement",
+        steps: [
+          "A version cannot be approved by the person who wrote it. In **Version History**, another policy manager or CISO opens the current version and clicks **Approve this version**.",
+          "**Approve** and **Publish** appear only once the current version carries that second approval. Adding or restoring a version sends an approved or published policy back to review.",
+          "Only the moves allowed from the current status are offered (e.g. **Back to review**, **Retire**). Retiring asks for confirmation and keeps versions and acknowledgements; a retired policy can be revived as a draft.",
+          "Employees acknowledge the policies assigned to them from **My Policies**; the **Attestations** tab updates each time you open it. Reminders go out for review dates and overdue acknowledgements.",
+        ],
+      },
+      {
         heading: "Tips",
         tips: [
           "**Restore version** in Version History brings back an earlier text.",
           "Use **Export PDF** to share a policy outside the platform.",
           "Need a first draft? Click **Open Generator**.",
+        ],
+      },
+    ],
+  },
+  {
+    id: "my-policies",
+    route: "/my-policies",
+    group: "overview",
+    title: "My Policies",
+    summary: "The policies you are asked to read and accept, with their text and due date.",
+    keywords: ["my policies", "acknowledge", "attestation", "accept", "read"],
+    sections: [
+      {
+        heading: "What it’s for",
+        body: "Every user — whatever their role — finds here the policies a manager asked them to acknowledge: pending ones first (overdue ones flagged), then those already accepted.",
+      },
+      {
+        heading: "How to acknowledge a policy",
+        steps: [
+          "Open **My Policies** from the sidebar.",
+          "Click a policy to read the version you were asked to accept.",
+          "Click **I have read and accept this policy**. The date is recorded and the policy manager sees it in the Attestations tab.",
+        ],
+      },
+      {
+        heading: "Tips",
+        tips: [
+          "You receive a reminder when an acknowledgement is past its due date.",
         ],
       },
     ],
@@ -978,6 +1056,15 @@ export const kbEn: KbArticle[] = [
           "The CISO clicks **Contract Review**, opens the contract, reads the AI findings and clicks **Approve Contract** or **Reject Contract** (comments required to reject).",
           "Once approved, click **Send to Vendor**.",
           "Use **Start Collaboration with Vendor** to negotiate: share a link, work on issues and a plan together, chat, **Mark Agreed**, then both sides sign the agreement by typing their full name.",
+        ],
+      },
+      {
+        heading: "How to maintain and offboard a third party",
+        steps: [
+          "Open a third party and click **Edit** to change its profile, risk tier, status, contract expiry or contact details.",
+          "**Upload contract** adds a new contract version: it goes through the same AI review, CISO review and send-to-vendor flow. Set the new contract expiry at the same time — it drives the expiry alerts.",
+          "On the **Assessments** tab, **Reassess** runs the prescreen questionnaire again. Every prescreen and approved AI analysis is kept there; the risk score follows the latest one.",
+          "**Offboard** ends the relationship with an effective date and a reason (offboarding in progress, or inactive). **Delete** is refused once a contract carries a CISO decision or a signature — offboard instead.",
         ],
       },
       {
