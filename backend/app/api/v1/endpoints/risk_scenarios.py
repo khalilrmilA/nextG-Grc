@@ -43,6 +43,8 @@ class ScenarioCreate(BaseModel):
     appetite_threshold: float | None = None
     next_review_date: str | None = None
     regulatory_exposure_weight: float | None = None
+    # Was accepted by PATCH only — a scenario created with incident links lost them.
+    linked_incident_ids: list[str] = []
 
 class ScenarioUpdate(BaseModel):
     name: str | None = None; description: str | None = None; treatment: str | None = None
@@ -425,6 +427,7 @@ async def create_scenario(body: ScenarioCreate, db: AsyncSession = Depends(get_d
     # same flag as the risk-register version.
     if body.appetite_threshold is not None:
         await _assert_feature(db, tenant_id, user, "risk_appetite")
+    await _assert_incidents_in_tenant(db, tenant_id, body.linked_incident_ids)
 
     definition, _ = await risk_scoring.resolve_matrix(db, tenant_id)
     ref_id = await _next_ref_id(db, tenant_id)
@@ -448,6 +451,7 @@ async def create_scenario(body: ScenarioCreate, db: AsyncSession = Depends(get_d
         tags=body.tags, appetite_threshold=body.appetite_threshold,
         next_review_date=body.next_review_date,
         regulatory_exposure_weight=reg_weight,
+        linked_incident_ids=list(body.linked_incident_ids),
         ref_id=ref_id,
         priority_score=priority_score,
     )

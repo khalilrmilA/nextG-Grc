@@ -9,7 +9,10 @@ from app.core.database import get_db
 from app.api.v1.dependencies.auth import get_current_user, get_tenant_id, require_roles
 from app.models.user import User, UserRole
 from app.models.security_exception import SecurityException, ExceptionStatus, RiskAcceptance
+from app.models.risk import Risk, RiskStatus
+from app.models.risk_scenario import RiskScenario
 from app.services.activity_chain import log_system_activity
+from app.services import risk_versioning
 
 router = APIRouter()
 
@@ -38,8 +41,11 @@ def _is_past(expiration_date: str | None) -> bool:
     return expiration_date[:10] < date.today().isoformat()
 
 
-async def _expire_due(db: AsyncSession, stmt, entity_type: str) -> list:
+async def _expire_due(db: AsyncSession, stmt, entity_type: str, on_expire=None) -> list:
     """Run `stmt`, stamping EXPIRED on anything whose window has closed.
+
+    ``on_expire(db, row)`` runs for each newly expired row inside the same
+    transaction (risk acceptances use it to hand their risks back).
 
     Idempotent and convergent: both uvicorn workers compute the same value from
     the same stored date, and the write happens only on the transition, so the
@@ -57,6 +63,9 @@ async def _expire_due(db: AsyncSession, stmt, entity_type: str) -> list:
     ]
     for r in changed:
         r.status = ExceptionStatus.EXPIRED.value
+    if on_expire is not None:
+        for r in changed:
+            await on_expire(db, r)
     try:
         await db.commit()
     except Exception:
@@ -142,12 +151,18 @@ class RACreate(BaseModel):
     risk_scenario_ids: list[str] = []; risk_ids: list[str] = []
     expiration_date: str; conditions: str | None = None
 
+class RADecision(BaseModel):
+    reason: str
+
 class RAOut(BaseModel):
     id: str; tenant_id: str; name: str; description: str | None; justification: str
     status: str; risk_scenario_ids: list; risk_ids: list
     requested_by_id: str; approver_id: str | None; approved_at: str | None
     expiration_date: str; review_date: str | None
     residual_risk_level: str | None; conditions: str | None
+    rejection_reason: str | None = None
+    revoked_by_id: str | None = None; revoked_at: str | None = None
+    revocation_reason: str | None = None
     created_at: datetime; updated_at: datetime
     is_expired: bool = False
     model_config = {"from_attributes": True}
@@ -235,6 +250,97 @@ async def reject_exception(
     await db.commit(); await db.refresh(e)
     return SEOut.model_validate(e)
 
+# ── Risk Acceptance ↔ risk register ──────────────────────────────────────
+# An approved acceptance IS the risk decision: each risk it covers (directly, or
+# as the register entry of a covered scenario) moves to `accepted`, and goes
+# back to the status it had before when the acceptance is revoked or lapses.
+
+async def _covered_risks(db: AsyncSession, tenant_id: str, a: RiskAcceptance) -> list[Risk]:
+    ids = set(a.risk_ids or [])
+    if a.risk_scenario_ids:
+        rows = await db.execute(select(RiskScenario.linked_risk_id).where(
+            RiskScenario.tenant_id == tenant_id, RiskScenario.id.in_(list(a.risk_scenario_ids))))
+        ids |= {r[0] for r in rows if r[0]}
+    if not ids:
+        return []
+    return list((await db.execute(
+        select(Risk).where(Risk.tenant_id == tenant_id, Risk.id.in_(list(ids)))
+    )).scalars().all())
+
+
+def _status_value(risk: Risk) -> str:
+    return getattr(risk.status, "value", risk.status)
+
+
+async def _accept_covered_risks(db: AsyncSession, a: RiskAcceptance, actor: User) -> None:
+    prior: dict[str, str] = {}
+    for risk in await _covered_risks(db, a.tenant_id, a):
+        current = _status_value(risk)
+        # A closed risk is already decided; one accepted by another acceptance
+        # has nothing to record (and its prior status belongs to that one).
+        if current in (RiskStatus.CLOSED.value, RiskStatus.ACCEPTED.value):
+            continue
+        prior[risk.id] = current
+        await risk_versioning.archive(
+            db, risk, actor, change_reason=f"Risk acceptance approved: {a.name}",
+            transition_from=current, transition_to=RiskStatus.ACCEPTED.value)
+        risk.status = RiskStatus.ACCEPTED
+    a.prior_risk_statuses = prior
+
+
+async def _release_covered_risks(db: AsyncSession, a: RiskAcceptance, actor: User | None, why: str) -> None:
+    """Hand each risk back after `a` stopped being live (revoked / expired).
+
+    A risk still covered by ANOTHER live acceptance stays accepted, and a risk
+    someone has moved since (e.g. closed it) is left alone.
+    """
+    others = (await db.execute(select(RiskAcceptance).where(
+        RiskAcceptance.tenant_id == a.tenant_id, RiskAcceptance.id != a.id,
+        RiskAcceptance.status == "approved"))).scalars().all()
+    still_covered: set[str] = set()
+    for o in others:
+        if not _is_past(o.expiration_date):
+            still_covered |= {r.id for r in await _covered_risks(db, a.tenant_id, o)}
+    prior = a.prior_risk_statuses or {}
+    for risk in await _covered_risks(db, a.tenant_id, a):
+        if _status_value(risk) != RiskStatus.ACCEPTED.value or risk.id in still_covered:
+            continue
+        back = prior.get(risk.id) or RiskStatus.ASSESSED.value
+        if back == RiskStatus.ACCEPTED.value:
+            back = RiskStatus.ASSESSED.value
+        await risk_versioning.archive(
+            db, risk, actor, change_reason=f"Risk acceptance {why}: {a.name}",
+            transition_from=RiskStatus.ACCEPTED.value, transition_to=back)
+        risk.status = RiskStatus(back)
+
+
+async def _release_on_expiry(db: AsyncSession, a: RiskAcceptance) -> None:
+    await _release_covered_risks(db, a, None, "expired")
+
+
+async def _assert_targets_in_tenant(db: AsyncSession, tenant_id: str, body: RACreate) -> None:
+    if body.risk_ids:
+        found = {r[0] for r in await db.execute(select(Risk.id).where(
+            Risk.tenant_id == tenant_id, Risk.id.in_(body.risk_ids)))}
+        missing = [i for i in body.risk_ids if i not in found]
+        if missing:
+            raise HTTPException(422, f"Unknown risk id(s) for this tenant: {', '.join(missing)}")
+    if body.risk_scenario_ids:
+        found = {r[0] for r in await db.execute(select(RiskScenario.id).where(
+            RiskScenario.tenant_id == tenant_id, RiskScenario.id.in_(body.risk_scenario_ids)))}
+        missing = [i for i in body.risk_scenario_ids if i not in found]
+        if missing:
+            raise HTTPException(422, f"Unknown risk scenario id(s) for this tenant: {', '.join(missing)}")
+
+
+async def _load_acceptance(db: AsyncSession, aid: str, tenant_id: str) -> RiskAcceptance:
+    a = (await db.execute(select(RiskAcceptance).where(
+        RiskAcceptance.id == aid, RiskAcceptance.tenant_id == tenant_id))).scalar_one_or_none()
+    if not a:
+        raise HTTPException(404, "Acceptance not found")
+    return a
+
+
 # ── Risk Acceptance endpoints ────────────────────────────────────────────
 @router.get("/acceptances", response_model=list[RAOut])
 async def list_acceptances(db: AsyncSession = Depends(get_db), _: User = Depends(get_current_user), tenant_id: str = Depends(get_tenant_id)):
@@ -242,11 +348,12 @@ async def list_acceptances(db: AsyncSession = Depends(get_db), _: User = Depends
         select(RiskAcceptance)
         .where(RiskAcceptance.tenant_id == tenant_id)
         .order_by(RiskAcceptance.created_at.desc())
-    ), "risk_acceptance")
+    ), "risk_acceptance", on_expire=_release_on_expiry)
     return [RAOut.model_validate(a) for a in rows]
 
 @router.post("/acceptances", response_model=RAOut, status_code=201)
 async def create_acceptance(body: RACreate, db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user), tenant_id: str = Depends(get_tenant_id)):
+    await _assert_targets_in_tenant(db, tenant_id, body)
     a = RiskAcceptance(tenant_id=tenant_id, name=body.name, description=body.description,
                        justification=body.justification, risk_scenario_ids=body.risk_scenario_ids,
                        risk_ids=body.risk_ids, requested_by_id=user.id,
@@ -277,5 +384,50 @@ async def approve_acceptance(
         raise HTTPException(
             409, "This acceptance's expiration date has already passed. Extend it before approving.")
     a.status = "approved"; a.approver_id = user.id; a.approved_at = datetime.utcnow().isoformat()
+    await _accept_covered_risks(db, a, user)
+    await db.commit(); await db.refresh(a)
+    return RAOut.model_validate(a)
+
+@router.patch("/acceptances/{aid}/reject", response_model=RAOut)
+async def reject_acceptance(
+    aid: str,
+    body: RADecision,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_roles(UserRole.CISO)),
+    tenant_id: str = Depends(get_tenant_id),
+):
+    """Refuse a pending acceptance. Same four-eyes rule as approval."""
+    if not body.reason.strip():
+        raise HTTPException(422, "A reason is required to reject a risk acceptance.")
+    a = await _load_acceptance(db, aid, tenant_id)
+    if a.requested_by_id == user.id:
+        raise HTTPException(403, "You cannot reject your own risk acceptance (four-eyes principle).")
+    if a.status != "pending":
+        raise HTTPException(409, f"Cannot reject acceptance in status '{a.status}'")
+    a.status = "rejected"; a.approver_id = user.id; a.rejection_reason = body.reason.strip()
+    await db.commit(); await db.refresh(a)
+    return RAOut.model_validate(a)
+
+@router.patch("/acceptances/{aid}/revoke", response_model=RAOut)
+async def revoke_acceptance(
+    aid: str,
+    body: RADecision,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_roles(UserRole.CISO)),
+    tenant_id: str = Depends(get_tenant_id),
+):
+    """Withdraw an approved acceptance before its expiry. Its own status,
+    `revoked`, rather than `expired`: a lapse and a decision are different facts,
+    and the decision has an author and a reason worth keeping. The covered risks
+    return to the status they had before the acceptance."""
+    if not body.reason.strip():
+        raise HTTPException(422, "A reason is required to revoke a risk acceptance.")
+    a = await _load_acceptance(db, aid, tenant_id)
+    if a.status != "approved":
+        raise HTTPException(409, f"Cannot revoke acceptance in status '{a.status}'")
+    a.status = ExceptionStatus.REVOKED.value
+    a.revoked_by_id = user.id; a.revoked_at = datetime.utcnow().isoformat()
+    a.revocation_reason = body.reason.strip()
+    await _release_covered_risks(db, a, user, "revoked")
     await db.commit(); await db.refresh(a)
     return RAOut.model_validate(a)

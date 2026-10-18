@@ -71,7 +71,7 @@ class RiskAcceptance(Base):
     name: Mapped[str] = mapped_column(String(500), nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     justification: Mapped[str] = mapped_column(Text, nullable=False)
-    status: Mapped[str] = mapped_column(String(30), default="pending")  # pending, approved, rejected, expired
+    status: Mapped[str] = mapped_column(String(30), default="pending")  # pending, approved, rejected, expired, revoked
 
     # What risks are being accepted
     risk_scenario_ids: Mapped[list] = mapped_column(JSON, default=list)
@@ -89,3 +89,14 @@ class RiskAcceptance(Base):
     # Conditions
     residual_risk_level: Mapped[str | None] = mapped_column(String(20), nullable=True)
     conditions: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    # Decisions after the request (scripts/migrate_r2_lifecycle.py adds these).
+    rejection_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Revoked = withdrawn by a decision before the window closed; distinct from
+    # expired (the window lapsed), so who withdrew it and why are kept.
+    revoked_by_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    revoked_at: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    revocation_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # {risk_id: status the risk had before this acceptance set it to "accepted"},
+    # so revoke / expiry can put each risk back where it was.
+    prior_risk_statuses: Mapped[dict | None] = mapped_column(JSON, nullable=True)

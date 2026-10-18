@@ -178,6 +178,8 @@ export interface Risk extends BaseEntity {
   target_validated_at?: string | null;
   target_calculation_notes?: string | null;
   reopen_reason?: string | null;
+  next_review_date?: string | null;
+  last_reviewed_at?: string | null;
   // STB gap 19.d — département / processus porteur du risque
   org_entity_id?: string | null;
   business_process_id?: string | null;

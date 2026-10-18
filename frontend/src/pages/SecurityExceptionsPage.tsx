@@ -1,7 +1,9 @@
 import { useState, useEffect } from "react";
-import { Plus, Search, X, Loader2, ShieldOff, CheckCircle, XCircle, AlertTriangle } from "lucide-react";
+import { Plus, Search, X, Loader2, ShieldOff, CheckCircle, XCircle, AlertTriangle, Undo2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { securityApi, usersApi } from "@/api/endpoints";
+import { securityApi, usersApi, risksApi, riskScenariosApi } from "@/api/endpoints";
+import { MultiSelect, type MultiSelectOption } from "@/components/common/MultiSelect";
+import { useAuthStore, hasAnyRole, currentUserId } from "@/store/auth";
 import appI18n from "@/i18n";
 
 /** Intl locale for the current UI language (Arabic keeps Latin digits). */
@@ -25,7 +27,11 @@ const ACCEPTANCE_STATUS_BADGE: Record<string, string> = {
   approved: "bg-green-100 text-green-700 border-green-200",
   rejected: "bg-red-100 text-red-700 border-red-200",
   expired: "bg-gray-100 text-gray-500 border-gray-200",
+  revoked: "bg-red-100 text-red-700 border-red-200",
 };
+
+// Approve / reject / revoke an acceptance: CISO (admins auto-pass server-side).
+const ACCEPTANCE_DECISION_ROLES = ["ciso", "tenant_admin", "super_admin"];
 
 const SEV_BADGE: Record<string, string> = {
   critical: "bg-red-100 text-red-700 border-red-200",
@@ -83,7 +89,20 @@ export default function SecurityExceptionsPage() {
     name: "",
     justification: "",
     expiration_date: "",
+    risk_ids: [] as string[],
+    risk_scenario_ids: [] as string[],
   });
+  // What an acceptance covers: picked from the register, shown by name in the list.
+  const [riskOptions, setRiskOptions] = useState<MultiSelectOption[]>([]);
+  const [scenarioOptions, setScenarioOptions] = useState<MultiSelectOption[]>([]);
+  // Reject / revoke both ask for a reason in a dialog (the backend refuses an empty one).
+  const [decision, setDecision] = useState<{ kind: "reject" | "revoke"; item: any } | null>(null);
+  const [decisionReason, setDecisionReason] = useState("");
+  const [decisionError, setDecisionError] = useState("");
+  const [decisionBusy, setDecisionBusy] = useState(false);
+  const authUser = useAuthStore((u) => u);
+  const canDecide = hasAnyRole(authUser, ACCEPTANCE_DECISION_ROLES);
+  const myId = currentUserId(authUser);
 
   async function loadExceptions() {
     try {
@@ -117,6 +136,14 @@ export default function SecurityExceptionsPage() {
         ]),
       )))
       .catch(() => setUserNames({}));
+    risksApi.list({ page: 1, page_size: 500 })
+      .then((d) => setRiskOptions((d.items ?? []).map((r) => ({ id: r.id, label: r.title }))))
+      .catch(() => setRiskOptions([]));
+    riskScenariosApi.list()
+      .then((d: any) => setScenarioOptions((Array.isArray(d) ? d : d.items || []).map((s: any) => ({
+        id: s.id, label: s.ref_id ? `${s.ref_id} — ${s.name}` : s.name,
+      }))))
+      .catch(() => setScenarioOptions([]));
   }, []);
 
   async function handleExcSubmit(e: React.FormEvent) {
@@ -149,7 +176,7 @@ export default function SecurityExceptionsPage() {
     try {
       await securityApi.createAcceptance(accForm);
       setShowAccModal(false);
-      setAccForm({ name: "", justification: "", expiration_date: "" });
+      setAccForm({ name: "", justification: "", expiration_date: "", risk_ids: [], risk_scenario_ids: [] });
       setAccLoading(true);
       loadAcceptances();
     } catch (err: any) {
@@ -202,6 +229,25 @@ export default function SecurityExceptionsPage() {
       setActionError(describeError(err));
     }
   }
+
+  async function submitDecision() {
+    if (!decision) return;
+    if (!decisionReason.trim()) { setDecisionError(t("r2.acceptances.error_reason_required")); return; }
+    setDecisionBusy(true); setDecisionError("");
+    try {
+      if (decision.kind === "reject") await securityApi.rejectAcceptance(decision.item.id, decisionReason.trim());
+      else await securityApi.revokeAcceptance(decision.item.id, decisionReason.trim());
+      setDecision(null); setDecisionReason("");
+      loadAcceptances();
+    } catch (err) {
+      setDecisionError(describeError(err));
+    } finally {
+      setDecisionBusy(false);
+    }
+  }
+
+  const riskLabel = (id: string) => riskOptions.find((o) => o.id === id)?.label ?? id;
+  const scenarioLabel = (id: string) => scenarioOptions.find((o) => o.id === id)?.label ?? id;
 
   const filteredExceptions = exceptions.filter((i) =>
     i.title?.toLowerCase().includes(excSearch.toLowerCase())
@@ -347,6 +393,7 @@ export default function SecurityExceptionsPage() {
                 <tr className="border-b border-gray-100 bg-gray-50/50">
                   <th className="text-left px-6 py-3 font-medium text-gray-500">{t("security_exceptions.table_name")}</th>
                   <th className="text-left px-6 py-3 font-medium text-gray-500">{t("security_exceptions.table_status")}</th>
+                  <th className="text-left px-6 py-3 font-medium text-gray-500">{t("r2.acceptances.covers")}</th>
                   <th className="text-left px-6 py-3 font-medium text-gray-500">{t("security_exceptions.table_justification")}</th>
                   <th className="text-left px-6 py-3 font-medium text-gray-500">{t("security_exceptions.table_expiration")}</th>
                   <th className="text-right px-6 py-3 font-medium text-gray-500">{t("security_exceptions.table_actions")}</th>
@@ -366,12 +413,40 @@ export default function SecurityExceptionsPage() {
                         </span>
                       )}
                     </td>
-                    <td className="px-6 py-4 text-gray-600 max-w-xs truncate">{item.justification || "-"}</td>
+                    <td className="px-6 py-4 text-xs text-gray-600 max-w-xs">
+                      {[...(item.risk_ids ?? []).map((id: string) => riskLabel(id)), ...(item.risk_scenario_ids ?? []).map((id: string) => scenarioLabel(id))]
+                        .map((lbl: string, i: number) => <div key={i} className="truncate">{lbl}</div>)}
+                      {!(item.risk_ids?.length || item.risk_scenario_ids?.length) && "-"}
+                    </td>
+                    <td className="px-6 py-4 text-gray-600 max-w-xs">
+                      <div className="truncate">{item.justification || "-"}</div>
+                      {(item.rejection_reason || item.revocation_reason) && (
+                        <div className="text-xs text-red-600 mt-1 truncate">
+                          {t("r2.common.reason")}: {item.revocation_reason || item.rejection_reason}
+                        </div>
+                      )}
+                    </td>
                     <td className="px-6 py-4 text-gray-500">{item.expiration_date ? new Date(item.expiration_date).toLocaleDateString(uiLocale()) : "-"}</td>
                     <td className="px-6 py-4 text-right">
-                      {item.status === "pending" && !item.is_expired && (
-                        <button onClick={() => handleApproveAcceptance(item.id)} className="inline-flex items-center gap-1 text-green-600 hover:text-green-700 text-xs font-medium">
-                          <CheckCircle className="w-4 h-4" /> {t("security_exceptions.approve")}
+                      {/* Four-eyes: the requester cannot decide on their own request. */}
+                      {canDecide && item.status === "pending" && !item.is_expired && item.requested_by_id !== myId && (
+                        <div className="flex items-center justify-end gap-2">
+                          <button onClick={() => handleApproveAcceptance(item.id)} className="inline-flex items-center gap-1 text-green-600 hover:text-green-700 text-xs font-medium">
+                            <CheckCircle className="w-4 h-4" /> {t("security_exceptions.approve")}
+                          </button>
+                          <button onClick={() => { setDecision({ kind: "reject", item }); setDecisionReason(""); setDecisionError(""); }}
+                            className="inline-flex items-center gap-1 text-red-600 hover:text-red-700 text-xs font-medium">
+                            <XCircle className="w-4 h-4" /> {t("security_exceptions.reject")}
+                          </button>
+                        </div>
+                      )}
+                      {canDecide && item.status === "pending" && item.requested_by_id === myId && (
+                        <span className="text-xs text-gray-400">{t("r2.acceptances.awaiting_other_approver")}</span>
+                      )}
+                      {canDecide && item.status === "approved" && !item.is_expired && (
+                        <button onClick={() => { setDecision({ kind: "revoke", item }); setDecisionReason(""); setDecisionError(""); }}
+                          className="inline-flex items-center gap-1 text-red-600 hover:text-red-700 text-xs font-medium">
+                          <Undo2 className="w-4 h-4" /> {t("r2.acceptances.revoke")}
                         </button>
                       )}
                     </td>
@@ -443,7 +518,7 @@ export default function SecurityExceptionsPage() {
       {showAccModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
           <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setShowAccModal(false)} />
-          <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-lg mx-4 p-6">
+          <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-lg mx-4 p-6 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-lg font-semibold text-gray-900">{t("security_exceptions.new_risk_acceptance")}</h2>
               <button onClick={() => setShowAccModal(false)} className="text-gray-400 hover:text-gray-600"><X className="w-5 h-5" /></button>
@@ -462,6 +537,19 @@ export default function SecurityExceptionsPage() {
                 <label className="block text-sm font-medium text-gray-700 mb-1">{t("security_exceptions.expiration_date")} *</label>
                 <input type="date" value={accForm.expiration_date} onChange={(e) => setAccForm({ ...accForm, expiration_date: e.target.value })} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
               </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">{t("r2.acceptances.risks_label")}</label>
+                <MultiSelect options={riskOptions} selected={accForm.risk_ids}
+                  onChange={(ids) => setAccForm({ ...accForm, risk_ids: ids })}
+                  placeholder={t("risk_scenarios.select_placeholder")} emptyLabel={t("risk_scenarios.no_options")} />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">{t("r2.acceptances.scenarios_label")}</label>
+                <MultiSelect options={scenarioOptions} selected={accForm.risk_scenario_ids}
+                  onChange={(ids) => setAccForm({ ...accForm, risk_scenario_ids: ids })}
+                  placeholder={t("risk_scenarios.select_placeholder")} emptyLabel={t("risk_scenarios.no_options")} />
+                <p className="text-xs text-gray-400 mt-1">{t("r2.acceptances.picker_hint")}</p>
+              </div>
               <div className="flex justify-end gap-3 pt-2">
                 <button type="button" onClick={() => setShowAccModal(false)} className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800">{t("security_exceptions.btn_cancel")}</button>
                 <button type="submit" disabled={accSubmitting} className="inline-flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-xl text-sm font-medium hover:bg-blue-700 disabled:opacity-50">
@@ -469,6 +557,36 @@ export default function SecurityExceptionsPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Reject / revoke an acceptance — both need a written reason. */}
+      {decision && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 space-y-4" role="alertdialog" aria-modal="true">
+            <h3 className="font-semibold text-gray-900">
+              {decision.kind === "reject" ? t("r2.acceptances.reject_title") : t("r2.acceptances.revoke_title")}
+            </h3>
+            <p className="text-sm text-gray-600">
+              {decision.kind === "reject"
+                ? t("r2.acceptances.reject_body", { name: decision.item.name })
+                : t("r2.acceptances.revoke_body", { name: decision.item.name })}
+            </p>
+            <div>
+              <label htmlFor="acc-decision-reason" className="block text-sm font-medium text-gray-700 mb-1">{t("r2.common.reason")} *</label>
+              <textarea id="acc-decision-reason" rows={3} value={decisionReason} onChange={(e) => setDecisionReason(e.target.value)}
+                className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            </div>
+            {decisionError && <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{decisionError}</p>}
+            <div className="flex justify-end gap-2">
+              <button onClick={() => setDecision(null)} className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800">{t("common.cancel")}</button>
+              <button onClick={submitDecision} disabled={decisionBusy}
+                className="inline-flex items-center gap-2 bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white px-4 py-2 rounded-xl text-sm font-medium">
+                {decisionBusy && <Loader2 className="w-4 h-4 animate-spin" />}
+                {decision.kind === "reject" ? t("security_exceptions.reject") : t("r2.acceptances.revoke")}
+              </button>
+            </div>
           </div>
         </div>
       )}

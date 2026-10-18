@@ -1,10 +1,14 @@
 import { useState, useEffect } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { Plus, Search, X, Loader2, Filter, History, GitCommitHorizontal, AlertTriangle, ArrowUpDown, SlidersHorizontal } from "lucide-react";
+import { Plus, Search, X, Loader2, Filter, History, GitCommitHorizontal, AlertTriangle, ArrowUpDown, SlidersHorizontal, Pencil, Trash2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { riskScenariosApi, scenarioVersionsApi, scenarioPriorityApi, assetsApi, vulnerabilitiesApi, threatsApi, appliedControlsApi, incidentsApi } from "@/api/endpoints";
 import { MultiSelect, type MultiSelectOption as Option } from "@/components/common/MultiSelect";
 import appI18n from "@/i18n";
+import { useAuthStore, hasAnyRole } from "@/store/auth";
+
+// POST / PATCH / DELETE /risk-scenarios: risk_manager + CISO (admins auto-pass).
+const SCENARIO_WRITE_ROLES = ["risk_manager", "ciso", "tenant_admin", "super_admin"];
 
 /** Intl locale for the current UI language (Arabic keeps Latin digits). */
 function uiLocale(): string {
@@ -264,8 +268,62 @@ export default function RiskScenariosPage() {
   const [criteria, setCriteria] = useState<any | null>(null);
   const [showCriteria, setShowCriteria] = useState(false);
   const [historyFor, setHistoryFor] = useState<{ id: string; name: string } | null>(null);
+  // null = creating; otherwise the scenario being edited.
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState("");
+  const canWrite = hasAnyRole(useAuthStore((u) => u), SCENARIO_WRITE_ROLES);
 
   const [form, setForm] = useState(EMPTY_FORM);
+
+  function openCreate() {
+    setEditingId(null); setForm(EMPTY_FORM); setError(""); setShowModal(true);
+  }
+
+  function openEdit(item: any) {
+    setEditingId(item.id);
+    setError("");
+    setForm({
+      name: item.name ?? "",
+      description: item.description ?? "",
+      treatment: item.treatment ?? "untreated",
+      current_probability: item.current_probability ?? EMPTY_FORM.current_probability,
+      current_impact: item.current_impact ?? EMPTY_FORM.current_impact,
+      target_probability: item.target_probability ?? EMPTY_FORM.target_probability,
+      target_impact: item.target_impact ?? EMPTY_FORM.target_impact,
+      threat_actor: item.threat_actor ?? "",
+      strength_of_knowledge: item.strength_of_knowledge ?? "medium",
+      justification: item.justification ?? "",
+      next_review_date: (item.next_review_date ?? "").slice(0, 10),
+      regulatory_exposure_weight: item.regulatory_exposure_weight ?? 0,
+      linked_incident_ids: item.linked_incident_ids ?? [],
+      asset_ids: item.asset_ids ?? [],
+      vulnerability_ids: item.vulnerability_ids ?? [],
+      threat_ids: item.threat_ids ?? [],
+      applied_control_ids: item.applied_control_ids ?? [],
+    });
+    setShowModal(true);
+  }
+
+  function closeModal() {
+    setShowModal(false); setEditingId(null);
+  }
+
+  async function handleDelete() {
+    if (!deleteTarget) return;
+    setDeleting(true); setDeleteError("");
+    try {
+      await riskScenariosApi.delete(deleteTarget.id);
+      setDeleteTarget(null);
+      load();
+    } catch (err: any) {
+      const d = err?.response?.data?.detail;
+      setDeleteError(typeof d === "string" ? d : t("r2.scenarios.error_delete_failed"));
+    } finally {
+      setDeleting(false);
+    }
+  }
 
   // Prefill from an "Create risk scenario from this incident" draft
   // (see IncidentsPage) passed via router state. Consumed once, then the
@@ -352,13 +410,15 @@ export default function RiskScenariosPage() {
     setError("");
     try {
       const payload = { ...form, next_review_date: form.next_review_date || null };
-      await riskScenariosApi.create(payload);
-      setShowModal(false);
+      if (editingId) await riskScenariosApi.update(editingId, payload);
+      else await riskScenariosApi.create(payload);
+      closeModal();
       setForm(EMPTY_FORM);
       setLoading(true);
       load();
     } catch (err: any) {
-      setError(err?.response?.data?.detail || t("risk_scenarios.error_create_failed"));
+      const d = err?.response?.data?.detail;
+      setError(typeof d === "string" ? d : t(editingId ? "r2.scenarios.error_update_failed" : "risk_scenarios.error_create_failed"));
     } finally {
       setSubmitting(false);
     }
@@ -385,12 +445,14 @@ export default function RiskScenariosPage() {
           <h1 className="text-2xl font-bold text-gray-900">{t("risk_scenarios.title")}</h1>
           <p className="text-sm text-gray-500 mt-1">{t("risk_scenarios.subtitle")}</p>
         </div>
-        <button
-          onClick={() => setShowModal(true)}
-          className="inline-flex items-center gap-2 bg-blue-600 text-white px-4 py-2.5 rounded-xl text-sm font-medium hover:bg-blue-700 transition-colors"
-        >
-          <Plus className="w-4 h-4" /> {t("risk_scenarios.add_scenario")}
-        </button>
+        {canWrite && (
+          <button
+            onClick={openCreate}
+            className="inline-flex items-center gap-2 bg-blue-600 text-white px-4 py-2.5 rounded-xl text-sm font-medium hover:bg-blue-700 transition-colors"
+          >
+            <Plus className="w-4 h-4" /> {t("risk_scenarios.add_scenario")}
+          </button>
+        )}
       </div>
 
       {/* Filters */}
@@ -522,6 +584,7 @@ export default function RiskScenariosPage() {
                 <th className="text-left px-6 py-3 font-medium text-gray-500">{t("risk_scenarios.col_linked")}</th>
                 <th className="text-left px-6 py-3 font-medium text-gray-500">{t("risk_scenarios.next_review_date_label", "Next review")}</th>
                 <th className="text-center px-6 py-3 font-medium text-gray-500">{t("risk_scenarios.version_history", "History")}</th>
+                {canWrite && <th className="px-6 py-3" aria-label={t("r2.common.actions")} />}
               </tr>
             </thead>
             <tbody>
@@ -596,6 +659,21 @@ export default function RiskScenariosPage() {
                         <History className="w-4 h-4" />
                       </button>
                     </td>
+                    {canWrite && (
+                      <td className="px-6 py-4">
+                        <div className="flex items-center justify-end gap-1">
+                          <button onClick={() => openEdit(item)} title={t("r2.common.edit")} aria-label={t("r2.common.edit")}
+                            className="inline-flex items-center justify-center w-7 h-7 rounded-lg text-gray-400 hover:bg-blue-50 hover:text-blue-600">
+                            <Pencil className="w-4 h-4" />
+                          </button>
+                          <button onClick={() => { setDeleteTarget({ id: item.id, name: item.name }); setDeleteError(""); }}
+                            title={t("r2.common.delete")} aria-label={t("r2.common.delete")}
+                            className="inline-flex items-center justify-center w-7 h-7 rounded-lg text-gray-400 hover:bg-red-50 hover:text-red-600">
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </td>
+                    )}
                   </tr>
                 );
               })}
@@ -607,11 +685,11 @@ export default function RiskScenariosPage() {
       {/* Create Modal */}
       {showModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
-          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setShowModal(false)} />
+          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={closeModal} />
           <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-xl mx-4 p-6 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-6">
-              <h2 className="text-lg font-semibold text-gray-900">{t("risk_scenarios.new_scenario")}</h2>
-              <button onClick={() => setShowModal(false)} className="text-gray-400 hover:text-gray-600"><X className="w-5 h-5" /></button>
+              <h2 className="text-lg font-semibold text-gray-900">{editingId ? t("r2.scenarios.edit_title") : t("risk_scenarios.new_scenario")}</h2>
+              <button onClick={closeModal} className="text-gray-400 hover:text-gray-600"><X className="w-5 h-5" /></button>
             </div>
             {error && <div className="mb-4 p-3 bg-red-50 text-red-700 rounded-xl text-sm">{error}</div>}
             <form onSubmit={handleSubmit} className="space-y-4">
@@ -754,12 +832,29 @@ export default function RiskScenariosPage() {
                 />
               </div>
               <div className="flex justify-end gap-3 pt-2">
-                <button type="button" onClick={() => setShowModal(false)} className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800">{t("risk_scenarios.btn_cancel")}</button>
+                <button type="button" onClick={closeModal} className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800">{t("risk_scenarios.btn_cancel")}</button>
                 <button type="submit" disabled={submitting} className="inline-flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-xl text-sm font-medium hover:bg-blue-700 disabled:opacity-50">
-                  {submitting && <Loader2 className="w-4 h-4 animate-spin" />} {t("risk_scenarios.btn_add_scenario")}
+                  {submitting && <Loader2 className="w-4 h-4 animate-spin" />} {editingId ? t("r2.common.save_changes") : t("risk_scenarios.btn_add_scenario")}
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {deleteTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 space-y-4" role="alertdialog" aria-modal="true">
+            <h3 className="font-semibold text-gray-900">{t("r2.scenarios.delete_confirm_title")}</h3>
+            <p className="text-sm text-gray-600">{t("r2.scenarios.delete_confirm_body", { name: deleteTarget.name })}</p>
+            {deleteError && <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{deleteError}</p>}
+            <div className="flex justify-end gap-2">
+              <button onClick={() => setDeleteTarget(null)} className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800">{t("common.cancel")}</button>
+              <button onClick={handleDelete} disabled={deleting}
+                className="inline-flex items-center gap-2 bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white px-4 py-2 rounded-xl text-sm font-medium">
+                {deleting && <Loader2 className="w-4 h-4 animate-spin" />} {t("r2.common.delete")}
+              </button>
+            </div>
           </div>
         </div>
       )}

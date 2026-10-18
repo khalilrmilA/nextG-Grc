@@ -26,19 +26,19 @@ Size: **S** = small (hours to a couple of days), **M** = medium (about a week or
 
 ## 2. Risks
 
-- [ ] **S — Edit, re-assess, close, reopen and delete a risk from the UI.**
+- [x] **S — Edit, re-assess, close, reopen and delete a risk from the UI.** *(R2 phase 2: RisksPage edit form + delete confirm; `RiskResponse` now returns org entity / process; close/reopen logged)*
   `risksApi.update` / `risksApi.delete` exist but nothing calls them
   ([endpoints.ts:420-422](../../frontend/src/api/endpoints.ts#L420-L422)).
   - The backend PATCH ([risks.py:348](../../backend/app/api/v1/endpoints/risks.py#L348)) already takes
     likelihood/impact, residual, target, owner, status, review date and scope.
   - It requires `reopen_reason` when a risk leaves `closed`.
   - DELETE ([risks.py:435](../../backend/app/api/v1/endpoints/risks.py#L435)) is CISO-only.
-- [ ] **S — Show risk history.** `/versions`, `/lifecycle` and `/versions/diff`
+- [x] **S — Show risk history.** *(R2 phase 2: History tab with per-edit diff)* `/versions`, `/lifecycle` and `/versions/diff`
   ([risks.py:602-645](../../backend/app/api/v1/endpoints/risks.py#L602-L645)) have no frontend wrapper.
-- [ ] **S — Edit and delete risk scenarios.** `riskScenariosApi.update` / `.delete` exist with no caller
+- [x] **S — Edit and delete risk scenarios.** *(R2 phase 2: confirmed `linked_incident_ids` was dropped at create — fixed)* `riskScenariosApi.update` / `.delete` exist with no caller
   ([endpoints.ts:2415-2416](../../frontend/src/api/endpoints.ts#L2415-L2416)).
   Create also drops `linked_incident_ids` (from the scorecard: re-check).
-- [ ] **S — Risk acceptance ↔ risk.** From the scorecard (re-check): an acceptance is not linked to
+- [x] **S — Risk acceptance ↔ risk.** *(R2 phase 2: picker, reject + revoke routes, risk status sync incl. expiry; needs `migrate_r2_lifecycle`)* From the scorecard (re-check): an acceptance is not linked to
   its risk or scenario in the UI, there is no reject/revoke route, and approving does not update
   `Risk.status`.
 

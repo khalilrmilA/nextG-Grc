@@ -26,6 +26,7 @@ from app.services.notification_generator import create_notification, get_recipie
 from app.services import perimeter
 from app.services.authz import get_effective_roles
 from app.services.ai_locale import get_request_language
+from app.api.v1.endpoints.activity_log import log_activity
 
 router = APIRouter()
 
@@ -230,6 +231,9 @@ def _enrich(risk: Risk, definition: dict, matrix_name: str) -> RiskResponse:
         reopen_reason=risk.reopen_reason,
         target_validated_at=risk.target_validated_at,
         target_calculation_notes=risk.target_calculation_notes,
+        # Declared on RiskResponse but never filled, so every risk read back with
+        # no département / processus and the edit form could not pre-fill them.
+        org_entity_id=risk.org_entity_id, business_process_id=risk.business_process_id,
         created_at=risk.created_at, updated_at=risk.updated_at,
     )
 
@@ -432,6 +436,17 @@ async def update_risk(
         await _alert_target_over_appetite(db, risk)
 
     definition, matrix_name = await risk_scoring.resolve_matrix(db, tenant_id, risk.risk_matrix_id)
+    # Closing and reopening are lifecycle decisions, not field edits: record them
+    # as such. The middleware alone logs every PATCH as a plain "update".
+    # log_activity commits the session (hash chain), which also commits the edit.
+    if moving and RiskStatus.CLOSED.value in (old_status, getattr(new_status, "value", new_status)):
+        closing = getattr(new_status, "value", new_status) == RiskStatus.CLOSED.value
+        await log_activity(
+            db, tenant_id, current_user, "close" if closing else "reopen", "risk",
+            entity_id=risk.id, entity_name=risk.title,
+            details={"from": old_status, "to": getattr(new_status, "value", new_status),
+                     **({} if closing else {"reason": (body.reopen_reason or "").strip()})},
+        )
     # Commit before returning. get_db() would commit at teardown, but that runs
     # AFTER ActivityLogMiddleware, which opens its own connection to write the
     # audit entry — so an uncommitted write here leaves this session holding

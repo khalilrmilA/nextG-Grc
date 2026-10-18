@@ -1,12 +1,12 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { AlertTriangle, Plus, Search, X, ChevronRight, ChevronDown, Download, Target, Pencil, Loader2, ShieldCheck, BarChart3 } from "lucide-react";
-import { risksApi, assetGraphApi } from "../api/endpoints";
+import { AlertTriangle, Plus, Search, X, ChevronRight, ChevronDown, Download, Target, Pencil, Loader2, ShieldCheck, BarChart3, Trash2, History } from "lucide-react";
+import { risksApi, assetGraphApi, usersApi, type RiskDiffCell } from "../api/endpoints";
 import type { Risk, RiskSeverity } from "../types";
 import RiskAIPanel from "../components/ai/RiskAIPanel";
 import { exportRisksCSV } from "../utils/exportUtils";
-import { useAuthStore, hasAnyRole } from "../store/auth";
+import { useAuthStore, hasAnyRole, currentUserId } from "../store/auth";
 import { useColumnVisibility, type ColumnDef } from "../components/common/useColumnVisibility";
 import ColumnsMenu from "../components/common/ColumnsMenu";
 import ModuleDashboard from "../components/dashboards/ModuleDashboard";
@@ -43,6 +43,11 @@ const STATUS_KEYS = [
   { value: "accepted",              key: "risks.statuses.accepted" },
   { value: "closed",                key: "risks.statuses.closed" },
 ];
+// Who may PATCH / DELETE a risk (risks.py). Admins auto-pass server-side.
+const RISK_EDIT_ROLES = ["ciso", "risk_manager", "tenant_admin", "super_admin"] as const;
+const RISK_DELETE_ROLES = ["ciso", "tenant_admin", "super_admin"] as const;
+const RISK_CREATE_ROLES = ["ciso", "risk_manager", "tenant_admin", "super_admin"] as const;
+
 const CATEGORY_KEYS = [
   { value: "Technical",         key: "risks.categories.technical" },
   { value: "Access Control",    key: "risks.categories.access_control" },
@@ -172,94 +177,181 @@ function severityFilterCls(s: string, active: boolean) {
   return SEV_BADGE[s as RiskSeverity];
 }
 
-// ── Add Risk Modal ────────────────────────────────────────────────────────────
-function AddRiskModal({ onClose, onSaved }: { readonly onClose: () => void; readonly onSaved: () => void }) {
+// ── Risk Form Modal (create + edit) ───────────────────────────────────────────
+type Named = { id: string; name: string };
+type UserOption = { id: string; label: string };
+
+const INPUT_CLS = "w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500";
+const SELECT_CLS = `${INPUT_CLS} bg-white`;
+const LABEL_CLS = "block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1";
+
+/** "" ⇄ number for the optional 1–5 selects. */
+function optNum(v: string): number | undefined { return v === "" ? undefined : Number(v); }
+function numStr(v: number | null | undefined): string { return v == null ? "" : String(v); }
+
+function RiskFormModal({ risk, users, orgEntities, processes, onClose, onSaved }: {
+  readonly risk?: Risk;
+  readonly users: UserOption[] | null;
+  readonly orgEntities?: Named[];
+  readonly processes?: Named[];
+  readonly onClose: () => void;
+  readonly onSaved: (saved: Risk) => void;
+}) {
   const { t } = useTranslation();
+  const editing = !!risk;
   const [form, setForm] = useState({
-    title: "", description: "", risk_category: "Technical",
-    likelihood: 3, impact: 3, status: "identified", tags: "",
+    title: risk?.title ?? "",
+    description: risk?.description ?? "",
+    risk_category: risk?.risk_category ?? "Technical",
+    status: risk?.status ?? "identified",
+    owner_id: risk?.owner_id ?? "",
+    likelihood: risk?.likelihood ?? 3,
+    impact: risk?.impact ?? 3,
+    residual_likelihood: numStr(risk?.residual_likelihood),
+    residual_impact: numStr(risk?.residual_impact),
+    target_likelihood: numStr(risk?.target_likelihood),
+    target_impact: numStr(risk?.target_impact),
+    next_review_date: (risk?.next_review_date ?? "").slice(0, 10),
+    tags: (risk?.tags ?? []).join(", "),
+    linked_controls: (risk?.linked_controls ?? []).join(", "),
+    org_entity_id: risk?.org_entity_id ?? "",
+    business_process_id: risk?.business_process_id ?? "",
+    reopen_reason: "",
   });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+
+  // Leaving `closed` needs a written reason — the backend refuses the PATCH without one.
+  const reopening = editing && risk?.status === "closed" && form.status !== "closed";
 
   const score = form.likelihood * form.impact;
   const sev = score >= 20 ? "CRITICAL" : score >= 12 ? "HIGH" : score >= 6 ? "MEDIUM" : "LOW";
   const sevColor = scoreSevColor(sev);
 
+  // A category saved before the current list existed must still show (and survive a save).
+  const categories = CATEGORY_KEYS.some(c => c.value === form.risk_category) || !form.risk_category
+    ? CATEGORY_KEYS : [...CATEGORY_KEYS, { value: form.risk_category, key: form.risk_category }];
+  // A risk cannot be CREATED closed (422) — closing is an edit.
+  const statuses = editing ? STATUS_KEYS : STATUS_KEYS.filter(s => s.value !== "closed");
+  // Without the user list (only administrators may read it) the current owner is kept as is.
+  const ownerOptions: UserOption[] = users ?? (form.owner_id ? [{ id: form.owner_id, label: form.owner_id }] : []);
+
+  const split = (v: string) => v.split(",").map(x => x.trim()).filter(Boolean);
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!form.title.trim()) { setError(t("risks_ui.error_title_required")); return; }
+    if (reopening && !form.reopen_reason.trim()) { setError(t("r2.risks.error_reopen_required")); return; }
     setSaving(true); setError("");
+    // PATCH ignores absent/null keys, so an emptied optional field is simply not sent.
+    const payload: Partial<Risk> & { reopen_reason?: string } = {
+      title: form.title.trim(),
+      description: form.description.trim() || undefined,
+      risk_category: form.risk_category || undefined,
+      status: form.status as Risk["status"],
+      owner_id: users ? (form.owner_id || undefined) : undefined,
+      likelihood: form.likelihood,
+      impact: form.impact,
+      residual_likelihood: optNum(form.residual_likelihood),
+      residual_impact: optNum(form.residual_impact),
+      target_likelihood: optNum(form.target_likelihood),
+      target_impact: optNum(form.target_impact),
+      next_review_date: form.next_review_date || undefined,
+      tags: split(form.tags),
+      linked_controls: split(form.linked_controls),
+      org_entity_id: form.org_entity_id || undefined,
+      business_process_id: form.business_process_id || undefined,
+    };
+    if (reopening) payload.reopen_reason = form.reopen_reason.trim();
     try {
-      await risksApi.create({
-        title: form.title.trim(),
-        description: form.description.trim() || undefined,
-        risk_category: form.risk_category,
-        likelihood: form.likelihood,
-        impact: form.impact,
-        status: form.status as Risk["status"],
-        tags: form.tags ? form.tags.split(",").map(t => t.trim()).filter(Boolean) : [],
-      });
-      onSaved();
+      const saved = editing ? await risksApi.update(risk!.id, payload) : await risksApi.create(payload);
+      onSaved(saved);
       onClose();
     } catch (err: unknown) {
-      const e = err as { response?: { data?: { detail?: string } } };
-      setError(e.response?.data?.detail ?? t("risks_ui.error_save_failed"));
+      const e = err as { response?: { data?: { detail?: unknown } } };
+      const detail = e.response?.data?.detail;
+      setError(typeof detail === "string" ? detail : t("risks_ui.error_save_failed"));
       setSaving(false);
     }
   }
 
+  const levelSelect = (field: "residual_likelihood" | "residual_impact" | "target_likelihood" | "target_impact", lbl: string) => (
+    <div>
+      <label htmlFor={`rf-${field}`} className={LABEL_CLS}>{lbl}</label>
+      <select id={`rf-${field}`} className={SELECT_CLS} value={form[field]}
+        onChange={e => setForm(f => ({ ...f, [field]: e.target.value }))}>
+        <option value="">—</option>
+        {[1, 2, 3, 4, 5].map(n => <option key={n} value={n}>{n}</option>)}
+      </select>
+    </div>
+  );
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
-          <h2 className="font-semibold text-gray-900">{t("risks.add_risk_title")}</h2>
+          <h2 className="font-semibold text-gray-900">{editing ? t("r2.risks.edit_title") : t("risks.add_risk_title")}</h2>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600"><X className="w-5 h-5" /></button>
         </div>
         <form onSubmit={handleSubmit} className="p-6 space-y-4">
           {error && <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{error}</p>}
 
           <div>
-            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">{t("risks.risk_title")} *</label>
-            <input className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-              placeholder={t("risks_ui.title_placeholder")}
+            <label htmlFor="rf-title" className={LABEL_CLS}>{t("risks.risk_title")} *</label>
+            <input id="rf-title" className={INPUT_CLS} placeholder={t("risks_ui.title_placeholder")}
               value={form.title} onChange={e => setForm(f => ({ ...f, title: e.target.value }))} />
           </div>
 
           <div>
-            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">{t("common.description")}</label>
-            <textarea rows={3} className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
-              placeholder={t("risks.describe_risk")}
+            <label htmlFor="rf-desc" className={LABEL_CLS}>{t("common.description")}</label>
+            <textarea id="rf-desc" rows={3} className={`${INPUT_CLS} resize-none`} placeholder={t("risks.describe_risk")}
               value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} />
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div>
-              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">{t("risks.category")}</label>
-              <select className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+              <label htmlFor="rf-cat" className={LABEL_CLS}>{t("risks.category")}</label>
+              <select id="rf-cat" className={SELECT_CLS}
                 value={form.risk_category} onChange={e => setForm(f => ({ ...f, risk_category: e.target.value }))}>
-                {CATEGORY_KEYS.map(c => <option key={c.value} value={c.value}>{t(c.key as never)}</option>)}
+                {categories.map(c => <option key={c.value} value={c.value}>{t(c.key as never)}</option>)}
               </select>
             </div>
             <div>
-              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">{t("common.status")}</label>
-              <select className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
-                value={form.status} onChange={e => setForm(f => ({ ...f, status: e.target.value }))}>
-                {/* A risk cannot be created closed (backend 422) — closing goes through edit. */}
-                {STATUS_KEYS.filter(s => s.value !== "closed").map(s => <option key={s.value} value={s.value}>{t(s.key as never)}</option>)}
+              <label htmlFor="rf-status" className={LABEL_CLS}>{t("common.status")}</label>
+              <select id="rf-status" className={SELECT_CLS}
+                value={form.status} onChange={e => setForm(f => ({ ...f, status: e.target.value as Risk["status"] }))}>
+                {statuses.map(s => <option key={s.value} value={s.value}>{t(s.key as never)}</option>)}
+              </select>
+            </div>
+            <div>
+              <label htmlFor="rf-owner" className={LABEL_CLS}>{t("risks.owner")}</label>
+              <select id="rf-owner" className={SELECT_CLS} disabled={!users}
+                title={users ? undefined : t("r2.risks.owner_unavailable")}
+                value={form.owner_id} onChange={e => setForm(f => ({ ...f, owner_id: e.target.value }))}>
+                <option value="">{t("r2.common.none")}</option>
+                {ownerOptions.map(u => <option key={u.id} value={u.id}>{u.label}</option>)}
               </select>
             </div>
           </div>
 
+          {reopening && (
+            <div className="bg-amber-50 border border-amber-200 rounded-xl p-3">
+              <label htmlFor="rf-reopen" className="block text-xs font-semibold text-amber-800 mb-1">{t("r2.risks.reopen_reason")} *</label>
+              <p className="text-xs text-amber-700 mb-2">{t("r2.risks.reopen_hint")}</p>
+              <textarea id="rf-reopen" rows={2} className={`${INPUT_CLS} resize-none bg-white`}
+                value={form.reopen_reason} onChange={e => setForm(f => ({ ...f, reopen_reason: e.target.value }))} />
+            </div>
+          )}
+
           <div className="bg-gray-50 rounded-xl p-4 space-y-3">
             <div className="flex items-center justify-between mb-1">
-              <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">{t("risks.risk_score")}</span>
+              <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">{t("risks.inherent_risk_score")}</span>
               <span className={`text-sm font-bold ${sevColor}`}>{score} — {t(`compliance.severities.${sev.toLowerCase()}`).toUpperCase()}</span>
             </div>
-            {(["likelihood","impact"] as const).map(field => (
+            {(["likelihood", "impact"] as const).map(field => (
               <div key={field}>
                 <div className="flex items-center justify-between text-xs text-gray-500 mb-1">
-                  <label htmlFor={`slider-${field}`} className="capitalize">{field}</label>
+                  <label htmlFor={`slider-${field}`}>{t(`risks.${field}`)}</label>
                   <span className="font-bold text-gray-800">{form[field]}</span>
                 </div>
                 <input id={`slider-${field}`} type="range" min={1} max={5} value={form[field]}
@@ -272,12 +364,56 @@ function AddRiskModal({ onClose, onSaved }: { readonly onClose: () => void; read
             ))}
           </div>
 
-          <div>
-            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">{t("risks.tags_label")}</label>
-            <input className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-              placeholder={t("risks_ui.tags_placeholder")}
-              value={form.tags} onChange={e => setForm(f => ({ ...f, tags: e.target.value }))} />
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            {levelSelect("residual_likelihood", t("r2.risks.residual_likelihood"))}
+            {levelSelect("residual_impact", t("r2.risks.residual_impact"))}
+            {levelSelect("target_likelihood", t("risks.target_likelihood"))}
+            {levelSelect("target_impact", t("risks.target_impact"))}
           </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label htmlFor="rf-review" className={LABEL_CLS}>{t("risks.due_date")}</label>
+              <input id="rf-review" type="date" className={INPUT_CLS}
+                value={form.next_review_date} onChange={e => setForm(f => ({ ...f, next_review_date: e.target.value }))} />
+            </div>
+            <div>
+              <label htmlFor="rf-tags" className={LABEL_CLS}>{t("risks.tags_label")}</label>
+              <input id="rf-tags" className={INPUT_CLS} placeholder={t("risks_ui.tags_placeholder")}
+                value={form.tags} onChange={e => setForm(f => ({ ...f, tags: e.target.value }))} />
+            </div>
+          </div>
+
+          <div>
+            <label htmlFor="rf-controls" className={LABEL_CLS}>{t("r2.risks.linked_controls_label")}</label>
+            <input id="rf-controls" className={`${INPUT_CLS} font-mono`} placeholder="A.8.8, A.5.15"
+              value={form.linked_controls} onChange={e => setForm(f => ({ ...f, linked_controls: e.target.value }))} />
+          </div>
+
+          {(!!orgEntities?.length || !!processes?.length) && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {!!orgEntities?.length && (
+                <div>
+                  <label htmlFor="rf-entity" className={LABEL_CLS}>{t("risks.filter_org_entity")}</label>
+                  <select id="rf-entity" className={SELECT_CLS}
+                    value={form.org_entity_id} onChange={e => setForm(f => ({ ...f, org_entity_id: e.target.value }))}>
+                    <option value="">{t("r2.common.none")}</option>
+                    {orgEntities.map(o => <option key={o.id} value={o.id}>{o.name}</option>)}
+                  </select>
+                </div>
+              )}
+              {!!processes?.length && (
+                <div>
+                  <label htmlFor="rf-process" className={LABEL_CLS}>{t("risks.filter_process")}</label>
+                  <select id="rf-process" className={SELECT_CLS}
+                    value={form.business_process_id} onChange={e => setForm(f => ({ ...f, business_process_id: e.target.value }))}>
+                    <option value="">{t("r2.common.none")}</option>
+                    {processes.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                  </select>
+                </div>
+              )}
+            </div>
+          )}
 
           <div className="flex gap-3 pt-2">
             <button type="button" onClick={onClose}
@@ -286,7 +422,7 @@ function AddRiskModal({ onClose, onSaved }: { readonly onClose: () => void; read
             </button>
             <button type="submit" disabled={saving}
               className="flex-1 py-2.5 rounded-lg bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white text-sm font-medium transition-colors">
-              {saving ? t("risks.saving") : t("risks.new_risk")}
+              {saving ? t("risks.saving") : editing ? t("r2.common.save_changes") : t("risks.new_risk")}
             </button>
           </div>
         </form>
@@ -295,10 +431,117 @@ function AddRiskModal({ onClose, onSaved }: { readonly onClose: () => void; read
   );
 }
 
-// ── Risk Detail Modal ─────────────────────────────────────────────────────────
-function RiskDetailModal({ risk, onClose, onUpdated }: { readonly risk: Risk; readonly onClose: () => void; readonly onUpdated: (updated: Risk) => void }) {
+// ── Risk History (versions + diff) ────────────────────────────────────────────
+const DIFF_FIELD_LABELS: Record<string, string> = {
+  title: "risks.risk_title", description: "common.description", risk_category: "risks.category",
+  status: "common.status", owner_id: "risks.owner", likelihood: "risks.likelihood", impact: "risks.impact",
+  severity: "common.severity", residual_likelihood: "r2.risks.residual_likelihood",
+  residual_impact: "r2.risks.residual_impact", target_likelihood: "risks.target_likelihood",
+  target_impact: "risks.target_impact", appetite_threshold: "risks.appetite_threshold",
+  risk_matrix_id: "risks.risk_matrix", next_review_date: "risks.due_date",
+};
+
+function RiskHistory({ risk, userLabel }: { readonly risk: Risk; readonly userLabel: (id: string) => string }) {
   const { t } = useTranslation();
   const label = useBucketLabel();
+  const { data: versions, isLoading, isError } = useQuery({
+    queryKey: ["risk-versions", risk.id, risk.updated_at],
+    queryFn: () => risksApi.versions(risk.id),
+    retry: false,
+  });
+  const [open, setOpen] = useState<Record<number, RiskDiffCell[] | "loading" | "error">>({});
+
+  const newest = versions?.[0]?.version_number ?? 0;
+
+  async function toggle(n: number) {
+    if (open[n]) { setOpen(o => { const c = { ...o }; delete c[n]; return c; }); return; }
+    setOpen(o => ({ ...o, [n]: "loading" }));
+    try {
+      // Version N is the state edit N started from, so edit N changed N → N+1
+      // (or N → the live risk for the most recent edit).
+      const cells = await risksApi.diffVersions(risk.id, n, n === newest ? 0 : n + 1);
+      setOpen(o => ({ ...o, [n]: cells }));
+    } catch {
+      setOpen(o => ({ ...o, [n]: "error" }));
+    }
+  }
+
+  const fmt = (field: string, v: unknown): string => {
+    if (v == null || v === "") return "—";
+    if (field === "status" || field === "severity") return label(String(v));
+    if (field === "owner_id") return userLabel(String(v));
+    return String(v);
+  };
+
+  if (isLoading) return <div className="py-8 flex justify-center"><Loader2 className="w-5 h-5 animate-spin text-gray-400" /></div>;
+  if (isError) return <p className="text-sm text-red-600">{t("r2.risks.history_failed")}</p>;
+  if (!versions?.length) return <p className="text-sm text-gray-400">{t("r2.risks.history_empty")}</p>;
+
+  return (
+    <ol className="space-y-3">
+      {versions.map(v => {
+        const cells = open[v.version_number];
+        return (
+          <li key={v.id} className="border border-gray-100 rounded-xl p-3">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-sm text-gray-800">
+                  <bdi className="font-semibold">{v.author_email ?? t("r2.common.system")}</bdi>
+                  <span className="text-gray-400"> · <bdi>{new Date(v.created_at).toLocaleString(uiLocale())}</bdi></span>
+                </p>
+                {v.transition_to && (
+                  <p className="text-xs mt-1">
+                    <span className="rounded-full px-2.5 py-0.5 text-xs font-semibold bg-blue-50 text-blue-700">
+                      {label(v.transition_from ?? "")} → {label(v.transition_to)}
+                    </span>
+                  </p>
+                )}
+                {v.change_reason && <p className="text-xs text-gray-600 mt-1">{t("r2.common.reason")}: {v.change_reason}</p>}
+              </div>
+              <button type="button" onClick={() => toggle(v.version_number)}
+                className="text-xs font-medium text-blue-600 hover:text-blue-800 whitespace-nowrap">
+                {cells ? t("r2.risks.hide_changes") : t("r2.risks.show_changes")}
+              </button>
+            </div>
+            {cells === "loading" && <Loader2 className="w-4 h-4 animate-spin text-gray-400 mt-2" />}
+            {cells === "error" && <p className="text-xs text-red-600 mt-2">{t("r2.risks.history_failed")}</p>}
+            {Array.isArray(cells) && (cells.length === 0
+              ? <p className="text-xs text-gray-400 mt-2">{t("r2.risks.no_field_changes")}</p>
+              : (
+                <table className="w-full mt-2 text-xs">
+                  <tbody className="divide-y divide-gray-50">
+                    {cells.map(c => (
+                      <tr key={c.field}>
+                        <td className="py-1 pe-2 text-gray-500 align-top">{t((DIFF_FIELD_LABELS[c.field] ?? c.field) as never)}</td>
+                        <td className="py-1 pe-2 text-red-600 line-through align-top break-words">{fmt(c.field, c.from_value)}</td>
+                        <td className="py-1 text-green-700 align-top break-words">{fmt(c.field, c.to_value)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              ))}
+          </li>
+        );
+      })}
+    </ol>
+  );
+}
+
+// ── Risk Detail Modal ─────────────────────────────────────────────────────────
+function RiskDetailModal({ risk, onClose, onUpdated, onEdit, onDeleted, userLabel }: {
+  readonly risk: Risk;
+  readonly onClose: () => void;
+  readonly onUpdated: (updated: Risk) => void;
+  readonly onEdit: () => void;
+  readonly onDeleted: () => void;
+  readonly userLabel: (id: string) => string;
+}) {
+  const { t } = useTranslation();
+  const label = useBucketLabel();
+  const [tab, setTab] = useState<"details" | "history">("details");
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState("");
   const [editingAppetite, setEditingAppetite] = useState(false);
   const [appetiteForm, setAppetiteForm] = useState({
     appetite_threshold: risk.appetite_threshold ?? "",
@@ -311,6 +554,26 @@ function RiskDetailModal({ risk, onClose, onUpdated }: { readonly risk: Risk; re
   // Task C: Validate Target (RFP mod 8 — final validation gate for the treatment plan)
   const user = useAuthStore((u) => u);
   const canValidateRole = hasAnyRole(user, ["ciso", "risk_manager"]);
+  // Mirrors the backend: PATCH = CISO / risk_manager / business_owner (the latter
+  // only on risks they own — perimeter rule), DELETE = CISO. Admins auto-pass.
+  const canEdit = hasAnyRole(user, [...RISK_EDIT_ROLES])
+    || (hasAnyRole(user, ["business_owner"]) && !!risk.owner_id && risk.owner_id === currentUserId(user));
+  const canDelete = hasAnyRole(user, [...RISK_DELETE_ROLES]);
+  // A closed or accepted risk records a decision; the backend refuses to delete it (409).
+  const deleteBlocked = risk.status === "closed" || risk.status === "accepted";
+
+  async function handleDelete() {
+    setDeleting(true); setDeleteError("");
+    try {
+      await risksApi.delete(risk.id);
+      onDeleted();
+    } catch (err: unknown) {
+      const e = err as { response?: { data?: { detail?: unknown } } };
+      const detail = e.response?.data?.detail;
+      setDeleteError(typeof detail === "string" ? detail : t("r2.risks.error_delete_failed"));
+      setDeleting(false);
+    }
+  }
   const hasTargetScore = risk.target_likelihood != null && risk.target_impact != null;
   const canValidateTarget = risk.appetite_threshold != null && hasTargetScore;
   const targetBlockedByAppetite = !!risk.target_over_appetite;
@@ -372,11 +635,44 @@ function RiskDetailModal({ risk, onClose, onUpdated }: { readonly risk: Risk; re
                 </div>
               </div>
             </div>
-            <button onClick={onClose} className="text-gray-400 hover:text-gray-600 flex-shrink-0"><X className="w-5 h-5" /></button>
+            <div className="flex items-center gap-2 flex-shrink-0">
+              {canEdit && (
+                <button onClick={onEdit}
+                  className="inline-flex items-center gap-1 text-xs font-medium text-blue-700 bg-white border border-blue-200 hover:bg-blue-50 px-2.5 py-1.5 rounded-lg">
+                  <Pencil className="w-3.5 h-3.5" /> {t("r2.common.edit")}
+                </button>
+              )}
+              {canDelete && (
+                <button onClick={() => { setConfirmDelete(true); setDeleteError(""); }} disabled={deleteBlocked}
+                  title={deleteBlocked ? t("r2.risks.delete_blocked") : undefined}
+                  className="inline-flex items-center gap-1 text-xs font-medium text-red-700 bg-white border border-red-200 hover:bg-red-50 disabled:opacity-40 disabled:hover:bg-white px-2.5 py-1.5 rounded-lg">
+                  <Trash2 className="w-3.5 h-3.5" /> {t("r2.common.delete")}
+                </button>
+              )}
+              <button onClick={onClose} className="text-gray-400 hover:text-gray-600"><X className="w-5 h-5" /></button>
+            </div>
           </div>
+          {risk.reopen_reason && risk.status !== "closed" && (
+            <p className="text-xs text-gray-600 mt-2">{t("r2.risks.reopened_because")}: {risk.reopen_reason}</p>
+          )}
         </div>
 
+        <div className="flex gap-1 px-6 pt-3 border-b border-gray-100" role="tablist">
+          {(["details", "history"] as const).map(k => (
+            <button key={k} role="tab" aria-selected={tab === k} onClick={() => setTab(k)}
+              className={`px-3 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${tab === k ? "border-blue-600 text-blue-700" : "border-transparent text-gray-500 hover:text-gray-700"}`}>
+              {k === "details" ? t("r2.common.tab_details") : (<span className="inline-flex items-center gap-1"><History className="w-3.5 h-3.5" />{t("r2.common.tab_history")}</span>)}
+            </button>
+          ))}
+        </div>
+
+        {tab === "history" ? (
+          <div className="p-6"><RiskHistory risk={risk} userLabel={userLabel} /></div>
+        ) : (
         <div className="p-6 space-y-5">
+          {risk.owner_id && (
+            <p className="text-sm text-gray-700"><span className="text-gray-400">{t("risks.owner")}:</span> {userLabel(risk.owner_id)}</p>
+          )}
           <div className="grid grid-cols-2 gap-3">
             <div className="bg-gray-50 rounded-xl p-3 text-center">
               <p className="text-xl font-bold text-gray-900">{risk.likelihood ?? "—"}</p>
@@ -580,7 +876,25 @@ function RiskDetailModal({ risk, onClose, onUpdated }: { readonly risk: Risk; re
             category={risk.risk_category ?? "General"}
           />
         </div>
+        )}
       </div>
+
+      {confirmDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 space-y-4" role="alertdialog" aria-modal="true">
+            <h3 className="font-semibold text-gray-900">{t("r2.risks.delete_confirm_title")}</h3>
+            <p className="text-sm text-gray-600">{t("r2.risks.delete_confirm_body", { title: risk.title })}</p>
+            {deleteError && <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{deleteError}</p>}
+            <div className="flex justify-end gap-2">
+              <button onClick={() => setConfirmDelete(false)} className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800">{t("common.cancel")}</button>
+              <button onClick={handleDelete} disabled={deleting}
+                className="inline-flex items-center gap-2 bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white px-4 py-2 rounded-lg text-sm font-medium">
+                {deleting && <Loader2 className="w-4 h-4 animate-spin" />} {t("r2.common.delete")}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -600,6 +914,9 @@ export default function RisksPage() {
   const [processFilter, setProcessFilter] = useState<string>("all");
   const [showAddModal, setShowAddModal] = useState(false);
   const [selectedRisk, setSelectedRisk] = useState<Risk | null>(null);
+  const [editingRisk, setEditingRisk] = useState<Risk | null>(null);
+  const authUser = useAuthStore((u) => u);
+  const canCreate = hasAnyRole(authUser, [...RISK_CREATE_ROLES]);
 
   const RISK_COLUMNS: ColumnDef[] = [
     { key: "title", label: t("risks.risk_title"), lockable: false },
@@ -654,6 +971,16 @@ export default function RisksPage() {
     queryKey: ["business-processes"], queryFn: () => assetGraphApi.listProcesses(),
     enabled: hasCartography, retry: false,
   });
+  // Owner picker + owner names. GET /users is administrator-only, so for other
+  // roles this fails and the form keeps the current owner (same degradation as
+  // the compliance owner picker).
+  const { data: tenantUsers, isError: usersError } = useQuery({
+    queryKey: ["tenant-users"], queryFn: () => usersApi.list(), retry: false,
+  });
+  const userOptions = usersError || !tenantUsers ? null : tenantUsers
+    .filter((u) => u.is_active)
+    .map((u) => ({ id: u.id, label: `${u.first_name ?? ""} ${u.last_name ?? ""}`.trim() || u.email }));
+  const userLabel = (id: string) => userOptions?.find((u) => u.id === id)?.label ?? (tenantUsers?.find((u) => u.id === id)?.email ?? id);
   // Only fall back to sample data when the request actually FAILED. Previously an
   // empty register also triggered it, so a new tenant with zero risks saw a populated
   // heatmap of fictional risks — and exportRisksCSV(risks) wrote those to a file the
@@ -702,10 +1029,12 @@ export default function RisksPage() {
           >
             <Download className="w-4 h-4" /> {t("risks.export_csv")}
           </button>
-          <button onClick={() => setShowAddModal(true)}
-            className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2.5 rounded-lg text-sm font-medium transition-colors">
-            <Plus className="w-4 h-4" /> {t("risks.new_risk")}
-          </button>
+          {canCreate && (
+            <button onClick={() => setShowAddModal(true)}
+              className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2.5 rounded-lg text-sm font-medium transition-colors">
+              <Plus className="w-4 h-4" /> {t("risks.new_risk")}
+            </button>
+          )}
         </div>
       </div>
 
@@ -911,18 +1240,42 @@ export default function RisksPage() {
       </div>
 
       {showAddModal && (
-        <AddRiskModal
+        <RiskFormModal
+          users={userOptions}
+          orgEntities={orgEntities}
+          processes={processes}
           onClose={() => setShowAddModal(false)}
           onSaved={() => queryClient.invalidateQueries({ queryKey: ["risks"] })}
         />
       )}
-      {selectedRisk && (
+      {selectedRisk && !editingRisk && (
         <RiskDetailModal
+          key={selectedRisk.id}
           risk={selectedRisk}
+          userLabel={userLabel}
           onClose={() => setSelectedRisk(null)}
           onUpdated={(updated) => {
             setSelectedRisk(updated);
             queryClient.invalidateQueries({ queryKey: ["risks"] });
+          }}
+          onEdit={() => setEditingRisk(selectedRisk)}
+          onDeleted={() => {
+            setSelectedRisk(null);
+            queryClient.invalidateQueries({ queryKey: ["risks"] });
+          }}
+        />
+      )}
+      {editingRisk && (
+        <RiskFormModal
+          risk={editingRisk}
+          users={userOptions}
+          orgEntities={orgEntities}
+          processes={processes}
+          onClose={() => setEditingRisk(null)}
+          onSaved={(saved) => {
+            setSelectedRisk(saved);
+            queryClient.invalidateQueries({ queryKey: ["risks"] });
+            queryClient.invalidateQueries({ queryKey: ["risk-versions", saved.id] });
           }}
         />
       )}

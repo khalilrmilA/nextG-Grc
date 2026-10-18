@@ -428,7 +428,39 @@ export const risksApi = {
 
   validateTarget: (id: string, calculation_notes?: string | null) =>
     apiClient.post<Risk>(`/risks/${id}/validate-target`, { calculation_notes }).then((r) => r.data),
+
+  // Archived states (newest first). Version N is the state edit N started from.
+  versions: (id: string) =>
+    apiClient.get<RiskVersion[]>(`/risks/${id}/versions`).then((r) => r.data),
+
+  // Only the status moves, oldest first.
+  lifecycle: (id: string) =>
+    apiClient.get<RiskVersion[]>(`/risks/${id}/lifecycle`).then((r) => r.data),
+
+  // to_version = 0 means the risk as it stands now.
+  diffVersions: (id: string, from_version: number, to_version: number) =>
+    apiClient.get<RiskDiffCell[]>(`/risks/${id}/versions/diff`, { params: { from_version, to_version } }).then((r) => r.data),
 };
+
+export interface RiskVersion {
+  id: string;
+  risk_id: string;
+  version_number: number;
+  snapshot: Record<string, unknown>;
+  risk_title?: string | null;
+  transition_from?: string | null;
+  transition_to?: string | null;
+  change_reason?: string | null;
+  author_id?: string | null;
+  author_email?: string | null;
+  created_at: string;
+}
+
+export interface RiskDiffCell {
+  field: string;
+  from_value: unknown;
+  to_value: unknown;
+}
 
 // ─── Risk Cartography ────────────────────────
 
@@ -2512,6 +2544,12 @@ export const securityApi = {
   listAcceptances: () => apiClient.get("/security/acceptances").then((r) => r.data),
   createAcceptance: (data: Record<string, unknown>) => apiClient.post("/security/acceptances", data).then((r) => r.data),
   approveAcceptance: (id: string) => apiClient.patch(`/security/acceptances/${id}/approve`).then((r) => r.data),
+  // Both need a written reason (422 otherwise). Reject: pending only, four-eyes.
+  // Revoke: approved only — the covered risks go back to their prior status.
+  rejectAcceptance: (id: string, reason: string) =>
+    apiClient.patch(`/security/acceptances/${id}/reject`, { reason }).then((r) => r.data),
+  revokeAcceptance: (id: string, reason: string) =>
+    apiClient.patch(`/security/acceptances/${id}/revoke`, { reason }).then((r) => r.data),
 };
 
 // ─── Risk Matrices ──────────────────────────

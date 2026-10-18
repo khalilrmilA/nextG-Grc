@@ -27,6 +27,20 @@ export function getUserRoles(user: AuthUser | null): string[] {
   return user.roles?.length ? user.roles : [user.role];
 }
 
+/** The signed-in user's id (the JWT `sub`), or null. Only used to decide which
+ *  buttons to show for owner-scoped roles — the backend still enforces ownership. */
+export function currentUserId(user: AuthUser | null): string | null {
+  const token = user?.accessToken;
+  if (!token) return null;
+  try {
+    const payload = token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/");
+    const sub = JSON.parse(atob(payload)).sub;
+    return typeof sub === "string" ? sub : null;
+  } catch {
+    return null;
+  }
+}
+
 /** Returns true if the user has ANY of the specified roles. */
 export function hasAnyRole(user: AuthUser | null, allowedRoles: string[]): boolean {
   return getUserRoles(user).some(r => allowedRoles.includes(r));
