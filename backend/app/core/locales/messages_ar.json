@@ -214,6 +214,7 @@
   "OCR is not installed on this server (pytesseract missing).": "لم يتم تثبيت OCR على هذا الخادم (pytesseract مفقود).",
   "Only PDF, DOCX, XLSX, XLS, TXT, PNG and JPEG files are supported": "يُدعم فقط ملفات PDF، DOCX، XLSX، XLS، TXT، PNG و JPEG",
   "Only PDF, DOCX, XLSX, XLS, and TXT files are supported": "يُدعم فقط ملفات PDF، DOCX، XLSX، XLS، و TXT",
+  "Only a compliance manager or the CISO can reassign a requirement.": "يمكن لمدير الامتثال أو مسؤول أمن المعلومات فقط إعادة إسناد متطلب.",
   "Only a report submitted for validation can be approved": "يمكن فقط الموافقة على تقرير تم إرساله للتحقق",
   "Only a report submitted for validation can be rejected": "يمكن فقط رفض تقرير تم إرساله للتحقق",
   "Only an administrator can delegate on someone else's behalf.": "يمكن فقط للمسؤول تفويض نيابةً عن شخص آخر.",
@@ -461,6 +462,7 @@
   "title is required": "العنوان مطلوب",
   "user_filter must contain the {username} placeholder": "يجب أن يحتوي user_filter على العنصر النائب {username}",
   "user_id is required": "معرف user_id مطلوب",
+  "valid_until cannot be before valid_from.": "لا يمكن أن يسبق تاريخ نهاية الصلاحية تاريخ بدايتها.",
   "xlsx import is unavailable on this server — save the sheet as CSV and re-upload": "استيراد xlsx غير متاح على هذا الخادم — احفظ الورقة كملف CSV وأعد رفعها",
   "التفاصيل": "التفاصيل"
  },
@@ -688,6 +690,7 @@
   "{key} must be between 0 and 5": "يجب أن يكون {key} بين 0 و 5",
   "{label} exceeds {settings_max_upload_size_mb} MB limit": "يتجاوز {label} الحد الأقصى {settings_max_upload_size_mb} ميغابايت",
   "{len_controls} controls exceed the {max_seeded_items}-row grid limit. Narrow the seed with a `domain`.": "{len_controls} ضابطًا تتجاوز حد الشبكة البالغ {max_seeded_items} صفًا. ضيّق نطاق التهيئة باستخدام `domain`.",
+  "{name} must be a date (YYYY-MM-DD).": "يجب أن يكون {name} تاريخاً (YYYY-MM-DD).",
   "{plan_eligible_count} entries would be sealed and removed. Re-send with confirm=true to proceed.": "سيتم إغلاق وإزالة {plan_eligible_count} مدخل. أعد الإرسال مع confirm=true للمتابعة.",
   "{tool} connector needs a base URL to a reachable instance.": "يتطلب موصل {tool} عنوان URL أساسي إلى نسخة يمكن الوصول إليها.",
   "{tool} connector needs both an access key and a secret key.": "يتطلب موصل {tool} كلًا من مفتاح الوصول ومفتاح سري.",

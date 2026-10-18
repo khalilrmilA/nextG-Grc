@@ -115,6 +115,28 @@ const bundle: { en: Record<string, any>; fr: Record<string, any>; ar: Record<str
         "accept_failed": "Your acknowledgement could not be recorded.",
         "no_content": "This version has no text."
       },
+      "compliance": {
+        "rerun_keeps_one": "1 requirement was decided by a person: the AI will keep that decision and only add its suggestion.",
+        "rerun_keeps_other": "{{count}} requirements were decided by a person: the AI will keep those decisions and only add its suggestions. Evidence is never removed.",
+        "mine_only": "Only requirements I own",
+        "owner_scope_hint": "As a control owner you assess the requirements assigned to you; the others are read-only.",
+        "human_set": "Reviewed",
+        "human_set_hint": "Set by a person — an AI re-run will not change it.",
+        "ai_suggests": "AI suggests",
+        "accept_suggestion": "Accept",
+        "applied_controls": "Applied controls implementing this requirement",
+        "valid_until": "Valid until",
+        "evidence_expired": "Expired",
+        "evidence_expires_in_one": "Expires in 1 day",
+        "evidence_expires_in_other": "Expires in {{count}} days",
+        "evidence_valid_until": "valid until {{date}}",
+        "evidence_all_expired": "Evidence expired",
+        "evidence_all_expired_hint": "All evidence on file for this requirement has passed its validity date.",
+        "evidence_upload_failed": "The evidence could not be uploaded.",
+        "deleted_files_btn": "Deleted files",
+        "deleted_files_title": "Deleted files",
+        "deleted_files_subtitle": "Every evidence, document or contract file removed in this organisation. The bytes are kept until the retention policy purges them: download a version to recover it."
+      },
       "treatment": {
         "justification": "Justification",
         "error_justification": "A justification is required for every treatment decision"
@@ -253,6 +275,28 @@ const bundle: { en: Record<string, any>; fr: Record<string, any>; ar: Record<str
         "accept_failed": "Votre prise de connaissance n’a pas pu être enregistrée.",
         "no_content": "Cette version n’a pas de texte."
       },
+      "compliance": {
+        "rerun_keeps_one": "1 exigence a été tranchée par une personne : l’IA conservera cette décision et n’ajoutera que sa suggestion.",
+        "rerun_keeps_other": "{{count}} exigences ont été tranchées par une personne : l’IA conservera ces décisions et n’ajoutera que ses suggestions. Les preuves ne sont jamais supprimées.",
+        "mine_only": "Seulement mes exigences",
+        "owner_scope_hint": "En tant que propriétaire de contrôle, vous évaluez les exigences qui vous sont attribuées ; les autres sont en lecture seule.",
+        "human_set": "Revue",
+        "human_set_hint": "Fixé par une personne — une nouvelle analyse IA ne le modifiera pas.",
+        "ai_suggests": "L’IA suggère",
+        "accept_suggestion": "Accepter",
+        "applied_controls": "Mesures appliquées couvrant cette exigence",
+        "valid_until": "Valable jusqu’au",
+        "evidence_expired": "Expirée",
+        "evidence_expires_in_one": "Expire dans 1 jour",
+        "evidence_expires_in_other": "Expire dans {{count}} jours",
+        "evidence_valid_until": "valable jusqu’au {{date}}",
+        "evidence_all_expired": "Preuves expirées",
+        "evidence_all_expired_hint": "Toutes les preuves de cette exigence ont dépassé leur date de validité.",
+        "evidence_upload_failed": "La preuve n’a pas pu être téléversée.",
+        "deleted_files_btn": "Fichiers supprimés",
+        "deleted_files_title": "Fichiers supprimés",
+        "deleted_files_subtitle": "Toutes les preuves, documents ou contrats supprimés dans l’organisation. Les fichiers sont conservés jusqu’à leur purge par la politique de rétention : téléchargez une version pour la récupérer."
+      },
       "treatment": {
         "justification": "Justification",
         "error_justification": "Une justification est requise pour chaque décision de traitement"
@@ -390,6 +434,28 @@ const bundle: { en: Record<string, any>; fr: Record<string, any>; ar: Record<str
         "accept": "لقد قرأت هذه السياسة وأقبلها",
         "accept_failed": "تعذّر تسجيل إقرارك.",
         "no_content": "لا يحتوي هذا الإصدار على نص."
+      },
+      "compliance": {
+        "rerun_keeps_one": "تم البت في متطلب واحد من قبل شخص: سيحتفظ الذكاء الاصطناعي بهذا القرار ويضيف اقتراحه فقط.",
+        "rerun_keeps_other": "تم البت في {{count}} من المتطلبات من قبل أشخاص: سيحتفظ الذكاء الاصطناعي بهذه القرارات ويضيف اقتراحاته فقط. لا تُحذف الأدلة أبداً.",
+        "mine_only": "المتطلبات التي أملكها فقط",
+        "owner_scope_hint": "بصفتك مالك ضابط، تقيّم المتطلبات المسندة إليك؛ أما البقية فللقراءة فقط.",
+        "human_set": "تمت المراجعة",
+        "human_set_hint": "حدده شخص — لن تغيّره إعادة تحليل الذكاء الاصطناعي.",
+        "ai_suggests": "يقترح الذكاء الاصطناعي",
+        "accept_suggestion": "قبول",
+        "applied_controls": "الضوابط المطبقة التي تنفذ هذا المتطلب",
+        "valid_until": "صالح حتى",
+        "evidence_expired": "منتهية الصلاحية",
+        "evidence_expires_in_one": "تنتهي خلال يوم واحد",
+        "evidence_expires_in_other": "تنتهي خلال {{count}} يوماً",
+        "evidence_valid_until": "صالحة حتى {{date}}",
+        "evidence_all_expired": "الأدلة منتهية الصلاحية",
+        "evidence_all_expired_hint": "تجاوزت جميع الأدلة المسجلة لهذا المتطلب تاريخ صلاحيتها.",
+        "evidence_upload_failed": "تعذّر رفع الدليل.",
+        "deleted_files_btn": "الملفات المحذوفة",
+        "deleted_files_title": "الملفات المحذوفة",
+        "deleted_files_subtitle": "كل دليل أو مستند أو عقد أزيل في هذه المؤسسة. تُحفظ الملفات حتى تحذفها سياسة الاحتفاظ: نزّل نسخة لاستعادتها."
       },
       "treatment": {
         "justification": "المبرر",

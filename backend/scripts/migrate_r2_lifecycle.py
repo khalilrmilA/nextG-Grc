@@ -56,6 +56,15 @@ COLUMNS: dict[str, dict[str, dict[str, str]]] = {
         "approved_at":        {"sqlite": "VARCHAR(30)", "postgresql": "VARCHAR(30)"},
         "applied_risk_score": {"sqlite": "FLOAT", "postgresql": "DOUBLE PRECISION"},
     },
+    # Phase 5.1 — an AI re-run merges instead of replacing: who set the status,
+    # and the AI's own opinion kept beside a human decision.
+    "control_assessments": {
+        "status_source":           {"sqlite": "VARCHAR(10)", "postgresql": "VARCHAR(10)"},
+        "ai_suggested_status":     {"sqlite": "VARCHAR(30)", "postgresql": "VARCHAR(30)"},
+        "ai_suggested_status_key": {"sqlite": "VARCHAR(40)", "postgresql": "VARCHAR(40)"},
+        "ai_suggested_notes":      {"sqlite": "TEXT", "postgresql": "TEXT"},
+        "ai_suggested_at":         {"sqlite": "VARCHAR(30)", "postgresql": "VARCHAR(30)"},
+    },
 }
 
 

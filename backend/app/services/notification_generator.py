@@ -69,7 +69,8 @@ from app.models.notification import (
 from app.models.user import User, UserRole
 from app.models.risk import Risk, RiskTreatment
 from app.models.vendor import Vendor, VendorContract, ContractValidationStatus
-from app.models.compliance import ComplianceGap
+from app.models.compliance import ComplianceGap, ComplianceAssessment, ControlAssessment, Evidence
+from app.models.framework import FrameworkControl
 from app.models.contract_collaboration import ContractCollaboration
 from app.models.action_item import ActionItem, ActionItemStatus
 from app.models.asset import Asset
@@ -762,6 +763,63 @@ async def check_policy_reviews(db: AsyncSession, tenant_id: str | None = None) -
                 link=f"/policies?highlight={policy.id}", severity=severity,
                 title_key=f"{key}.title", message_key=f"{key}.message",
                 params={"policy": policy.title, "days": abs(days), "due": policy.next_review_date[:10]},
+            )
+            created += 1
+    return created
+
+
+# Evidence validity reminders (R2 5.4): one notice per stage and evidence.
+
+
+async def check_evidence_expiry(db: AsyncSession, tenant_id: str | None = None) -> int:
+    """Evidence whose valid_until is 30 / 7 / 0 days away (or just passed).
+
+    valid_until existed on the model and nothing ever read it, so a requirement
+    stayed "conforme" on a certificate that had lapsed. The control's owner and
+    the tenant's stakeholders are told once per stage; evidence that lapsed
+    more than 30 days ago is history, not news.
+    """
+    created = 0
+    today = datetime.utcnow().date()
+    rows = (await db.execute(_scoped(
+        select(Evidence, ControlAssessment, FrameworkControl)
+        .join(ControlAssessment, ControlAssessment.id == Evidence.control_assessment_id)
+        .join(FrameworkControl, FrameworkControl.id == ControlAssessment.control_id)
+        .where(Evidence.valid_until.isnot(None)),
+        Evidence.tenant_id, tenant_id))).all()
+    for ev, ca, fc in rows:
+        try:
+            until = datetime.fromisoformat(ev.valid_until[:10]).date()
+        except (ValueError, TypeError):
+            continue
+        days = (until - today).days
+        if days > 30 or days < -30:
+            continue
+        # 30..8 days → "30d", 7..1 → "7d", today or past → "expired".
+        stage = "expired" if days <= 0 else ("7d" if days <= 7 else "30d")
+        expired = stage == "expired"
+        key = "notifications.evidence_expired" if expired else "notifications.evidence_expiring"
+        control_ref = fc.control_id or ""
+        name = ev.file_name or ev.name or ""
+        title = (f"Evidence EXPIRED: {control_ref}" if expired
+                 else f"Evidence expires in {days} days: {control_ref}")
+        message = (f"The evidence '{name}' for {control_ref} expired on {ev.valid_until[:10]}."
+                   if expired else
+                   f"The evidence '{name}' for {control_ref} is valid until {ev.valid_until[:10]}.")
+        recipients = {u.id: u for u in await get_recipients_for_tenant(db, ev.tenant_id)}
+        owner = await get_owner_in_tenant(db, ca.owner_id, ev.tenant_id)
+        if owner:
+            recipients[owner.id] = owner
+        dedup = f"{ev.id}:{stage}"
+        for user in recipients.values():
+            if await notification_exists(db, user.id, NotificationType.CONTROL_EXPIRED, dedup, within_days=90):
+                continue
+            await create_notification(
+                db, user=user, notif_type=NotificationType.CONTROL_EXPIRED,
+                title=title, message=message, entity_id=dedup, entity_type="evidence",
+                link=f"/compliance/{ca.assessment_id}", severity="high" if expired else ("medium" if days <= 7 else "info"),
+                title_key=f"{key}.title", message_key=f"{key}.message",
+                params={"control": control_ref, "file": name, "days": abs(days), "until": ev.valid_until[:10]},
             )
             created += 1
     return created
@@ -2542,6 +2600,7 @@ async def run_all_checks(db: AsyncSession, tenant_id: str | None = None) -> dict
         # R2: policy review dates and overdue acknowledgements.
         "policy_reviews": 0,
         "overdue_attestations": 0,
+        "evidence_expiry": 0,
     }
     # Queued e-mails for this run; drained after the commits below.
     outbox: list[dict] = []
@@ -2596,6 +2655,7 @@ async def run_all_checks(db: AsyncSession, tenant_id: str | None = None) -> dict
     await _run("recommendation_due", "Recommendation deadline check", check_recommendation_due, True)
     await _run("policy_reviews", "Policy review check", check_policy_reviews)
     await _run("overdue_attestations", "Overdue attestation check", check_overdue_attestations)
+    await _run("evidence_expiry", "Evidence expiry check", check_evidence_expiry)
 
     results["total"] = sum(results.values())
 

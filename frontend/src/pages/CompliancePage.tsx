@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate, Link } from "react-router-dom";
+import { useAuthStore, hasAnyRole } from "@/store/auth";
 import {
   CheckCircle, Clock, AlertCircle, XCircle, Plus, FileText, Loader2, X, FolderUp,
   Sparkles, BarChart3, Trash2, Building2, Workflow, Server, Globe2, PieChart, Layers,
@@ -1102,6 +1103,11 @@ export default function CompliancePage() {
     });
   }
 
+  // compliance.py: create = CISO + compliance_manager, delete = CISO (admins auto-pass).
+  const authUser = useAuthStore((u) => u);
+  const canCreateAssessment = hasAnyRole(authUser, ["ciso", "compliance_manager", "tenant_admin", "super_admin"]);
+  const canDeleteAssessment = hasAnyRole(authUser, ["ciso", "tenant_admin", "super_admin"]);
+
   async function handleDelete(id: string) {
     setDeletingId(id);
     setDeleteError("");
@@ -1145,13 +1151,15 @@ export default function CompliancePage() {
             {t("compliance.assessments_subtitle", { count: live.length, active: live.filter((a) => a.status === "in_progress").length })}
           </p>
         </div>
-        <button
-          onClick={() => setShowModal(true)}
-          className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
-        >
-          <Plus className="w-4 h-4" />
-          {t("compliance.new_assessment")}
-        </button>
+        {canCreateAssessment && (
+          <button
+            onClick={() => setShowModal(true)}
+            className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+          >
+            <Plus className="w-4 h-4" />
+            {t("compliance.new_assessment")}
+          </button>
+        )}
       </div>
 
       {/*
@@ -1386,7 +1394,7 @@ export default function CompliancePage() {
                   </div>
                   <div className="flex items-center gap-3 flex-shrink-0 ml-3">
                     <ScoreBadge score={a.compliance_score} />
-                    {a.status === "draft" && (
+                    {a.status === "draft" && canDeleteAssessment && (
                       confirmDeleteId === a.id ? (
                         <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
                           <span className="text-xs text-red-600 font-medium">

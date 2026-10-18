@@ -56,11 +56,15 @@ export function FileHistoryModal({
   parentId,
   title,
   onClose,
+  mode = "parent",
 }: {
   readonly parentType: string;
   readonly parentId: string;
   readonly title: string;
   readonly onClose: () => void;
+  /** "deleted" lists every deleted file of the tenant (GET /compliance/files/deleted)
+   *  instead of one parent's history — the recovery list (CISO / compliance manager). */
+  readonly mode?: "parent" | "deleted";
 }) {
   const { t, i18n } = useTranslation();
   const user = useAuthStore((u) => u);
@@ -98,8 +102,7 @@ export function FileHistoryModal({
 
   useEffect(() => {
     let cancelled = false;
-    complianceApi
-      .listFileVersions(parentType, parentId)
+    (mode === "deleted" ? complianceApi.listDeletedFiles() : complianceApi.listFileVersions(parentType, parentId))
       .then((rows) => {
         if (!cancelled) setVersions(Array.isArray(rows) ? rows : []);
       })
@@ -112,7 +115,7 @@ export function FileHistoryModal({
     return () => {
       cancelled = true;
     };
-  }, [parentType, parentId, t]);
+  }, [parentType, parentId, mode, t]);
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -130,10 +133,14 @@ export function FileHistoryModal({
           <div>
             <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
               <History className="w-5 h-5 text-gray-400" />
-              {t("compliance.file_history_title", { defaultValue: t("treatment.history") })}
+              {mode === "deleted"
+                ? t("r2.compliance.deleted_files_title")
+                : t("compliance.file_history_title", { defaultValue: t("treatment.history") })}
             </h2>
             <p className="text-xs text-gray-500 mt-0.5">{title}</p>
-            {i18n.exists("compliance.file_history_subtitle") && (
+            {mode === "deleted" ? (
+              <p className="text-xs text-gray-400 mt-1">{t("r2.compliance.deleted_files_subtitle")}</p>
+            ) : i18n.exists("compliance.file_history_subtitle") && (
               <p className="text-xs text-gray-400 mt-1">{t("compliance.file_history_subtitle")}</p>
             )}
           </div>

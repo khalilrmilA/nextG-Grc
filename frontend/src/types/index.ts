@@ -480,6 +480,18 @@ export interface ControlAssessmentDetail extends BaseEntity {
   requires_justification?: boolean;
   owner_id?: string | null;
   owner_name?: string | null;
+  /** "human" when a person set the status — an AI re-run then only suggests. */
+  status_source?: "human" | "ai" | null;
+  ai_suggested_status?: string | null;
+  ai_suggested_status_key?: string | null;
+  ai_suggested_notes?: string | null;
+  ai_suggested_at?: string | null;
+  evidence_count?: number;
+  evidence_expired_count?: number;
+  /** Every piece of evidence on file has passed its valid_until. */
+  evidence_all_expired?: boolean;
+  /** Applied controls that declare they implement this requirement (information only). */
+  applied_controls?: { id: string; name: string; status: string; progress?: number | null }[];
 }
 
 export interface GapDetail {

@@ -25,6 +25,30 @@ import GapReportTab from "@/components/features/compliance/GapReportTab";
 import DocumentViewerModal, { type ViewableDoc } from "@/components/features/compliance/DocumentViewerModal";
 import ShareLinkModal from "@/components/features/compliance/ShareLinkModal";
 import { exportComplianceCSV, exportComplianceReport, exportDdA } from "@/utils/exportUtils";
+import { useAuthStore, hasAnyRole, currentUserId } from "@/store/auth";
+
+// R2 5.3 — mirrors compliance.py: CISO / compliance_manager act on every requirement
+// (and run the analysis); a control_owner self-assesses the rows they own.
+const COMPLIANCE_MANAGE_ROLES = ["ciso", "compliance_manager", "tenant_admin", "super_admin"];
+// Visibility toggle, evidence delete, share links, assessment settings stay CISO-only.
+const COMPLIANCE_CISO_ROLES = ["ciso", "tenant_admin", "super_admin"];
+
+/** Days from today to an ISO date (negative once past). */
+function daysUntil(iso?: string | null): number | null {
+  if (!iso) return null;
+  const d = new Date(iso.slice(0, 10) + "T00:00:00");
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  return Math.round((d.getTime() - today.getTime()) / 86400000);
+}
+
+function EvidenceValidityBadge({ validUntil }: { readonly validUntil?: string | null }) {
+  const { t } = useTranslation();
+  const days = daysUntil(validUntil);
+  if (days == null) return null;
+  if (days < 0) return <span className="rounded-full px-2.5 py-0.5 text-xs font-semibold bg-red-100 text-red-700 flex-shrink-0">{t("r2.compliance.evidence_expired")}</span>;
+  if (days <= 30) return <span className="rounded-full px-2.5 py-0.5 text-xs font-semibold bg-amber-100 text-amber-700 flex-shrink-0">{t("r2.compliance.evidence_expires_in", { count: days })}</span>;
+  return <span className="text-[10px] text-gray-500 flex-shrink-0">{t("r2.compliance.evidence_valid_until", { date: validUntil!.slice(0, 10) })}</span>;
+}
 
 // ─── Status helpers ────────────────────────────────────────────────────────────
 
@@ -116,9 +140,11 @@ function scoreColor(s: number) {
 function UploadTab({
   assessment,
   onAnalyzed,
+  canManage,
 }: {
   readonly assessment: AssessmentDetail;
   readonly onAnalyzed: (updated: AssessmentDetail) => void;
+  readonly canManage: boolean;
 }) {
   const { t } = useTranslation();
   const [dragOver, setDragOver] = useState(false);
@@ -238,8 +264,18 @@ function UploadTab({
         </div>
       )}
 
+      {/* An AI re-run merges: what a person decided stays (R2 5.1) — say how much. */}
+      {canManage && docs.length > 0 && (() => {
+        const kept = assessment.control_assessments.filter(c => c.status_source === "human").length;
+        return kept > 0 ? (
+          <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 text-sm text-blue-800">
+            {t("r2.compliance.rerun_keeps", { count: kept })}
+          </div>
+        ) : null;
+      })()}
+
       {/* Analyze button */}
-      <div className="flex justify-end">
+      {canManage && <div className="flex justify-end">
         <button
           onClick={runAnalysis}
           disabled={docs.length === 0 || analyzing}
@@ -257,7 +293,7 @@ function UploadTab({
             </>
           )}
         </button>
-      </div>
+      </div>}
 
       {analyzing && (
         <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 text-sm text-blue-700">
@@ -278,6 +314,16 @@ function ResultsTab({
 }) {
   const { t, i18n } = useTranslation();
   const [filter, setFilter] = useState<"all" | "implemented" | "partial" | "gap">("all");
+  const authUser = useAuthStore((u) => u);
+  const canManage = hasAnyRole(authUser, COMPLIANCE_MANAGE_ROLES);
+  const canCiso = hasAnyRole(authUser, COMPLIANCE_CISO_ROLES);
+  const isControlOwner = !canManage && hasAnyRole(authUser, ["control_owner"]);
+  const myId = currentUserId(authUser);
+  // A control owner starts on the requirements they own — the only ones they can act on.
+  const [mineOnly, setMineOnly] = useState(isControlOwner);
+  const [validUntil, setValidUntil] = useState<Record<string, string>>({});
+  const [sourceOverrides, setSourceOverrides] = useState<Record<string, string>>({});
+  const [accepting, setAccepting] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [policyGap, setPolicyGap] = useState<GapDetail | null>(null);
   const [overrides, setOverrides] = useState<Record<string, string>>({});
@@ -336,6 +382,7 @@ function ResultsTab({
     try {
       const updated = await complianceApi.updateControlAssessment(caId, { status: newStatus as import("@/types").ControlStatus });
       setOverrides((prev) => ({ ...prev, [caId]: updated.status }));
+      setSourceOverrides((prev) => ({ ...prev, [caId]: "human" }));
       recordHistory(caId, currentStatus, updated.status);
     } catch {
       // Previously swallowed: the dropdown moved on screen whether or not the
@@ -358,6 +405,7 @@ function ResultsTab({
       const updated = await complianceApi.updateControlAssessment(ca.id, { status_key: levelKey });
       setKeyOverrides((prev) => ({ ...prev, [ca.id]: updated.status_key ?? levelKey }));
       setOverrides((prev) => ({ ...prev, [ca.id]: updated.status }));
+      setSourceOverrides((prev) => ({ ...prev, [ca.id]: "human" }));
       recordHistory(ca.id, before, updated.status);
       if (updated.requires_justification) {
         setNaErrors((prev) => ({ ...prev, [ca.id]: t("applicability.justification_required") }));
@@ -430,7 +478,7 @@ function ResultsTab({
     if (!file) return;
     setUploadingEvidence(caId);
     try {
-      const result = await complianceApi.uploadControlEvidence(caId, file);
+      const result = await complianceApi.uploadControlEvidence(caId, file, validUntil[caId] || undefined);
       setEvidenceMap(prev => ({
         ...prev,
         [caId]: [...(prev[caId] ?? []), result],
@@ -439,8 +487,32 @@ function ResultsTab({
         setEvidenceSharedToast({ fileName: file.name, count: result.shared_count! });
         setTimeout(() => setEvidenceSharedToast(null), 5000);
       }
-    } catch {/* silent */} finally {
+    } catch (err: unknown) {
+      const d = (err as { response?: { data?: { detail?: unknown } } })?.response?.data?.detail;
+      setEvidenceError(typeof d === "string" ? d : t("r2.compliance.evidence_upload_failed"));
+    } finally {
       setUploadingEvidence(null);
+    }
+  }
+
+  /** Take the AI's suggestion as the person's own decision (it becomes human-set). */
+  async function acceptSuggestion(ca: ControlAssessmentDetail) {
+    setAccepting(ca.id);
+    setStatusError("");
+    const before = effectiveStatus(ca);
+    try {
+      const updated = await complianceApi.updateControlAssessment(ca.id,
+        usesScale && ca.ai_suggested_status_key
+          ? { status_key: ca.ai_suggested_status_key }
+          : { status: ca.ai_suggested_status as import("@/types").ControlStatus });
+      setOverrides((prev) => ({ ...prev, [ca.id]: updated.status }));
+      if (updated.status_key) setKeyOverrides((prev) => ({ ...prev, [ca.id]: updated.status_key! }));
+      setSourceOverrides((prev) => ({ ...prev, [ca.id]: "human" }));
+      recordHistory(ca.id, before, updated.status);
+    } catch {
+      setStatusError(t("compliance.status_save_failed", "The status could not be saved. Nothing was changed."));
+    } finally {
+      setAccepting(null);
     }
   }
 
@@ -524,6 +596,13 @@ function ResultsTab({
   function effectiveOwner(ca: ControlAssessmentDetail): string {
     return ownerOverrides[ca.id] ?? ca.owner_id ?? "";
   }
+  /** What the backend lets this user change on the row (perimeter rule). */
+  function canEdit(ca: ControlAssessmentDetail): boolean {
+    return canManage || (hasAnyRole(authUser, ["control_owner"]) && !!myId && effectiveOwner(ca) === myId);
+  }
+  function isHumanSet(ca: ControlAssessmentDetail): boolean {
+    return (sourceOverrides[ca.id] ?? ca.status_source) === "human";
+  }
   function isNotApplicable(ca: ControlAssessmentDetail): boolean {
     if (usesScale) {
       const lv = findLevel(scaleLevels, effectiveStatusKey(ca));
@@ -533,6 +612,7 @@ function ResultsTab({
   }
 
   const filtered = cas.filter((ca) => {
+    if (mineOnly && effectiveOwner(ca) !== myId) return false;
     const st = effectiveStatus(ca);
     if (filter === "implemented") return st === "implemented";
     if (filter === "partial") return st === "partially_implemented";
@@ -739,7 +819,16 @@ function ResultsTab({
             <span className="ml-1.5 opacity-70">{counts[f]}</span>
           </button>
         ))}
+        {myId && (
+          <label className="ms-auto flex items-center gap-2 text-xs text-gray-600 cursor-pointer select-none">
+            <input type="checkbox" checked={mineOnly} onChange={(e) => setMineOnly(e.target.checked)} className="accent-blue-600" />
+            {t("r2.compliance.mine_only")}
+          </label>
+        )}
       </div>
+      {isControlOwner && (
+        <p className="text-xs text-gray-500">{t("r2.compliance.owner_scope_hint")}</p>
+      )}
 
       {/* Controls list */}
       <div className="bg-white rounded-2xl border border-gray-100 divide-y divide-gray-50">
@@ -782,7 +871,16 @@ function ResultsTab({
                 </button>
 
                 <div className="flex items-center gap-2 flex-shrink-0">
-                  {ca.ai_confidence != null && (
+                  {ca.evidence_all_expired && (
+                    <span className="rounded-full px-2.5 py-0.5 text-xs font-semibold bg-red-100 text-red-700" title={t("r2.compliance.evidence_all_expired_hint")}>
+                      {t("r2.compliance.evidence_all_expired")}
+                    </span>
+                  )}
+                  {isHumanSet(ca) ? (
+                    <span className="rounded-full px-2.5 py-0.5 text-xs font-semibold bg-blue-50 text-blue-700" title={t("r2.compliance.human_set_hint")}>
+                      {t("r2.compliance.human_set")}
+                    </span>
+                  ) : ca.ai_confidence != null && (
                     <span className="text-xs text-gray-400">{Math.round(ca.ai_confidence * 100)}%</span>
                   )}
                   <ControlStatusBadge status={effectiveStatus(ca)} statusKey={effectiveStatusKey(ca)} levels={scaleLevels} />
@@ -795,14 +893,14 @@ function ResultsTab({
                       {t("compliance.generate_policy_btn")}
                     </button>
                   )}
-                  <button
+                  {canCiso && <button
                     onClick={(e) => { e.stopPropagation(); setShareModalCa(ca); }}
                     className="flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-500 hover:bg-orange-50 hover:text-orange-600 transition-colors"
                     title={t("compliance.share_link_title", "Share an upload link with a stakeholder")}
                   >
                     <Link2 className="w-3 h-3" />
                     {t("compliance.share_btn")}
-                  </button>
+                  </button>}
                 </div>
               </div>
 
@@ -844,6 +942,45 @@ function ResultsTab({
                     </div>
                   )}
 
+                  {/* The AI's opinion on a requirement a person decided (R2 5.1). */}
+                  {isHumanSet(ca) && ca.ai_suggested_status && ca.ai_suggested_status !== effectiveStatus(ca) && (
+                    <div className="bg-violet-50 border border-violet-200 rounded-lg p-3 flex flex-wrap items-center gap-2">
+                      <Sparkles className="w-3.5 h-3.5 text-violet-600" />
+                      <span className="text-xs text-violet-800">
+                        {t("r2.compliance.ai_suggests")}{" "}
+                      </span>
+                      <ControlStatusBadge status={ca.ai_suggested_status} statusKey={ca.ai_suggested_status_key} levels={scaleLevels} />
+                      {ca.ai_confidence != null && <span className="text-xs text-violet-600">{Math.round(ca.ai_confidence * 100)}%</span>}
+                      {canEdit(ca) && (
+                        <button onClick={() => acceptSuggestion(ca)} disabled={accepting === ca.id}
+                          className="ms-auto inline-flex items-center gap-1 text-xs font-medium bg-violet-600 hover:bg-violet-700 disabled:opacity-50 text-white px-2.5 py-1 rounded-lg">
+                          {accepting === ca.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <CheckCircle className="w-3 h-3" />}
+                          {t("r2.compliance.accept_suggestion")}
+                        </button>
+                      )}
+                      {ca.ai_suggested_notes && <p className="w-full text-xs text-violet-700">{ca.ai_suggested_notes}</p>}
+                    </div>
+                  )}
+
+                  {/* Applied controls declared as implementing this requirement —
+                      information only, never moves the status (R2 5.6). */}
+                  {(ca.applied_controls?.length ?? 0) > 0 && (
+                    <div>
+                      <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">{t("r2.compliance.applied_controls")}</p>
+                      <div className="space-y-1">
+                        {ca.applied_controls!.map((ac) => (
+                          <div key={ac.id} className="flex items-center gap-2 text-xs bg-gray-50 rounded px-2 py-1">
+                            <span className="flex-1 truncate text-gray-700">{ac.name}</span>
+                            <span className="rounded-full px-2.5 py-0.5 text-xs font-semibold bg-white border border-gray-200 text-gray-600">
+                              {t(`vocab.${ac.status}`, { defaultValue: ac.status.replaceAll("_", " ") })}
+                            </span>
+                            {ac.progress != null && <span className="text-gray-500 w-10 text-end">{ac.progress}%</span>}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
                   {/* Verdict — driven by the assessment's own conformity grid
                       when it has one, by the legacy enum when it does not. */}
                   <div className="flex flex-wrap items-center gap-2 pt-1">
@@ -852,7 +989,7 @@ function ResultsTab({
                       <select
                         value={effectiveStatusKey(ca)}
                         onChange={(e) => handleLevelChange(ca, e.target.value)}
-                        disabled={saving === ca.id}
+                        disabled={saving === ca.id || !canEdit(ca)}
                         className="text-xs border border-gray-200 rounded-lg px-2 py-1 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
                       >
                         {/* Placeholder only: handleLevelChange refuses "" (there
@@ -869,7 +1006,7 @@ function ResultsTab({
                       <select
                         value={effectiveStatus(ca)}
                         onChange={(e) => handleStatusOverride(ca.id, effectiveStatus(ca), e.target.value)}
-                        disabled={saving === ca.id}
+                        disabled={saving === ca.id || !canEdit(ca)}
                         className="text-xs border border-gray-200 rounded-lg px-2 py-1 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
                       >
                         <option value="implemented">{t("compliance.status_options.implemented")}</option>
@@ -896,7 +1033,7 @@ function ResultsTab({
                         id={`owner-${ca.id}`}
                         value={effectiveOwner(ca)}
                         onChange={(e) => handleOwnerChange(ca.id, e.target.value)}
-                        disabled={savingOwner === ca.id}
+                        disabled={savingOwner === ca.id || !canManage}
                         className="text-xs border border-gray-200 rounded-lg px-2 py-1 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white max-w-[180px]"
                       >
                         <option value="">{t("compliance.select_owner")}</option>
@@ -929,13 +1066,14 @@ function ResultsTab({
                           setNaErrors((prev) => ({ ...prev, [ca.id]: "" }));
                         }}
                         placeholder={t("applicability.justification_placeholder")}
+                        readOnly={!canEdit(ca)}
                         className="w-full px-3 py-2 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none bg-white"
                       />
                       <div className="flex items-center gap-2">
                         <button
                           type="button"
                           onClick={() => handleSaveNaJustification(ca)}
-                          disabled={savingNa === ca.id}
+                          disabled={savingNa === ca.id || !canEdit(ca)}
                           className="flex items-center gap-1.5 text-xs font-medium bg-gray-800 hover:bg-gray-900 disabled:opacity-50 text-white px-3 py-1.5 rounded-lg transition-colors"
                         >
                           {savingNa === ca.id && <Loader2 className="w-3 h-3 animate-spin" />}
@@ -990,6 +1128,7 @@ function ResultsTab({
                         <textarea
                           value={justifications[ca.id] ?? ca.notes ?? ""}
                           onChange={(e) => handleJustificationChange(ca.id, e.target.value)}
+                          readOnly={!canEdit(ca)}
                           placeholder={t("compliance.justification_placeholder")}
                           className="w-full px-3 py-2 text-xs border-2 border-blue-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none bg-blue-50 hover:bg-blue-50 transition-all placeholder-blue-400"
                           rows={1}
@@ -1002,7 +1141,7 @@ function ResultsTab({
                       </div>
 
                       {/* Evidence Upload - Purple Theme */}
-                      <div>
+                      {canEdit(ca) && <div>
                         <div className="flex items-center gap-1.5 mb-1.5">
                           <div className="w-2 h-2 rounded-full bg-purple-500" />
                           <label className="text-xs font-semibold text-purple-700 uppercase tracking-wide">{t("compliance.files_label")}</label>
@@ -1037,7 +1176,13 @@ function ResultsTab({
                             )}
                           </label>
                         </div>
-                      </div>
+                        <label className="block mt-1.5 text-[10px] font-semibold text-purple-700 uppercase tracking-wide" htmlFor={`valid-until-${ca.id}`}>
+                          {t("r2.compliance.valid_until")}
+                        </label>
+                        <input id={`valid-until-${ca.id}`} type="date" value={validUntil[ca.id] ?? ""}
+                          onChange={(e) => setValidUntil((prev) => ({ ...prev, [ca.id]: e.target.value }))}
+                          className="w-full text-xs border border-purple-200 rounded-lg px-2 py-1 focus:outline-none focus:ring-2 focus:ring-purple-400 bg-white" />
+                      </div>}
                     </div>
 
                     {/* Linked Document Checklist files - Teal Theme */}
@@ -1083,6 +1228,7 @@ function ResultsTab({
                             <div key={ev.id} className="flex items-center gap-1.5 text-xs bg-white/60 px-2 py-1 rounded">
                               <FileText className="w-3.5 h-3.5 flex-shrink-0 text-green-600" />
                               <span className="truncate font-medium text-green-700 flex-1">{ev.file_name}</span>
+                              <EvidenceValidityBadge validUntil={ev.valid_until} />
                               {ev.is_shared && (
                                 <span title={t("compliance.evidence_auto_shared_title")} className="flex items-center gap-0.5 text-indigo-600 bg-indigo-50 rounded px-1 py-0.5 flex-shrink-0">
                                   <Globe className="w-2.5 h-2.5" />
@@ -1097,8 +1243,8 @@ function ResultsTab({
                               >
                                 <ExternalLink className="w-3 h-3" />
                               </button>
-                              {/* Auditor visibility toggle */}
-                              <button
+                              {/* Auditor visibility toggle (CISO-only route) */}
+                              {canCiso && <button
                                 onClick={() => handleToggleVisibility(ca.id, ev.id)}
                                 disabled={togglingVisibility === ev.id}
                                 title={ev.is_visible_to_auditor ? t("compliance.checklist_hide_auditor") : t("compliance.checklist_show_auditor")}
@@ -1109,7 +1255,7 @@ function ResultsTab({
                                   : ev.is_visible_to_auditor
                                     ? <Eye className="w-3 h-3" />
                                     : <EyeOff className="w-3 h-3" />}
-                              </button>
+                              </button>}
                               {/* File history (scoped to the control, not this row) */}
                               <button
                                 onClick={() => setHistoryFor({ id: ca.id, label: ca.control_identifier || ca.control_title || t("traceability.control") })}
@@ -1118,8 +1264,8 @@ function ResultsTab({
                               >
                                 <History className="w-3 h-3" />
                               </button>
-                              {/* Delete */}
-                              <button
+                              {/* Delete (CISO-only route) */}
+                              {canCiso && <button
                                 onClick={() => handleDeleteEvidence(ca.id, ev.id)}
                                 disabled={deletingEvidence === ev.id}
                                 title={t("common.delete")}
@@ -1128,7 +1274,7 @@ function ResultsTab({
                                 {deletingEvidence === ev.id
                                   ? <Loader2 className="w-3 h-3 animate-spin" />
                                   : <Trash2 className="w-3 h-3" />}
-                              </button>
+                              </button>}
                             </div>
                           ))}
                         </div>
@@ -1553,8 +1699,13 @@ export default function AssessmentDetailPage() {
   const [assessment, setAssessment] = useState<AssessmentDetail | null>(null);
   const [gaps, setGaps] = useState<GapDetail[]>([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<Tab>("upload");
+  const pageUser = useAuthStore((u) => u);
+  const canManagePage = hasAnyRole(pageUser, COMPLIANCE_MANAGE_ROLES);
+  const canCisoPage = hasAnyRole(pageUser, COMPLIANCE_CISO_ROLES);
+  // Someone who cannot upload / analyse has no Upload tab: start on the results.
+  const [activeTab, setActiveTab] = useState<Tab>(canManagePage ? "upload" : "results");
   const [showSettings, setShowSettings] = useState(false);
+  const [showDeleted, setShowDeleted] = useState(false);
 
   useEffect(() => {
     if (!assessmentId) return;
@@ -1594,8 +1745,11 @@ export default function AssessmentDetailPage() {
   const gapCount = gaps.length;
 
   const tabs: { key: Tab; label: string; disabled?: boolean; icon?: React.ReactNode }[] = [
-    { key: "upload",     label: t("compliance.upload_analyze") },
-    { key: "checklist",  label: t("compliance.document_checklist") },
+    // Uploading analysis documents / running the AI: CISO + compliance_manager only.
+    ...(canManagePage ? [
+      { key: "upload" as Tab,    label: t("compliance.upload_analyze") },
+      { key: "checklist" as Tab, label: t("compliance.document_checklist") },
+    ] : []),
     { key: "results",    label: `${t("compliance.results")}${hasResults ? ` (${assessment.control_assessments.length})` : ""}`, disabled: !hasResults },
     { key: "gapreport",  label: `${t("compliance.gap_report")}${gapCount > 0 ? ` (${gapCount})` : ""}`, disabled: gapCount === 0 },
     { key: "crossfw",    label: `${t("compliance.cross_framework")}${Object.keys(assessment.cross_framework_summary).length > 0 ? ` (${Object.keys(assessment.cross_framework_summary).length})` : ""}` },
@@ -1652,14 +1806,23 @@ export default function AssessmentDetailPage() {
             </div>
           </div>
           <div className="flex items-center gap-3">
-            <button
+            {canCisoPage && (
+              <button
+                onClick={() => setShowDeleted(true)}
+                className="flex items-center gap-1.5 text-sm font-medium text-gray-600 border border-gray-200 hover:bg-gray-50 px-3 py-2 rounded-lg transition-colors"
+              >
+                <Archive className="w-4 h-4" />
+                {t("r2.compliance.deleted_files_btn")}
+              </button>
+            )}
+            {canCisoPage && <button
               onClick={() => setShowSettings(true)}
               title={t("compliance_scope.change_scope")}
               className="flex items-center gap-1.5 text-sm font-medium text-gray-600 border border-gray-200 hover:bg-gray-50 px-3 py-2 rounded-lg transition-colors"
             >
               <Settings2 className="w-4 h-4" />
               {t("compliance.assessment_settings", "Assessment settings")}
-            </button>
+            </button>}
             {hasResults && (
               <button
                 onClick={() => navigate(`/compliance/${assessmentId}/traceability`)}
@@ -1705,9 +1868,15 @@ export default function AssessmentDetailPage() {
         </div>
       </div>
 
+      {showDeleted && (
+        <FileHistoryModal mode="deleted" parentType="" parentId="" title={assessment.name}
+          onClose={() => setShowDeleted(false)} />
+      )}
+
       {/* Tab content */}
-      {activeTab === "upload" && (
+      {activeTab === "upload" && canManagePage && (
         <UploadTab
+          canManage={canManagePage}
           assessment={assessment}
           onAnalyzed={(updated) => {
             setAssessment(updated);

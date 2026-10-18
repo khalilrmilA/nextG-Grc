@@ -71,7 +71,7 @@ Size: **S** = small (hours to a couple of days), **M** = medium (about a week or
 
 ## 5. Controls & evidence (compliance)
 
-- [ ] **M — AI re-run must merge, not replace (biggest item).**
+- [x] **M — AI re-run must merge, not replace (biggest item).** *(R2 phase 5: `services/compliance_merge.py`, `status_source` + `ai_suggested_*`, Accept in UI; `selftest_compliance_merge.py` runs the real task with a fake AI result)*
   [compliance.py:2645-2697](../../backend/app/api/v1/endpoints/compliance.py#L2645-L2697) deletes and
   recreates every control assessment the AI re-judges, including the evidence rows. That loses the
   manual status, owner, notes, N/A justification and auditor verdict.
@@ -79,11 +79,11 @@ Size: **S** = small (hours to a couple of days), **M** = medium (about a week or
   - File bytes are retired to the recovery list.
   - Fix: update existing rows in place, never overwrite a human-set value without confirmation, and
     keep the evidence attached.
-- [ ] **S — Create the control rows when an assessment is created.** `POST /compliance/assessments`
+- [x] **S — Create the control rows when an assessment is created.** *(R2 phase 5 + `scripts/backfill_control_assessments.py`)* `POST /compliance/assessments`
   creates no `ControlAssessment` rows, so appliance tenants and later-added frameworks need an AI run
   before anyone can assess by hand. Create one `NOT_STARTED` row per control, as registration does
   ([auth.py:642-652](../../backend/app/api/v1/endpoints/auth.py#L642-L652)).
-- [ ] **M — Let control owners self-assess.** These write routes are CISO-only:
+- [x] **M — Let control owners self-assess.** *(R2 phase 5: reads + update/evidence open to compliance_manager tenant-wide and control_owner on owned rows; create/analyze CISO + compliance_manager)* These write routes are CISO-only:
   - create assessment ([compliance.py:1651](../../backend/app/api/v1/endpoints/compliance.py#L1651))
   - upload document ([:2346](../../backend/app/api/v1/endpoints/compliance.py#L2346))
   - analyze ([:2858](../../backend/app/api/v1/endpoints/compliance.py#L2858))
@@ -91,9 +91,9 @@ Size: **S** = small (hours to a couple of days), **M** = medium (about a week or
   - upload evidence ([:3671](../../backend/app/api/v1/endpoints/compliance.py#L3671))
 
   Allow owner-scoped writes (`services/perimeter.py`) and align `ROUTE_ROLES`.
-- [ ] **M — Evidence validity.** `valid_until` is unused. Add expiry plus renewal reminders.
-- [ ] **S — Recovery list UI.** `complianceApi.listDeletedFiles` has no caller.
-- [ ] **M — Roll applied controls up into requirement status.** The `framework_control_ids` and
+- [x] **M — Evidence validity.** *(R2 phase 5: valid until on upload, badges, expired-only flag, 30/7/0-day reminders)* `valid_until` is unused. Add expiry plus renewal reminders.
+- [x] **S — Recovery list UI.** *(R2 phase 5: Deleted files panel via FileHistoryModal, CISO)* `complianceApi.listDeletedFiles` has no caller.
+- [x] **M — Roll applied controls up into requirement status.** *(R2 phase 5, optional item: shown per requirement as information only — status never changed automatically)* The `framework_control_ids` and
   evidence links on applied controls are backend-only; compliance never reads them.
 
 ## 6. Audits (already Strong; caveat only)

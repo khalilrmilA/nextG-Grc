@@ -154,6 +154,18 @@ class ControlAssessment(Base):
         DateTime(timezone=True), nullable=True
     )
 
+    # --- R2: human work survives an AI re-run (scripts/migrate_r2_lifecycle.py) ---
+    # Who set `status` last: "human" (a person, incl. accepting the AI's
+    # suggestion) or "ai" (the analysis). NULL on rows that predate the marker
+    # (scripts/backfill_control_status_source.py recovers human edits from the
+    # activity log). The analysis never overwrites a human-set row; it records its
+    # opinion in ai_suggested_* instead.
+    status_source: Mapped[str | None] = mapped_column(String(10), nullable=True)
+    ai_suggested_status: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    ai_suggested_status_key: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    ai_suggested_notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    ai_suggested_at: Mapped[str | None] = mapped_column(String(30), nullable=True)
+
     # Relationships
     assessment: Mapped["ComplianceAssessment"] = relationship(
         "ComplianceAssessment", back_populates="control_assessments"

@@ -503,6 +503,8 @@ export interface EvidenceItem {
   created_at: string;
   shared_count?: number;
   is_shared?: boolean;
+  valid_from?: string | null;
+  valid_until?: string | null;
 }
 
 export interface ChecklistDocItem {
@@ -595,9 +597,12 @@ export const complianceApi = {
       .post(`/compliance/assessments/${assessmentId}/gaps/bulk-action`, data)
       .then((r) => r.data),
 
-  uploadControlEvidence: (controlAssessmentId: string, file: File) => {
+  // validUntil (YYYY-MM-DD): how long this proof stays valid — drives the
+  // expired / expiring badges and the 30/7/0-day reminders.
+  uploadControlEvidence: (controlAssessmentId: string, file: File, validUntil?: string) => {
     const formData = new FormData();
     formData.append("file", file);
+    if (validUntil) formData.append("valid_until", validUntil);
     return apiClient
       .post<EvidenceItem>(
         `/compliance/control-assessments/${controlAssessmentId}/evidence`,

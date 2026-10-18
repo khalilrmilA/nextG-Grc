@@ -10,7 +10,7 @@ import asyncio
 import logging
 import re
 import uuid
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Annotated
 
@@ -31,6 +31,9 @@ from app.core.security_utils import (
     verify_file_signature,
 )
 from app.services import file_integrity
+from app.services import compliance_merge, perimeter
+from app.models.applied_control import AppliedControl
+from app.services.authz import get_effective_roles
 from app.models.compliance import (
     AssessmentStatus,
     ComplianceAssessment,
@@ -57,6 +60,14 @@ from app.services.content_translation import get_display_language, localize_fiel
 from app.services.ai_structured import ai_structured, coerce_shape, extract_json, validate_against
 
 router = APIRouter()
+
+# R2 5.3 — who may do what on a compliance assessment. Reading and self-assessing
+# open to compliance_manager (tenant-wide) and control_owner (their own rows, via
+# services/perimeter); running the analysis and creating assessments stay with
+# the CISO and compliance_manager. tenant_admin / super_admin auto-pass.
+_READ_ROLES = (UserRole.CISO, UserRole.COMPLIANCE_MANAGER, UserRole.CONTROL_OWNER)
+_ASSESS_ROLES = (UserRole.CISO, UserRole.COMPLIANCE_MANAGER, UserRole.CONTROL_OWNER)
+_MANAGE_ROLES = (UserRole.CISO, UserRole.COMPLIANCE_MANAGER)
 
 # ─── Request / Response schemas ────────────────────────────────────────────────
 
@@ -146,6 +157,9 @@ class EvidenceResponse(BaseModel):
     created_at: datetime
     shared_count: int = 0
     is_shared: bool = False
+    # Validity window (YYYY-MM-DD). The UI derives "expired" / "expires in N days".
+    valid_from: str | None = None
+    valid_until: str | None = None
 
     model_config = {"from_attributes": True}
 
@@ -173,6 +187,19 @@ class ControlAssessmentResponse(BaseModel):
     cross_framework_coverage: list[dict] = []
     is_mandatory: bool = False
     linked_checklist_documents: list[LinkedChecklistDocument] = []
+    # R2 5.1 — "human" when a person set the status; the AI's own opinion beside it.
+    status_source: str | None = None
+    ai_suggested_status: str | None = None
+    ai_suggested_status_key: str | None = None
+    ai_suggested_notes: str | None = None
+    ai_suggested_at: str | None = None
+    # R2 5.4 — evidence on file, and whether every piece of it has expired.
+    evidence_count: int = 0
+    evidence_expired_count: int = 0
+    evidence_all_expired: bool = False
+    # R2 5.6 — applied controls declared as implementing this requirement
+    # (information only: never changes the requirement's status).
+    applied_controls: list[dict] = []
     # Machine translation of the requirement text for display (content_translations);
     # the stored text stays in original_*. Additive/optional.
     translated: bool = False
@@ -1534,6 +1561,35 @@ async def _build_assessment_detail(
     controls = ctrl_result.scalars().all()
     controls_map: dict[str, FrameworkControl] = {c.id: c for c in controls}
 
+    # Evidence validity per requirement, in one query (R2 5.4).
+    today_iso = datetime.now(timezone.utc).date().isoformat()
+    ev_stats: dict[str, list[int]] = {}
+    if cas:
+        for ca_id, valid_until in (await db.execute(
+            select(Evidence.control_assessment_id, Evidence.valid_until).where(
+                Evidence.control_assessment_id.in_([ca.id for ca in cas]),
+                Evidence.tenant_id == assessment.tenant_id,
+            )
+        )).all():
+            st = ev_stats.setdefault(ca_id, [0, 0])
+            st[0] += 1
+            if valid_until and valid_until[:10] < today_iso:
+                st[1] += 1
+
+    # Applied controls that declare they implement a requirement (R2 5.6) —
+    # framework_control_ids holds FrameworkControl ids.
+    applied_by_control: dict[str, list[dict]] = {}
+    for ac in (await db.execute(
+        select(AppliedControl).where(AppliedControl.tenant_id == assessment.tenant_id)
+    )).scalars().all():
+        for fc_id in (ac.framework_control_ids or []):
+            if fc_id in controls_map:
+                applied_by_control.setdefault(fc_id, []).append({
+                    "id": ac.id, "name": ac.name,
+                    "status": getattr(ac.status, "value", ac.status),
+                    "progress": getattr(ac, "progress", None),
+                })
+
     ca_responses = []
     for ca in cas:
         cid = controls_map[ca.control_id].control_id if ca.control_id in controls_map else ca.control_id
@@ -1575,6 +1631,15 @@ async def _build_assessment_detail(
             ) or [],
             is_mandatory=(controls_map[ca.control_id].is_mandatory if ca.control_id in controls_map else False),
             linked_checklist_documents=linked_docs,
+            status_source=ca.status_source,
+            ai_suggested_status=ca.ai_suggested_status,
+            ai_suggested_status_key=ca.ai_suggested_status_key,
+            ai_suggested_notes=ca.ai_suggested_notes,
+            ai_suggested_at=ca.ai_suggested_at,
+            evidence_count=ev_stats.get(ca.id, [0, 0])[0],
+            evidence_expired_count=ev_stats.get(ca.id, [0, 0])[1],
+            evidence_all_expired=bool(ev_stats.get(ca.id)) and ev_stats[ca.id][0] == ev_stats[ca.id][1],
+            applied_controls=applied_by_control.get(ca.control_id, []),
         ))
 
     gap_result = await db.execute(
@@ -1648,7 +1713,7 @@ async def _build_assessment_detail(
 async def create_assessment(
     body: AssessmentCreate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_roles(UserRole.CISO)),
+    current_user: User = Depends(require_roles(*_MANAGE_ROLES)),
     tenant_id: str = Depends(get_tenant_id),
 ) -> AssessmentDetailResponse:
     """Create a compliance assessment on a PERIMETER — the whole organisation, a
@@ -1756,6 +1821,20 @@ async def create_assessment(
         in_scope_assets=in_scope_assets,
     )
     db.add(assessment)
+    await db.flush()
+    # One NOT_STARTED row per requirement from day one (R2 5.2), as registration
+    # does: without them nobody could assess by hand before an AI run, and an
+    # appliance tenant or a framework added later had no way to start at all.
+    # Only for a NEW assessment — the de-duplicated one above already has its rows.
+    scale = await _load_scale(db, assessment)
+    for fc_id in (await db.execute(
+        select(FrameworkControl.id).where(FrameworkControl.framework_id == body.framework_id)
+    )).scalars().all():
+        db.add(ControlAssessment(
+            assessment_id=assessment.id, control_id=fc_id,
+            status=ControlStatus.NOT_STARTED,
+            status_key=_status_key_for(scale, ControlStatus.NOT_STARTED),
+        ))
     await db.commit()
     await db.refresh(assessment)
     return await _build_assessment_detail(db, assessment)
@@ -1780,7 +1859,7 @@ async def list_assessments(
                     "historical record of a past perimeter, not part of the live picture.",
     ),
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(require_roles(UserRole.CISO)),
+    _: User = Depends(require_roles(*_READ_ROLES)),
     tenant_id: str = Depends(get_tenant_id),
     lang: str = Depends(get_display_language),
 ) -> PaginatedAssessments:
@@ -1898,7 +1977,7 @@ async def list_assessments(
 async def get_assessment(
     assessment_id: str,
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(require_roles(UserRole.CISO)),
+    _: User = Depends(require_roles(*_READ_ROLES)),
     tenant_id: str = Depends(get_tenant_id),
     lang: str = Depends(get_display_language),
 ) -> AssessmentDetailResponse:
@@ -2204,7 +2283,7 @@ async def _coverage_assessments(
 async def coverage_by_entity(
     framework_id: str | None = Query(None, description="Restrict to one framework"),
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(require_roles(UserRole.CISO)),
+    _: User = Depends(require_roles(*_READ_ROLES)),
     tenant_id: str = Depends(get_tenant_id),
 ) -> ScopeCoverageResponse:
     """Conformity per DÉPARTEMENT (org entity), with a roll-up over its subtree."""
@@ -2259,7 +2338,7 @@ async def coverage_by_entity(
 async def coverage_by_process(
     framework_id: str | None = Query(None, description="Restrict to one framework"),
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(require_roles(UserRole.CISO)),
+    _: User = Depends(require_roles(*_READ_ROLES)),
     tenant_id: str = Depends(get_tenant_id),
 ) -> ScopeCoverageResponse:
     """Conformity per PROCESSUS métier."""
@@ -2291,7 +2370,7 @@ async def coverage_by_process(
 async def coverage_by_asset(
     framework_id: str | None = Query(None, description="Restrict to one framework"),
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(require_roles(UserRole.CISO)),
+    _: User = Depends(require_roles(*_READ_ROLES)),
     tenant_id: str = Depends(get_tenant_id),
 ) -> ScopeCoverageResponse:
     """Conformity per SYSTÈME (asset).
@@ -2343,7 +2422,7 @@ async def upload_document(
     file: UploadFile = File(...),
     document_type_key: str | None = Form(default=None),
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_roles(UserRole.CISO)),
+    current_user: User = Depends(require_roles(*_MANAGE_ROLES)),
     tenant_id: str = Depends(get_tenant_id),
     lang: str = Depends(get_request_language),
 ) -> UploadedDocumentResponse:
@@ -2465,6 +2544,9 @@ async def upload_document(
                             ControlStatus.NOT_STARTED,
                             ControlStatus.NOT_IMPLEMENTED,
                         ]),
+                        # A level a person chose is not promoted automatically.
+                        or_(ControlAssessment.status_source.is_(None),
+                            ControlAssessment.status_source != compliance_merge.HUMAN),
                     )
                     .values(status=ControlStatus.PARTIALLY_IMPLEMENTED)
                 )
@@ -2637,41 +2719,24 @@ async def _run_analysis_background(assessment_id: str, tenant_id: str, user_id: 
                 if v is None or _VERDICT_STATUS.get(v.verdict) is None:
                     missing_control_ids.update(control.id for control in rows)
 
-            # ── Clear previous results ───────────────────────────────────────────────
-            # Controls in ``missing_control_ids`` keep their previous ControlAssessment / Evidence /
-            # ComplianceGap rows untouched — only controls this run actually produced a verdict for
-            # (or controls whose old row no longer matches any current framework control) are
-            # replaced.
+            # ── Merge into the existing rows (R2) ────────────────────────────────────
+            # A re-run used to DELETE every ControlAssessment it re-judged — and its
+            # Evidence with it — then recreate them, so the status, N/A justification
+            # and proof a person had recorded were silently lost. Rows are now updated
+            # in place through compliance_merge: a human-set row keeps its decision and
+            # only receives the AI's suggestion, evidence is never touched, and a
+            # control this run could not judge keeps its row exactly as it was.
             old_cas = (await db.execute(
                 select(ControlAssessment).where(ControlAssessment.assessment_id == assessment_id)
             )).scalars().all()
             old_cas_by_control_id: dict[str, ControlAssessment] = {ca.control_id: ca for ca in old_cas}
-            cas_to_replace = [ca for ca in old_cas if ca.control_id not in missing_control_ids]
-            cas_to_replace_ids = [ca.id for ca in cas_to_replace]
-            # Delete Evidence rows first — control_assessment_id is NOT NULL so
-            # SQLAlchemy cannot null it out when the parent ControlAssessment is deleted.
-            if cas_to_replace_ids:
-                old_evidence = (await db.execute(
-                    select(Evidence).where(Evidence.control_assessment_id.in_(cas_to_replace_ids))
-                )).scalars().all()
-                for ev in old_evidence:
-                    # Re-running an analysis is routine, and it silently wiped
-                    # every evidence row on the replaced control assessments.
-                    # The bytes stay on disk either way; retiring the version
-                    # is what makes them show up in the recovery list instead
-                    # of becoming untraceable orphans.
-                    await file_integrity.retire_versions(
-                        db, entity_type=file_integrity.EVIDENCE, entity_id=ev.id,
-                        note="Control assessment replaced by a re-run analysis",
-                    )
-                    await db.delete(ev)
-                await db.flush()
-            for ca in cas_to_replace:
-                await db.delete(ca)
+            human_control_ids = {ca.control_id for ca in old_cas if compliance_merge.is_human(ca)}
+            # Gaps of a human-set control are the human's too: left alone, like the row.
+            frozen_control_ids = missing_control_ids | human_control_ids
             old_gaps = (await db.execute(
                 select(ComplianceGap).where(ComplianceGap.assessment_id == assessment_id)
             )).scalars().all()
-            gaps_to_replace = [g for g in old_gaps if g.control_id not in missing_control_ids]
+            gaps_to_replace = [g for g in old_gaps if g.control_id not in frozen_control_ids]
             gaps_to_replace_ids = [g.id for g in gaps_to_replace]
             # The action plan has to SURVIVE a re-analysis. This block used to hard-delete
             # every ActionItem hanging off a replaced gap, so re-running the analysis — the
@@ -2708,43 +2773,48 @@ async def _run_analysis_background(assessment_id: str, tenant_id: str, user_id: 
             # control id -> the gap this run raised for it, used to re-point the
             # surviving action items once every gap has an id.
             new_gaps_by_control: dict[str, ComplianceGap] = {}
+            now_iso = datetime.now(timezone.utc).isoformat()
             for key, rows in by_key.items():
                 v = run.verdicts.get(key)
                 for control in rows:
                     ctrl_status = _VERDICT_STATUS.get(v.verdict) if v is not None else None
-                    if v is None or ctrl_status is None:
-                        if control.id in old_cas_by_control_id:
-                            # Kept untouched above: never overwrite a known result with a
-                            # placeholder just because this run could not judge it again.
-                            preserved_keys.add(key)
-                            continue
-                        # First-time assessment of this control: explicit "analysis_failed"
-                        # outcome — no verdict, no confidence, no gap.
-                        newly_not_started_keys.add(key)
-                        db.add(ControlAssessment(
-                            assessment_id=assessment_id,
-                            control_id=control.id,
-                            status=ControlStatus.NOT_STARTED,
-                            status_key=_status_key_for(scale, ControlStatus.NOT_STARTED),
-                            ai_confidence=None,
-                            implementation_notes=_t(lang, "not_analysed"),
-                        ))
+                    verdict = None
+                    if v is not None and ctrl_status is not None:
+                        verdict = compliance_merge.AiVerdict(
+                            status=ctrl_status,
+                            # The verdict is mapped onto the assessment's own grid when it has
+                            # one, so a tenant scale scores an AI run exactly like a manual one.
+                            status_key=_status_key_for(scale, ctrl_status),
+                            confidence=v.confidence,
+                            notes=_implementation_notes(v, lang) or None,
+                            na_justification=v.not_applicable_justification,
+                        )
+                    existing = old_cas_by_control_id.get(control.id)
+                    outcome = compliance_merge.merge_verdict(
+                        existing, verdict, now_iso=now_iso,
+                        not_applicable_value=ControlStatus.NOT_APPLICABLE.value,
+                        placeholder_status=ControlStatus.NOT_STARTED,
+                        placeholder_status_key=_status_key_for(scale, ControlStatus.NOT_STARTED),
+                        # First-time assessment of this control with no verdict: explicit
+                        # "analysis_failed" outcome — no verdict, no confidence, no gap.
+                        placeholder_note=_t(lang, "not_analysed"),
+                    )
+                    if outcome.kind == compliance_merge.KEPT:
+                        # Never overwrite a known result with a placeholder just because
+                        # this run could not judge it again.
+                        preserved_keys.add(key)
                         continue
-
-                    db.add(ControlAssessment(
-                        assessment_id=assessment_id,
-                        control_id=control.id,
-                        status=ctrl_status,
-                        # The verdict is mapped onto the assessment's own grid when it has
-                        # one, so a tenant scale scores an AI run exactly like a manual one.
-                        status_key=_status_key_for(scale, ctrl_status),
-                        ai_confidence=round(max(0.0, min(1.0, float(v.confidence))), 3),
-                        implementation_notes=_implementation_notes(v, lang) or None,
-                        not_applicable_justification=(
-                            (v.not_applicable_justification or "").strip() or None
-                            if ctrl_status == ControlStatus.NOT_APPLICABLE else None
-                        ),
-                    ))
+                    if outcome.kind in (compliance_merge.CREATED, compliance_merge.PLACEHOLDER):
+                        db.add(ControlAssessment(assessment_id=assessment_id, control_id=control.id, **outcome.fields))
+                    else:
+                        compliance_merge.apply(existing, outcome)
+                    if outcome.kind == compliance_merge.PLACEHOLDER:
+                        newly_not_started_keys.add(key)
+                        continue
+                    if outcome.kind == compliance_merge.SUGGESTED:
+                        # A person decided this control: the AI only suggests, and opens
+                        # no non-conformité behind their back.
+                        continue
 
                     # Which levels open a non-conformité is the grid's decision when the
                     # assessment has one (« counts_as_gap »), and the two legacy statuses
@@ -2776,7 +2846,7 @@ async def _run_analysis_background(assessment_id: str, tenant_id: str, user_id: 
 
             await db.flush()
 
-            # ── Re-attach the action plan that survived the deletion above ───────────
+            # ── Re-attach the action plan whose gaps were replaced above ─────────────
             # A gap re-raised for the same control is the same non-conformity: its
             # actions keep their owner, dates, notes and completion state instead of
             # being recreated empty. Actions whose control came back compliant are
@@ -2855,7 +2925,7 @@ async def analyze_assessment(
     assessment_id: str,
     background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_roles(UserRole.CISO)),
+    current_user: User = Depends(require_roles(*_MANAGE_ROLES)),
     tenant_id: str = Depends(get_tenant_id),
     lang: str = Depends(get_request_language),
 ) -> dict:
@@ -2900,7 +2970,7 @@ async def analyze_assessment(
 async def get_analyze_status(
     assessment_id: str,
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(require_roles(UserRole.CISO)),
+    _: User = Depends(require_roles(*_READ_ROLES)),
     tenant_id: str = Depends(get_tenant_id),
 ) -> dict:
     """Poll for background analysis job status."""
@@ -2925,7 +2995,7 @@ async def get_analyze_status(
 async def get_assessment_results(
     assessment_id: str,
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(require_roles(UserRole.CISO)),
+    _: User = Depends(require_roles(*_READ_ROLES)),
     tenant_id: str = Depends(get_tenant_id),
     lang: str = Depends(get_display_language),
 ) -> AssessmentDetailResponse:
@@ -2938,7 +3008,7 @@ async def update_control_assessment(
     control_assessment_id: str,
     body: ControlAssessmentUpdate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_roles(UserRole.CISO)),
+    current_user: User = Depends(require_roles(*_ASSESS_ROLES)),
     tenant_id: str = Depends(get_tenant_id),
     lang: str = Depends(get_request_language),
     display_lang: str = Depends(get_display_language),
@@ -2966,6 +3036,13 @@ async def update_control_assessment(
         raise HTTPException(status_code=404, detail="Control assessment not found")
 
     ca, assessment, control = row
+    # A control owner self-assesses the requirements assigned to them, and only
+    # those; compliance_manager and CISO act tenant-wide (services/perimeter).
+    roles = await get_effective_roles(current_user, db)
+    perimeter.assert_in_perimeter(current_user, ca, roles, what="record", lang=lang)
+    if (perimeter.is_perimeter_scoped(current_user, roles) and body.owner_id is not None
+            and (body.owner_id or None) != current_user.id):
+        raise HTTPException(status_code=403, detail="Only a compliance manager or the CISO can reassign a requirement.")
     scale = await _load_scale(db, assessment)
 
     # A grid level takes precedence over the legacy enum: `status_key` names a
@@ -3030,6 +3107,12 @@ async def update_control_assessment(
             )
         ca.not_applicable_justification = justification or None
 
+    # Whatever a person sets on the fields the analysis also writes is theirs from
+    # now on: a later AI re-run only suggests (services/compliance_merge).
+    if any(v is not None for v in (body.status, body.status_key, body.implementation_notes,
+                                   body.not_applicable_justification)):
+        ca.status_source = compliance_merge.HUMAN
+
     # Only a change of LEVEL may open or close a non-conformité. A PATCH that just
     # edits the notes must not quietly raise a gap (and an action item with it) for
     # a control that happens to sit on a gap level without one.
@@ -3092,6 +3175,11 @@ async def update_control_assessment(
         ai_confidence=ca.ai_confidence,
         cross_framework_coverage=control.mapped_controls or [],
         is_mandatory=control.is_mandatory,
+        status_source=ca.status_source,
+        ai_suggested_status=ca.ai_suggested_status,
+        ai_suggested_status_key=ca.ai_suggested_status_key,
+        ai_suggested_notes=ca.ai_suggested_notes,
+        ai_suggested_at=ca.ai_suggested_at,
     )
 
     if gap_resolved:
@@ -3124,7 +3212,7 @@ async def update_control_assessment(
 async def get_document_checklist(
     assessment_id: str,
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(require_roles(UserRole.CISO)),
+    _: User = Depends(require_roles(*_READ_ROLES)),
     tenant_id: str = Depends(get_tenant_id),
 ) -> dict:
     """
@@ -3667,11 +3755,27 @@ async def get_traceability_matrix(
 async def upload_control_evidence(
     control_assessment_id: str,
     file: UploadFile = File(...),
+    # R2 5.4 — how long this proof stays valid (YYYY-MM-DD, optional).
+    valid_from: str | None = Form(None),
+    valid_until: str | None = Form(None),
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_roles(UserRole.CISO)),
+    current_user: User = Depends(require_roles(*_ASSESS_ROLES)),
     tenant_id: str = Depends(get_tenant_id),
+    lang: str = Depends(get_request_language),
 ) -> EvidenceResponse:
     """Upload evidence file for a specific control assessment."""
+    def _iso_date(v: str | None, name: str) -> str | None:
+        v = (v or "").strip()
+        if not v:
+            return None
+        try:
+            return date.fromisoformat(v[:10]).isoformat()
+        except ValueError:
+            raise HTTPException(status_code=422, detail=f"{name} must be a date (YYYY-MM-DD).")
+    valid_from = _iso_date(valid_from, "valid_from")
+    valid_until = _iso_date(valid_until, "valid_until")
+    if valid_from and valid_until and valid_until < valid_from:
+        raise HTTPException(status_code=422, detail="valid_until cannot be before valid_from.")
     # Reject filenames whose extension must never reach the uploads
     # volume — see security_utils.DANGEROUS_UPLOAD_EXTENSIONS.
     assert_safe_upload_name(file.filename, field_name="file")
@@ -3688,6 +3792,8 @@ async def upload_control_evidence(
         raise HTTPException(status_code=404, detail="Control assessment not found")
 
     ca, assessment = row
+    perimeter.assert_in_perimeter(current_user, ca, await get_effective_roles(current_user, db),
+                                  what="record", lang=lang)
 
     # Fetch framework short name for display filename
     ev_fw_result = await db.execute(
@@ -3761,6 +3867,8 @@ async def upload_control_evidence(
         content_type=content_type,
         uploaded_by_id=current_user.id,
         is_visible_to_auditor=True,
+        valid_from=valid_from,
+        valid_until=valid_until,
     )
     db.add(evidence)
     await db.flush()
@@ -3846,6 +3954,8 @@ async def upload_control_evidence(
                                 uploaded_by_id=current_user.id,
                                 is_visible_to_auditor=True,
                                 shared_from_evidence_id=None,
+                                valid_from=valid_from,
+                                valid_until=valid_until,
                             )
                             db.add(shared)
                             await db.flush()
@@ -3878,6 +3988,8 @@ async def upload_control_evidence(
         is_visible_to_auditor=evidence.is_visible_to_auditor,
         created_at=evidence.created_at,
         shared_count=shared_count,
+        valid_from=valid_from,
+        valid_until=valid_until,
     )
 
 
@@ -3916,6 +4028,8 @@ async def list_control_evidence(
         is_visible_to_auditor=e.is_visible_to_auditor if e.is_visible_to_auditor is not None else True,
         created_at=e.created_at,
         is_shared=bool(e.shared_from_evidence_id),
+        valid_from=e.valid_from,
+        valid_until=e.valid_until,
     ) for e in items]
 
 
@@ -4586,6 +4700,9 @@ async def _apply_action_closure(
             if ca is not None and _is_gap_level(scale, ca.status, ca.status_key):
                 ca.status, ca.status_key = _status_pair_for_key(
                     scale, _closure_level_key(scale), ControlStatus.IMPLEMENTED)
+                # Completing the remediation is a person's act: an AI re-run must
+                # not undo the closure.
+                ca.status_source = compliance_merge.HUMAN
                 _append_note(_t(lang, "closed_by_action", date=today, title=item.title))
     elif previous_status == ActionItemStatus.COMPLETED and item.status in (
         ActionItemStatus.OPEN, ActionItemStatus.IN_PROGRESS,
@@ -4600,6 +4717,7 @@ async def _apply_action_closure(
                 # requirement marked compliant.
                 ca.status, ca.status_key = _status_pair_for_key(
                     scale, _regression_level_key(scale), ControlStatus.PARTIALLY_IMPLEMENTED)
+                ca.status_source = compliance_merge.HUMAN
                 _append_note(_t(lang, "reopened_by_action", date=today, title=item.title))
 
     if resolved or reopened:

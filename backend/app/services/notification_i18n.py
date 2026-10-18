@@ -962,6 +962,27 @@ CATALOG: dict[str, dict] = {
                "partage « {link} »."),
         "ar": "رفع أحد أصحاب المصلحة الملف «{file}» ({size_kb} كيلوبايت){ctrl_for} عبر رابط المشاركة «{link}».",
     },
+    # ── Evidence validity (R2) ──
+    "notifications.evidence_expired.title": {
+        "en": "Evidence EXPIRED: {control}",
+        "fr": "Preuve EXPIRÉE : {control}",
+        "ar": "دليل منتهي الصلاحية: {control}",
+    },
+    "notifications.evidence_expired.message": {
+        "en": "The evidence '{file}' for {control} expired on {until}.",
+        "fr": "La preuve « {file} » pour {control} a expiré le {until}.",
+        "ar": "انتهت صلاحية الدليل «{file}» الخاص بـ{control} في {until}.",
+    },
+    "notifications.evidence_expiring.title": {
+        "en": "Evidence expires in {days} days: {control}",
+        "fr": "Preuve expirant dans {ndays} : {control}",
+        "ar": "ينتهي الدليل خلال {ndays}: {control}",
+    },
+    "notifications.evidence_expiring.message": {
+        "en": "The evidence '{file}' for {control} is valid until {until}.",
+        "fr": "La preuve « {file} » pour {control} est valable jusqu'au {until}.",
+        "ar": "الدليل «{file}» الخاص بـ{control} صالح حتى {until}.",
+    },
     # ── Policies (R2) ──
     "notifications.policy_review_overdue.title": {
         "en": "Policy review OVERDUE: {policy:.50}",

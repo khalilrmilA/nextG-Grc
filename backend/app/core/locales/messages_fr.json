@@ -215,6 +215,7 @@
   "OCR is not installed on this server (pytesseract missing).": "L'OCR n'est pas installé sur ce serveur (pytesseract manquant).",
   "Only PDF, DOCX, XLSX, XLS, TXT, PNG and JPEG files are supported": "Seuls les fichiers PDF, DOCX, XLSX, XLS, TXT, PNG et JPEG sont pris en charge",
   "Only PDF, DOCX, XLSX, XLS, and TXT files are supported": "Seuls les fichiers PDF, DOCX, XLSX, XLS et TXT sont pris en charge",
+  "Only a compliance manager or the CISO can reassign a requirement.": "Seul un responsable conformité ou le RSSI peut réaffecter une exigence.",
   "Only a report submitted for validation can be approved": "Seul un rapport soumis pour validation peut être approuvé",
   "Only a report submitted for validation can be rejected": "Seul un rapport soumis pour validation peut être rejeté",
   "Only an administrator can delegate on someone else's behalf.": "Seul un administrateur peut déléguer au nom de quelqu'un d'autre.",
@@ -462,6 +463,7 @@
   "title is required": "le titre est requis",
   "user_filter must contain the {username} placeholder": "user_filter doit contenir le placeholder {username}",
   "user_id is required": "user_id est requis",
+  "valid_until cannot be before valid_from.": "La date de fin de validité ne peut pas précéder la date de début.",
   "xlsx import is unavailable on this server — save the sheet as CSV and re-upload": "l’importation xlsx n’est pas disponible sur ce serveur — enregistrez la feuille au format CSV et téléversez‑la à nouveau",
   "التفاصيل": "التفاصيل"
  },
@@ -689,6 +691,7 @@
   "{key} must be between 0 and 5": "{key} doit être compris entre 0 et 5",
   "{label} exceeds {settings_max_upload_size_mb} MB limit": "{label} dépasse la limite de {settings_max_upload_size_mb} Mo",
   "{len_controls} controls exceed the {max_seeded_items}-row grid limit. Narrow the seed with a `domain`.": "{len_controls} contrôles dépassent la limite de {max_seeded_items} lignes de la grille. Restreignez l'initialisation avec un `domain`.",
+  "{name} must be a date (YYYY-MM-DD).": "{name} doit être une date (AAAA-MM-JJ).",
   "{plan_eligible_count} entries would be sealed and removed. Re-send with confirm=true to proceed.": "{plan_eligible_count} entrées seraient scellées et supprimées. Renvoyez avec confirm=true pour continuer.",
   "{tool} connector needs a base URL to a reachable instance.": "Le connecteur {tool} nécessite une URL de base vers une instance accessible.",
   "{tool} connector needs both an access key and a secret key.": "Le connecteur {tool} nécessite à la fois une clé d'accès et une clé secrète.",

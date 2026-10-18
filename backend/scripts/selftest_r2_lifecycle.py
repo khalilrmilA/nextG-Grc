@@ -30,6 +30,10 @@ Sections
                after restore); a new version sends the policy back to review;
                my-attestations for any role + idempotent acknowledge; review and
                overdue-acknowledgement reminders
+* compliance — control_owner reads and self-assesses only rows they own (no
+               reassignment); compliance_manager acts tenant-wide and creates
+               assessments; evidence validity flags + 30/7/0-day reminders
+               (the AI merge itself: scripts/selftest_compliance_merge.py)
 """
 from __future__ import annotations
 
@@ -389,6 +393,69 @@ async def policies(api: Api) -> None:
     check({"submit", "approve", "publish", "retire", "acknowledge"} <= acts, "workflow + acknowledge in the activity log", acts)
 
 
+async def compliance(api: Api) -> None:
+    print("[compliance]")
+    from datetime import date, timedelta
+    co, cm = role_email("control_owner"), role_email("compliance_manager")
+    s, lst = await api.req("GET", "/compliance/assessments", who=co)
+    check(s == 200, "control_owner can list assessments", lst if s != 200 else "")
+    items = lst.get("items", lst) if isinstance(lst, dict) else lst
+    aid = next(a["id"] for a in items if (a.get("total_controls") or a.get("control_count") or 1))
+    s, a = await api.req("GET", f"/compliance/assessments/{aid}", who=co)
+    check(s == 200 and a["control_assessments"], "control_owner reads the detail")
+    row, other = a["control_assessments"][0], a["control_assessments"][1]
+    async with AsyncSessionLocal() as db:
+        co_id = (await db.execute(select(User.id).where(User.email == co))).scalar_one()
+    s, _ = await api.req("PATCH", f"/compliance/control-assessments/{row['id']}", who=co, json={"status": "in_progress"})
+    check(s == 403, "control_owner cannot assess a row they do not own")
+    s, r = await api.req("PATCH", f"/compliance/control-assessments/{row['id']}", who=cm, json={"owner_id": co_id})
+    check(s == 200 and r["owner_id"] == co_id, "compliance_manager assigns the owner")
+    s, r = await api.req("PATCH", f"/compliance/control-assessments/{row['id']}", who=co, json={"status": "partially_implemented", "notes": "self"})
+    check(s == 200 and r["status"] == "partially_implemented" and r["status_source"] == "human", "owner self-assesses own row")
+    s, _ = await api.req("PATCH", f"/compliance/control-assessments/{row['id']}", who=co, json={"owner_id": None})
+    s2, _ = await api.req("PATCH", f"/compliance/control-assessments/{row['id']}", who=co, json={"owner_id": ""})
+    check(s == 200 and s2 == 403, "owner cannot hand the row to someone else (null = unchanged)", (s, s2))
+    soon = (date.today() + timedelta(days=5)).isoformat()
+    past = (date.today() - timedelta(days=2)).isoformat()
+    s, ev = await api.req("POST", f"/compliance/control-assessments/{row['id']}/evidence", who=co,
+                          files={"file": ("p.txt", b"proof", "text/plain")}, data={"valid_until": soon})
+    check(s == 200 and ev["valid_until"] == soon, "owner uploads evidence with validity")
+    s, _ = await api.req("POST", f"/compliance/control-assessments/{other['id']}/evidence", who=co,
+                         files={"file": ("p.txt", b"proof", "text/plain")})
+    check(s == 403, "owner cannot upload on someone else's row")
+    s, _ = await api.req("POST", f"/compliance/control-assessments/{other['id']}/evidence", who=cm,
+                         files={"file": ("p.txt", b"proof", "text/plain")}, data={"valid_until": past})
+    check(s == 200, "compliance_manager uploads (already-expired) evidence tenant-wide")
+    s, _ = await api.req("POST", f"/compliance/control-assessments/{other['id']}/evidence", who=cm,
+                         files={"file": ("p.txt", b"proof", "text/plain")}, data={"valid_until": "31/12/2026"})
+    check(s == 422, "validity must be an ISO date")
+    s, a = await api.req("GET", f"/compliance/assessments/{aid}")
+    rows = {c["id"]: c for c in a["control_assessments"]}
+    check(rows[other["id"]]["evidence_all_expired"] and not rows[row["id"]]["evidence_all_expired"],
+          "control flagged when its only evidence has expired")
+
+    from app.services.notification_generator import run_all_checks
+    from app.models.notification import Notification
+    async with AsyncSessionLocal() as db:
+        tid = (await db.execute(select(User.tenant_id).where(User.email == co))).scalar_one()
+        res = await run_all_checks(db, tenant_id=tid)
+        keys = {n.title_key for n in (await db.execute(select(Notification).where(
+            Notification.user_id == co_id))).scalars()}
+    check(res.get("evidence_expiry", 0) >= 1 and "notifications.evidence_expiring.title" in keys,
+          "7-day evidence reminder reaches the owner", res.get("evidence_expiry"))
+    async with AsyncSessionLocal() as db:
+        again = await run_all_checks(db, tenant_id=tid)
+    check(again.get("evidence_expiry", 0) == 0, "reminder not repeated within the same stage")
+
+    fw = a["framework_id"]
+    s, _ = await api.req("POST", "/compliance/assessments", who=co, json={"framework_id": fw, "name": "x"})
+    check(s == 403, "control_owner cannot create an assessment")
+    s, _ = await api.req("POST", f"/compliance/assessments/{aid}/analyze", who=co)
+    check(s == 403, "control_owner cannot run the analysis")
+    s, _ = await api.req("GET", "/compliance/files/deleted")
+    check(s == 200, "CISO lists deleted files")
+
+
 async def http_tests() -> None:
     from app.core.rate_limit import limiter
     limiter.enabled = False
@@ -401,6 +468,7 @@ async def http_tests() -> None:
         await acceptances(api, sc)
         await vendors(api)
         await policies(api)
+        await compliance(api)
 
 
 def main() -> None:
