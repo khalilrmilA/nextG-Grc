@@ -753,6 +753,10 @@ export const complianceApi = {
     action_type?: string;
     recurrence?: string | null;
     notes?: string | null;
+    /** An action answering an audit recommendation: the backend takes the
+     *  recommendation's finding, which the audit report's action plan reads. */
+    recommendation_id?: string | null;
+    finding_id?: string | null;
   }) => apiClient.post<ActionPlanItem>("/compliance/action-plan", data).then((r) => r.data),
 
   deleteActionPlanItem: (id: string) =>

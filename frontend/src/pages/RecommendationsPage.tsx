@@ -14,9 +14,10 @@ import { useTranslation } from "react-i18next";
 import { Link } from "react-router-dom";
 import {
   Loader2, RefreshCw, X, CheckCircle, Clock, AlertTriangle, ListChecks,
-  Pencil, Trash2, ShieldCheck, ExternalLink, Filter,
+  Pencil, Trash2, ShieldCheck, ExternalLink, Filter, ListPlus,
 } from "lucide-react";
-import { auditsApi, usersApi } from "@/api/endpoints";
+import { auditsApi, usersApi, complianceApi } from "@/api/endpoints";
+import { useAuthStore, hasAnyRole } from "@/store/auth";
 import type { AuditRecommendation, AuditRecommendationSummary } from "@/types";
 
 const BUCKETS = ["pending", "in_progress", "closed"] as const;
@@ -277,8 +278,69 @@ function EditRecommendationModal({
 
 // ── Page ──────────────────────────────────────────────────────────────────────
 
+/** Plan an action that answers a recommendation (R2 6.1). The backend links it
+ *  to the recommendation's finding, so the finding roll-up and the audit report's
+ *  « plan d'action » section both see it. */
+function AddActionModal({ rec, onClose, onCreated }: {
+  readonly rec: AuditRecommendation; readonly onClose: () => void; readonly onCreated: () => void;
+}) {
+  const { t } = useTranslation();
+  const [title, setTitle] = useState(rec.title);
+  const [due, setDue] = useState(rec.due_date ?? "");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!title.trim()) return;
+    setBusy(true); setError("");
+    try {
+      await complianceApi.createActionPlanItem({
+        title: title.trim(), due_date: due || null, recommendation_id: rec.id, action_type: "corrective",
+      });
+      onCreated();
+      onClose();
+    } catch (err: unknown) {
+      const d = (err as { response?: { data?: { detail?: unknown } } })?.response?.data?.detail;
+      setError(typeof d === "string" ? d : t("r2.audits.add_action_failed"));
+      setBusy(false);
+    }
+  }
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
+      <form onSubmit={submit} className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 space-y-4">
+        <div className="flex items-center justify-between">
+          <h3 className="font-semibold text-gray-900">{t("r2.audits.add_action_title")}</h3>
+          <button type="button" onClick={onClose} title={t("common.close")} className="text-gray-400 hover:text-gray-600"><X className="w-5 h-5" /></button>
+        </div>
+        <p className="text-xs text-gray-500">{t("r2.audits.add_action_hint")}</p>
+        {error && <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{error}</p>}
+        <div>
+          <label htmlFor="ra-title" className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">{t("r2.audits.action_title")} *</label>
+          <input id="ra-title" value={title} onChange={(e) => setTitle(e.target.value)}
+            className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+        </div>
+        <div>
+          <label htmlFor="ra-due" className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">{t("r2.audits.action_due")}</label>
+          <input id="ra-due" type="date" value={due} onChange={(e) => setDue(e.target.value)}
+            className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+        </div>
+        <div className="flex justify-end gap-2">
+          <button type="button" onClick={onClose} className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800">{t("common.cancel")}</button>
+          <button type="submit" disabled={busy || !title.trim()}
+            className="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white px-4 py-2 rounded-lg text-sm font-medium">
+            {busy && <Loader2 className="w-4 h-4 animate-spin" />} {t("r2.audits.add_action")}
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
 export default function RecommendationsPage() {
   const { t } = useTranslation();
+  // POST /compliance/action-plan is CISO-only (admins auto-pass).
+  const canPlanAction = hasAnyRole(useAuthStore((u) => u), ["ciso", "tenant_admin", "super_admin"]);
+  const [addingAction, setAddingAction] = useState<AuditRecommendation | null>(null);
 
   const [rows, setRows] = useState<AuditRecommendation[]>([]);
   const [summary, setSummary] = useState<AuditRecommendationSummary | null>(null);
@@ -594,6 +656,13 @@ export default function RecommendationsPage() {
                       </td>
                       <td className="px-5 py-3">
                         <div className="flex items-center justify-end gap-1">
+                          {!terminal && canPlanAction && (
+                            <button type="button" onClick={() => setAddingAction(r)} title={t("r2.audits.add_action")}
+                              aria-label={t("r2.audits.add_action")}
+                              className="p-1.5 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors">
+                              <ListPlus className="w-3.5 h-3.5" />
+                            </button>
+                          )}
                           {!terminal && (
                             <button type="button" onClick={() => setClosing(r)} title={t("recommendations.close")}
                               className="p-1.5 text-gray-400 hover:text-green-600 hover:bg-green-50 rounded-lg transition-colors">
@@ -666,6 +735,10 @@ export default function RecommendationsPage() {
         </div>
       )}
 
+      {addingAction && (
+        <AddActionModal rec={addingAction} onClose={() => setAddingAction(null)}
+          onCreated={() => { setNotice(t("r2.audits.action_added")); load(); }} />
+      )}
       {closing && (
         <CloseRecommendationModal
           recommendation={closing}

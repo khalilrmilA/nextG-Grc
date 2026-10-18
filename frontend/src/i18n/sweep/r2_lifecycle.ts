@@ -137,6 +137,15 @@ const bundle: { en: Record<string, any>; fr: Record<string, any>; ar: Record<str
         "deleted_files_title": "Deleted files",
         "deleted_files_subtitle": "Every evidence, document or contract file removed in this organisation. The bytes are kept until the retention policy purges them: download a version to recover it."
       },
+      "audits": {
+        "add_action": "Add action",
+        "add_action_title": "Plan an action for this recommendation",
+        "add_action_hint": "The action is linked to the recommendation’s finding: its progress feeds the recommendation and it appears in the audit report’s action plan.",
+        "action_title": "Action",
+        "action_due": "Due date",
+        "action_added": "Action added to the action plan.",
+        "add_action_failed": "The action could not be created."
+      },
       "treatment": {
         "justification": "Justification",
         "error_justification": "A justification is required for every treatment decision"
@@ -297,6 +306,15 @@ const bundle: { en: Record<string, any>; fr: Record<string, any>; ar: Record<str
         "deleted_files_title": "Fichiers supprimés",
         "deleted_files_subtitle": "Toutes les preuves, documents ou contrats supprimés dans l’organisation. Les fichiers sont conservés jusqu’à leur purge par la politique de rétention : téléchargez une version pour la récupérer."
       },
+      "audits": {
+        "add_action": "Ajouter une action",
+        "add_action_title": "Planifier une action pour cette recommandation",
+        "add_action_hint": "L’action est liée au constat de la recommandation : son avancement alimente la recommandation et elle figure dans le plan d’action du rapport d’audit.",
+        "action_title": "Action",
+        "action_due": "Échéance",
+        "action_added": "Action ajoutée au plan d’action.",
+        "add_action_failed": "L’action n’a pas pu être créée."
+      },
       "treatment": {
         "justification": "Justification",
         "error_justification": "Une justification est requise pour chaque décision de traitement"
@@ -456,6 +474,15 @@ const bundle: { en: Record<string, any>; fr: Record<string, any>; ar: Record<str
         "deleted_files_btn": "الملفات المحذوفة",
         "deleted_files_title": "الملفات المحذوفة",
         "deleted_files_subtitle": "كل دليل أو مستند أو عقد أزيل في هذه المؤسسة. تُحفظ الملفات حتى تحذفها سياسة الاحتفاظ: نزّل نسخة لاستعادتها."
+      },
+      "audits": {
+        "add_action": "إضافة إجراء",
+        "add_action_title": "تخطيط إجراء لهذه التوصية",
+        "add_action_hint": "يُربط الإجراء بملاحظة التوصية: يغذّي تقدمه التوصية ويظهر في خطة العمل في تقرير التدقيق.",
+        "action_title": "الإجراء",
+        "action_due": "تاريخ الاستحقاق",
+        "action_added": "تمت إضافة الإجراء إلى خطة العمل.",
+        "add_action_failed": "تعذّر إنشاء الإجراء."
       },
       "treatment": {
         "justification": "المبرر",

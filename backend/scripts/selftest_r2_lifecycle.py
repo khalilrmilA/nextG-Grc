@@ -34,6 +34,9 @@ Sections
                reassignment); compliance_manager acts tenant-wide and creates
                assessments; evidence validity flags + 30/7/0-day reminders
                (the AI merge itself: scripts/selftest_compliance_merge.py)
+* audits     — an action raised for a recommendation is linked to its finding:
+               finding roll-up counts it and the generated audit report's
+               « plan d'action » section lists it
 """
 from __future__ import annotations
 
@@ -456,6 +459,37 @@ async def compliance(api: Api) -> None:
     check(s == 200, "CISO lists deleted files")
 
 
+async def audits(api: Api) -> None:
+    print("[audits]")
+    s, au = await api.req("POST", "/audits", json={"title": "ST audit", "audit_type": "internal"})
+    check(s == 201, "audit created", au)
+    auid = au["id"]
+    s, f = await api.req("POST", f"/audits/{auid}/findings", json={
+        "title": "ST finding", "description": "Access reviews not evidenced", "severity": "high"})
+    check(s == 201, "finding created", f)
+    s, rec = await api.req("POST", f"/audits/{auid}/recommendations", json={
+        "title": "ST recommendation", "finding_id": f["id"]})
+    check(s == 201 and rec.get("finding_id") == f["id"], "recommendation linked to the finding", rec)
+    s, item = await api.req("POST", "/compliance/action-plan", json={
+        "title": "ST action: quarterly access review", "recommendation_id": rec["id"], "due_date": "2027-01-31"})
+    check(s == 201 and item["finding_id"] == f["id"] and item["recommendation_id"] == rec["id"],
+          "action takes the recommendation's finding", item)
+    s, _ = await api.req("POST", "/compliance/action-plan", json={"title": "x", "finding_id": "nope"})
+    check(s == 404, "unknown finding refused")
+    s, recs = await api.req("GET", f"/audits/{auid}/recommendations")
+    check(s == 200 and recs[0].get("action_items_total") == 1, "recommendation roll-up counts the action", recs)
+    s, out = await api.req("POST", f"/audits/{auid}/report/generate")
+    check(s == 200 and out.get("report_url"), "audit report generated", out)
+    import io
+    from pathlib import Path
+    from pypdf import PdfReader
+    pdf = Path(settings.UPLOADS_DIR) / out["report_url"]
+    # Table cells wrap, so compare on normalised whitespace.
+    text = " ".join(" ".join((pg.extract_text() or "") for pg in PdfReader(io.BytesIO(pdf.read_bytes())).pages).split())
+    check("quarterly access review" in text and "ST finding" in text,
+          "report « plan d'action » lists the action with its finding", text[-400:])
+
+
 async def http_tests() -> None:
     from app.core.rate_limit import limiter
     limiter.enabled = False
@@ -469,6 +503,7 @@ async def http_tests() -> None:
         await vendors(api)
         await policies(api)
         await compliance(api)
+        await audits(api)
 
 
 def main() -> None:

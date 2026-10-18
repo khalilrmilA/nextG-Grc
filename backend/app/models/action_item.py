@@ -73,6 +73,10 @@ class ActionItem(Base):
     finding_id: Mapped[str | None] = mapped_column(
         String(36), ForeignKey("audit_findings.id"), nullable=True, index=True
     )
+    # The audit recommendation this action answers (R2 6.1). finding_id is filled
+    # from the recommendation's finding, which is what the finding roll-up and the
+    # audit report's action-plan section read (scripts/migrate_r2_lifecycle.py).
+    recommendation_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
 
     # Relationships
     assessment: Mapped["ComplianceAssessment"] = relationship(

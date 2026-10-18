@@ -4511,6 +4511,7 @@ class ActionPlanItem(BaseModel):
     recurrence: str | None = None
     # Set when the action came from an audit finding rather than a compliance gap.
     finding_id: str | None = None
+    recommendation_id: str | None = None
     # owner
     owner_id: str | None
     owner_name: str | None
@@ -4554,6 +4555,10 @@ class ActionPlanCreateBody(BaseModel):
     action_type: str = "corrective"
     recurrence: str | None = None
     notes: str | None = None
+    # An action answering an audit recommendation / finding (R2 6.1). Given a
+    # recommendation, the finding is taken from it.
+    recommendation_id: str | None = None
+    finding_id: str | None = None
 
 
 class ActionItemAttachmentResponse(BaseModel):
@@ -4853,6 +4858,7 @@ async def list_action_plan(
             action_type=r.action_type or "corrective",
             recurrence=r.recurrence,
             finding_id=r.finding_id,
+            recommendation_id=getattr(r, "recommendation_id", None),
             owner_id=r.owner_id,
             owner_name=f"{own.first_name} {own.last_name}".strip() if own else None,
         ))
@@ -4982,10 +4988,36 @@ async def create_action_plan_item(
         if owning is None:
             raise HTTPException(status_code=404, detail="Assessment not found")
 
+    # An action raised for an audit recommendation / finding. The finding is what
+    # the finding roll-up and the audit report's « plan d'action » read; it was
+    # never written, so both stayed empty (R2 6.1).
+    finding_id = body.finding_id or None
+    recommendation_id = body.recommendation_id or None
+    if recommendation_id:
+        from app.models.audit_recommendation import AuditRecommendation
+        rec = (await db.execute(select(AuditRecommendation).where(
+            AuditRecommendation.id == recommendation_id,
+            AuditRecommendation.tenant_id == tenant_id))).scalar_one_or_none()
+        if rec is None:
+            raise HTTPException(status_code=404, detail="Recommendation not found")
+        if finding_id and rec.finding_id and finding_id != rec.finding_id:
+            raise HTTPException(status_code=422, detail="finding_id does not match the recommendation's finding")
+        finding_id = finding_id or rec.finding_id
+    if finding_id:
+        from app.models.audit import Audit, AuditFinding
+        owned = (await db.execute(
+            select(AuditFinding.id).join(Audit, Audit.id == AuditFinding.audit_id)
+            .where(AuditFinding.id == finding_id, Audit.tenant_id == tenant_id)
+        )).scalar_one_or_none()
+        if owned is None:
+            raise HTTPException(status_code=404, detail="Finding not found")
+
     item = ActionItem(
         tenant_id=tenant_id,
         assessment_id=assessment_id,
         gap_id=gap.id if gap else None,
+        finding_id=finding_id,
+        recommendation_id=recommendation_id,
         title=body.title.strip(),
         description=body.description,
         owner_id=body.owner_id or current_user.id,  # tenant-checked above

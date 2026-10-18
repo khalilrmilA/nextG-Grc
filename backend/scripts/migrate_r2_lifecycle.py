@@ -65,6 +65,10 @@ COLUMNS: dict[str, dict[str, dict[str, str]]] = {
         "ai_suggested_notes":      {"sqlite": "TEXT", "postgresql": "TEXT"},
         "ai_suggested_at":         {"sqlite": "VARCHAR(30)", "postgresql": "VARCHAR(30)"},
     },
+    # Phase 6.1 — the recommendation an action answers (finding_id follows it).
+    "action_items": {
+        "recommendation_id": {"sqlite": "VARCHAR(36)", "postgresql": "VARCHAR(36)"},
+    },
 }
 
 

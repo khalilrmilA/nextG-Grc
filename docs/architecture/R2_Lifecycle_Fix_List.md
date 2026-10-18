@@ -98,7 +98,7 @@ Size: **S** = small (hours to a couple of days), **M** = medium (about a week or
 
 ## 6. Audits (already Strong; caveat only)
 
-- [ ] **S — `ActionItem.finding_id` is never written**, so the finding progress roll-up and the
+- [x] **S — `ActionItem.finding_id` is never written** *(R2 phase 6: no code path created finding-linked actions at all — added `recommendation_id`/`finding_id` to POST /compliance/action-plan, Add action on Recommendations, `scripts/backfill_action_item_findings.py`; report action-plan section verified)*, so the finding progress roll-up and the
   report's action-plan section are empty.
 
 ---
