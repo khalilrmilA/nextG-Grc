@@ -27,6 +27,12 @@ Creating the profiles is the fix that keeps the clause true. Widening the gate �
 ``allow_admin=True``, or dropping an extra role into the tuple — makes the tender
 statement false again, so it is not the answer to this.
 
+UPDATE 2026-10-18 (R2 follow-up D, product decision by the platform owner): the
+tenant owner must see every dashboard, so the strict gates now pass
+super_admin / tenant_admin (``allow_admin=True``). They still exclude every
+OTHER role a clause leaves out. The profiles below remain the way to show each
+objective opening for the role the clause names.
+
 What it does
 ------------
 Creates one account per missing profile in ONE demo tenant. Users only: no
@@ -186,9 +192,9 @@ def main(argv: list[str]) -> int:
     print(f"\nCreated {len(to_add)} account(s) in {tenant_name!r}, password: {args.password!r}")
     print("must_change_password is 0 on purpose: a forced password change at the first")
     print("screen would break the demo script.")
-    print("\nThe tenant_admin of this tenant still gets 403 on /dashboards/{vulnerabilities,")
-    print("threats,risks,controls,governance} — that is the tender clause working, not a")
-    print("regression. Demonstrate each objective from the account named above.")
+    print("\nThe tenant_admin (tenant owner) sees every dashboard (decision 2026-10-18); the")
+    print("strict gates still refuse the other roles a clause leaves out. Demonstrate each")
+    print("objective from the account named above.")
     return 0
 
 

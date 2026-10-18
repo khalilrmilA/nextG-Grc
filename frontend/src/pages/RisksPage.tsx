@@ -202,11 +202,13 @@ function RiskFormModal({ risk, users, orgEntities, processes, onClose, onSaved }
   const [form, setForm] = useState({
     title: risk?.title ?? "",
     description: risk?.description ?? "",
-    risk_category: risk?.risk_category ?? "Technical",
+    // Follow-up D: defaults are for a NEW risk only — editing a risk that has no
+    // category / scores must not silently save "Technical" and 3×3.
+    risk_category: editing ? (risk?.risk_category ?? "") : "Technical",
     status: risk?.status ?? "identified",
     owner_id: risk?.owner_id ?? "",
-    likelihood: risk?.likelihood ?? 3,
-    impact: risk?.impact ?? 3,
+    likelihood: (editing ? risk?.likelihood ?? null : 3) as number | null,
+    impact: (editing ? risk?.impact ?? null : 3) as number | null,
     residual_likelihood: numStr(risk?.residual_likelihood),
     residual_impact: numStr(risk?.residual_impact),
     target_likelihood: numStr(risk?.target_likelihood),
@@ -224,7 +226,8 @@ function RiskFormModal({ risk, users, orgEntities, processes, onClose, onSaved }
   // Leaving `closed` needs a written reason — the backend refuses the PATCH without one.
   const reopening = editing && risk?.status === "closed" && form.status !== "closed";
 
-  const score = form.likelihood * form.impact;
+  const scored = form.likelihood != null && form.impact != null;
+  const score = scored ? form.likelihood! * form.impact! : 0;
   const sev = score >= 20 ? "CRITICAL" : score >= 12 ? "HIGH" : score >= 6 ? "MEDIUM" : "LOW";
   const sevColor = scoreSevColor(sev);
 
@@ -243,25 +246,27 @@ function RiskFormModal({ risk, users, orgEntities, processes, onClose, onSaved }
     if (!form.title.trim()) { setError(t("risks_ui.error_title_required")); return; }
     if (reopening && !form.reopen_reason.trim()) { setError(t("r2.risks.error_reopen_required")); return; }
     setSaving(true); setError("");
-    // PATCH ignores absent/null keys, so an emptied optional field is simply not sent.
-    const payload: Partial<Risk> & { reopen_reason?: string } = {
+    // Follow-up D: on edit, an emptied optional field is sent as null — the PATCH
+    // clears it (risks.py _CLEARABLE_RISK_FIELDS). On create, empty = not sent.
+    const clear = <T,>(v: T | undefined): T | null | undefined => (v === undefined ? (editing ? null : undefined) : v);
+    const payload = {
       title: form.title.trim(),
-      description: form.description.trim() || undefined,
+      description: clear(form.description.trim() || undefined),
       risk_category: form.risk_category || undefined,
       status: form.status as Risk["status"],
-      owner_id: users ? (form.owner_id || undefined) : undefined,
-      likelihood: form.likelihood,
-      impact: form.impact,
-      residual_likelihood: optNum(form.residual_likelihood),
-      residual_impact: optNum(form.residual_impact),
-      target_likelihood: optNum(form.target_likelihood),
-      target_impact: optNum(form.target_impact),
-      next_review_date: form.next_review_date || undefined,
+      owner_id: users ? clear(form.owner_id || undefined) : undefined,
+      likelihood: form.likelihood ?? undefined,
+      impact: form.impact ?? undefined,
+      residual_likelihood: clear(optNum(form.residual_likelihood)),
+      residual_impact: clear(optNum(form.residual_impact)),
+      target_likelihood: clear(optNum(form.target_likelihood)),
+      target_impact: clear(optNum(form.target_impact)),
+      next_review_date: clear(form.next_review_date || undefined),
       tags: split(form.tags),
       linked_controls: split(form.linked_controls),
-      org_entity_id: form.org_entity_id || undefined,
-      business_process_id: form.business_process_id || undefined,
-    };
+      org_entity_id: clear(form.org_entity_id || undefined),
+      business_process_id: clear(form.business_process_id || undefined),
+    } as Partial<Risk> & { reopen_reason?: string };
     if (reopening) payload.reopen_reason = form.reopen_reason.trim();
     try {
       const saved = editing ? await risksApi.update(risk!.id, payload) : await risksApi.create(payload);
@@ -313,6 +318,7 @@ function RiskFormModal({ risk, users, orgEntities, processes, onClose, onSaved }
               <label htmlFor="rf-cat" className={LABEL_CLS}>{t("risks.category")}</label>
               <select id="rf-cat" className={SELECT_CLS}
                 value={form.risk_category} onChange={e => setForm(f => ({ ...f, risk_category: e.target.value }))}>
+                {!form.risk_category && <option value="">—</option>}
                 {categories.map(c => <option key={c.value} value={c.value}>{t(c.key as never)}</option>)}
               </select>
             </div>
@@ -346,17 +352,21 @@ function RiskFormModal({ risk, users, orgEntities, processes, onClose, onSaved }
           <div className="bg-gray-50 rounded-xl p-4 space-y-3">
             <div className="flex items-center justify-between mb-1">
               <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">{t("risks.inherent_risk_score")}</span>
-              <span className={`text-sm font-bold ${sevColor}`}>{score} — {t(`compliance.severities.${sev.toLowerCase()}`).toUpperCase()}</span>
+              {scored
+                ? <span className={`text-sm font-bold ${sevColor}`}>{score} — {t(`compliance.severities.${sev.toLowerCase()}`).toUpperCase()}</span>
+                : <span className="text-sm text-gray-400">{t("r2b.risks.not_scored")}</span>}
             </div>
             {(["likelihood", "impact"] as const).map(field => (
               <div key={field}>
                 <div className="flex items-center justify-between text-xs text-gray-500 mb-1">
                   <label htmlFor={`slider-${field}`}>{t(`risks.${field}`)}</label>
-                  <span className="font-bold text-gray-800">{form[field]}</span>
+                  <span className="font-bold text-gray-800">{form[field] ?? "—"}</span>
                 </div>
-                <input id={`slider-${field}`} type="range" min={1} max={5} value={form[field]}
+                <input id={`slider-${field}`} type="range" min={1} max={5} value={form[field] ?? 3}
                   onChange={e => setForm(f => ({ ...f, [field]: +e.target.value }))}
-                  className="w-full accent-blue-600" />
+                  // An unset score shows the thumb at 3; a click there must set it too.
+                  onClick={e => { const v = +e.currentTarget.value; if (form[field] == null) setForm(f => ({ ...f, [field]: v })); }}
+                  className={`w-full accent-blue-600 ${form[field] == null ? "opacity-40" : ""}`} />
                 <div className="flex justify-between text-xs text-gray-300 mt-0.5">
                   <span>1 ({t("risks.scale_low")})</span><span>5 ({t("risks.scale_high")})</span>
                 </div>

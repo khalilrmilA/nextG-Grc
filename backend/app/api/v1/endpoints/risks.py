@@ -169,6 +169,15 @@ class RiskUpdate(BaseModel):
     business_process_id: str | None = None
 
 
+# Optional on a risk, so an edit may empty them (title / likelihood / impact /
+# status / category are not: a risk without them is not assessable).
+_CLEARABLE_RISK_FIELDS = (
+    "description", "owner_id", "residual_likelihood", "residual_impact",
+    "target_likelihood", "target_impact", "next_review_date", "appetite_threshold",
+    "org_entity_id", "business_process_id",
+)
+
+
 class RiskResponse(BaseModel):
     id: str
     tenant_id: str
@@ -391,6 +400,11 @@ async def update_risk(
         lang=lang)
 
     provided = body.model_dump(exclude_none=True)
+    # Follow-up D: optional fields can be CLEARED — an explicit null (or "") in the
+    # body empties the field; an omitted field is still left untouched.
+    for f in _CLEARABLE_RISK_FIELDS:
+        if f in body.model_fields_set and getattr(body, f) in (None, ""):
+            provided[f] = None
     await _assert_scope_in_tenant(
         db, tenant_id, provided.get("org_entity_id"), provided.get("business_process_id")
     )

@@ -1038,6 +1038,11 @@ function ResultsTab({
                         disabled={saving === ca.id || !canEdit(ca)}
                         className="text-xs border border-gray-200 rounded-lg px-2 py-1 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
                       >
+                        {/* Follow-up D: a row not yet assessed showed "Compliant" (the
+                            first option) because its status had no option. These are
+                            placeholders only — nothing is saved until a verdict is picked. */}
+                        <option value="not_started" disabled>{t("compliance.status_options.not_started")}</option>
+                        <option value="in_progress" disabled>{t("compliance.status_options.in_progress", "In progress")}</option>
                         <option value="implemented">{t("compliance.status_options.implemented")}</option>
                         <option value="partially_implemented">{t("compliance.status_options.partially_implemented")}</option>
                         <option value="not_implemented">{t("compliance.status_options.not_implemented")}</option>

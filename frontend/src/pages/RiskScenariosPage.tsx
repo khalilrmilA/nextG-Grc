@@ -560,8 +560,8 @@ export default function RiskScenariosPage() {
         </div>
       )}
 
-      {/* Table */}
-      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+      {/* Table — scrolls sideways; the actions column stays pinned. */}
+      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-x-auto">
         {loading ? (
           <div className="flex items-center justify-center py-16">
             <Loader2 className="w-6 h-6 animate-spin text-blue-500" />
@@ -583,8 +583,9 @@ export default function RiskScenariosPage() {
                 <th className="text-left px-6 py-3 font-medium text-gray-500">{t("risk_scenarios.col_knowledge")}</th>
                 <th className="text-left px-6 py-3 font-medium text-gray-500">{t("risk_scenarios.col_linked")}</th>
                 <th className="text-left px-6 py-3 font-medium text-gray-500">{t("risk_scenarios.next_review_date_label", "Next review")}</th>
-                <th className="text-center px-6 py-3 font-medium text-gray-500">{t("risk_scenarios.version_history", "History")}</th>
-                {canWrite && <th className="px-6 py-3" aria-label={t("r2.common.actions")} />}
+                {/* Follow-up D: History / Edit / Delete sat off-screen at 1440 px —
+                    one actions column, pinned to the end edge while the table scrolls. */}
+                <th className="sticky end-0 z-10 bg-gray-50 px-4 py-3 text-end font-medium text-gray-500 shadow-[-6px_0_6px_-6px_rgba(0,0,0,0.15)]">{t("r2.common.actions")}</th>
               </tr>
             </thead>
             <tbody>
@@ -593,7 +594,7 @@ export default function RiskScenariosPage() {
                 const tgtLevel = item.target_risk_level || riskLevel(item.target_probability || 1, item.target_impact || 1);
                 const linked = linkedCount(item);
                 return (
-                  <tr key={item.id} className="border-b border-gray-50 hover:bg-gray-50/50 transition-colors">
+                  <tr key={item.id} className="group border-b border-gray-50 hover:bg-gray-50 transition-colors">
                     <td className="px-6 py-4 font-medium text-gray-900">{item.ref_id && (
                         <span className="mr-2 font-mono text-[11px] text-gray-400">{item.ref_id}</span>
                       )}{item.name}</td>
@@ -650,18 +651,16 @@ export default function RiskScenariosPage() {
                         </span>
                       ) : "-"}
                     </td>
-                    <td className="px-6 py-4 text-center">
-                      <button
-                        onClick={() => setHistoryFor({ id: item.id, name: item.name })}
-                        title={t("risk_scenarios.version_history", "History")}
-                        className="inline-flex items-center justify-center w-7 h-7 rounded-lg text-gray-400 hover:bg-gray-100 hover:text-gray-600"
-                      >
-                        <History className="w-4 h-4" />
-                      </button>
-                    </td>
-                    {canWrite && (
-                      <td className="px-6 py-4">
-                        <div className="flex items-center justify-end gap-1">
+                    <td className="sticky end-0 bg-white group-hover:bg-gray-50 px-4 py-4 shadow-[-6px_0_6px_-6px_rgba(0,0,0,0.15)]">
+                      <div className="flex items-center justify-end gap-1">
+                        <button
+                          onClick={() => setHistoryFor({ id: item.id, name: item.name })}
+                          title={t("risk_scenarios.version_history", "History")} aria-label={t("risk_scenarios.version_history", "History")}
+                          className="inline-flex items-center justify-center w-7 h-7 rounded-lg text-gray-400 hover:bg-gray-100 hover:text-gray-600"
+                        >
+                          <History className="w-4 h-4" />
+                        </button>
+                        {canWrite && <>
                           <button onClick={() => openEdit(item)} title={t("r2.common.edit")} aria-label={t("r2.common.edit")}
                             className="inline-flex items-center justify-center w-7 h-7 rounded-lg text-gray-400 hover:bg-blue-50 hover:text-blue-600">
                             <Pencil className="w-4 h-4" />
@@ -671,9 +670,9 @@ export default function RiskScenariosPage() {
                             className="inline-flex items-center justify-center w-7 h-7 rounded-lg text-gray-400 hover:bg-red-50 hover:text-red-600">
                             <Trash2 className="w-4 h-4" />
                           </button>
-                        </div>
-                      </td>
-                    )}
+                        </>}
+                      </div>
+                    </td>
                   </tr>
                 );
               })}

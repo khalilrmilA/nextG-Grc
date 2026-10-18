@@ -536,7 +536,10 @@ function ExportMenu({
  *  (/auth/me resolves groups and delegations), so this stays faithful. */
 function canSeeModule(user: AuthUser | null, module: ModuleDef): boolean {
   if (!module.roles) return true;
-  if (module.adminAutoPass && user && ADMIN_ROLES.includes(user.role)) return true;
+  // Follow-up D (decision 2026-10-18): the tenant owner sees every dashboard —
+  // the strict gates now pass admins too (allow_admin=True); `adminAutoPass`
+  // only documents which clause a route implements.
+  if (user && ADMIN_ROLES.includes(user.role)) return true;
   return hasAnyRole(user, module.roles);
 }
 

@@ -1012,7 +1012,7 @@ async def get_governance_trend(
     # history, not the RACI matrix; both are Elite, so no tenant's entitlement
     # changes either way.
     _plan: Annotated[User, Depends(require_feature("custom_dashboards"))],
-    _role: Annotated[User, Depends(require_roles_strict(UserRole.EXECUTIVE, UserRole.CISO))],
+    _role: Annotated[User, Depends(require_roles_strict(UserRole.EXECUTIVE, UserRole.CISO, allow_admin=True))],
     tenant_id: Annotated[str, Depends(get_tenant_id)],
     months: int = Query(6, ge=1, le=24),
 ):

@@ -391,6 +391,7 @@ _L10N: dict[str, dict[str, str]] = {
         "locate_failed": ("AI analysis could not search every part of the uploaded documents for evidence (a "
                           "retrieval step failed); the previous results were kept. Retry the analysis."),
         "gap_manual": "Manual evaluation: \"{title}\" ({control_id}) was assessed as not compliant.",
+        "gap_manual_partial": "Manual evaluation: \"{title}\" ({control_id}) was assessed as partially compliant.",
         "closed_by_action": ("Requirement closed on {date}: the action \"{title}\" that remediated it was "
                              "completed."),
         "reopened_by_action": ("Requirement re-opened on {date}: the action \"{title}\" that remediated it was "
@@ -424,6 +425,7 @@ _L10N: dict[str, dict[str, str]] = {
                           "téléversés (une étape de recherche a échoué) ; les résultats précédents ont été conservés. "
                           "Relancez l'analyse."),
         "gap_manual": "Évaluation manuelle : « {title} » ({control_id}) a été jugée non conforme.",
+        "gap_manual_partial": "Évaluation manuelle : « {title} » ({control_id}) a été jugée partiellement conforme.",
         "closed_by_action": ("Exigence clôturée le {date} : l'action « {title} » qui la corrigeait a été terminée."),
         "reopened_by_action": ("Exigence rouverte le {date} : l'action « {title} » qui la corrigeait a été rouverte."),
         "plan_orphaned": ("La non-conformité traitée par cette action a été levée par l'analyse du {date} ; "
@@ -452,6 +454,7 @@ _L10N: dict[str, dict[str, str]] = {
         "locate_failed": ("تعذر على تحليل الذكاء الاصطناعي البحث عن الأدلة في جميع أجزاء المستندات المرفوعة (فشلت "
                           "خطوة استرجاع)؛ تم الاحتفاظ بالنتائج السابقة. أعد تشغيل التحليل."),
         "gap_manual": "تقييم يدوي: تم اعتبار \"{title}\" ({control_id}) غير مطابق.",
+        "gap_manual_partial": "تقييم يدوي: تم اعتبار \"{title}\" ({control_id}) مطابقًا جزئيًا.",
         "closed_by_action": "تم إغلاق المتطلب في {date}: اكتمل الإجراء \"{title}\" الذي عالجه.",
         "reopened_by_action": "أُعيد فتح المتطلب في {date}: أُعيد فتح الإجراء \"{title}\" الذي عالجه.",
         "plan_orphaned": ("تمت معالجة عدم المطابقة التي يعالجها هذا الإجراء في تحليل {date}؛ تم إلغاء الإجراء بدلاً "
@@ -1109,14 +1112,26 @@ async def _sync_gap_for_control(
     )).scalars().all())
 
     if _is_gap_level(scale, ca.status, getattr(ca, "status_key", None)):
+        def _refresh_text(g: ComplianceGap) -> None:
+            # A reused gap keeps its row, but a generated text must follow the
+            # verdict (partial vs not compliant); a text a person wrote is kept.
+            ident = control.control_id or ca.control_id
+            texts = {key: _t(lang, key, title=control.title, control_id=ident)
+                     for key in ("gap_manual", "gap_manual_partial")}
+            if g.gap_description in texts.values():
+                g.gap_description = texts["gap_manual_partial" if ca.status == ControlStatus.PARTIALLY_IMPLEMENTED
+                                          else "gap_manual"]
+
         open_gap = next((g for g in existing if not g.is_resolved), None)
         if open_gap is not None:
+            _refresh_text(open_gap)
             return open_gap.id, False
         if existing:
             # A control that regresses re-opens the SAME gap, so its action plan,
             # owner, dates and history survive instead of restarting from an empty
             # row every time somebody flips the status back and forth.
             existing[0].is_resolved = False
+            _refresh_text(existing[0])
             return existing[0].id, False
 
         req_levels = (await db.execute(
@@ -1131,7 +1146,10 @@ async def _sync_gap_for_control(
         gap = ComplianceGap(
             assessment_id=assessment.id,
             control_id=ca.control_id,
-            gap_description=_t(lang, "gap_manual", title=control.title, control_id=identifier),
+            # Follow-up D: the text follows the verdict — a partial control is not
+            # "not compliant".
+            gap_description=_t(lang, "gap_manual_partial" if ca.status == ControlStatus.PARTIALLY_IMPLEMENTED
+                               else "gap_manual", title=control.title, control_id=identifier),
             severity=severity,
             remediation_steps=_t(lang, "remediation_default", title=control.title, control_id=identifier),
             is_certification_blocker=is_blocker,
@@ -2608,6 +2626,12 @@ async def upload_document(
                     .values(status=ControlStatus.PARTIALLY_IMPLEMENTED)
                 )
 
+    # Follow-up D: commit before returning (and before the background task, which
+    # reads the document in its own session). Leaving it to get_db()'s teardown
+    # held SQLite's write lock while ActivityLogMiddleware waited on it, so the
+    # audit entry for the upload timed out and was lost.
+    await db.commit()
+
     # Background: tag the document with the clauses of THIS assessment's framework it addresses
     # and store a factual summary (whole text, chunked; failures surface in the summary).
     if extracted.strip():
@@ -3936,6 +3960,9 @@ async def upload_control_evidence(
         file_sha256=evidence.file_sha256, file_size_bytes=len(file_bytes),
         content_type=content_type, uploaded_by_id=current_user.id,
     )
+    # The primary evidence is durable before the best-effort propagation below:
+    # a propagation error then cannot take the upload down with it.
+    await db.commit()
 
     # ── Cross-framework evidence propagation ──────────────────────────────────
     # Find the FrameworkControl for this control assessment to read its mapped_controls.
@@ -4035,8 +4062,11 @@ async def upload_control_evidence(
         # Propagation failure must never block the primary upload
         pass
     # ─────────────────────────────────────────────────────────────────────────
-
-    return EvidenceResponse(
+    # Follow-up D: commit before returning — see upload_document. A failed
+    # propagation may have left the session needing a rollback; the primary
+    # evidence is already committed.
+    # Built before the commit: a rollback would expire `evidence`.
+    out = EvidenceResponse(
         id=evidence.id,
         file_name=evidence.file_name,
         file_path=evidence.file_path,
@@ -4049,6 +4079,11 @@ async def upload_control_evidence(
         valid_until=valid_until,
         uploaded_by_id=current_user.id,
     )
+    try:
+        await db.commit()
+    except Exception:
+        await db.rollback()
+    return out
 
 
 @router.get("/control-assessments/{control_assessment_id}/evidence", response_model=list[EvidenceResponse])

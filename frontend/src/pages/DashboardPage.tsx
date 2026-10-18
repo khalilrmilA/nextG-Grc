@@ -317,10 +317,8 @@ function DashboardExportMenu() {
   // `roles` on a catalogue entry is ADVISORY — the binding check runs on the
   // export itself and can still refuse. It is used here for exactly what the
   // backend offered it for: not showing a viewer eight buttons that all 403.
-  // Admins keep every entry because require_roles auto-passes them on the three
-  // non-strict dashboards (assets, audit, compliance); on a strict one they get
-  // the 403 message below,
-  // which is the tender exclusion working rather than a defect.
+  // Admins keep every entry: the tenant owner passes every gate, strict ones
+  // included (follow-up D, product decision 2026-10-18).
   const entries = (catalogue?.dashboards ?? []).filter(
     (e) => isAdmin || e.roles.length === 0 || e.roles.some((r) => roles.includes(r)),
   );
@@ -409,7 +407,8 @@ function DashboardExportMenu() {
               {entries.length > 0 && (
                 <div className="space-y-1.5">
                   {entries.map((entry) => {
-                    const advisoryOk = entry.roles.length === 0 || entry.roles.some((r) => roles.includes(r));
+                    // The tenant owner passes every gate (decision 2026-10-18).
+                    const advisoryOk = isAdmin || entry.roles.length === 0 || entry.roles.some((r) => roles.includes(r));
                     return (
                       <button
                         key={entry.key}
@@ -550,7 +549,9 @@ function DashboardToolbar() {
 // than letting every other user walk into a 403 on their home page — and the
 // rest of this dashboard is untouched for everyone else.
 
-const EXECUTIVE_ROLES = ["executive", "ciso"];
+// The tenant owner sees the executive view too (follow-up D, decision 2026-10-18;
+// the backend gate is require_roles_strict(..., allow_admin=True)).
+const EXECUTIVE_ROLES = ["executive", "ciso", "tenant_admin", "super_admin"];
 
 function useIsExecutive(): boolean {
   const roles = useRoleList();

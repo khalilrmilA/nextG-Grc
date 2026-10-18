@@ -354,7 +354,8 @@ async def _apply_role_gate(key: str, fn, user: User, tenant_id: str, db: AsyncSe
     roles, strict = _FALLBACK_DASHBOARD_ROLES.get(key, ((), False))
     if not roles:
         return
-    checker = require_roles_strict(*roles) if strict else require_roles(*roles)
+    # Same rule as the dashboards themselves: the tenant owner is never excluded.
+    checker = require_roles_strict(*roles, allow_admin=True) if strict else require_roles(*roles)
     await _run_gate(key, checker, user, tenant_id, db)
 
 

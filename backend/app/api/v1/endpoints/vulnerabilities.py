@@ -309,7 +309,7 @@ async def get_vuln_trend(
     # no account on this installation holds security_analyst, so that role
     # alone would lock out every real user of the screen.
     _plan: Annotated[User, Depends(require_feature("custom_dashboards"))],
-    _role: Annotated[User, Depends(require_roles_strict(UserRole.SECURITY_ANALYST, UserRole.CISO))],
+    _role: Annotated[User, Depends(require_roles_strict(UserRole.SECURITY_ANALYST, UserRole.CISO, allow_admin=True))],
     tenant_id: Annotated[str, Depends(get_tenant_id)],
     months: int = Query(6, ge=1, le=24),
 ):

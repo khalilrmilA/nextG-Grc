@@ -49,6 +49,9 @@ const bundle: { en: Record<string, any>; fr: Record<string, any>; ar: Record<str
       },
       "compliance": {
         "edit_validity": "Change the validity date"
+      },
+      "risks": {
+        "not_scored": "Not scored yet — set likelihood and impact"
       }
     },
     "vocab": {
@@ -99,6 +102,9 @@ const bundle: { en: Record<string, any>; fr: Record<string, any>; ar: Record<str
       },
       "compliance": {
         "edit_validity": "Modifier la date de validité"
+      },
+      "risks": {
+        "not_scored": "Pas encore évalué — renseignez la probabilité et l’impact"
       }
     },
     "vocab": {
@@ -149,6 +155,9 @@ const bundle: { en: Record<string, any>; fr: Record<string, any>; ar: Record<str
       },
       "compliance": {
         "edit_validity": "تعديل تاريخ الصلاحية"
+      },
+      "risks": {
+        "not_scored": "لم يُقيَّم بعد — حدّد الاحتمالية والأثر"
       }
     },
     "vocab": {

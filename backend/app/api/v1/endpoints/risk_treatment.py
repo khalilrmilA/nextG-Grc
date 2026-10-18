@@ -557,7 +557,10 @@ async def supersede_treatment(
     ))
 
     # Apply the newly submitted fields to the existing (unique-per-risk) row.
-    data = body.model_dump(exclude={"change_summary"})
+    # Follow-up D: only the fields the new plan states replace the old ones — the
+    # supersede form does not show owner, start date, complexity, actual cost or
+    # the delay justification, and dumping every field wiped them to null.
+    data = body.model_dump(exclude={"change_summary"}, exclude_unset=True)
     for k, v in data.items():
         setattr(treatment, k, v)
     treatment.priority = _derive_treatment_priority(risk, treatment.complexity)

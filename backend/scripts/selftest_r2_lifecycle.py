@@ -861,6 +861,48 @@ async def prompt2(api: Api) -> None:
         await backfill_mirrors(_settings.DATABASE_URL, apply=False)
     check("would close 0 risk" in buf.getvalue(), "backfill is idempotent", buf.getvalue()[-120:])
 
+    print("[prompt 2: D — gap text, clearable risk fields, supersede, upload trail, owner dashboards]")
+    a = await _new_assessment(api, "ST D gaps")
+    row = a["control_assessments"][0]
+    await api.req("PATCH", f"/compliance/control-assessments/{row['id']}", json={"status": "partially_implemented"})
+    _, det = await api.req("GET", f"/compliance/assessments/{a['id']}")
+    gaps = det.get("gaps", [])
+    g = next((x for x in gaps if x.get("control_id") == row["control_id"]), {})
+    check("partially compliant" in (g.get("gap_description") or ""), "a partial control's gap says partially compliant", g.get("gap_description"))
+    await api.req("PATCH", f"/compliance/control-assessments/{row['id']}", json={"status": "not_implemented"})
+    _, det = await api.req("GET", f"/compliance/assessments/{a['id']}")
+    gaps = det.get("gaps", [])
+    g = next((x for x in gaps if x.get("control_id") == row["control_id"]), {})
+    check("assessed as not compliant" in (g.get("gap_description") or ""), "the same gap's text follows the new verdict", g.get("gap_description"))
+
+    s, rk = await api.req("POST", "/risks", json={"title": "ST D clearable", "likelihood": 2, "impact": 3,
+                                                  "residual_likelihood": 1, "next_review_date": "2027-01-01"})
+    s, rk2 = await api.req("PATCH", f"/risks/{rk['id']}", json={"residual_likelihood": None, "next_review_date": None})
+    check(s == 200 and rk2["residual_likelihood"] is None and rk2["next_review_date"] is None
+          and rk2["likelihood"] == 2, "explicit null clears optional risk fields; others untouched", rk2)
+
+    s, tr = await api.req("POST", "/risk-treatment", json={
+        "risk_id": rk["id"], "treatment_option": "mitigate", "acceptance_justification": "j",
+        "start_date": "2026-11-01", "complexity": "high", "actual_cost": 1200, "delay_justification": "vendor slip"})
+    s, tr2 = await api.req("POST", f"/risk-treatment/{rk['id']}/supersede", json={
+        "treatment_option": "transfer", "acceptance_justification": "insure", "transfer_to": "Insurer",
+        "change_summary": "moved to insurance"})
+    check(s == 200 and tr2["start_date"] == "2026-11-01" and tr2["complexity"] == "high"
+          and tr2["actual_cost"] == 1200 and tr2["delay_justification"] == "vendor slip"
+          and tr2["treatment_option"] == "transfer", "supersede keeps the fields its form does not show", tr2)
+
+    s, ev = await api.req("POST", f"/compliance/control-assessments/{row['id']}/evidence",
+                          files={"file": ("d.txt", b"trail proof", "text/plain")})
+    from app.models.activity_log import ActivityLog as _AL
+    async with AsyncSessionLocal() as db:
+        logged = [x for x in (await db.execute(select(_AL).where(_AL.entity_type == "compliance"))).scalars().all()
+                  if f"/control-assessments/{row['id']}/evidence" in str((x.details or {}).get("path", ""))]
+    check(s == 200 and logged, "the evidence upload is in the activity log (committed before returning)", len(logged))
+
+    for path in ("/dashboards/governance", "/dashboards/risks", "/dashboard/executive-summary"):
+        s, _ = await api.req("GET", path, who="admin@demo.com")
+        check(s != 403, f"tenant owner is not refused on {path}", s)
+
 
 def main() -> None:
     asyncio.run(http_tests())

@@ -4,6 +4,12 @@ import { useTranslation } from "react-i18next";
 import { riskTreatmentApi, riskScenariosApi, risksApi, usersApi } from "@/api/endpoints";
 import { MultiSelect } from "@/components/common/MultiSelect";
 import appI18n from "@/i18n";
+import { useAuthStore, hasAnyRole, currentUserId } from "@/store/auth";
+
+// risk_treatment.py _WRITE_ROLES (admins auto-pass); a business_owner plans only
+// for risks they own (perimeter) unless they also hold an organisation-wide role.
+const PLAN_ROLES = ["ciso", "risk_manager", "business_owner", "tenant_admin", "super_admin"];
+const ORG_WIDE = ["super_admin", "tenant_admin", "ciso", "risk_manager", "compliance_manager"];
 
 /** Intl locale for the current UI language (Arabic keeps Latin digits). */
 function uiLocale(): string {
@@ -21,7 +27,7 @@ const OPTION_BADGE: Record<string, string> = {
   avoid: "bg-emerald-100 text-emerald-700 border-emerald-200",
 };
 
-type RiskLite = { id: string; title: string };
+type RiskLite = { id: string; title: string; owner_id?: string | null };
 type ScenarioLite = { id: string; name: string; linked_risk_id?: string | null; current_risk_level?: string | null };
 type UserLite = { id: string; first_name: string; last_name: string; email: string };
 type TrackingRow = {
@@ -115,7 +121,7 @@ export default function RiskTreatmentPage() {
     // ceiling (PaginationParams le=500); beyond that the truncation is reported
     // rather than hidden — see left_open.
     risksApi.list({ page_size: 500 })
-      .then((d: any) => setRisks((d.items || d || []).map((r: any) => ({ id: r.id, title: r.title }))))
+      .then((d: any) => setRisks((d.items || d || []).map((r: any) => ({ id: r.id, title: r.title, owner_id: r.owner_id }))))
       .catch(() => setRisks([]));
     riskScenariosApi.list()
       .then((d: any) => setScenarios(Array.isArray(d) ? d : (d?.items || [])))
@@ -126,6 +132,12 @@ export default function RiskTreatmentPage() {
   }, []);
 
   const riskTitle = (id: string) => risks.find((r) => r.id === id)?.title || id.slice(0, 8);
+  // Follow-up D: hide what the server answers 403 to.
+  const authUser = useAuthStore((u) => u);
+  const myId = currentUserId(authUser);
+  const canPlan = hasAnyRole(authUser, PLAN_ROLES);
+  const perimeterOnly = canPlan && !hasAnyRole(authUser, ORG_WIDE);
+  const canPlanFor = (riskId: string) => canPlan && (!perimeterOnly || risks.find((r) => r.id === riskId)?.owner_id === myId);
   const scenarioLabel = (s: ScenarioLite) => s.current_risk_level ? `${s.name} (${s.current_risk_level})` : s.name;
   const scenarioName = (id: string) => {
     const s = scenarios.find((sc) => sc.id === id);
@@ -268,9 +280,9 @@ export default function RiskTreatmentPage() {
           </div>
           <p className="text-sm text-gray-500 mt-1">{t("treatment.subtitle", "Treatment decisions per risk — mitigate / accept / transfer / avoid — with schedule, cost and tracking")}</p>
         </div>
-        <button onClick={() => { setError(""); setForm({ ...emptyForm }); setShowModal(true); }} className="inline-flex items-center gap-2 bg-blue-600 text-white px-4 py-2.5 rounded-xl text-sm font-medium hover:bg-blue-700 transition-colors">
+        {canPlan && <button onClick={() => { setError(""); setForm({ ...emptyForm }); setShowModal(true); }} className="inline-flex items-center gap-2 bg-blue-600 text-white px-4 py-2.5 rounded-xl text-sm font-medium hover:bg-blue-700 transition-colors">
           <Plus className="w-4 h-4" /> {t("treatment.new", "New treatment")}
-        </button>
+        </button>}
       </div>
 
       {/* Stats */}
@@ -350,14 +362,14 @@ export default function RiskTreatmentPage() {
                       </td>
                       <td className="px-6 py-4">
                         <div className="flex items-center gap-1.5">
-                          <button
+                          {canPlanFor(tr.risk_id) && <button
                             type="button"
                             onClick={() => openSupersede(tr)}
                             title={t("treatment.supersede", "Supersede / Update plan")}
                             className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
                           >
                             <RefreshCw className="w-3.5 h-3.5" /> {t("treatment.supersede_short", "Supersede")}
-                          </button>
+                          </button>}
                           <button
                             type="button"
                             onClick={() => openHistory(tr)}
@@ -466,7 +478,7 @@ export default function RiskTreatmentPage() {
                 <label className="block text-sm font-medium text-gray-700 mb-1">{t("treatment.col_risk", "Risk")} *</label>
                 <select value={form.risk_id} onChange={(e) => setForm({ ...form, risk_id: e.target.value, linked_scenario_ids: [] })} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
                   <option value="">{t("treatment.select_risk", "Select a risk…")}</option>
-                  {risks.map((r) => <option key={r.id} value={r.id}>{r.title}</option>)}
+                  {risks.filter((r) => canPlanFor(r.id)).map((r) => <option key={r.id} value={r.id}>{r.title}</option>)}
                 </select>
               </div>
               <div>

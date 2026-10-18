@@ -1008,7 +1008,7 @@ def _posture(compliance_score: float | None, control_coverage: float | None,
 async def get_executive_summary(
     tenant_id: Annotated[str, Depends(get_tenant_id)],
     db: Annotated[AsyncSession, Depends(get_db)],
-    current_user: Annotated[User, Depends(require_roles_strict(*_EXECUTIVE_ROLES))],
+    current_user: Annotated[User, Depends(require_roles_strict(*_EXECUTIVE_ROLES, allow_admin=True))],
 ):
     """Consolidated cross-module KPI set for the Direction Générale / RSSI.
 

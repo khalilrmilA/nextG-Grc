@@ -56,7 +56,10 @@ def _dashboard_gate(*roles: UserRole, strict: bool = False):
     (role) failures stay distinguishable to the SPA, which handles them very
     differently — 402 opens the upgrade dialog.
     """
-    _access = require_roles_strict(*roles) if strict else require_roles(*roles)
+    # Follow-up D (product decision 2026-10-18): the tenant owner sees every
+    # dashboard — "strict" still excludes the other roles a clause leaves out,
+    # but no longer locks out tenant_admin / super_admin ("Restricted view").
+    _access = require_roles_strict(*roles, allow_admin=True) if strict else require_roles(*roles)
 
     async def _gate(
         current_user: Annotated[User, Depends(require_feature(_FEATURE))],
