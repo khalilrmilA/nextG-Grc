@@ -434,6 +434,10 @@ async def policies(api: Api) -> None:
     check(s == 200 and p["next_review_date"] == "2031-05-05", "re-publish keeps a hand-set review date", p.get("next_review_date"))
     s, b = await api.req("PATCH", f"/policies/{pid}", who=pm, json={"next_review_date": "soon"})
     check(s == 422, "a review date must be a date", b)
+    for bad in (0, -3, 100000):
+        s1, _ = await api.req("PATCH", f"/policies/{pid}", who=pm, json={"review_frequency_months": bad})
+        s2, _ = await api.req("POST", "/policies", who=pm, json={"title": "ST bad cycle", "review_frequency_months": bad})
+        check(s1 == 422 and s2 == 422, f"review frequency {bad} refused with 422 (was a 500 on publish/review)", (s1, s2))
     s, p = await api.req("PATCH", f"/policies/{pid}", who=pm, json={"status": "retired"})
     check(s == 200 and p["status"] == "retired" and p["allowed_transitions"] == ["draft"], "retire (only revive left)")
     s, logs = await api.req("GET", "/activity-log", params={"entity_type": "policy", "page_size": 100})
@@ -525,6 +529,10 @@ async def audits(api: Api) -> None:
     auid = au["id"]
     s, f = await api.req("POST", f"/audits/{auid}/findings", json={
         "title": "ST finding", "description": "Access reviews not evidenced", "severity": "high"})
+    long_title = "ST privileged access reviews are not performed quarterly for administrator accounts"
+    long_desc = ("Quarterly reviews of privileged accounts could not be evidenced for the period under audit; "
+                 "two dormant administrator accounts remained enabled after their owners left the organisation")
+    await api.req("POST", f"/audits/{auid}/findings", json={"title": long_title, "description": long_desc, "severity": "medium"})
     check(s == 201, "finding created", f)
     s, rec = await api.req("POST", f"/audits/{auid}/recommendations", json={
         "title": "ST recommendation", "finding_id": f["id"]})
@@ -547,6 +555,9 @@ async def audits(api: Api) -> None:
     text = " ".join(" ".join((pg.extract_text() or "") for pg in PdfReader(io.BytesIO(pdf.read_bytes())).pages).split())
     check("quarterly access review" in text and "ST finding" in text,
           "report « plan d'action » lists the action with its finding", text[-400:])
+    flat = text.replace("- ", "")
+    check(long_title in flat and long_desc in flat,
+          "report table cells keep long titles and descriptions whole (no mid-word cut)", flat[:600])
 
 
 async def followups(api: Api) -> None:
@@ -684,6 +695,30 @@ async def prompt2(api: Api) -> None:
     check(first.get("waiver_expiry", 0) >= 1 and second.get("waiver_expiry") == 0 and st == "expired"
           and r["status"] != "accepted", "daily check expires it once and hands the risk back",
           (first.get("waiver_expiry"), second.get("waiver_expiry"), st, r.get("status")))
+
+    # Race: two sweeps at the same moment (2 workers) on separate connections.
+    from app.services.notification_generator import sync_waiver_expiry
+    from app.models.risk_version import RiskVersion
+    s, risk2 = await api.req("POST", "/risks", who=rm, json={"title": "ST race risk", "likelihood": 3, "impact": 3, "category": "operational"})
+    s, e2 = await api.req("POST", "/security/acceptances", who=rm, json={
+        "name": "ST race", "justification": "j", "expiration_date": "2030-01-01", "risk_ids": [risk2["id"]]})
+    await api.req("PATCH", f"/security/acceptances/{e2['id']}/approve")
+    async with AsyncSessionLocal() as db:
+        await db.execute(update(RiskAcceptance).where(RiskAcceptance.id == e2["id"]).values(expiration_date="2020-01-01"))
+        await db.commit()
+
+    async def one_sweep():
+        async with AsyncSessionLocal() as db:
+            return await sync_waiver_expiry(db, tid)
+    counts = await asyncio.gather(one_sweep(), one_sweep(), return_exceptions=True)
+    async with AsyncSessionLocal() as db:
+        st2 = (await db.execute(select(RiskAcceptance.status).where(RiskAcceptance.id == e2["id"]))).scalar_one()
+        hand_backs = (await db.execute(select(RiskVersion).where(
+            RiskVersion.risk_id == risk2["id"], RiskVersion.transition_from == "accepted"))).scalars().all()
+    check(st2 == "expired" and sum(c for c in counts if isinstance(c, int)) == 1 and len(hand_backs) == 1,
+          "two simultaneous sweeps: expired once, risk handed back once", (counts, st2, len(hand_backs)))
+    s, b = await api.req("PATCH", f"/security/acceptances/{e2['id']}/revoke", json={"reason": "late"})
+    check(s == 409 and "expired" in str(b), "revoke after expiry is refused with the real status", b)
 
     print("[prompt 2: C-2 — attestations on an approved text only, no duplicates, auditors attest]")
     pm = role_email("policy_manager")

@@ -2582,8 +2582,11 @@ async def sync_waiver_expiry(db: AsyncSession, tenant_id: str | None = None) -> 
         stmt = _scoped(select(model).where(model.status.in_(_LIVE_STATUSES)), model.tenant_id, tenant_id)
         due = [r for r in (await db.execute(stmt)).scalars().all() if _is_past(r.expiration_date)]
         if due:
-            await _expire_due(db, stmt, kind, on_expire=hook)
-            changed += len(due)
+            # Count only what THIS run claimed — the other worker's sweep (or a page
+            # read) may have expired some of them first.
+            claimed: list[str] = []
+            await _expire_due(db, stmt, kind, on_expire=hook, claimed_out=claimed)
+            changed += len(claimed)
     return changed
 
 

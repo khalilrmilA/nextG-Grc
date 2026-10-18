@@ -24,7 +24,7 @@ from datetime import date, datetime, timezone
 from typing import Annotated
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import String, cast, select
 from sqlalchemy.exc import IntegrityError, OperationalError, ProgrammingError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -155,7 +155,7 @@ class ThreatUpdate(BaseModel):
     affected_assets: list[str] | None = None
     mitre_ids: list[str] | None = None
     threat_type: str | None = None
-    review_frequency_months: int | None = None
+    review_frequency_months: int | None = Field(default=None, ge=1, le=120)
 
 
 class ThreatProfileUpdate(BaseModel):
@@ -170,7 +170,7 @@ class ThreatProfileUpdate(BaseModel):
     threat_type: str | None = None
     linked_asset_ids: list[str] | None = None
     linked_vulnerability_ids: list[str] | None = None
-    review_frequency_months: int | None = None
+    review_frequency_months: int | None = Field(default=None, ge=1, le=120)
 
 
 class ThreatHistoryOut(BaseModel):

@@ -867,6 +867,22 @@ def _styles(lang: str = "en"):
 
 # ── Reusable Components ───────────────────────────────────────────────────
 
+def _clip(text, limit: int = 160) -> str:
+    """Shorten a table value at a WORD boundary, with an ellipsis.
+
+    Table cells wrap (see _text_cell), so a hard ``text[:50]`` only ever served
+    to bound very long values — and it cut words in half with no marker
+    ("Insufficient access revi"). Limits are now generous and the cut is visible.
+    """
+    if text is None:
+        return ""
+    text = str(text).strip()
+    if len(text) <= limit:
+        return text
+    cut = text[:limit].rsplit(" ", 1)[0] if " " in text[:limit] else text[:limit]
+    return cut.rstrip(" ,;:-") + "…"
+
+
 def _p(text, style, width: float | None = None) -> Paragraph:
     """Paragraph whose Arabic runs carry an Arabic-capable font.
 
@@ -1202,7 +1218,7 @@ async def generate_executive_summary(db: AsyncSession, tenant_id: str, org: str,
     rows = []
     for a in assessments:
         score = f"{a.compliance_score:.0f}%" if a.compliance_score is not None else "—"
-        rows.append([a.name[:50] if a.name else _t(lang, "unnamed"), _label(lang, a.status), score])
+        rows.append([_clip(a.name, 160) if a.name else _t(lang, "unnamed"), _label(lang, a.status), score])
     els.append(_table(
         [_t(lang, "col_assessment"), _t(lang, "col_status"), _t(lang, "col_score")],
         rows, [PAGE_W * 0.55, PAGE_W * 0.25, PAGE_W * 0.20], lang,
@@ -1245,7 +1261,7 @@ async def generate_risk_report(db: AsyncSession, tenant_id: str, org: str, lang:
     rows = []
     for r in scored:
         score = (r.likelihood or 0) * (r.impact or 0)
-        rows.append([r.title[:50], _category_label(lang, r.risk_category)[:24], f"{score:.1f}",
+        rows.append([_clip(r.title, 160), _clip(_category_label(lang, r.risk_category), 80), f"{score:.1f}",
                      _label(lang, r.severity), _label(lang, r.status)])
     els.append(_table(
         [_t(lang, "col_title"), _t(lang, "col_category"), _t(lang, "col_score"),
@@ -1268,7 +1284,7 @@ async def generate_risk_report(db: AsyncSession, tenant_id: str, org: str, lang:
             label = (_t(lang, "due_overdue", days=abs(days)) if days < 0
                      else _t(lang, "due_today") if days == 0
                      else _t(lang, "due_in", days=days))
-            overdue.append([r.title[:50], _fmt_date(d, lang), label])
+            overdue.append([_clip(r.title, 160), _fmt_date(d, lang), label])
     els.append(_table(
         [_t(lang, "col_risk"), _t(lang, "col_review_date"), _t(lang, "col_status")],
         overdue, [PAGE_W * 0.50, PAGE_W * 0.25, PAGE_W * 0.25], lang,
@@ -1307,7 +1323,7 @@ async def generate_vendor_report(db: AsyncSession, tenant_id: str, org: str, lan
     for v in vendors[:15]:
         score = f"{v.risk_score:.0f}" if v.risk_score else "—"
         dpa = _t(lang, "yes") if v.has_data_processing_agreement else _t(lang, "no")
-        rows.append([v.name[:30], _category_label(lang, v.industry)[:24],
+        rows.append([_clip(v.name, 80), _clip(_category_label(lang, v.industry), 80),
                      _label(lang, v.risk_tier), score, dpa, _label(lang, v.status)])
     els.append(_table(
         [_t(lang, "col_vendor"), _t(lang, "col_industry"), _t(lang, "col_tier"),
@@ -1331,7 +1347,7 @@ async def generate_vendor_report(db: AsyncSession, tenant_id: str, org: str, lan
     rows = []
     for c in contracts[:10]:
         vr = (await db.execute(select(Vendor).where(Vendor.id == c.vendor_id))).scalar_one_or_none()
-        rows.append([(vr.name if vr else "—")[:30], c.file_name[:30], f"v{c.version}", _fmt_date(c.created_at, lang)])
+        rows.append([_clip((vr.name if vr else "—"), 80), _clip(c.file_name, 80), f"v{c.version}", _fmt_date(c.created_at, lang)])
     els.append(_table(
         [_t(lang, "col_vendor"), _t(lang, "col_contract"), _t(lang, "col_version"), _t(lang, "col_uploaded")],
         rows, [PAGE_W * 0.25, PAGE_W * 0.35, PAGE_W * 0.10, PAGE_W * 0.20], lang,
@@ -1340,7 +1356,7 @@ async def generate_vendor_report(db: AsyncSession, tenant_id: str, org: str, lan
     # Missing DPA
     if no_dpa > 0:
         els.append(_section(st, _t(lang, "sec_missing_dpa")))
-        rows = [[v.name[:40], _category_label(lang, v.industry)[:28]] for v in vendors if not v.has_data_processing_agreement][:10]
+        rows = [[_clip(v.name, 160), _clip(_category_label(lang, v.industry), 80)] for v in vendors if not v.has_data_processing_agreement][:10]
         els.append(_table([_t(lang, "col_vendor"), _t(lang, "col_industry")], rows,
                           [PAGE_W * 0.55, PAGE_W * 0.45], lang))
 
@@ -1375,7 +1391,7 @@ async def generate_compliance_report(db: AsyncSession, tenant_id: str, org: str,
     rows = []
     for a in assessments[:15]:
         score = f"{a.compliance_score:.0f}%" if a.compliance_score is not None else "—"
-        rows.append([a.name[:45] if a.name else _t(lang, "unnamed"), _label(lang, a.status),
+        rows.append([_clip(a.name, 160) if a.name else _t(lang, "unnamed"), _label(lang, a.status),
                      score, _fmt_date(a.created_at, lang)])
     els.append(_table(
         [_t(lang, "col_assessment"), _t(lang, "col_status"), _t(lang, "col_score"), _t(lang, "col_created")],
@@ -1391,7 +1407,7 @@ async def generate_compliance_report(db: AsyncSession, tenant_id: str, org: str,
     gap_rows = []
     for g in ranked[:MAX_TABLE_ROWS]:
         gap_rows.append([g.control_id[:15] if g.control_id else "—", _label(lang, g.severity),
-                         (g.gap_description or "—")[:80]])
+                         _clip((g.gap_description or "—"), 400)])
     els.append(_table(
         [_t(lang, "col_control"), _t(lang, "col_severity"), _t(lang, "col_description")],
         gap_rows, [PAGE_W * 0.15, PAGE_W * 0.15, PAGE_W * 0.65], lang,
@@ -1617,7 +1633,7 @@ async def generate_single_audit_report(db: AsyncSession, audit: Audit, org: str,
     f_rows = []
     for f in findings[:MAX_TABLE_ROWS]:
         f_rows.append([
-            (f.title or "—")[:50],
+            _clip((f.title or "—"), 160),
             _label(lang, f.severity),
             _label(lang, f.status),
             names.get(f.remediation_owner_id or "", "—"),
@@ -1648,8 +1664,8 @@ async def generate_single_audit_report(db: AsyncSession, audit: Audit, org: str,
         els.append(_p(f"{_label(lang, ftype)} ({len(bucket)})", st["H3"]))
         els.append(_table(
             [_t(lang, "col_finding"), _t(lang, "col_severity"), _t(lang, "col_status"), _t(lang, "col_description")],
-            [[(f.title or "—")[:40], _label(lang, f.severity), _label(lang, f.status),
-              (f.description or "—")[:110]] for f in bucket[:MAX_TABLE_ROWS]],
+            [[_clip((f.title or "—"), 160), _label(lang, f.severity), _label(lang, f.status),
+              _clip((f.description or "—"), 400)] for f in bucket[:MAX_TABLE_ROWS]],
             [PAGE_W * 0.26, PAGE_W * 0.13, PAGE_W * 0.16, PAGE_W * 0.45],
             lang,
         ))
@@ -1664,8 +1680,8 @@ async def generate_single_audit_report(db: AsyncSession, audit: Audit, org: str,
         linked = by_id.get(r.finding_id or "")
         r_rows.append([
             r.ref_code or "—",
-            (r.title or "—")[:60],
-            (linked.title[:30] if linked is not None and linked.title else _t(lang, "unlinked")),
+            _clip((r.title or "—"), 160),
+            (_clip(linked.title, 80) if linked is not None and linked.title else _t(lang, "unlinked")),
             names.get(r.owner_id or "", "—"),
             _fmt_date(r.due_date, lang),
             _label(lang, r.status),
@@ -1673,7 +1689,7 @@ async def generate_single_audit_report(db: AsyncSession, audit: Audit, org: str,
     if not r_rows:
         for f in findings:
             if (f.recommendation or "").strip():
-                r_rows.append(["—", f.recommendation.strip()[:60], (f.title or "—")[:30],
+                r_rows.append(["—", _clip(f.recommendation.strip(), 160), _clip((f.title or "—"), 80),
                                names.get(f.remediation_owner_id or "", "—"),
                                _fmt_date(f.due_date, lang), _label(lang, f.status)])
     if r_rows:
@@ -1694,8 +1710,8 @@ async def generate_single_audit_report(db: AsyncSession, audit: Audit, org: str,
     for it in actions[:MAX_TABLE_ROWS]:
         linked = by_id.get(it.finding_id or "")
         a_rows.append([
-            (it.title or "—")[:45],
-            (linked.title[:30] if linked is not None and linked.title else _t(lang, "unlinked")),
+            _clip((it.title or "—"), 160),
+            (_clip(linked.title, 80) if linked is not None and linked.title else _t(lang, "unlinked")),
             names.get(it.owner_id or "", "—"),
             _label(lang, it.priority),
             _fmt_date(it.due_date, lang),
@@ -1725,7 +1741,7 @@ async def generate_single_audit_report(db: AsyncSession, audit: Audit, org: str,
         els.append(_section(st, _t(lang, "sec_distribution")))
         els.append(_table(
             [_t(lang, "col_recipients"), _t(lang, "col_channel"), _t(lang, "col_version"), _t(lang, "col_sent")],
-            [[(d.recipients or "—")[:60], d.channel or "—", f"v{d.report_version}",
+            [[_clip((d.recipients or "—"), 160), d.channel or "—", f"v{d.report_version}",
               _fmt_date(d.distributed_at or d.created_at, lang)] for d in distributions[:MAX_TABLE_ROWS]],
             [PAGE_W * 0.45, PAGE_W * 0.15, PAGE_W * 0.12, PAGE_W * 0.20],
             lang,

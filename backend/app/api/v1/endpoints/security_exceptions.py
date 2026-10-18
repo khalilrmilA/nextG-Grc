@@ -2,7 +2,8 @@
 from datetime import date, datetime
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, field_validator, model_validator
-from sqlalchemy import select
+from sqlalchemy import select, update as sa_update
+from sqlalchemy.orm.attributes import set_committed_value
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
@@ -42,7 +43,40 @@ def _is_past(expiration_date: str | None) -> bool:
     return expiration_date[:10] < date.today().isoformat()
 
 
-async def _expire_due(db: AsyncSession, stmt, entity_type: str, on_expire=None) -> list:
+async def _claim(db: AsyncSession, row, from_statuses, to_status: str) -> bool:
+    """Move ``row`` to ``to_status`` only if it is still in ``from_statuses``.
+
+    A conditional UPDATE, not "read, check, assign": with 2 uvicorn workers the
+    daily sweep, the page read and a CISO's revoke can all look at the same
+    acceptance at the same moment. The database serialises the UPDATEs, so
+    exactly one of them matches the row; only that caller runs the side effects
+    (risks handed back, risk versions, activity entries). The others see
+    rowcount 0 and do nothing — no duplicate versions, no double hand-back.
+    Caller commits.
+    """
+    model = type(row)
+    res = await db.execute(
+        sa_update(model)
+        .where(model.id == row.id, model.status.in_(list(from_statuses)))
+        .values(status=to_status)
+        .execution_options(synchronize_session=False))
+    if res.rowcount != 1:
+        return False
+    set_committed_value(row, "status", to_status)
+    return True
+
+
+async def _claim_or_409(db: AsyncSession, row, from_statuses, to_status: str, verb: str) -> None:
+    """_claim, or a 409 naming the status the row is ACTUALLY in now (another
+    worker may have moved it since this request loaded it)."""
+    if row.status in from_statuses and await _claim(db, row, from_statuses, to_status):
+        return
+    await db.refresh(row)
+    raise HTTPException(409, f"Cannot {verb} acceptance in status '{row.status}'")
+
+
+async def _expire_due(db: AsyncSession, stmt, entity_type: str, on_expire=None,
+                      claimed_out: list | None = None) -> list:
     """Run `stmt`, stamping EXPIRED on anything whose window has closed.
 
     ``on_expire(db, row)`` runs for each newly expired row inside the same
@@ -57,15 +91,16 @@ async def _expire_due(db: AsyncSession, stmt, entity_type: str, on_expire=None) 
     if not changed:
         return rows
     # Capture the before-state now: after the commit these are the new values.
-    transitions = [
-        (r.tenant_id, r.id, getattr(r, "title", None) or getattr(r, "name", None),
-         r.status, r.expiration_date)
-        for r in changed
-    ]
-    for r in changed:
-        r.status = ExceptionStatus.EXPIRED.value
+    before = {r.id: (r.tenant_id, r.id, getattr(r, "title", None) or getattr(r, "name", None),
+                     r.status, r.expiration_date) for r in changed}
+    # Claim each transition; a row another worker (or a revoke) got first is skipped.
+    claimed = [r for r in changed
+               if await _claim(db, r, _LIVE_STATUSES, ExceptionStatus.EXPIRED.value)]
+    transitions = [before[r.id] for r in claimed]
+    if claimed_out is not None:
+        claimed_out.extend(r.id for r in claimed)
     if on_expire is not None:
-        for r in changed:
+        for r in claimed:
             await on_expire(db, r)
     try:
         await db.commit()
@@ -387,7 +422,9 @@ async def approve_acceptance(
     if _is_past(a.expiration_date):
         raise HTTPException(
             409, "This acceptance's expiration date has already passed. Extend it before approving.")
-    a.status = "approved"; a.approver_id = user.id; a.approved_at = datetime.utcnow().isoformat()
+    # Claimed: a concurrent reject / withdraw / second approval of the same request loses.
+    await _claim_or_409(db, a, ("pending",), "approved", "approve")
+    a.approver_id = user.id; a.approved_at = datetime.utcnow().isoformat()
     await _accept_covered_risks(db, a, user)
     await db.commit(); await db.refresh(a)
     return RAOut.model_validate(a)
@@ -406,9 +443,8 @@ async def reject_acceptance(
     a = await _load_acceptance(db, aid, tenant_id)
     if a.requested_by_id == user.id:
         raise HTTPException(403, "You cannot reject your own risk acceptance (four-eyes principle).")
-    if a.status != "pending":
-        raise HTTPException(409, f"Cannot reject acceptance in status '{a.status}'")
-    a.status = "rejected"; a.approver_id = user.id; a.rejection_reason = body.reason.strip()
+    await _claim_or_409(db, a, ("pending",), "rejected", "reject")
+    a.approver_id = user.id; a.rejection_reason = body.reason.strip()
     await db.commit(); await db.refresh(a)
     return RAOut.model_validate(a)
 
@@ -427,9 +463,7 @@ async def revoke_acceptance(
     if not body.reason.strip():
         raise HTTPException(422, "A reason is required to revoke a risk acceptance.")
     a = await _load_acceptance(db, aid, tenant_id)
-    if a.status != "approved":
-        raise HTTPException(409, f"Cannot revoke acceptance in status '{a.status}'")
-    a.status = ExceptionStatus.REVOKED.value
+    await _claim_or_409(db, a, ("approved",), ExceptionStatus.REVOKED.value, "revoke")
     a.revoked_by_id = user.id; a.revoked_at = datetime.utcnow().isoformat()
     a.revocation_reason = body.reason.strip()
     await _release_covered_risks(db, a, user, "revoked")
@@ -456,9 +490,7 @@ async def withdraw_acceptance(
     a = await _load_acceptance(db, aid, tenant_id)
     if a.requested_by_id != user.id:
         raise HTTPException(403, "Only the person who requested this acceptance can withdraw it.")
-    if a.status != "pending":
-        raise HTTPException(409, f"Cannot withdraw acceptance in status '{a.status}'")
-    a.status = "withdrawn"
+    await _claim_or_409(db, a, ("pending",), "withdrawn", "withdraw")
     a.revoked_by_id = user.id; a.revoked_at = datetime.utcnow().isoformat()
     a.revocation_reason = body.reason.strip()
     await db.commit(); await db.refresh(a)

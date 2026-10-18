@@ -4,7 +4,7 @@ import calendar
 from datetime import date, datetime
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -126,7 +126,8 @@ class PolicyCreate(BaseModel):
     owner_id: str | None = None
     status: str | None = None  # draft, in_review, approved, published
     linked_controls: list[str] = []
-    review_frequency_months: int = 12
+    # 1-120: 0 made every review due at once, a huge value overflowed the date (500).
+    review_frequency_months: int = Field(default=12, ge=1, le=120)
     next_review_date: str | None = None
     effective_date: str | None = None
     expiration_date: str | None = None
@@ -141,7 +142,7 @@ class PolicyUpdate(BaseModel):
     status: str | None = None
     owner_id: str | None = None
     linked_controls: list[str] | None = None
-    review_frequency_months: int | None = None
+    review_frequency_months: int | None = Field(default=None, ge=1, le=120)
     next_review_date: str | None = None
     effective_date: str | None = None
     expiration_date: str | None = None
@@ -634,8 +635,6 @@ async def update_policy(pid: str, body: PolicyUpdate, db: AsyncSession = Depends
 
     if body.title is not None and not body.title.strip():
         raise HTTPException(422, "A policy needs a title.")
-    if body.review_frequency_months is not None and not 1 <= body.review_frequency_months <= 120:
-        raise HTTPException(422, "The review frequency must be between 1 and 120 months.")
     for f in ["title","description","category","owner_id","review_frequency_months",
               "effective_date","expiration_date","business_process_id","org_entity_id"]:
         v = getattr(body, f, None)
