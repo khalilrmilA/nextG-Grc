@@ -245,7 +245,8 @@ function AddRiskModal({ onClose, onSaved }: { readonly onClose: () => void; read
               <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">{t("common.status")}</label>
               <select className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
                 value={form.status} onChange={e => setForm(f => ({ ...f, status: e.target.value }))}>
-                {STATUS_KEYS.map(s => <option key={s.value} value={s.value}>{t(s.key as never)}</option>)}
+                {/* A risk cannot be created closed (backend 422) — closing goes through edit. */}
+                {STATUS_KEYS.filter(s => s.value !== "closed").map(s => <option key={s.value} value={s.value}>{t(s.key as never)}</option>)}
               </select>
             </div>
           </div>

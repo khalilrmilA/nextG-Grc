@@ -132,6 +132,9 @@ class RiskCreate(BaseModel):
     target_likelihood: float | None = None
     target_impact: float | None = None
     risk_matrix_id: str | None = None
+    # Initial workflow status picked in the create form. None keeps the model
+    # default; `closed` is refused — closing goes through PATCH and its reopen rules.
+    status: RiskStatus | None = None
     tags: list[str] = []
     linked_controls: list[str] = []
     linked_assets: list[str] = []
@@ -314,8 +317,17 @@ async def create_risk(
         UserRole.CISO, UserRole.RISK_MANAGER
     )),
 ):
+    if body.status == RiskStatus.CLOSED:
+        raise HTTPException(
+            status_code=422,
+            detail="A risk cannot be created as closed. Create it, then close it.",
+        )
     await _assert_scope_in_tenant(db, tenant_id, body.org_entity_id, body.business_process_id)
-    risk = Risk(tenant_id=tenant_id, **body.model_dump())
+    data = body.model_dump()
+    # Risk(status=None) would write NULL instead of letting the column default apply.
+    if data.get("status") is None:
+        data.pop("status", None)
+    risk = Risk(tenant_id=tenant_id, **data)
     definition, matrix_name = await _apply_scoring(db, tenant_id, risk)
     db.add(risk)
     await db.flush()

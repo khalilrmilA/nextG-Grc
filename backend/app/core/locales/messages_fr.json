@@ -15,6 +15,7 @@
   "A reply to an internal note must itself be internal": "Une réponse à une note interne doit elle‑même être interne",
   "A response is required": "Une réponse est requise",
   "A retired scale cannot be made the default": "Une échelle retirée ne peut pas être définie comme valeur par défaut",
+  "A risk cannot be created as closed. Create it, then close it.": "Un risque ne peut pas être créé à l’état fermé. Créez-le, puis fermez-le.",
   "A source needs a name.": "Une source nécessite un nom.",
   "A translation needs at least one of title, description or guidance": "Une traduction nécessite au moins l'un des champs titre, description ou guidance",
   "A user cannot delegate to themselves.": "Un utilisateur ne peut pas se déléguer à lui‑même.",

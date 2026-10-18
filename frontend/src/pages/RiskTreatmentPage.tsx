@@ -159,8 +159,10 @@ export default function RiskTreatmentPage() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!form.risk_id) { setError(t("treatment.error_risk_required", "Select a risk")); return; }
-    if (form.treatment_option === "accept" && !form.acceptance_justification.trim()) {
-      setError(t("treatment.error_justification", "Acceptance requires a justification")); return;
+    if (!form.acceptance_justification.trim()) {
+      setError(form.treatment_option === "accept"
+        ? t("treatment.error_justification", "Acceptance requires a justification")
+        : t("r2.treatment.error_justification", "A justification is required for every treatment decision")); return;
     }
     setSubmitting(true); setError("");
     try {
@@ -210,8 +212,10 @@ export default function RiskTreatmentPage() {
       setSupersedeError(t("treatment.error_change_summary", "Describe what changed in this new plan"));
       return;
     }
-    if (supersedeForm.treatment_option === "accept" && !supersedeForm.acceptance_justification.trim()) {
-      setSupersedeError(t("treatment.error_justification", "Acceptance requires a justification"));
+    if (!supersedeForm.acceptance_justification.trim()) {
+      setSupersedeError(supersedeForm.treatment_option === "accept"
+        ? t("treatment.error_justification", "Acceptance requires a justification")
+        : t("r2.treatment.error_justification", "A justification is required for every treatment decision"));
       return;
     }
     setSupersedeSubmitting(true); setSupersedeError("");
@@ -507,12 +511,13 @@ export default function RiskTreatmentPage() {
                   <input value={form.transfer_to} onChange={(e) => setForm({ ...form, transfer_to: e.target.value })} placeholder={t("treatment.transfer_to_placeholder")} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
                 </div>
               )}
-              {form.treatment_option === "accept" && (
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">{t("treatment.justification", "Acceptance justification")} *</label>
-                  <textarea value={form.acceptance_justification} onChange={(e) => setForm({ ...form, acceptance_justification: e.target.value })} rows={2} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-                </div>
-              )}
+              {/* The backend requires a justification for every option, not only accept. */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  {form.treatment_option === "accept" ? t("treatment.justification", "Acceptance justification") : t("r2.treatment.justification", "Justification")} *
+                </label>
+                <textarea value={form.acceptance_justification} onChange={(e) => setForm({ ...form, acceptance_justification: e.target.value })} rows={2} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              </div>
               <div className="flex justify-end gap-3 pt-2">
                 <button type="button" onClick={() => setShowModal(false)} className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800">{t("common.cancel", "Cancel")}</button>
                 <button type="submit" disabled={submitting} className="inline-flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-xl text-sm font-medium hover:bg-blue-700 disabled:opacity-50">
@@ -590,12 +595,13 @@ export default function RiskTreatmentPage() {
                   <input value={supersedeForm.transfer_to} onChange={(e) => setSupersedeForm({ ...supersedeForm, transfer_to: e.target.value })} placeholder={t("treatment.transfer_to_placeholder")} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
                 </div>
               )}
-              {supersedeForm.treatment_option === "accept" && (
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">{t("treatment.justification", "Acceptance justification")} *</label>
-                  <textarea value={supersedeForm.acceptance_justification} onChange={(e) => setSupersedeForm({ ...supersedeForm, acceptance_justification: e.target.value })} rows={2} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-                </div>
-              )}
+              {/* The backend requires a justification for every option, not only accept. */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  {supersedeForm.treatment_option === "accept" ? t("treatment.justification", "Acceptance justification") : t("r2.treatment.justification", "Justification")} *
+                </label>
+                <textarea value={supersedeForm.acceptance_justification} onChange={(e) => setSupersedeForm({ ...supersedeForm, acceptance_justification: e.target.value })} rows={2} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              </div>
               <div className="flex justify-end gap-3 pt-2">
                 <button type="button" onClick={() => setSupersedeModal(false)} className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800">{t("common.cancel", "Cancel")}</button>
                 <button type="submit" disabled={supersedeSubmitting} className="inline-flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-xl text-sm font-medium hover:bg-blue-700 disabled:opacity-50">

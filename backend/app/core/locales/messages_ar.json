@@ -15,6 +15,7 @@
   "A reply to an internal note must itself be internal": "يجب أن يكون الرد على ملاحظة داخلية داخليًا أيضًا",
   "A response is required": "الاستجابة مطلوبة",
   "A retired scale cannot be made the default": "لا يمكن جعل مقياس مُوقَف المقياس الافتراضي",
+  "A risk cannot be created as closed. Create it, then close it.": "لا يمكن إنشاء خطر بحالة مغلق. أنشئه أولاً ثم أغلقه.",
   "A source needs a name.": "المصدر يحتاج إلى اسم.",
   "A translation needs at least one of title, description or guidance": "الترجمة تحتاج إلى واحد على الأقل من العنوان أو الوصف أو الإرشاد",
   "A user cannot delegate to themselves.": "لا يمكن للمستخدم تفويض نفسه.",

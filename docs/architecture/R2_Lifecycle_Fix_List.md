@@ -13,11 +13,11 @@ Size: **S** = small (hours to a couple of days), **M** = medium (about a week or
 
 ## 1. Quick bugs (do first)
 
-- [ ] **S — Risk status chosen at creation is dropped.**
+- [x] **S — Risk status chosen at creation is dropped.** *(R2 phase 1: `closed` refused with 422; verified on test copy)*
   The form sends `status` ([RisksPage.tsx:200](../../frontend/src/pages/RisksPage.tsx#L200)), but
   `RiskCreate` has no `status` field ([risks.py:123](../../backend/app/api/v1/endpoints/risks.py#L123)).
   Add `status: RiskStatus | None = None` to `RiskCreate` and apply it in `create_risk`.
-- [ ] **S — "Mitigate" treatment fails with 422.**
+- [x] **S — "Mitigate" treatment fails with 422.** *(R2 phase 1: field shown + validated for all options in create and supersede)*
   The backend requires a justification for **every** option
   ([risk_treatment.py:248](../../backend/app/api/v1/endpoints/risk_treatment.py#L248)). The form shows
   the field and validates it only for `accept`
