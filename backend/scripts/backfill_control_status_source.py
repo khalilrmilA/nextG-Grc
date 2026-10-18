@@ -5,7 +5,7 @@ From R2 on, update_control_assessment marks the rows a person edits
 Rows edited BEFORE the marker existed carry NULL, which the analysis treats as
 its own — so the next re-run would overwrite them, exactly what R2 fixes.
 
-Two footprints of a person's edit are used; every such row still NULL is
+Four footprints of a person's decision are used; every such row still NULL is
 marked "human":
 
 1. the activity log records every PATCH /compliance/control-assessments/{id}
@@ -13,7 +13,13 @@ marked "human":
 2. a row with NO ai_confidence whose status is not "not_started": the analysis
    always records a confidence, so such a status was set by a person (or by the
    completion of a remediation action / a checklist upload — neither is the AI's
-   verdict either).
+   verdict either);
+3. (follow-up B-2) the activity log records every PATCH
+   /compliance/action-plan/{item_id}: completing or reopening an action linked
+   to a gap closes or reopens that gap's control row;
+4. (follow-up B-2) a COMPLETED action item linked to a gap: its completion is
+   what closed the gap's control row, a person's act even when the log entry
+   is gone.
 
 Conservative on purpose: a PATCH that only changed the notes counts too — the
 cost is that the AI suggests instead of overwriting on that row, never that
@@ -74,9 +80,37 @@ async def run(url: str, apply: bool) -> int:
                 ControlAssessment.status_source.is_(None),
             )
         )).scalars().all())
-        candidates = sorted(from_log | no_confidence)
-        print(f"activity log: {len(edited)} row(s) edited by a person, {len(from_log)} unmarked; "
-              f"status without AI confidence: {len(no_confidence)} unmarked; total {len(candidates)}")
+        # 3 + 4: rows reached through the action plan (item → gap → control row).
+        from app.models.action_item import ActionItem, ActionItemStatus
+        from app.models.compliance import ComplianceGap
+        action_logged = {
+            eid for eid, details in (await db.execute(
+                select(ActivityLog.entity_id, ActivityLog.details).where(
+                    ActivityLog.entity_type == "compliance",
+                    ActivityLog.action == "update",
+                    ActivityLog.entity_id.isnot(None),
+                ))).all()
+            if "/action-plan/" in str((details or {}).get("path", ""))
+        }
+
+        async def rows_for(items_where) -> set[str]:
+            return set((await db.execute(
+                select(ControlAssessment.id)
+                .join(ComplianceGap, (ComplianceGap.assessment_id == ControlAssessment.assessment_id)
+                      & (ComplianceGap.control_id == ControlAssessment.control_id))
+                .join(ActionItem, ActionItem.gap_id == ComplianceGap.id)
+                .where(items_where, ControlAssessment.status_source.is_(None))
+            )).scalars().all())
+
+        from_action_log = await rows_for(ActionItem.id.in_(list(action_logged) or [""]))
+        from_completed = await rows_for(ActionItem.status == ActionItemStatus.COMPLETED)
+        candidates = sorted(from_log | no_confidence | from_action_log | from_completed)
+        print("unmarked rows per source (a row can appear under several):")
+        print(f"  1. control row edited (activity log): {len(from_log)}  [{len(edited)} edit(s) logged]")
+        print(f"  2. status without AI confidence:     {len(no_confidence)}")
+        print(f"  3. action plan closure/reopen (log): {len(from_action_log)}  [{len(action_logged)} action edit(s) logged]")
+        print(f"  4. completed remediation action:     {len(from_completed)}")
+        print(f"  total distinct rows:                 {len(candidates)}")
         if apply and candidates:
             for i in range(0, len(candidates), 500):
                 await db.execute(update(ControlAssessment)

@@ -323,6 +323,7 @@
   "This Nessus edition does not allow API access (HTTP 412). Use Nessus Manager / Tenable.io, or export the scan as .nessus and use file import.": "Cette édition de Nessus ne permet pas l'accès API (HTTP 412). Utilisez Nessus Manager / Tenable.io, ou exportez le scan au format .nessus et utilisez l'importation de fichier.",
   "This acceptance's expiration date has already passed. Extend it before approving.": "La date d’expiration de cette acceptation est déjà passée. Prolongez‑la avant d’approuver.",
   "This activation code has already been used on another deployment.": "Ce code d’activation a déjà été utilisé sur un autre déploiement.",
+  "This assessment has recorded work — archive it instead.": "Cette évaluation contient du travail enregistré — archivez-la plutôt.",
   "This audit is not conducted on a grid": "Cet audit n’est pas réalisé sur une grille",
   "This campaign has already been announced. Pass force=true to re-send.": "Cette campagne a déjà été annoncée. Passez force=true pour la renvoyer.",
   "This capability requires the Elite Pack.": "Cette fonctionnalité nécessite l’Elite Pack.",

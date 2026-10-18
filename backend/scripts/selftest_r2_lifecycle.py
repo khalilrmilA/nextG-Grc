@@ -598,6 +598,38 @@ async def http_tests() -> None:
         await compliance(api)
         await audits(api)
         await followups(api)
+        await prompt2(api)
+
+
+async def _new_assessment(api: Api, name: str) -> dict:
+    from app.models.framework import Framework
+    from app.models.compliance import ComplianceAssessment
+    # One assessment per framework: POST returns the existing one, so use a free framework.
+    async with AsyncSessionLocal() as db:
+        taken = set((await db.execute(select(ComplianceAssessment.framework_id))).scalars().all())
+        fw_id = next(f for f in (await db.execute(select(Framework.id).where(Framework.is_builtin == True))).scalars().all()  # noqa: E712
+                     if f not in taken)
+    s, a = await api.req("POST", "/compliance/assessments", json={
+        "framework_id": fw_id, "name": f"{name} {uuid.uuid4().hex[:6]}", "scope_type": "tenant"})
+    assert s == 201, (s, a)
+    return a
+
+
+async def prompt2(api: Api) -> None:
+    """R2 Prompt 2 follow-ups (B–D)."""
+    print("[prompt 2: B — draft assessment delete]")
+    a = await _new_assessment(api, "ST draft untouched")
+    s, b = await api.req("DELETE", f"/compliance/assessments/{a['id']}")
+    check(s == 204, "an untouched draft (with its control rows) deletes — was 500", b)
+    s, _ = await api.req("GET", f"/compliance/assessments/{a['id']}")
+    check(s == 404, "and is gone")
+    a = await _new_assessment(api, "ST draft worked")
+    row = a["control_assessments"][0]
+    await api.req("PATCH", f"/compliance/control-assessments/{row['id']}", json={"status": "partially_implemented"})
+    s, b = await api.req("DELETE", f"/compliance/assessments/{a['id']}", lang="fr")
+    check(s == 409 and "archivez" in str(b), "a draft with a person's decision is refused with 409 (fr)", b)
+    s, _ = await api.req("GET", f"/compliance/assessments/{a['id']}")
+    check(s == 200, "and is kept")
 
 
 def main() -> None:

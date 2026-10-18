@@ -322,6 +322,7 @@
   "This Nessus edition does not allow API access (HTTP 412). Use Nessus Manager / Tenable.io, or export the scan as .nessus and use file import.": "إصدار Nessus هذا لا يسمح بالوصول إلى API (HTTP 412). استخدم Nessus Manager / Tenable.io، أو صدّر الفحص كملف .nessus واستخدم استيراد الملف.",
   "This acceptance's expiration date has already passed. Extend it before approving.": "تاريخ انتهاء صلاحية هذا القبول قد مضى بالفعل. قم بتمديده قبل الموافقة.",
   "This activation code has already been used on another deployment.": "تم استخدام رمز التفعيل هذا بالفعل في نشر آخر.",
+  "This assessment has recorded work — archive it instead.": "يحتوي هذا التقييم على عمل مسجّل — قم بأرشفته بدلًا من ذلك.",
   "This audit is not conducted on a grid": "هذا التدقيق لا يُجرى على شبكة",
   "This campaign has already been announced. Pass force=true to re-send.": "تم الإعلان عن هذه الحملة بالفعل. مرّر force=true لإعادة الإرسال.",
   "This capability requires the Elite Pack.": "هذه القدرة تتطلب Elite Pack.",

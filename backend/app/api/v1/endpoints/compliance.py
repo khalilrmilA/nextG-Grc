@@ -16,7 +16,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, Query, UploadFile, status
 from pydantic import BaseModel
-from sqlalchemy import func, or_, select, update as sa_update
+from sqlalchemy import delete as sa_delete, func, or_, select, update as sa_update
 from sqlalchemy.exc import OperationalError, ProgrammingError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -2148,11 +2148,54 @@ async def delete_assessment(
             status_code=400,
             detail="Only draft assessments can be deleted. Archive completed assessments instead."
         )
+    # Follow-up B-1: since R2 every assessment is created with its control rows,
+    # and nothing cascades — the bare delete hit the NOT NULL foreign key and
+    # answered 500. A draft nobody has worked on is removed with its rows; one
+    # that carries a person's work is refused, so nothing an auditor could ask
+    # for disappears with it.
+    if await _assessment_has_recorded_work(db, assessment.id):
+        raise HTTPException(status_code=409, detail="This assessment has recorded work — archive it instead.")
+    from app.models.evidence_upload_token import EvidenceUploadToken
+    row_ids = select(ControlAssessment.id).where(ControlAssessment.assessment_id == assessment.id)
+    await db.execute(sa_delete(EvidenceUploadToken).where(EvidenceUploadToken.control_assessment_id.in_(row_ids)))
+    await db.execute(sa_delete(ComplianceGap).where(ComplianceGap.assessment_id == assessment.id))
+    await db.execute(sa_delete(ControlAssessment).where(ControlAssessment.assessment_id == assessment.id))
+    # Documents uploaded for the analysis are inputs, not conclusions: their file
+    # versions are retired (recoverable), never orphaned.
+    docs = (await db.execute(select(UploadedDocument).where(UploadedDocument.assessment_id == assessment.id))).scalars().all()
+    for doc in docs:
+        if doc.file_path:
+            await file_integrity.retire_versions(
+                db, entity_type=file_integrity.DOCUMENT, entity_id=doc.id,
+                note=f"Draft assessment {assessment.id} deleted")
+        await db.delete(doc)
     await db.delete(assessment)
     # Commit here rather than relying on get_db()'s teardown: that runs after
     # ActivityLogMiddleware, which opens its own connection for the audit
     # entry and would wait on the write lock this session still holds.
     await db.commit()
+
+
+async def _assessment_has_recorded_work(db: AsyncSession, assessment_id: str) -> bool:
+    """A person's decision, evidence, action, auditor engagement or comment on it."""
+    from app.models.audit import Audit
+    from app.models.audit_collaboration import AuditComment
+    from app.models.auditor_assignment import AuditorAssignment
+    row_ids = select(ControlAssessment.id).where(ControlAssessment.assessment_id == assessment_id)
+    gap_ids = select(ComplianceGap.id).where(ComplianceGap.assessment_id == assessment_id)
+    checks = [
+        select(ControlAssessment.id).where(ControlAssessment.assessment_id == assessment_id,
+                                           ControlAssessment.status_source == "human"),
+        select(Evidence.id).where(Evidence.control_assessment_id.in_(row_ids)),
+        select(ActionItem.id).where(or_(ActionItem.assessment_id == assessment_id, ActionItem.gap_id.in_(gap_ids))),
+        select(AuditorAssignment.id).where(AuditorAssignment.assessment_id == assessment_id),
+        select(Audit.id).where(Audit.assessment_id == assessment_id),
+        select(AuditComment.id).where(AuditComment.control_assessment_id.in_(row_ids)),
+    ]
+    for q in checks:
+        if (await db.execute(q.limit(1))).first():
+            return True
+    return False
 
 
 # ─── Coverage by perimeter (STB objectif 2) ───────────────────────────────────

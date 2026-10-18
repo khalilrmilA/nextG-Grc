@@ -118,7 +118,8 @@ class VendorAssessment(Base):
     result: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     assessed_by_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
     approved_by_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
-    approved_at: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    # 40: a timezone-aware isoformat() is 32 characters (follow-up B-3).
+    approved_at: Mapped[str | None] = mapped_column(String(40), nullable=True)
     # The value written to vendor.risk_score when this assessment was approved
     # (the prescreen flow stores it on the register's 1–40 scale).
     applied_risk_score: Mapped[float | None] = mapped_column(Float, nullable=True)

@@ -164,7 +164,8 @@ class ControlAssessment(Base):
     ai_suggested_status: Mapped[str | None] = mapped_column(String(30), nullable=True)
     ai_suggested_status_key: Mapped[str | None] = mapped_column(String(40), nullable=True)
     ai_suggested_notes: Mapped[str | None] = mapped_column(Text, nullable=True)
-    ai_suggested_at: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    # 40: a timezone-aware isoformat() is 32 characters (follow-up B-3).
+    ai_suggested_at: Mapped[str | None] = mapped_column(String(40), nullable=True)
 
     # Relationships
     assessment: Mapped["ComplianceAssessment"] = relationship(

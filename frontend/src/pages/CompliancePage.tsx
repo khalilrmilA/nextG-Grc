@@ -1115,10 +1115,12 @@ export default function CompliancePage() {
       await complianceApi.deleteAssessment(id);
       setAssessments((prev) => prev.filter((a) => a.id !== id));
       setConfirmDeleteId(null);
-    } catch {
+    } catch (err: unknown) {
       // Previously swallowed: the row disappeared whether or not the server
-      // accepted the delete.
-      setDeleteError(t("compliance.delete_failed", "The assessment could not be deleted. Nothing was changed."));
+      // accepted the delete. The server says why (409: recorded work → archive).
+      const detail = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
+      setDeleteError(typeof detail === "string" ? detail
+        : t("compliance.delete_failed", "The assessment could not be deleted. Nothing was changed."));
     } finally {
       setDeletingId(null);
     }

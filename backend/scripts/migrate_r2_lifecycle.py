@@ -53,7 +53,7 @@ COLUMNS: dict[str, dict[str, dict[str, str]]] = {
         "result":             {"sqlite": "JSON", "postgresql": "JSON"},
         "assessed_by_id":     {"sqlite": "VARCHAR(36)", "postgresql": "VARCHAR(36)"},
         "approved_by_id":     {"sqlite": "VARCHAR(36)", "postgresql": "VARCHAR(36)"},
-        "approved_at":        {"sqlite": "VARCHAR(30)", "postgresql": "VARCHAR(30)"},
+        "approved_at":        {"sqlite": "VARCHAR(40)", "postgresql": "VARCHAR(40)"},
         "applied_risk_score": {"sqlite": "FLOAT", "postgresql": "DOUBLE PRECISION"},
     },
     # Phase 5.1 — an AI re-run merges instead of replacing: who set the status,
@@ -63,7 +63,7 @@ COLUMNS: dict[str, dict[str, dict[str, str]]] = {
         "ai_suggested_status":     {"sqlite": "VARCHAR(30)", "postgresql": "VARCHAR(30)"},
         "ai_suggested_status_key": {"sqlite": "VARCHAR(40)", "postgresql": "VARCHAR(40)"},
         "ai_suggested_notes":      {"sqlite": "TEXT", "postgresql": "TEXT"},
-        "ai_suggested_at":         {"sqlite": "VARCHAR(30)", "postgresql": "VARCHAR(30)"},
+        "ai_suggested_at":         {"sqlite": "VARCHAR(40)", "postgresql": "VARCHAR(40)"},
     },
     # Phase 6.1 — the recommendation an action answers (finding_id follows it).
     "action_items": {
@@ -89,6 +89,40 @@ def _url(db: str | None) -> str:
     if not os.path.exists(path):
         raise SystemExit(f"ERROR: database not found at {path}")
     return f"sqlite+aiosqlite:///{os.path.abspath(path)}"
+
+
+# Follow-up B-3: columns first shipped too narrow. Both receive
+# datetime.now(timezone.utc).isoformat() — 32 characters — so PostgreSQL rejects
+# the write (and with it the whole AI analysis / approval). SQLite ignores
+# VARCHAR lengths, so only PostgreSQL is altered. table -> {column: length}.
+WIDEN: dict[str, dict[str, int]] = {
+    "control_assessments": {"ai_suggested_at": 40},
+    "vendor_assessments": {"approved_at": 40},
+}
+
+
+async def _widen(conn, dialect: str, tables: set[str], apply: bool) -> int:
+    planned = 0
+    for table, cols in WIDEN.items():
+        if table not in tables:
+            continue
+        info = {c["name"]: c for c in await conn.run_sync(lambda c, t=table: inspect(c).get_columns(t))}
+        for col, length in cols.items():
+            if col not in info:
+                continue  # added just above with the right width
+            current = getattr(info[col]["type"], "length", None)
+            if dialect != "postgresql":
+                print(f"{table}.{col}: SQLite ignores VARCHAR length — nothing to widen")
+                continue
+            if current is not None and current >= length:
+                print(f"{table}.{col}: already VARCHAR({current})")
+                continue
+            ddl = f"ALTER TABLE {table} ALTER COLUMN {col} TYPE VARCHAR({length})"
+            print(f"{table}.{col}: {'WIDEN' if apply else 'would widen'} VARCHAR({current}) → {length}  ({ddl})")
+            if apply:
+                await conn.execute(text(ddl))
+            planned += 1
+    return planned
 
 
 async def run(url: str, apply: bool) -> int:
@@ -117,6 +151,7 @@ async def run(url: str, apply: bool) -> int:
                 if apply:
                     await conn.execute(text(ddl))
                 planned += 1
+        planned += await _widen(conn, dialect, tables, apply)
     await engine.dispose()
     if not apply and planned:
         print(f"\nDry run: {planned} column(s) to add. Re-run with --apply to write.")
