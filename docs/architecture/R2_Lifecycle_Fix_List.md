@@ -44,15 +44,15 @@ Size: **S** = small (hours to a couple of days), **M** = medium (about a week or
 
 ## 3. Third parties (vendors)
 
-- [ ] **S — Edit, re-tier, change status / offboard, and delete a vendor.** The backend has PATCH and
+- [x] **S — Edit, re-tier, change status / offboard, and delete a vendor.** *(R2 phase 3: partial `VendorUpdateRequest`; `POST /vendors/{id}/offboard` with date + reason; delete with confirm)* The backend has PATCH and
   DELETE ([vendors.py:760](../../backend/app/api/v1/endpoints/vendors.py#L760),
   [:803](../../backend/app/api/v1/endpoints/vendors.py#L803)). Add `vendorsApi.update` / `.delete`
   (they don't exist yet in [endpoints.ts](../../frontend/src/api/endpoints.ts#L1517)) and an edit
   screen. This also makes `contract_expiry` editable after a renewal, and that field drives the
   expiry alerts.
-- [ ] **S — Upload a new contract for an existing vendor.** `uploadContract` is called only from the
+- [x] **S — Upload a new contract for an existing vendor.** *(R2 phase 3: Upload contract in the detail view, optional new expiry)* `uploadContract` is called only from the
   new-vendor wizard. Add it to the vendor detail view.
-- [ ] **M — Keep assessment history.** Prescreen answers are dropped at save. Approve-analysis
+- [x] **M — Keep assessment history.** *(R2 phase 3: prescreen + approved AI analysis stored as `VendorAssessment`; Assessments tab + Reassess)* Prescreen answers are dropped at save. Approve-analysis
   overwrites `vendor.description` each run. `VendorAssessment` / `VendorRisk` are model-only.
 
 ## 4. Policies

@@ -1546,6 +1546,24 @@ export const policiesApi = {
 
 // ─── Vendors ─────────────────────────────────
 
+export interface VendorAssessmentRecord {
+  id: string;
+  vendor_id: string;
+  name: string;
+  kind?: "prescreen" | "ai_analysis" | string | null;
+  status: string;
+  risk_level?: string | null;
+  assessment_score?: number | null;
+  applied_risk_score?: number | null;
+  narrative?: string | null;
+  result?: { strengths?: string[]; concerns?: string[]; red_flags?: string[]; recommendations?: string[] } | null;
+  answers?: Record<string, string> | null;
+  assessed_by_id?: string | null;
+  approved_by_id?: string | null;
+  approved_at?: string | null;
+  created_at: string;
+}
+
 export const vendorsApi = {
   list: () =>
     apiClient.get<{ items: Vendor[]; total: number }>("/vendors").then((r) => r.data),
@@ -1554,6 +1572,24 @@ export const vendorsApi = {
 
   create: (data: Partial<Vendor>) =>
     apiClient.post<Vendor>("/vendors", data).then((r) => r.data),
+
+  // Partial update: only the keys sent are changed. Ending the relationship
+  // (offboarding / inactive) goes through offboard(), which records date + reason.
+  update: (id: string, data: Record<string, unknown>) =>
+    apiClient.patch<Vendor>(`/vendors/${id}`, data).then((r) => r.data),
+
+  // 409 when a contract carries a CISO decision or a signature — offboard instead.
+  delete: (id: string) => apiClient.delete(`/vendors/${id}`),
+
+  offboard: (id: string, data: { status: "offboarding" | "inactive"; effective_date: string; reason: string }) =>
+    apiClient.post<Vendor>(`/vendors/${id}/offboard`, data).then((r) => r.data),
+
+  // Prescreen + approved AI analyses, newest first.
+  listAssessments: (id: string) =>
+    apiClient.get<VendorAssessmentRecord[]>(`/vendors/${id}/assessments`).then((r) => r.data),
+
+  createAssessment: (id: string, data: Record<string, unknown>) =>
+    apiClient.post<VendorAssessmentRecord>(`/vendors/${id}/assessments`, data).then((r) => r.data),
 
   approveAnalysis: (vendorId: string, riskScore: number, analysisNotes?: string) =>
     apiClient.post<Vendor>(`/vendors/${vendorId}/approve-analysis`, {

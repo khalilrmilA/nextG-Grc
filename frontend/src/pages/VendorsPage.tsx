@@ -1,9 +1,19 @@
 import { useState, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { Link, useNavigate } from "react-router-dom";
-import { Building2, Plus, Globe, AlertTriangle, Search, ShieldCheck, ShieldX, X, ChevronRight, Calendar, ExternalLink, Sparkles, Loader2, FileCheck, Map as MapIcon } from "lucide-react";
+import { Building2, Plus, Globe, AlertTriangle, Search, ShieldCheck, ShieldX, X, ChevronRight, Calendar, ExternalLink, Sparkles, Loader2, FileCheck, Map as MapIcon, Pencil, Trash2, LogOut, History } from "lucide-react";
 import VendorAIModal from "../components/ai/VendorAIModal";
 import VendorRiskCartography from "../components/vendor/VendorRiskCartography";
+import {
+  PrescreenQuestions, PrescreenInsights, emptyPrescreenResponses, prescreenToRegisterScore,
+  prescreenAssessmentPayload, type PrescreenResult,
+} from "../components/vendor/Prescreen";
+import { TIER_OPTIONS, STATUS_OPTIONS, INDUSTRY_OPTIONS, ENDED_STATUSES, industryKey } from "../components/vendor/vendorOptions";
+import {
+  EditVendorModal, OffboardVendorModal, DeleteVendorDialog, ReassessVendorModal,
+  VendorAssessmentsTab, UploadContractPanel, VENDOR_WRITE_ROLES,
+} from "../components/vendor/VendorLifecycle";
+import { useAuthStore, hasAnyRole } from "@/store/auth";
 import { vendorsApi, contractCollabApi } from "@/api/endpoints";
 import { useColumnVisibility, type ColumnDef } from "@/components/common/useColumnVisibility";
 import ColumnsMenu from "@/components/common/ColumnsMenu";
@@ -20,8 +30,11 @@ interface VendorEntry {
   has_data_processing_agreement: boolean;
   contract_expiry: string | null;
   services_provided: string | null;
-  primary_contact_name?: string;
-  primary_contact_email?: string;
+  primary_contact_name?: string | null;
+  primary_contact_email?: string | null;
+  offboarded_at?: string | null;
+  offboarding_reason?: string | null;
+  description?: string | null;
   created_at?: string;
 }
 type Tier   = "critical" | "high" | "medium" | "low";
@@ -41,26 +54,6 @@ const STATUS_BADGE: Record<Status, string> = {
   inactive:     "bg-gray-100 text-gray-400",
 };
 
-const TIER_OPTIONS:   Tier[]   = ["critical", "high", "medium", "low"];
-const STATUS_OPTIONS: Status[] = ["active", "under_review", "onboarding", "offboarding", "inactive"];
-const INDUSTRY_OPTIONS = [
-  "Cloud Infrastructure", "Telecommunications", "Payment Processing",
-  "Identity & Access Mgmt", "Email Services", "Analytics", "Data Backup",
-  "CRM / SaaS", "Security Services", "HR / Payroll", "Legal Tech",
-  "IT Support & Maintenance", "Network Services", "Database Services",
-  "Consulting & Advisory", "Managed Services Provider (MSP)",
-  "Software Development", "Testing & QA", "Hosting & Colocation",
-  "Disaster Recovery", "Backup & Archive", "Development Tools",
-  "Supply Chain Management", "Healthcare Services", "Financial Services",
-  "Insurance", "Retail & E-commerce", "Manufacturing", "Logistics",
-  "Education", "Government", "Non-Profit", "Media & Entertainment",
-  "Real Estate", "Travel & Hospitality", "Transportation", "Energy",
-  "Utilities", "Pharmaceuticals", "Other",
-];
-
-/** i18n key suffix for an industry value (the stored value stays English). */
-const industryKey = (o: string) => o.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
-
 /** Display locale for dates, following the interface language. */
 const dateLocale = (lang: string) => (lang.startsWith("fr") ? "fr-FR" : lang.startsWith("ar") ? "ar-u-nu-latn" : "en-US");
 
@@ -69,62 +62,6 @@ function riskScoreColor(score: number) {
   if (score > 12) return "text-orange-600 bg-orange-50";
   if (score > 6)  return "text-yellow-600 bg-yellow-50";
   return "text-green-600 bg-green-50";
-}
-
-// ── Prescreen Questionnaire Definition ──────────────────────────────────────
-// The English question text is what gets sent to the AI (it keys the responses),
-// so it stays here as data; the on-screen label goes through t() by id.
-interface QuestionGroup {
-  category: string;
-  icon: string;
-  questions: { id: string; text: string }[];
-}
-
-const PRESCREEN_QUESTIONS: QuestionGroup[] = [
-  {
-    category: "security",
-    icon: "shield",
-    questions: [
-      { id: "iso27001", text: "Is the 3rd party ISO 27001 certified?" },
-      { id: "soc2", text: "Does the 3rd party hold SOC 2 Type II certification?" },
-      { id: "encryption", text: "Is data encrypted at rest and in transit (AES-256, TLS 1.3)?" },
-      { id: "pentest", text: "Does the 3rd party conduct annual penetration testing?" },
-      { id: "mfa", text: "Is multi-factor authentication enforced for all admin access?" },
-    ],
-  },
-  {
-    category: "compliance",
-    icon: "check",
-    questions: [
-      { id: "gdpr", text: "Is the 3rd party GDPR compliant?" },
-      { id: "dpa", text: "Will a Data Processing Agreement (DPA) be signed?" },
-      { id: "irp", text: "Does the 3rd party have a documented incident response plan?" },
-      { id: "subprocessors", text: "Will sub-processor changes be notified in advance?" },
-      { id: "right_to_audit", text: "Does the contract include a 'right to audit' clause?" },
-    ],
-  },
-  {
-    category: "operations",
-    icon: "settings",
-    questions: [
-      { id: "sla", text: "Does the 3rd party guarantee 99.9%+ uptime SLA?" },
-      { id: "support", text: "Is 24/7 support available?" },
-      { id: "drp", text: "Is the disaster recovery plan tested annually?" },
-      { id: "backup", text: "Are data backup procedures documented and tested?" },
-      { id: "change_mgmt", text: "Is there a documented change management process?" },
-    ],
-  },
-];
-
-interface PrescreenResult {
-  initial_risk_score: number;
-  risk_level: string;
-  summary: string;
-  strengths: string[];
-  concerns: string[];
-  red_flags: string[];
-  recommendations: string[];
-  questionnaire_responses: Record<string, string>;
 }
 
 // ── Add Vendor Modal ──────────────────────────────────────────────────────────
@@ -141,11 +78,7 @@ function AddVendorModal({ onClose, onSaved }: { readonly onClose: () => void; re
   const [uploading, setUploading] = useState(false);
 
   // Questionnaire state
-  const [responses, setResponses] = useState<Record<string, string>>(() => {
-    const init: Record<string, string> = {};
-    PRESCREEN_QUESTIONS.forEach(g => g.questions.forEach(q => { init[q.text] = "na"; }));
-    return init;
-  });
+  const [responses, setResponses] = useState<Record<string, string>>(emptyPrescreenResponses);
   const [analyzing, setAnalyzing] = useState(false);
   const [aiResult, setAiResult] = useState<PrescreenResult | null>(null);
 
@@ -168,7 +101,7 @@ function AddVendorModal({ onClose, onSaved }: { readonly onClose: () => void; re
       }) as PrescreenResult;
       setAiResult(result);
       // Update form risk score based on AI suggestion
-      setForm(f => ({ ...f, risk_score: Math.round(result.initial_risk_score * 4) }));  // 1-10 → 1-40
+      setForm(f => ({ ...f, risk_score: prescreenToRegisterScore(result.initial_risk_score) }));  // 1-10 → 1-40
       setStep(3);
     } catch (err) {
       setError(t("vendors_page.ai_analysis_failed", { error: err instanceof Error ? err.message : t("vendors_page.unknown_error") }));
@@ -202,6 +135,12 @@ function AddVendorModal({ onClose, onSaved }: { readonly onClose: () => void; re
         website: form.website.trim() || undefined,
         description: description || undefined,
       } as any);
+
+      // Keep the prescreen as the vendor's first assessment — its answers and
+      // verdict used to be dropped here (only the score survived).
+      if (aiResult) {
+        await vendorsApi.createAssessment(newVendor.id, prescreenAssessmentPayload(aiResult, responses, form.risk_score));
+      }
 
       // Upload contract if provided
       if (contractFile) {
@@ -363,125 +302,10 @@ function AddVendorModal({ onClose, onSaved }: { readonly onClose: () => void; re
           </>}
 
           {/* STEP 2: Security Questionnaire */}
-          {step === 2 && (
-            <div className="space-y-5">
-              <div className="bg-blue-50 border border-blue-100 rounded-xl p-3">
-                <p className="text-xs text-blue-900">
-                  <Sparkles className="w-3 h-3 inline mr-1" />
-                  {t("vendors_page.questionnaire_intro")}
-                </p>
-              </div>
-
-              {PRESCREEN_QUESTIONS.map((group) => (
-                <div key={group.category}>
-                  <h3 className="text-xs font-bold text-gray-700 uppercase tracking-wide mb-2 flex items-center gap-1.5">
-                    <ShieldCheck className="w-3.5 h-3.5 text-blue-600" />
-                    {t(`vendors_page.prescreen_category.${group.category}`)}
-                  </h3>
-                  <div className="space-y-2">
-                    {group.questions.map(({ id, text: q }) => (
-                      <div key={q} className="bg-gray-50 rounded-lg p-3">
-                        <p className="text-sm text-gray-800 mb-2">{t(`vendors_page.prescreen.${id}`, { defaultValue: q })}</p>
-                        <div className="flex gap-2">
-                          {["yes", "no", "na"].map((option) => (
-                            <label key={option} className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg border cursor-pointer transition-colors text-xs font-medium ${
-                              responses[q] === option
-                                ? option === "yes" ? "bg-green-100 border-green-300 text-green-700"
-                                : option === "no" ? "bg-red-100 border-red-300 text-red-700"
-                                : "bg-gray-200 border-gray-300 text-gray-700"
-                                : "bg-white border-gray-200 text-gray-500 hover:bg-gray-50"
-                            }`}>
-                              <input
-                                type="radio"
-                                name={q}
-                                value={option}
-                                checked={responses[q] === option}
-                                onChange={() => setResponses(r => ({ ...r, [q]: option }))}
-                                className="sr-only"
-                              />
-                              {option === "yes" ? `✓ ${t("common.yes")}` : option === "no" ? `✗ ${t("common.no")}` : t("dashboard.na")}
-                            </label>
-                          ))}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
+          {step === 2 && <PrescreenQuestions responses={responses} onChange={setResponses} />}
 
           {/* STEP 3: AI Insights */}
-          {step === 3 && aiResult && (
-            <div className="space-y-4">
-              <div className={`rounded-xl border p-4 ${
-                aiResult.risk_level === "critical" ? "bg-red-50 border-red-200" :
-                aiResult.risk_level === "high" ? "bg-orange-50 border-orange-200" :
-                aiResult.risk_level === "medium" ? "bg-yellow-50 border-yellow-200" :
-                "bg-green-50 border-green-200"
-              }`}>
-                <div className="flex items-center justify-between mb-2">
-                  <div className="flex items-center gap-2">
-                    <Sparkles className="w-4 h-4 text-gray-600" />
-                    <h3 className="text-sm font-bold text-gray-900">{t("vendors.ai_risk_assessment")}</h3>
-                  </div>
-                  <div className="text-right">
-                    <div className="text-2xl font-bold">{aiResult.initial_risk_score.toFixed(1)}<span className="text-xs text-gray-500">/10</span></div>
-                    <div className="text-xs uppercase font-semibold">{String(t(`vendors.tiers.${aiResult.risk_level}` as never, aiResult.risk_level))}</div>
-                  </div>
-                </div>
-                <p className="text-xs text-gray-700">{aiResult.summary}</p>
-              </div>
-
-              {aiResult.strengths.length > 0 && (
-                <div>
-                  <h4 className="text-xs font-bold text-green-700 uppercase mb-1.5">✓ {t("vendors_page.strengths")}</h4>
-                  <ul className="space-y-1">
-                    {aiResult.strengths.map((s, i) => (
-                      <li key={i} className="text-xs text-gray-700 bg-green-50 rounded px-2 py-1.5">{s}</li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-
-              {aiResult.concerns.length > 0 && (
-                <div>
-                  <h4 className="text-xs font-bold text-yellow-700 uppercase mb-1.5">⚠ {t("vendors_page.concerns")}</h4>
-                  <ul className="space-y-1">
-                    {aiResult.concerns.map((c, i) => (
-                      <li key={i} className="text-xs text-gray-700 bg-yellow-50 rounded px-2 py-1.5">{c}</li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-
-              {aiResult.red_flags.length > 0 && (
-                <div>
-                  <h4 className="text-xs font-bold text-red-700 uppercase mb-1.5">🚩 {t("vendors_page.red_flags")}</h4>
-                  <ul className="space-y-1">
-                    {aiResult.red_flags.map((r, i) => (
-                      <li key={i} className="text-xs text-gray-700 bg-red-50 rounded px-2 py-1.5">{r}</li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-
-              {aiResult.recommendations.length > 0 && (
-                <div>
-                  <h4 className="text-xs font-bold text-blue-700 uppercase mb-1.5">💡 {t("vendors_page.recommendations")}</h4>
-                  <ul className="space-y-1">
-                    {aiResult.recommendations.map((r, i) => (
-                      <li key={i} className="text-xs text-gray-700 bg-blue-50 rounded px-2 py-1.5">{r}</li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-
-              <div className="bg-gray-50 rounded-lg p-3 text-xs text-gray-600">
-<strong>{t("vendors.suggested_risk_score", "Suggested Risk Score")}:</strong> {form.risk_score}/40
-              </div>
-            </div>
-          )}
+          {step === 3 && aiResult && <PrescreenInsights result={aiResult} suggestedScore={form.risk_score} />}
 
           {/* Action Buttons */}
           <div className="flex gap-3 pt-2 border-t border-gray-100 mt-4">
@@ -573,14 +397,25 @@ const CONTRACT_STATUS_LABELS: Record<string, { key: string; fallback: string; co
   signed: { key: "vendors.contract_status.signed", fallback: "Signed Agreement", color: "bg-emerald-100 text-emerald-800" },
 };
 
-function VendorDetailModal({ vendor, onClose, onRunAI }: { readonly vendor: VendorEntry; readonly onClose: () => void; readonly onRunAI: () => void }) {
+function VendorDetailModal({ vendor, onClose, onRunAI, onChanged, onDeleted }: {
+  readonly vendor: VendorEntry;
+  readonly onClose: () => void;
+  readonly onRunAI: () => void;
+  readonly onChanged: (v: VendorEntry) => void;
+  readonly onDeleted: () => void;
+}) {
   const { t, i18n } = useTranslation();
   const navigate = useNavigate();
   const tier   = vendor.risk_tier as Tier;
   const status = vendor.status as Status;
   const [contracts, setContracts] = useState<ContractItem[]>([]);
   const [loadingContracts, setLoadingContracts] = useState(true);
-  const [activeTab, setActiveTab] = useState<"overview" | "cartography">("overview");
+  const [contractsKey, setContractsKey] = useState(0);
+  const [activeTab, setActiveTab] = useState<"overview" | "assessments" | "cartography">("overview");
+  const [dialog, setDialog] = useState<null | "edit" | "offboard" | "delete" | "reassess">(null);
+  const [assessmentsKey, setAssessmentsKey] = useState(0);
+  const canWrite = hasAnyRole(useAuthStore((u) => u), VENDOR_WRITE_ROLES);
+  const ended = ENDED_STATUSES.includes(status);
   const [startingCollab, setStartingCollab] = useState<string | null>(null);
 
   const startCollaboration = async (contractId: string) => {
@@ -608,7 +443,7 @@ function VendorDetailModal({ vendor, onClose, onRunAI }: { readonly vendor: Vend
       }
     }
     loadContracts();
-  }, [vendor.id]);
+  }, [vendor.id, contractsKey]);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
@@ -629,8 +464,31 @@ function VendorDetailModal({ vendor, onClose, onRunAI }: { readonly vendor: Vend
                 </div>
               </div>
             </div>
-            <button onClick={onClose} className="text-gray-400 hover:text-gray-600 flex-shrink-0"><X className="w-5 h-5" /></button>
+            <div className="flex items-center gap-2 flex-shrink-0">
+              {canWrite && (
+                <>
+                  <button onClick={() => setDialog("edit")} className="inline-flex items-center gap-1 text-xs font-medium text-blue-700 bg-white border border-blue-200 hover:bg-blue-50 px-2.5 py-1.5 rounded-lg">
+                    <Pencil className="w-3.5 h-3.5" /> {t("r2.common.edit")}
+                  </button>
+                  {vendor.status !== "inactive" && (
+                    <button onClick={() => setDialog("offboard")} className="inline-flex items-center gap-1 text-xs font-medium text-orange-700 bg-white border border-orange-200 hover:bg-orange-50 px-2.5 py-1.5 rounded-lg">
+                      <LogOut className="w-3.5 h-3.5" /> {t("r2.vendors.offboard")}
+                    </button>
+                  )}
+                  <button onClick={() => setDialog("delete")} className="inline-flex items-center gap-1 text-xs font-medium text-red-700 bg-white border border-red-200 hover:bg-red-50 px-2.5 py-1.5 rounded-lg">
+                    <Trash2 className="w-3.5 h-3.5" /> {t("r2.common.delete")}
+                  </button>
+                </>
+              )}
+              <button onClick={onClose} className="text-gray-400 hover:text-gray-600"><X className="w-5 h-5" /></button>
+            </div>
           </div>
+          {ended && vendor.offboarded_at && (
+            <p className="text-xs text-gray-600 mt-3 bg-white/70 border border-gray-200 rounded-lg px-3 py-2">
+              {t("r2.vendors.offboarded_on", { date: new Date(vendor.offboarded_at).toLocaleDateString(dateLocale(i18n.language)) })}
+              {vendor.offboarding_reason && <> — {vendor.offboarding_reason}</>}
+            </p>
+          )}
         </div>
 
         {/* Tabs */}
@@ -645,6 +503,18 @@ function VendorDetailModal({ vendor, onClose, onRunAI }: { readonly vendor: Vend
           >
             {t("vendors.tab_overview", "Overview")}
             {activeTab === "overview" && (
+              <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-600"></div>
+            )}
+          </button>
+          <button
+            onClick={() => setActiveTab("assessments")}
+            className={`px-4 py-3 text-sm font-medium transition-colors relative flex items-center gap-1.5 ${
+              activeTab === "assessments" ? "text-blue-600" : "text-gray-500 hover:text-gray-700"
+            }`}
+          >
+            <History className="w-3.5 h-3.5" />
+            {t("r2.vendors.assessments_tab")}
+            {activeTab === "assessments" && (
               <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-600"></div>
             )}
           </button>
@@ -664,7 +534,10 @@ function VendorDetailModal({ vendor, onClose, onRunAI }: { readonly vendor: Vend
           </button>
         </div>
 
-        {activeTab === "cartography" ? (
+        {activeTab === "assessments" ? (
+          <VendorAssessmentsTab vendor={vendor} canWrite={canWrite} onReassess={() => setDialog("reassess")}
+            refreshKey={assessmentsKey} locale={dateLocale(i18n.language)} />
+        ) : activeTab === "cartography" ? (
           <div className="p-6">
             <VendorRiskCartography vendorId={vendor.id} />
             <button
@@ -748,6 +621,12 @@ function VendorDetailModal({ vendor, onClose, onRunAI }: { readonly vendor: Vend
                 <FileCheck className="w-3 h-3" />
                 {t("vendors.contracts", "Contracts")} {contracts.length > 0 && `(${contracts.length})`}
               </p>
+              {canWrite && !ended && (
+                <UploadContractPanel vendor={vendor} onUploaded={(newExpiry) => {
+                  setContractsKey(k => k + 1);
+                  if (newExpiry && newExpiry !== vendor.contract_expiry) onChanged({ ...vendor, contract_expiry: newExpiry });
+                }} />
+              )}
             </div>
             {loadingContracts ? (
               <div className="bg-gray-50 rounded-xl p-3 text-center">
@@ -810,6 +689,22 @@ function VendorDetailModal({ vendor, onClose, onRunAI }: { readonly vendor: Vend
         </div>
         )}
       </div>
+
+      {dialog === "edit" && (
+        <EditVendorModal vendor={vendor} onClose={() => setDialog(null)} onSaved={(v) => onChanged({ ...vendor, ...v } as VendorEntry)} />
+      )}
+      {dialog === "offboard" && (
+        <OffboardVendorModal vendor={vendor} onClose={() => setDialog(null)} onSaved={(v) => onChanged({ ...vendor, ...v } as VendorEntry)} />
+      )}
+      {dialog === "delete" && (
+        <DeleteVendorDialog vendor={vendor} onClose={() => setDialog(null)} onDeleted={onDeleted} />
+      )}
+      {dialog === "reassess" && (
+        <ReassessVendorModal vendor={vendor} onClose={() => setDialog(null)} onSaved={(score) => {
+          setAssessmentsKey(k => k + 1);
+          if (score != null) onChanged({ ...vendor, risk_score: score });
+        }} />
+      )}
     </div>
   );
 }
@@ -824,6 +719,7 @@ export default function VendorsPage() {
   const [showAdd, setShowAdd] = useState(false);
   const [selected, setSelected] = useState<VendorEntry | null>(null);
   const [aiVendor, setAiVendor] = useState<VendorEntry | null>(null);
+  const canWrite = hasAnyRole(useAuthStore((u) => u), VENDOR_WRITE_ROLES);
 
   const VENDOR_COLUMNS: ColumnDef[] = [
     { key: "vendor", label: t("vendors.col_vendor"), lockable: false },
@@ -881,10 +777,12 @@ export default function VendorsPage() {
             className="flex items-center gap-2 bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors">
             <FileCheck className="w-4 h-4" /> {t("vendors.contract_review")}
           </Link>
-          <button onClick={() => setShowAdd(true)}
-            className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors">
-            <Plus className="w-4 h-4" /> {t("vendors.new_vendor")}
-          </button>
+          {canWrite && (
+            <button onClick={() => setShowAdd(true)}
+              className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors">
+              <Plus className="w-4 h-4" /> {t("vendors.new_vendor")}
+            </button>
+          )}
         </div>
       </div>
 
@@ -1016,9 +914,18 @@ export default function VendorsPage() {
       )}
       {selected && (
         <VendorDetailModal
+          key={selected.id}
           vendor={selected}
           onClose={() => setSelected(null)}
           onRunAI={() => { setAiVendor(selected); setSelected(null); }}
+          onChanged={(v) => {
+            setSelected(v);
+            setVendors(prev => prev.map(x => x.id === v.id ? v : x));
+          }}
+          onDeleted={() => {
+            setVendors(prev => prev.filter(x => x.id !== selected.id));
+            setSelected(null);
+          }}
         />
       )}
       {aiVendor && (

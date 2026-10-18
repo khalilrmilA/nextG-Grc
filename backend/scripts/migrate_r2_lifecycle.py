@@ -39,6 +39,23 @@ COLUMNS: dict[str, dict[str, dict[str, str]]] = {
         "revocation_reason":   {"sqlite": "TEXT", "postgresql": "TEXT"},
         "prior_risk_statuses": {"sqlite": "JSON", "postgresql": "JSON"},
     },
+    # Phase 3.1 — vendor offboarding date / reason / actor.
+    "vendors": {
+        "offboarded_at":      {"sqlite": "VARCHAR(20)", "postgresql": "VARCHAR(20)"},
+        "offboarding_reason": {"sqlite": "TEXT", "postgresql": "TEXT"},
+        "offboarded_by_id":   {"sqlite": "VARCHAR(36)", "postgresql": "VARCHAR(36)"},
+    },
+    # Phase 3.3 — vendor assessment history (prescreen + AI analysis).
+    "vendor_assessments": {
+        "kind":               {"sqlite": "VARCHAR(30)", "postgresql": "VARCHAR(30)"},
+        "risk_level":         {"sqlite": "VARCHAR(20)", "postgresql": "VARCHAR(20)"},
+        "narrative":          {"sqlite": "TEXT", "postgresql": "TEXT"},
+        "result":             {"sqlite": "JSON", "postgresql": "JSON"},
+        "assessed_by_id":     {"sqlite": "VARCHAR(36)", "postgresql": "VARCHAR(36)"},
+        "approved_by_id":     {"sqlite": "VARCHAR(36)", "postgresql": "VARCHAR(36)"},
+        "approved_at":        {"sqlite": "VARCHAR(30)", "postgresql": "VARCHAR(30)"},
+        "applied_risk_score": {"sqlite": "FLOAT", "postgresql": "DOUBLE PRECISION"},
+    },
 }
 
 

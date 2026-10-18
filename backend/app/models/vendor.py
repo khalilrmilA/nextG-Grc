@@ -69,6 +69,12 @@ class Vendor(Base):
     # Tags
     tags: Mapped[list] = mapped_column(JSON, default=list)
 
+    # Offboarding — set by POST /vendors/{id}/offboard (scripts/migrate_r2_lifecycle.py).
+    # The relationship's end is a decision with a date and a reason, not a bare status flip.
+    offboarded_at: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    offboarding_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    offboarded_by_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+
     # Relationships
     tenant: Mapped["Tenant"] = relationship("Tenant", back_populates="vendors")
     assessments: Mapped[list["VendorAssessment"]] = relationship(
@@ -102,6 +108,20 @@ class VendorAssessment(Base):
     # Score
     assessment_score: Mapped[float | None] = mapped_column(Float, nullable=True)
     findings: Mapped[list] = mapped_column(JSON, default=list)
+
+    # History of the vendor's risk evaluations (scripts/migrate_r2_lifecycle.py).
+    # kind: "prescreen" (questionnaire + AI insights) | "ai_analysis" (web-search report).
+    kind: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    risk_level: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    narrative: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Structured AI output (strengths, concerns, red flags, recommendations …).
+    result: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    assessed_by_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    approved_by_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    approved_at: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    # The value written to vendor.risk_score when this assessment was approved
+    # (the prescreen flow stores it on the register's 1–40 scale).
+    applied_risk_score: Mapped[float | None] = mapped_column(Float, nullable=True)
 
     vendor: Mapped["Vendor"] = relationship("Vendor", back_populates="assessments")
 

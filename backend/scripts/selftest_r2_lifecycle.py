@@ -21,6 +21,10 @@ Sections
 * acceptance — tenant-checked targets; four-eyes; approve → risks accepted; reject
                and revoke need a reason; revoke / expiry restore the prior status;
                overlapping acceptances keep a risk accepted
+* vendors    — partial PATCH keeps untouched fields; ending a relationship only via
+               offboard (date + reason, logged); reactivation clears it; prescreen and
+               approved AI analysis kept as assessments, score follows the latest;
+               delete refused once a contract carries a CISO decision
 """
 from __future__ import annotations
 
@@ -236,6 +240,71 @@ async def acceptances(api: Api, sc: dict) -> None:
         check((await status(rid))[1]["status"] == want, f"after c{i + 1} expiry risk is {want}")
 
 
+async def vendors(api: Api) -> None:
+    print("[vendors]")
+    vm = role_email("vendor_manager")
+    s, v = await api.req("POST", "/vendors", who=vm, json={
+        "name": "ST Vendor", "country": "TN", "risk_tier": "medium", "status": "onboarding",
+        "has_data_processing_agreement": True, "contract_expiry": "2027-01-31",
+        "primary_contact_name": "Ali", "primary_contact_email": "ali@example.com"})
+    check(s == 201 and v["primary_contact_email"] == "ali@example.com", "contact returned on create", v)
+    vid = v["id"]
+    s, u = await api.req("PATCH", f"/vendors/{vid}", who=vm, json={"risk_tier": "high"})
+    check(s == 200 and u["risk_tier"] == "high" and u["status"] == "onboarding"
+          and u["has_data_processing_agreement"] is True and u["contract_expiry"] == "2027-01-31"
+          and u["primary_contact_name"] == "Ali", "partial PATCH re-tiers, keeps the rest", u)
+    s, u = await api.req("PATCH", f"/vendors/{vid}", who=vm, json={"contract_expiry": "2028-06-30", "status": "active"})
+    check(s == 200 and u["contract_expiry"] == "2028-06-30" and u["status"] == "active", "renewal expiry + status")
+    s, b = await api.req("PATCH", f"/vendors/{vid}", who=vm, lang="fr", json={"status": "inactive"})
+    check(s == 422 and "relation" in str(b), "PATCH to inactive refused → offboard (fr)", b)
+    s, _ = await api.req("PATCH", f"/vendors/{vid}", who=role_email("risk_manager"), json={"risk_tier": "low"})
+    check(s == 403, "risk_manager cannot edit a vendor")
+
+    s, _ = await api.req("POST", f"/vendors/{vid}/offboard", who=vm, json={"effective_date": "2026-12-31", "reason": " "})
+    check(s == 422, "offboard needs a reason")
+    s, _ = await api.req("POST", f"/vendors/{vid}/offboard", who=vm, json={"effective_date": "31/12/2026", "reason": "x"})
+    check(s == 422, "offboard needs an ISO date")
+    s, o = await api.req("POST", f"/vendors/{vid}/offboard", who=vm, json={
+        "status": "offboarding", "effective_date": "2026-12-31", "reason": "Contract not renewed"})
+    check(s == 200 and o["status"] == "offboarding" and o["offboarded_at"] == "2026-12-31"
+          and o["offboarding_reason"] == "Contract not renewed", "offboarding recorded", o)
+    s, o = await api.req("POST", f"/vendors/{vid}/offboard", who=vm, json={
+        "status": "inactive", "effective_date": "2027-01-15", "reason": "Exit complete"})
+    check(s == 200 and o["status"] == "inactive", "offboarding → inactive")
+    s, _ = await api.req("POST", f"/vendors/{vid}/offboard", who=vm, json={"effective_date": "2027-01-16", "reason": "again"})
+    check(s == 409, "already inactive → 409")
+    s, logs = await api.req("GET", "/activity-log", params={"entity_type": "vendor", "page_size": 50})
+    items = logs.get("items", logs) if isinstance(logs, dict) else logs
+    check(any(x.get("action") == "offboard" and x.get("entity_id") == vid for x in items or []),
+          "offboard in the activity log")
+    s, r = await api.req("PATCH", f"/vendors/{vid}", who=vm, json={"status": "active"})
+    check(s == 200 and r["status"] == "active" and r["offboarded_at"] is None, "reactivation clears offboarding")
+
+    s, a = await api.req("POST", f"/vendors/{vid}/assessments", who=vm, json={
+        "answers": {"Q1": "yes", "Q2": "no"}, "initial_risk_score": 6.5, "risk_level": "high",
+        "summary": "weak DR", "strengths": ["ISO"], "concerns": ["DR"], "red_flags": [], "recommendations": ["test DR"]})
+    check(s == 201 and a["applied_risk_score"] == 26 and a["status"] == "approved", "prescreen kept, ×4 applied", a)
+    s, vv = await api.req("GET", f"/vendors/{vid}")
+    check(vv["risk_score"] == 26, "vendor score = latest approved prescreen")
+    s, _ = await api.req("POST", f"/vendors/{vid}/approve-analysis", who=vm, json={"risk_score": 4, "analysis_notes": "Score: 4/10 report"})
+    s, hist = await api.req("GET", f"/vendors/{vid}/assessments")
+    check(s == 200 and [h["kind"] for h in hist] == ["ai_analysis", "prescreen"]
+          and hist[0]["narrative"] == "Score: 4/10 report", "AI analysis kept as history, newest first", hist)
+    s, vv = await api.req("GET", f"/vendors/{vid}")
+    check(vv["risk_score"] == 4, "vendor score = latest approved analysis")
+
+    from app.models.vendor import VendorContract
+    async with AsyncSessionLocal() as db:
+        db.add(VendorContract(vendor_id=vid, file_name="c.pdf", file_path="/nonexistent/c.pdf",
+                              validation_status="approved", ciso_reviewed_at="2026-10-18"))
+        await db.commit()
+    s, b = await api.req("DELETE", f"/vendors/{vid}", who=vm)
+    check(s == 409, "delete refused: contract carries a CISO decision", b)
+    s, v2 = await api.req("POST", "/vendors", who=vm, json={"name": "ST Vendor 2"})
+    s, _ = await api.req("DELETE", f"/vendors/{v2['id']}", who=vm)
+    check(s == 204, "vendor without records deletes")
+
+
 async def http_tests() -> None:
     from app.core.rate_limit import limiter
     limiter.enabled = False
@@ -246,6 +315,7 @@ async def http_tests() -> None:
         await risks(api)
         sc = await scenarios(api)
         await acceptances(api, sc)
+        await vendors(api)
 
 
 def main() -> None:

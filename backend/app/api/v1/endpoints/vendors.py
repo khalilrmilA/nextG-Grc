@@ -39,6 +39,7 @@ from app.services import ai_chunking, ai_prompts, ai_provider
 from app.services.ai_locale import failure_message, get_request_language, guess_language
 from app.services.ai_structured import AiResult, ai_structured
 from app.services import file_integrity
+from app.api.v1.endpoints.activity_log import log_activity
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -509,6 +510,36 @@ _MESSAGES: dict[str, dict[str, str]] = {
         "ar": "لا يمكن حذف هذا المورّد: {n} من مفاوضات العقود تحمل بالفعل توقيعاً أو اتفاقاً متبادلاً. "
               "غيّر حالة المورّد إلى \"inactive\" لإنهاء العلاقة مع الاحتفاظ بالسجل.",
     },
+    "use_offboard": {
+        "en": "Use Offboard to end a relationship: it records the date and the reason.",
+        "fr": "Utilisez « Mettre fin à la relation » : la date et le motif sont alors consignés.",
+        "ar": "استخدم «إنهاء العلاقة» لإنهاء التعامل: يُسجَّل حينها التاريخ والسبب.",
+    },
+    "offboard_reason_required": {
+        "en": "A reason is required to offboard a vendor.",
+        "fr": "Un motif est requis pour mettre fin à la relation avec un fournisseur.",
+        "ar": "يلزم تقديم سبب لإنهاء العلاقة مع المورّد.",
+    },
+    "offboard_bad_status": {
+        "en": "Offboarding sets the status to 'offboarding' or 'inactive'.",
+        "fr": "La fin de relation place le statut à « offboarding » ou « inactive ».",
+        "ar": "إنهاء العلاقة يضبط الحالة على \"offboarding\" أو \"inactive\".",
+    },
+    "offboard_bad_date": {
+        "en": "The effective date must be a date (YYYY-MM-DD).",
+        "fr": "La date d'effet doit être une date (AAAA-MM-JJ).",
+        "ar": "يجب أن يكون تاريخ السريان تاريخاً (YYYY-MM-DD).",
+    },
+    "already_inactive": {
+        "en": "This vendor is already inactive.",
+        "fr": "Ce fournisseur est déjà inactif.",
+        "ar": "هذا المورّد غير نشط بالفعل.",
+    },
+    "name_required": {
+        "en": "The vendor name cannot be empty.",
+        "fr": "Le nom du fournisseur ne peut pas être vide.",
+        "ar": "لا يمكن أن يكون اسم المورّد فارغاً.",
+    },
     "needs_ciso_approval": {
         "en": "Contract must be approved by CISO before sending to vendor",
         "fr": "Le contrat doit être approuvé par le RSSI avant d'être envoyé au fournisseur",
@@ -556,6 +587,32 @@ def _parse_tier_status(body: "VendorCreateRequest", lang: str) -> tuple[VendorRi
         ))
 
 
+class VendorUpdateRequest(BaseModel):
+    """Partial update — only the fields the caller sends are touched (exclude_unset).
+
+    PATCH used to take the full VendorCreateRequest, so a client that sent only the
+    fields it edited silently reset everything else (status back to 'active', DPA to
+    false, contact and expiry to null).
+    """
+    name: str | None = None
+    industry: str | None = None
+    country: str | None = None
+    website: str | None = None
+    risk_tier: str | None = None
+    status: str | None = None
+    services_provided: str | None = None
+    has_data_processing_agreement: bool | None = None
+    contract_expiry: str | None = None
+    primary_contact_name: str | None = None
+    primary_contact_email: str | None = None
+
+
+class VendorOffboardRequest(BaseModel):
+    status: str = "inactive"          # "offboarding" (in progress) or "inactive" (ended)
+    effective_date: str               # YYYY-MM-DD
+    reason: str
+
+
 class VendorResponse(BaseModel):
     id: str
     name: str
@@ -570,8 +627,51 @@ class VendorResponse(BaseModel):
     risk_score: float | None
     description: str | None
     created_at: datetime
+    # Returned so the edit form can pre-fill them (they were write-only).
+    primary_contact_name: str | None = None
+    primary_contact_email: str | None = None
+    owner_id: str | None = None
+    offboarded_at: str | None = None
+    offboarding_reason: str | None = None
 
     model_config = {"from_attributes": True}
+
+
+class VendorAssessmentOut(BaseModel):
+    id: str
+    vendor_id: str
+    name: str
+    kind: str | None = None
+    status: str
+    risk_level: str | None = None
+    assessment_score: float | None = None
+    applied_risk_score: float | None = None
+    narrative: str | None = None
+    result: dict | None = None
+    answers: dict | None = None
+    assessed_by_id: str | None = None
+    approved_by_id: str | None = None
+    approved_at: str | None = None
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class VendorAssessmentCreate(BaseModel):
+    """A prescreen run for an EXISTING vendor (the /prescreen analysis itself is
+    stateless — this is what keeps its answers and verdict)."""
+    answers: dict[str, str]
+    initial_risk_score: float                 # AI score, 1–10
+    risk_level: str | None = None
+    summary: str | None = None
+    strengths: list[str] = []
+    concerns: list[str] = []
+    red_flags: list[str] = []
+    recommendations: list[str] = []
+    # Approve now and make it the vendor's current score. The register shows the
+    # prescreen on its 1–40 scale (the new-vendor wizard's ×4), so that is the default.
+    apply_score: bool = True
+    applied_risk_score: float | None = None
 
 
 class VendorListResponse(BaseModel):
@@ -760,9 +860,9 @@ async def get_vendor(
 @router.patch("/{vendor_id}", response_model=VendorResponse)
 async def update_vendor(
     vendor_id: str,
-    body: VendorCreateRequest,
+    body: VendorUpdateRequest,
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(require_roles(UserRole.VENDOR_MANAGER, UserRole.CISO)),
+    current_user: User = Depends(require_roles(UserRole.VENDOR_MANAGER, UserRole.CISO)),
     tenant_id: str = Depends(get_tenant_id),
     lang: str = Depends(get_request_language),
 ):
@@ -778,26 +878,170 @@ async def update_vendor(
     if not vendor:
         raise HTTPException(status_code=404, detail=_msg("vendor_not_found", lang))
 
-    risk_tier, vstatus = _parse_tier_status(body, lang)
+    data = body.model_dump(exclude_unset=True)
+    ended = (VendorStatus.OFFBOARDING, VendorStatus.INACTIVE)
+    probe = VendorCreateRequest(
+        name=vendor.name,
+        risk_tier=data.get("risk_tier") or getattr(vendor.risk_tier, "value", vendor.risk_tier),
+        status=data.get("status") or getattr(vendor.status, "value", vendor.status),
+    )
+    risk_tier, vstatus = _parse_tier_status(probe, lang)
+    reactivated_from = None
+    if "status" in data and vstatus != vendor.status:
+        if vstatus in ended:
+            # Ending the relationship goes through /offboard, which records why and when.
+            raise HTTPException(status_code=422, detail=_msg("use_offboard", lang))
+        if vendor.status in ended:
+            reactivated_from = (getattr(vendor.status, "value", vendor.status),
+                                vendor.offboarded_at, vendor.offboarding_reason)
 
-    # Update fields
-    vendor.name = body.name.strip()
-    vendor.industry = body.industry
-    vendor.country = body.country.upper() if body.country else None
-    vendor.website = body.website
+    if "name" in data:
+        if not (data["name"] or "").strip():
+            raise HTTPException(status_code=422, detail=_msg("name_required", lang))
+        vendor.name = data["name"].strip()
+    if "country" in data:
+        vendor.country = data["country"].upper() if data["country"] else None
+    for field in ("industry", "website", "services_provided", "contract_expiry",
+                  "primary_contact_name", "primary_contact_email"):
+        if field in data:
+            setattr(vendor, field, data[field])
+    if data.get("has_data_processing_agreement") is not None:
+        vendor.has_data_processing_agreement = data["has_data_processing_agreement"]
     vendor.risk_tier = risk_tier
     vendor.status = vstatus
-    vendor.services_provided = body.services_provided
-    vendor.has_data_processing_agreement = body.has_data_processing_agreement
-    vendor.contract_expiry = body.contract_expiry
-    vendor.primary_contact_name = body.primary_contact_name
-    vendor.primary_contact_email = body.primary_contact_email
+
+    if reactivated_from:
+        vendor.offboarded_at = vendor.offboarding_reason = vendor.offboarded_by_id = None
+        # log_activity commits (hash chain), which also commits the edit above.
+        await log_activity(
+            db, tenant_id, current_user, "reactivate", "vendor", entity_id=vendor.id,
+            entity_name=vendor.name,
+            details={"from": reactivated_from[0], "to": vstatus.value,
+                     "previous_offboarded_at": reactivated_from[1],
+                     "previous_offboarding_reason": reactivated_from[2]},
+        )
 
     await db.flush()
     await db.commit()
     await db.refresh(vendor)
 
     return VendorResponse.model_validate(vendor)
+
+
+@router.post("/{vendor_id}/offboard", response_model=VendorResponse)
+async def offboard_vendor(
+    vendor_id: str,
+    body: VendorOffboardRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_roles(UserRole.VENDOR_MANAGER, UserRole.CISO)),
+    tenant_id: str = Depends(get_tenant_id),
+    lang: str = Depends(get_request_language),
+):
+    """End (or start ending) the relationship: status + effective date + reason.
+
+    The supported way to retire a vendor whose contracts are a record of fact —
+    DELETE refuses those. Reverting is an ordinary edit of the status.
+    """
+    vendor = (await db.execute(
+        select(Vendor).where(Vendor.id == vendor_id, Vendor.tenant_id == tenant_id)
+    )).scalar_one_or_none()
+    if not vendor:
+        raise HTTPException(status_code=404, detail=_msg("vendor_not_found", lang))
+    if body.status not in (VendorStatus.OFFBOARDING.value, VendorStatus.INACTIVE.value):
+        raise HTTPException(status_code=422, detail=_msg("offboard_bad_status", lang))
+    if not body.reason.strip():
+        raise HTTPException(status_code=422, detail=_msg("offboard_reason_required", lang))
+    try:
+        effective = date.fromisoformat(body.effective_date[:10]).isoformat()
+    except ValueError:
+        raise HTTPException(status_code=422, detail=_msg("offboard_bad_date", lang))
+    if vendor.status == VendorStatus.INACTIVE:
+        raise HTTPException(status_code=409, detail=_msg("already_inactive", lang))
+
+    previous = getattr(vendor.status, "value", vendor.status)
+    vendor.status = VendorStatus(body.status)
+    vendor.offboarded_at = effective
+    vendor.offboarding_reason = body.reason.strip()
+    vendor.offboarded_by_id = current_user.id
+    # log_activity commits (hash chain), which also commits the change above.
+    await log_activity(
+        db, tenant_id, current_user, "offboard", "vendor", entity_id=vendor.id,
+        entity_name=vendor.name,
+        details={"from": previous, "to": body.status, "effective_date": effective,
+                 "reason": vendor.offboarding_reason},
+    )
+    await db.refresh(vendor)
+    return VendorResponse.model_validate(vendor)
+
+
+@router.get("/{vendor_id}/assessments", response_model=list[VendorAssessmentOut])
+async def list_vendor_assessments(
+    vendor_id: str,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(get_current_user),
+    tenant_id: str = Depends(get_tenant_id),
+    lang: str = Depends(get_request_language),
+):
+    """Every prescreen and approved AI analysis of this vendor, newest first."""
+    vendor = (await db.execute(
+        select(Vendor.id).where(Vendor.id == vendor_id, Vendor.tenant_id == tenant_id)
+    )).scalar_one_or_none()
+    if not vendor:
+        raise HTTPException(status_code=404, detail=_msg("vendor_not_found", lang))
+    rows = (await db.execute(
+        select(VendorAssessment).where(VendorAssessment.vendor_id == vendor_id)
+        # created_at has one-second resolution on SQLite; completed_at is an ISO
+        # timestamp with microseconds and breaks the tie between two quick runs.
+        .order_by(VendorAssessment.created_at.desc(), VendorAssessment.completed_at.desc())
+    )).scalars().all()
+    return [VendorAssessmentOut.model_validate(r) for r in rows]
+
+
+@router.post("/{vendor_id}/assessments", response_model=VendorAssessmentOut, status_code=status.HTTP_201_CREATED)
+async def create_vendor_assessment(
+    vendor_id: str,
+    body: VendorAssessmentCreate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_roles(UserRole.VENDOR_MANAGER, UserRole.CISO)),
+    tenant_id: str = Depends(get_tenant_id),
+    lang: str = Depends(get_request_language),
+):
+    """Keep a prescreen run (new-vendor wizard or Reassess) and, by default, make
+    its score the vendor's current one."""
+    vendor = (await db.execute(
+        select(Vendor).where(Vendor.id == vendor_id, Vendor.tenant_id == tenant_id)
+    )).scalar_one_or_none()
+    if not vendor:
+        raise HTTPException(status_code=404, detail=_msg("vendor_not_found", lang))
+    if not body.answers:
+        raise HTTPException(status_code=422, detail=_msg("prescreen_empty", lang))
+    now = datetime.now(timezone.utc).isoformat()
+    applied = None
+    if body.apply_score:
+        applied = body.applied_risk_score if body.applied_risk_score is not None \
+            else float(round(body.initial_risk_score * 4))
+    row = VendorAssessment(
+        vendor_id=vendor.id, name="Prescreen questionnaire", kind="prescreen",
+        status="approved" if body.apply_score else "completed",
+        completed_at=now, answers=dict(body.answers),
+        questions=list(body.answers.keys()),
+        assessment_score=body.initial_risk_score, risk_level=body.risk_level,
+        narrative=body.summary,
+        result={"strengths": body.strengths, "concerns": body.concerns,
+                "red_flags": body.red_flags, "recommendations": body.recommendations},
+        findings=list(body.red_flags) + list(body.concerns),
+        assessed_by_id=current_user.id,
+        approved_by_id=current_user.id if body.apply_score else None,
+        approved_at=now if body.apply_score else None,
+        applied_risk_score=applied,
+    )
+    db.add(row)
+    if applied is not None:
+        vendor.risk_score = applied
+    await db.flush()
+    await db.commit()
+    await db.refresh(row)
+    return VendorAssessmentOut.model_validate(row)
 
 
 @router.delete("/{vendor_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -891,7 +1135,7 @@ async def approve_vendor_analysis(
     vendor_id: str,
     body: VendorApproveAnalysisRequest,
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(require_roles(UserRole.VENDOR_MANAGER, UserRole.CISO)),
+    current_user: User = Depends(require_roles(UserRole.VENDOR_MANAGER, UserRole.CISO)),
     tenant_id: str = Depends(get_tenant_id),
     lang: str = Depends(get_request_language),
 ):
@@ -924,6 +1168,15 @@ async def approve_vendor_analysis(
     # the guard above has just confirmed is non-blank, so neither is ever persisted unbacked.
     vendor.risk_score = body.risk_score
     vendor.description = body.analysis_notes
+    # description only ever holds the latest report; the assessment row keeps
+    # every approved one (the history used to be overwritten on each run).
+    now = datetime.now(timezone.utc).isoformat()
+    db.add(VendorAssessment(
+        vendor_id=vendor.id, name="AI risk analysis", kind="ai_analysis", status="approved",
+        completed_at=now, assessment_score=body.risk_score, applied_risk_score=body.risk_score,
+        narrative=body.analysis_notes, assessed_by_id=current_user.id,
+        approved_by_id=current_user.id, approved_at=now,
+    ))
 
     await db.flush()
     await db.commit()
