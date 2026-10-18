@@ -1,7 +1,7 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { Link, useNavigate } from "react-router-dom";
-import { Building2, Plus, Globe, AlertTriangle, Search, ShieldCheck, ShieldX, X, ChevronRight, Calendar, ExternalLink, Sparkles, Loader2, FileCheck, Map as MapIcon, Pencil, Trash2, LogOut, History } from "lucide-react";
+import { Building2, Plus, Globe, AlertTriangle, Search, ShieldCheck, ShieldX, X, ChevronRight, Calendar, ExternalLink, Sparkles, Loader2, FileCheck, Map as MapIcon, Pencil, Trash2, LogOut, History, RefreshCw } from "lucide-react";
 import VendorAIModal from "../components/ai/VendorAIModal";
 import VendorRiskCartography from "../components/vendor/VendorRiskCartography";
 import {
@@ -64,6 +64,13 @@ function riskScoreColor(score: number) {
   return "text-green-600 bg-green-50";
 }
 
+/** The server's own message (translated by Accept-Language), if it sent one. */
+function apiDetail(err: unknown): string | undefined {
+  const d = (err as { response?: { data?: { detail?: unknown } } })?.response?.data?.detail;
+  if (typeof d === "string") return d;
+  return err instanceof Error ? err.message : undefined;
+}
+
 // ── Add Vendor Modal ──────────────────────────────────────────────────────────
 function AddVendorModal({ onClose, onSaved }: { readonly onClose: () => void; readonly onSaved: (v: VendorEntry) => void }) {
   const { t } = useTranslation();
@@ -81,6 +88,13 @@ function AddVendorModal({ onClose, onSaved }: { readonly onClose: () => void; re
   const [responses, setResponses] = useState<Record<string, string>>(emptyPrescreenResponses);
   const [analyzing, setAnalyzing] = useState(false);
   const [aiResult, setAiResult] = useState<PrescreenResult | null>(null);
+  // AI unavailable (424): retry, or onboard without a score (product decision 2026-10-18).
+  const [aiDown, setAiDown] = useState(false);
+  const [skipAi, setSkipAi] = useState(false);
+  // Steps already saved, so a retry after a later failure resumes instead of
+  // creating a second vendor / assessment / contract (follow-up C-3).
+  const done = useRef<{ vendor: VendorEntry | null; assessment: boolean; contract: boolean }>(
+    { vendor: null, assessment: false, contract: false });
 
   function handleNextFromInfo() {
     setError("");
@@ -100,12 +114,18 @@ function AddVendorModal({ onClose, onSaved }: { readonly onClose: () => void; re
         responses,
       }) as PrescreenResult;
       setAiResult(result);
+      setAiDown(false); setSkipAi(false);
       // Update form risk score based on AI suggestion
       setForm(f => ({ ...f, risk_score: prescreenToRegisterScore(result.initial_risk_score) }));  // 1-10 → 1-40
       setStep(3);
     } catch (err) {
-      setError(t("vendors_page.ai_analysis_failed", { error: err instanceof Error ? err.message : t("vendors_page.unknown_error") }));
-      console.error(err);
+      const status = (err as { response?: { status?: number } })?.response?.status;
+      if (status === 424) {
+        setAiDown(true);
+        setError(t("r2b.vendors.ai_unavailable"));
+      } else {
+        setError(t("vendors_page.ai_analysis_failed", { error: apiDetail(err) ?? t("vendors_page.unknown_error") }));
+      }
     } finally {
       setAnalyzing(false);
     }
@@ -122,7 +142,7 @@ function AddVendorModal({ onClose, onSaved }: { readonly onClose: () => void; re
         description = `## AI Prescreen Analysis\n\n**Risk Level:** ${aiResult.risk_level.toUpperCase()} (${aiResult.initial_risk_score}/10)\n\n${aiResult.summary}\n\n### Strengths\n${aiResult.strengths.map(s => `- ${s}`).join('\n')}\n\n### Concerns\n${aiResult.concerns.map(c => `- ${c}`).join('\n')}\n\n### Red Flags\n${aiResult.red_flags.map(r => `- ${r}`).join('\n')}\n\n### Recommendations\n${aiResult.recommendations.map(r => `- ${r}`).join('\n')}`;
       }
 
-      const newVendor = await vendorsApi.create({
+      const newVendor = done.current.vendor ?? await vendorsApi.create({
         name: form.name.trim(),
         industry: form.industry,
         country: form.country.trim().toUpperCase().slice(0, 2),
@@ -134,24 +154,32 @@ function AddVendorModal({ onClose, onSaved }: { readonly onClose: () => void; re
         contract_expiry: form.contract_expiry || undefined,
         website: form.website.trim() || undefined,
         description: description || undefined,
-      } as any);
+      } as any) as unknown as VendorEntry;
+      done.current.vendor = newVendor;
 
       // Keep the prescreen as the vendor's first assessment — its answers and
-      // verdict used to be dropped here (only the score survived).
-      if (aiResult) {
-        await vendorsApi.createAssessment(newVendor.id, prescreenAssessmentPayload(aiResult, responses, form.risk_score));
+      // verdict used to be dropped here (only the score survived). Without the
+      // AI the answers are kept unscored, to be re-run from Reassess.
+      if (!done.current.assessment && (aiResult || skipAi)) {
+        await vendorsApi.createAssessment(newVendor.id, aiResult
+          ? prescreenAssessmentPayload(aiResult, responses, form.risk_score)
+          : { answers: responses, apply_score: false });
+        done.current.assessment = true;
       }
 
       // Upload contract if provided
-      if (contractFile) {
+      if (contractFile && !done.current.contract) {
         await vendorsApi.uploadContract(newVendor.id, contractFile);
+        done.current.contract = true;
       }
 
       onSaved(newVendor as unknown as VendorEntry);
       onClose();
     } catch (err) {
-      setError(t("vendors_page.create_failed", { error: err instanceof Error ? err.message : "" }));
-      console.error(err);
+      // The vendor may already exist: say so, and Save resumes from the failed step.
+      setError(done.current.vendor
+        ? t("r2b.vendors.partial_save", { error: apiDetail(err) ?? "" })
+        : t("vendors_page.create_failed", { error: apiDetail(err) ?? "" }));
     } finally {
       setUploading(false);
     }
@@ -306,6 +334,29 @@ function AddVendorModal({ onClose, onSaved }: { readonly onClose: () => void; re
 
           {/* STEP 3: AI Insights */}
           {step === 3 && aiResult && <PrescreenInsights result={aiResult} suggestedScore={form.risk_score} />}
+          {step === 3 && !aiResult && skipAi && (
+            <div className="space-y-3">
+              <p className="text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">{t("r2b.vendors.no_ai_notice")}</p>
+              <div>
+                <label htmlFor="v-manual-score" className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">{t("r2b.vendors.manual_score")}</label>
+                <input id="v-manual-score" type="number" min={1} max={40} value={form.risk_score}
+                  onChange={e => setForm(f => ({ ...f, risk_score: Math.max(1, Math.min(40, +e.target.value || 1)) }))}
+                  className="w-32 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              </div>
+            </div>
+          )}
+          {step === 2 && aiDown && (
+            <div className="flex flex-wrap gap-2">
+              <button type="button" onClick={handleAnalyze} disabled={analyzing}
+                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-gray-200 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50">
+                <RefreshCw className="w-4 h-4" />{t("r2b.vendors.retry")}
+              </button>
+              <button type="button" onClick={() => { setSkipAi(true); setError(""); setStep(3); }} disabled={analyzing}
+                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-amber-600 hover:bg-amber-700 text-white text-sm font-medium disabled:opacity-50">
+                {t("r2b.vendors.continue_without_ai")} →
+              </button>
+            </div>
+          )}
 
           {/* Action Buttons */}
           <div className="flex gap-3 pt-2 border-t border-gray-100 mt-4">
@@ -935,6 +986,12 @@ export default function VendorsPage() {
           vendorIndustry={aiVendor.industry ?? undefined}
           vendorServices={aiVendor.services_provided ?? undefined}
           onClose={() => setAiVendor(null)}
+          onApproved={(v) => {
+            // The register and the detail read the new score straight away.
+            const updated = { ...aiVendor, ...(v as unknown as VendorEntry) };
+            setVendors(prev => prev.map(x => x.id === updated.id ? updated : x));
+            setSelected(updated);
+          }}
         />
       )}
     </div>

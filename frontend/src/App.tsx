@@ -68,8 +68,10 @@ import LicenseActivationPage from "./pages/LicenseActivationPage";
 function PrivateRoute({ children, requiredModule }: { readonly children: React.ReactNode; requiredModule?: string }) {
   const { t } = useTranslation();
   const user = useAuthStore((u) => u);
+  const location = useLocation();
   if (!user) return <Navigate to="/login" replace />;
-  if (user.role === "auditor") return <Navigate to="/auditor/portal" replace />;
+  // A policy reminder links to /my-policies; an auditor reads it in their own portal.
+  if (user.role === "auditor") return <Navigate to={location.pathname.endsWith("/my-policies") ? "/auditor/my-policies" : "/auditor/portal"} replace />;
   if (user.role === "super_admin") return <Navigate to="/super-admin" replace />;
   // Check module access if required
   if (requiredModule && user.accessible_modules && !user.accessible_modules.includes(requiredModule)) {
@@ -218,6 +220,7 @@ export default function App() {
         <Route path="portal/audits/:auditId/report" element={<AuditReportPage />} />
         <Route path="portal/:assessmentId" element={<AuditChecklistPage />} />
         <Route path="portal/:assessmentId/report" element={<AuditReportPage />} />
+        <Route path="my-policies" element={<MyPoliciesPage />} />
         <Route path="settings" element={<SettingsPage />} />
         <Route path="help" element={<HelpPage />} />
       </Route>

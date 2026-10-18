@@ -24,7 +24,7 @@ const bundle: { en: Record<string, any>; fr: Record<string, any>; ar: Record<str
         "error_update_failed": "The scenario could not be saved. Nothing was changed.",
         "error_delete_failed": "The scenario could not be deleted. Nothing was changed.",
         "delete_confirm_title": "Delete this risk scenario?",
-        "delete_confirm_body": "“{{name}}” and its version history will be deleted; its final state is kept in the activity log. The linked risk-register entry is kept and can then be closed or deleted on its own."
+        "delete_confirm_body": "“{{name}}” and its version history will be deleted; its final state is kept in the activity log. The risk-register entry it created is deleted too — or closed (“Scenario deleted”) if a treatment plan, an acceptance or a control still cites it."
       },
       "acceptances": {
         "covers": "Covers",
@@ -193,7 +193,7 @@ const bundle: { en: Record<string, any>; fr: Record<string, any>; ar: Record<str
         "error_update_failed": "Le scénario n’a pas pu être enregistré. Rien n’a été modifié.",
         "error_delete_failed": "Le scénario n’a pas pu être supprimé. Rien n’a été modifié.",
         "delete_confirm_title": "Supprimer ce scénario de risque ?",
-        "delete_confirm_body": "« {{name}} » et son historique de versions seront supprimés ; son état final est conservé dans le journal d’activité. L’entrée liée du registre des risques est conservée et pourra ensuite être fermée ou supprimée séparément."
+        "delete_confirm_body": "« {{name}} » et son historique de versions seront supprimés ; son état final est conservé dans le journal d’activité. L’entrée du registre des risques qu’il a créée est supprimée aussi — ou clôturée (« Scénario supprimé ») si un plan de traitement, une acceptation ou une mesure la cite encore."
       },
       "acceptances": {
         "covers": "Couvre",
@@ -362,7 +362,7 @@ const bundle: { en: Record<string, any>; fr: Record<string, any>; ar: Record<str
         "error_update_failed": "تعذّر حفظ السيناريو. لم يتم تغيير أي شيء.",
         "error_delete_failed": "تعذّر حذف السيناريو. لم يتم تغيير أي شيء.",
         "delete_confirm_title": "حذف سيناريو الخطر هذا؟",
-        "delete_confirm_body": "سيتم حذف «{{name}}» وسجل إصداراته؛ وتُحفظ حالته النهائية في سجل النشاط. ويُحتفظ بالمدخل المرتبط في سجل المخاطر ويمكن بعد ذلك إغلاقه أو حذفه بشكل مستقل."
+        "delete_confirm_body": "سيتم حذف «{{name}}» وسجل إصداراته؛ وتُحفظ حالته النهائية في سجل النشاط. ويُحذف أيضًا مدخل سجل المخاطر الذي أنشأه — أو يُغلق («تم حذف السيناريو») إذا كانت خطة معالجة أو قبول أو تدبير لا يزال يشير إليه."
       },
       "acceptances": {
         "covers": "يشمل",

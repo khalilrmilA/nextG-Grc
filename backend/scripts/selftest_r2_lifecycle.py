@@ -570,7 +570,8 @@ async def followups(api: Api) -> None:
         check(s == 200, f"{who} can read compliance assessments")
 
     pm = role_email("policy_manager")
-    _, p = await api.req("POST", "/policies", who=pm, json={"title": "ST read-only ack", "content": "x"})
+    # Acknowledgements need a signed-off text in force (follow-up C-2).
+    p = await _published_policy(api, "ST read-only ack", "x")
     async with AsyncSessionLocal() as db:
         ids = dict((await db.execute(select(User.email, User.id).where(
             User.email.in_([role_email("viewer"), role_email("executive")])))).all())
@@ -599,6 +600,19 @@ async def http_tests() -> None:
         await audits(api)
         await followups(api)
         await prompt2(api)
+
+
+async def _published_policy(api: Api, title: str, content: str) -> dict:
+    """policy_manager writes it, the CISO approves the version, it is published."""
+    pm = role_email("policy_manager")
+    _, p = await api.req("POST", "/policies", who=pm, json={"title": title, "content": content})
+    _, vs = await api.req("GET", f"/policies/{p['id']}/versions")
+    await api.req("PATCH", f"/policies/{p['id']}", who=pm, json={"status": "in_review"})
+    await api.req("PATCH", f"/policies/{p['id']}/versions/{vs[0]['id']}/approve")
+    await api.req("PATCH", f"/policies/{p['id']}", who=pm, json={"status": "approved"})
+    s, p = await api.req("PATCH", f"/policies/{p['id']}", who=pm, json={"status": "published"})
+    assert s == 200 and p["status"] == "published", (s, p)
+    return p
 
 
 async def _new_assessment(api: Api, name: str) -> dict:
@@ -630,6 +644,222 @@ async def prompt2(api: Api) -> None:
     check(s == 409 and "archivez" in str(b), "a draft with a person's decision is refused with 409 (fr)", b)
     s, _ = await api.req("GET", f"/compliance/assessments/{a['id']}")
     check(s == 200, "and is kept")
+
+    print("[prompt 2: C-1 — acceptance withdraw + expiry in the daily check]")
+    rm = role_email("risk_manager")
+    s, risk = await api.req("POST", "/risks", who=rm, json={"title": "ST C1 risk", "likelihood": 3, "impact": 3, "category": "operational"})
+    rid = risk["id"]
+    s, w = await api.req("POST", "/security/acceptances", who=rm, json={
+        "name": "ST withdraw", "justification": "j", "expiration_date": "2030-01-01", "risk_ids": [rid]})
+    s, _ = await api.req("PATCH", f"/security/acceptances/{w['id']}/withdraw", json={"reason": "not mine"})
+    check(s == 403, "only the requester can withdraw")
+    s, b = await api.req("PATCH", f"/security/acceptances/{w['id']}/withdraw", who=rm, lang="fr", json={"reason": " "})
+    check(s == 422 and "motif" in str(b), "withdraw needs a reason (fr)", b)
+    s, w2 = await api.req("PATCH", f"/security/acceptances/{w['id']}/withdraw", who=rm, json={"reason": "Risk treated instead"})
+    check(s == 200 and w2["status"] == "withdrawn" and w2["revocation_reason"] == "Risk treated instead",
+          "requester withdraws their pending request", w2)
+    s, _ = await api.req("PATCH", f"/security/acceptances/{w['id']}/withdraw", who=rm, json={"reason": "again"})
+    check(s == 409, "a withdrawn request cannot be withdrawn again")
+    s, _ = await api.req("PATCH", f"/security/acceptances/{w['id']}/approve")
+    check(s == 409, "a withdrawn request cannot be approved")
+    s, logs = await api.req("GET", "/activity-log", params={"entity_type": "risk_acceptance", "page_size": 50})
+    items = logs.get("items", logs) if isinstance(logs, dict) else logs
+    check(any(x.get("action") == "withdraw" and x.get("entity_id") == w["id"] for x in items or []), "withdraw is logged")
+
+    s, e = await api.req("POST", "/security/acceptances", who=rm, json={
+        "name": "ST expiring", "justification": "j", "expiration_date": "2030-01-01", "risk_ids": [rid]})
+    s, e = await api.req("PATCH", f"/security/acceptances/{e['id']}/approve")
+    _, r = await api.req("GET", f"/risks/{rid}")
+    check(s == 200 and r["status"] == "accepted", "approved acceptance accepts the risk", r.get("status"))
+    from app.models.security_exception import RiskAcceptance
+    from app.services.notification_generator import run_all_checks
+    async with AsyncSessionLocal() as db:
+        await db.execute(update(RiskAcceptance).where(RiskAcceptance.id == e["id"]).values(expiration_date="2020-01-01"))
+        await db.commit()
+        tid = (await db.execute(select(RiskAcceptance.tenant_id).where(RiskAcceptance.id == e["id"]))).scalar_one()
+        first = await run_all_checks(db, tenant_id=tid)
+        second = await run_all_checks(db, tenant_id=tid)
+        st = (await db.execute(select(RiskAcceptance.status).where(RiskAcceptance.id == e["id"]))).scalar_one()
+    _, r = await api.req("GET", f"/risks/{rid}")
+    check(first.get("waiver_expiry", 0) >= 1 and second.get("waiver_expiry") == 0 and st == "expired"
+          and r["status"] != "accepted", "daily check expires it once and hands the risk back",
+          (first.get("waiver_expiry"), second.get("waiver_expiry"), st, r.get("status")))
+
+    print("[prompt 2: C-2 — attestations on an approved text only, no duplicates, auditors attest]")
+    pm = role_email("policy_manager")
+    s, p = await api.req("POST", "/policies", who=pm, json={"title": "ST C2 policy", "content": "Rule 1."})
+    pid = p["id"]
+    async with AsyncSessionLocal() as db:
+        auditor_id = (await db.execute(select(User.id).where(User.email == "auditor@demo.com"))).scalar_one()
+        viewer_id = (await db.execute(select(User.id).where(User.email == role_email("business_owner")))).scalar_one()
+    s, b = await api.req("POST", f"/policies/{pid}/attestations", who=pm, lang="fr", json={"user_ids": [viewer_id]})
+    check(s == 409 and "approuv" in str(b), "no acknowledgement request on a draft (fr)", b)
+    _, vs = await api.req("GET", f"/policies/{pid}/versions")
+    await api.req("PATCH", f"/policies/{pid}", who=pm, json={"status": "in_review"})
+    await api.req("PATCH", f"/policies/{pid}/versions/{vs[0]['id']}/approve")
+    await api.req("PATCH", f"/policies/{pid}", who=pm, json={"status": "approved"})
+    s, p = await api.req("PATCH", f"/policies/{pid}", who=pm, json={"status": "published"})
+    s, atts = await api.req("POST", f"/policies/{pid}/attestations", who=pm, json={"user_ids": [viewer_id, auditor_id, viewer_id]})
+    check(s == 201 and len(atts) == 2, "published + approved text: requests created (repeated id once)", atts)
+    s, again = await api.req("POST", f"/policies/{pid}/attestations", who=pm, json={"user_ids": [viewer_id]})
+    _, all_atts = await api.req("GET", f"/policies/{pid}/attestations")
+    check(s == 201 and len(all_atts) == 2 and again[0]["id"] in {a["id"] for a in atts},
+          "re-sending does not duplicate a pending request", len(all_atts))
+    s, mine = await api.req("GET", "/policies/my-attestations", who="auditor@demo.com")
+    mine_row = next((m for m in mine if m["policy_id"] == pid), None) if s == 200 else None
+    check(mine_row is not None, "the auditor sees the request in My policies", s)
+    s, a = await api.req("PATCH", f"/policies/{pid}/attestations/{mine_row['id']}/acknowledge", who="auditor@demo.com")
+    check(s == 200 and a["status"] == "acknowledged", "the auditor acknowledges")
+    s, logs = await api.req("GET", "/activity-log", params={"entity_type": "policy", "page_size": 100})
+    items = logs.get("items", logs) if isinstance(logs, dict) else logs
+    check(any(x.get("action") == "approve_version" and x.get("entity_id") == pid for x in items or []),
+          "version approval is in the activity log")
+    viewer_att = next(x for x in all_atts if x["user_id"] == viewer_id)
+    await api.req("PATCH", f"/policies/{pid}", who=pm, json={"status": "retired"})
+    s, b = await api.req("PATCH", f"/policies/{pid}/attestations/{viewer_att['id']}/acknowledge", who=role_email("business_owner"))
+    check(s == 409, "a retired policy can no longer be acknowledged", b)
+
+    print("[prompt 2: C-3 — vendors: send queue, duplicates, unscored prescreen, alerts]")
+    vm = role_email("vendor_manager")
+    s, v = await api.req("POST", "/vendors", who=vm, json={"name": "ST C3 Vendor", "country": "TN",
+                                                          "contract_expiry": "2026-11-01"})
+    vid = v["id"]
+    s, b = await api.req("POST", "/vendors", who=vm, lang="fr", json={"name": "st c3 vendor"})
+    check(s == 409 and "registre" in str(b), "a second vendor with the same name is refused (fr)", b)
+    body = b"Master services agreement. Liability capped at 12 months of fees." * 20
+    s, c1 = await api.req("POST", f"/vendors/{vid}/upload-contract", who=vm,
+                          files={"contract_file": ("msa.txt", body, "text/plain")})
+    s2, c2 = await api.req("POST", f"/vendors/{vid}/upload-contract", who=vm,
+                           files={"contract_file": ("msa.txt", body, "text/plain")})
+    check(s == 200 and s2 == 200 and c1["id"] == c2["id"] and c2["version"] == 1,
+          "re-uploading the same file returns the contract on file (no second version)", (c1.get("id"), c2.get("id")))
+    s, ready = await api.req("GET", "/vendors/contracts/ready-to-send")
+    check(s == 200 and all(r["id"] != c1["id"] for r in ready), "not ready to send before approval")
+    s, ap = await api.req("POST", f"/vendors/contracts/{c1['id']}/ciso-review", json={"action": "approve", "comments": "ok"})
+    check(s == 200 and ap["validation_status"] == "approved", "CISO approves the contract", ap)
+    s, ready = await api.req("GET", "/vendors/contracts/ready-to-send", who=vm)
+    row = next((r for r in ready if r["id"] == c1["id"]), None) if s == 200 else None
+    check(row is not None and row["vendor_name"] == "ST C3 Vendor", "approved contract is in Ready to send, with its vendor name", ready)
+    s, _ = await api.req("POST", f"/vendors/contracts/{c1['id']}/ciso-review", json={"action": "reject", "comments": "x"})
+    check(s == 409, "a decided contract cannot be decided again")
+    s, sent = await api.req("POST", f"/vendors/contracts/{c1['id']}/send-to-vendor", who=vm)
+    s2, ready = await api.req("GET", "/vendors/contracts/ready-to-send")
+    check(s == 200 and sent["validation_status"] == "sent_to_vendor" and all(r["id"] != c1["id"] for r in ready),
+          "sent to vendor, leaves Ready to send")
+    # Give the background AI review (dead Ollama here) time to finish, then check it did not revert.
+    await asyncio.sleep(1.5)
+    from app.models.vendor import VendorContract as _VC
+    async with AsyncSessionLocal() as db:
+        st = (await db.execute(select(_VC.validation_status).where(_VC.id == c1["id"]))).scalar_one()
+    check(st == "sent_to_vendor", "a late AI result does not pull a sent contract back to review", st)
+
+    s, before = await api.req("GET", f"/vendors/{vid}")
+    s, a = await api.req("POST", f"/vendors/{vid}/assessments", who=vm,
+                         json={"answers": {"q1": "yes"}, "apply_score": False})
+    s2, after = await api.req("GET", f"/vendors/{vid}")
+    check(s == 201 and a["assessment_score"] is None and a["status"] == "completed"
+          and after["risk_score"] == before["risk_score"], "prescreen kept without an AI score; score untouched", a)
+
+    from app.models.notification import Notification
+    from app.services.notification_generator import check_vendor_contract_expiry
+    await api.req("POST", f"/vendors/{vid}/offboard", who=vm, json={"status": "inactive", "reason": "ended", "effective_date": "2026-10-18"})
+    async with AsyncSessionLocal() as db:
+        tid = (await db.execute(select(User.tenant_id).where(User.email == vm))).scalar_one()
+        await check_vendor_contract_expiry(db, tid)
+        await db.commit()
+        n = [x for x in (await db.execute(select(Notification).where(Notification.tenant_id == tid))).scalars().all()
+             if (x.data or {}).get("entity_id") == vid]
+    check(not n, "no contract-expiry alert for an offboarded vendor", len(n))
+    s, b = await api.req("DELETE", f"/vendors/{vid}", who=vm)
+    check(s == 409 and "Offboard" in str(b), "delete refusal points to Offboard", b)
+
+    print("[prompt 2: C-4 — evidence by its uploader, validity edit, mixed roles]")
+    co, cm = role_email("control_owner"), role_email("compliance_manager")
+    a = await _new_assessment(api, "ST C4")
+    rows = a["control_assessments"]
+    async with AsyncSessionLocal() as db:
+        co_id = (await db.execute(select(User.id).where(User.email == co))).scalar_one()
+        ciso = (await db.execute(select(User).where(User.email == "ciso@demo.com"))).scalar_one()
+        mixed = "mixedrole@demo.com"
+        if not (await db.execute(select(User).where(User.email == mixed))).scalar_one_or_none():
+            db.add(User(id=str(uuid.uuid4()), tenant_id=ciso.tenant_id, email=mixed,
+                        hashed_password=ciso.hashed_password, first_name="Mixed", last_name="Selftest",
+                        role="control_owner", roles=["control_owner", "risk_manager"],
+                        is_active=True, is_verified=True, elite_access=True))
+            await db.commit()
+    await api.req("PATCH", f"/compliance/control-assessments/{rows[0]['id']}", who=cm, json={"owner_id": co_id})
+    s, ev = await api.req("POST", f"/compliance/control-assessments/{rows[0]['id']}/evidence", who=co,
+                          files={"file": ("own.txt", b"own proof", "text/plain")}, data={"valid_until": "2027-01-01"})
+    check(s == 200 and ev.get("uploaded_by_id") == co_id, "upload response names the uploader", ev)
+    s, e2 = await api.req("PATCH", f"/compliance/evidence/{ev['id']}", who=co, json={"valid_until": "2027-06-30"})
+    check(s == 200 and e2["valid_until"] == "2027-06-30", "uploader changes the validity date", e2)
+    s, _ = await api.req("PATCH", f"/compliance/evidence/{ev['id']}", who=co, json={"valid_until": "30/06/2027"})
+    check(s == 422, "validity must be a date")
+    s, vis = await api.req("PATCH", f"/compliance/evidence/{ev['id']}/visibility")
+    check(s == 200 and vis["valid_until"] == "2027-06-30", "visibility toggle keeps the validity window", vis)
+    s, cm_ev = await api.req("POST", f"/compliance/control-assessments/{rows[0]['id']}/evidence", who=cm,
+                             files={"file": ("cm.txt", b"manager proof", "text/plain")})
+    s, b = await api.req("DELETE", f"/compliance/evidence/{cm_ev['id']}", who=co)
+    check(s == 403, "a control owner cannot delete someone else's evidence", b)
+    s, _ = await api.req("DELETE", f"/compliance/evidence/{ev['id']}", who=co)
+    check(s == 204, "the uploader deletes their own evidence (was CISO-only)")
+    s, _ = await api.req("DELETE", f"/compliance/evidence/{cm_ev['id']}", who=cm)
+    check(s == 204, "compliance_manager deletes any evidence")
+    s, _ = await api.req("GET", "/compliance/files/deleted", who=cm)
+    check(s == 200, "compliance_manager reads the deleted-files list")
+    s, r = await api.req("PATCH", f"/compliance/control-assessments/{rows[1]['id']}", who=mixed,
+                         json={"status": "partially_implemented"})
+    check(s == 200, "control_owner + risk_manager acts on a row they do not own (organisation-wide wins)", r)
+    s, _ = await api.req("PATCH", f"/compliance/control-assessments/{rows[1]['id']}", who=co,
+                         json={"status": "implemented"})
+    check(s == 403, "a plain control_owner still cannot")
+
+    print("[prompt 2: C-5 — scenario mirror risk, history before re-score, orphan backfill]")
+    rm = role_email("risk_manager")
+    s, sa = await api.req("POST", "/risk-scenarios", who=rm, json={"name": "ST C5 lone", "current_probability": 2, "current_impact": 2})
+    ra = sa["linked_risk_id"]
+    await api.req("PATCH", f"/risk-scenarios/{sa['id']}", who=rm, json={"current_probability": 4, "current_impact": 3})
+    s, vers = await api.req("GET", f"/risks/{ra}/versions")
+    check(s == 200 and any("Re-scored from risk scenario" in (v.get("change_reason") or "") for v in vers)
+          and any(v["snapshot"].get("likelihood") == 2 for v in vers),
+          "a scenario re-score versions the register entry first (old score kept)", vers)
+    s, _ = await api.req("DELETE", f"/risk-scenarios/{sa['id']}", who=rm)
+    s2, _ = await api.req("GET", f"/risks/{ra}")
+    check(s == 204 and s2 == 404, "deleting a scenario deletes its unreferenced register entry", (s, s2))
+
+    s, sb = await api.req("POST", "/risk-scenarios", who=rm, json={"name": "ST C5 treated", "current_probability": 3, "current_impact": 3})
+    rb = sb["linked_risk_id"]
+    s, tr = await api.req("POST", "/risk-treatment", json={"risk_id": rb, "treatment_option": "mitigate", "description": "patch",
+                                                         "acceptance_justification": "fix it"})
+    check(s == 201, "treatment plan on the scenario's register entry", tr)
+    await api.req("DELETE", f"/risk-scenarios/{sb['id']}", who=rm)
+    s, r = await api.req("GET", f"/risks/{rb}")
+    s2, vers = await api.req("GET", f"/risks/{rb}/versions")
+    check(s == 200 and r["status"] == "closed" and any("Scenario deleted" in (v.get("change_reason") or "") for v in vers),
+          "a register entry a treatment plan cites is closed, reason 'Scenario deleted'", r.get("status"))
+
+    # An orphan made the old way: scenario row removed, its risk left open, log entry without the link.
+    s, sc3 = await api.req("POST", "/risk-scenarios", who=rm, json={"name": "ST C5 old orphan", "current_probability": 2, "current_impact": 4})
+    rc = sc3["linked_risk_id"]
+    from app.models.risk_scenario import RiskScenario
+    from app.models.activity_log import ActivityLog
+    async with AsyncSessionLocal() as db:
+        tid = (await db.execute(select(RiskScenario.tenant_id).where(RiskScenario.id == sc3["id"]))).scalar_one()
+        rm_id = (await db.execute(select(User.id).where(User.email == rm))).scalar_one()
+        await db.execute(RiskScenario.__table__.delete().where(RiskScenario.id == sc3["id"]))
+        db.add(ActivityLog(tenant_id=tid, user_id=rm_id, user_email=rm, action="delete", entity_type="risk_scenario", entity_id=sc3["id"],
+                           entity_name="ST C5 old orphan", details={"deleted": {"name": "ST C5 old orphan"}}, origin="api"))
+        await db.commit()
+    from scripts.backfill_scenario_mirrors import run as backfill_mirrors
+    from app.core.config import settings as _settings
+    await backfill_mirrors(_settings.DATABASE_URL, apply=True)
+    s, r = await api.req("GET", f"/risks/{rc}")
+    check(r.get("status") == "closed", "backfill closes the old orphan", r.get("status"))
+    import io, contextlib
+    buf = io.StringIO()
+    with contextlib.redirect_stdout(buf):
+        await backfill_mirrors(_settings.DATABASE_URL, apply=False)
+    check("would close 0 risk" in buf.getvalue(), "backfill is idempotent", buf.getvalue()[-120:])
 
 
 def main() -> None:

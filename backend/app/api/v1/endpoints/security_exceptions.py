@@ -11,7 +11,8 @@ from app.models.user import User, UserRole
 from app.models.security_exception import SecurityException, ExceptionStatus, RiskAcceptance
 from app.models.risk import Risk, RiskStatus
 from app.models.risk_scenario import RiskScenario
-from app.services.activity_chain import log_system_activity
+from app.models.activity_log import ActivityLog
+from app.services.activity_chain import chain_and_add, log_system_activity
 from app.services import risk_versioning
 
 router = APIRouter()
@@ -163,6 +164,9 @@ class RAOut(BaseModel):
     rejection_reason: str | None = None
     revoked_by_id: str | None = None; revoked_at: str | None = None
     revocation_reason: str | None = None
+    # Withdrawn by its requester (follow-up C-1): who, when and why. Kept in the
+    # revoked_* columns — a withdrawal is the same "stopped before its term"
+    # record, authored by the requester instead of a CISO; `status` tells them apart.
     created_at: datetime; updated_at: datetime
     is_expired: bool = False
     model_config = {"from_attributes": True}
@@ -431,3 +435,41 @@ async def revoke_acceptance(
     await _release_covered_risks(db, a, user, "revoked")
     await db.commit(); await db.refresh(a)
     return RAOut.model_validate(a)
+
+
+@router.patch("/acceptances/{aid}/withdraw", response_model=RAOut)
+async def withdraw_acceptance(
+    aid: str,
+    body: RADecision,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+    tenant_id: str = Depends(get_tenant_id),
+):
+    """The requester takes back their own PENDING request (follow-up C-1).
+
+    Before this a pending request could only be cleared by someone else (four-eyes
+    reject), so a one-person tenant was stuck with it forever. Nothing was
+    approved, so no risk changes status. Reason required; the trail keeps it.
+    """
+    if not body.reason.strip():
+        raise HTTPException(422, "A reason is required to withdraw a risk acceptance.")
+    a = await _load_acceptance(db, aid, tenant_id)
+    if a.requested_by_id != user.id:
+        raise HTTPException(403, "Only the person who requested this acceptance can withdraw it.")
+    if a.status != "pending":
+        raise HTTPException(409, f"Cannot withdraw acceptance in status '{a.status}'")
+    a.status = "withdrawn"
+    a.revoked_by_id = user.id; a.revoked_at = datetime.utcnow().isoformat()
+    a.revocation_reason = body.reason.strip()
+    await db.commit(); await db.refresh(a)
+    out = RAOut.model_validate(a)
+    try:
+        await chain_and_add(db, ActivityLog(
+            tenant_id=tenant_id, user_id=user.id, user_email=user.email,
+            action="withdraw", entity_type="risk_acceptance", entity_id=out.id,
+            entity_name=(out.name or "")[:255] or None,
+            details={"from": "pending", "to": "withdrawn", "reason": out.revocation_reason}, origin="api",
+        ))
+    except Exception:
+        pass
+    return out

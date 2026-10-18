@@ -456,11 +456,11 @@ _MESSAGES: dict[str, dict[str, str]] = {
     },
     "vendor_has_records": {
         "en": "This vendor cannot be deleted: {n} contract(s) already carry a CISO decision or a signature. "
-              "Set the vendor's status to 'inactive' to retire the relationship and keep the record.",
+              "Use Offboard to end the relationship: it records the date and the reason, and keeps the record.",
         "fr": "Ce fournisseur ne peut pas être supprimé : {n} contrat(s) portent déjà une décision du RSSI ou une signature. "
-              "Passez le statut du fournisseur à « inactive » pour clore la relation en conservant le dossier.",
+              "Utilisez « Sortie du fournisseur » pour clore la relation : la date et le motif sont enregistrés et le dossier est conservé.",
         "ar": "لا يمكن حذف هذا المورّد: {n} من العقود تحمل بالفعل قرار مسؤول أمن المعلومات أو توقيعاً. "
-              "غيّر حالة المورّد إلى \"inactive\" لإنهاء العلاقة مع الاحتفاظ بالسجل.",
+              "استخدم «إنهاء العلاقة» لإغلاقها: يُسجَّل التاريخ والسبب ويُحتفظ بالسجل.",
     },
     "no_analysis": {
         "en": "No AI analysis is available to approve for this vendor. Run the AI risk assessment first.",
@@ -504,11 +504,11 @@ _MESSAGES: dict[str, dict[str, str]] = {
     },
     "vendor_has_signed_negotiation": {
         "en": "This vendor cannot be deleted: {n} contract negotiation(s) already carry a signature or a "
-              "mutual agreement. Set the vendor's status to 'inactive' to retire the relationship and keep the record.",
+              "mutual agreement. Use Offboard to end the relationship: it records the date and the reason, and keeps the record.",
         "fr": "Ce fournisseur ne peut pas être supprimé : {n} négociation(s) de contrat portent déjà une signature ou "
-              "un accord mutuel. Passez le statut du fournisseur à « inactive » pour clore la relation en conservant le dossier.",
+              "un accord mutuel. Utilisez « Sortie du fournisseur » pour clore la relation : la date et le motif sont enregistrés et le dossier est conservé.",
         "ar": "لا يمكن حذف هذا المورّد: {n} من مفاوضات العقود تحمل بالفعل توقيعاً أو اتفاقاً متبادلاً. "
-              "غيّر حالة المورّد إلى \"inactive\" لإنهاء العلاقة مع الاحتفاظ بالسجل.",
+              "استخدم «إنهاء العلاقة» لإغلاقها: يُسجَّل التاريخ والسبب ويُحتفظ بالسجل.",
     },
     "use_offboard": {
         "en": "Use Offboard to end a relationship: it records the date and the reason.",
@@ -539,6 +539,16 @@ _MESSAGES: dict[str, dict[str, str]] = {
         "en": "The vendor name cannot be empty.",
         "fr": "Le nom du fournisseur ne peut pas être vide.",
         "ar": "لا يمكن أن يكون اسم المورّد فارغاً.",
+    },
+    "vendor_name_taken": {
+        "en": "A vendor named “{name}” is already in the register. Open it instead of creating a second one.",
+        "fr": "Un fournisseur nommé « {name} » figure déjà au registre. Ouvrez-le au lieu d’en créer un second.",
+        "ar": "يوجد بالفعل مورّد باسم «{name}» في السجل. افتحه بدلًا من إنشاء مورّد ثانٍ.",
+    },
+    "contract_already_decided": {
+        "en": "This contract already carries a CISO decision ({status}). Upload a new version to start a new review.",
+        "fr": "Ce contrat porte déjà une décision du RSSI ({status}). Téléversez une nouvelle version pour lancer une nouvelle revue.",
+        "ar": "يحمل هذا العقد بالفعل قرار مسؤول أمن المعلومات ({status}). ارفع نسخة جديدة لبدء مراجعة جديدة.",
     },
     "needs_ciso_approval": {
         "en": "Contract must be approved by CISO before sending to vendor",
@@ -661,7 +671,9 @@ class VendorAssessmentCreate(BaseModel):
     """A prescreen run for an EXISTING vendor (the /prescreen analysis itself is
     stateless — this is what keeps its answers and verdict)."""
     answers: dict[str, str]
-    initial_risk_score: float                 # AI score, 1–10
+    # AI score, 1–10. None = the AI was unavailable and onboarding went on without
+    # it (product decision 2026-10-18): the answers are kept, unscored, to re-run later.
+    initial_risk_score: float | None = None
     risk_level: str | None = None
     summary: str | None = None
     strengths: list[str] = []
@@ -730,6 +742,9 @@ class VendorContractResponse(BaseModel):
     sent_to_vendor_at: str | None
     version: int
     created_at: datetime
+    # Filled by the cross-vendor queues (pending review / ready to send) so a
+    # reviewer reads a name, not an id prefix.
+    vendor_name: str | None = None
 
     model_config = {"from_attributes": True}
 
@@ -816,6 +831,17 @@ async def create_vendor(
 ):
     """Create a new vendor."""
     risk_tier, vstatus = _parse_tier_status(body, lang)
+    # Follow-up C-3: an onboarding that failed after this call (assessment or
+    # contract step) was retried from the start and created a second vendor. The
+    # wizard now resumes with the vendor it created; this is the server-side
+    # backstop. An inactive (offboarded) namesake does not block a new relationship.
+    name = body.name.strip()
+    twin = (await db.execute(select(Vendor).where(
+        Vendor.tenant_id == tenant_id, func.lower(Vendor.name) == name.lower(),
+        Vendor.status != VendorStatus.INACTIVE,
+    ).limit(1))).scalar_one_or_none()
+    if twin is not None:
+        raise HTTPException(status_code=409, detail=_msg("vendor_name_taken", lang, name=twin.name))
     vendor = Vendor(
         tenant_id=tenant_id,
         name=body.name.strip(),
@@ -1023,12 +1049,12 @@ async def create_vendor_assessment(
         raise HTTPException(status_code=422, detail=_msg("prescreen_empty", lang))
     now = datetime.now(timezone.utc).isoformat()
     applied = None
-    if body.apply_score:
+    if body.apply_score and (body.applied_risk_score is not None or body.initial_risk_score is not None):
         applied = body.applied_risk_score if body.applied_risk_score is not None \
             else _to_register_scale(body.initial_risk_score)
     row = VendorAssessment(
         vendor_id=vendor.id, name="Prescreen questionnaire", kind="prescreen",
-        status="approved" if body.apply_score else "completed",
+        status="approved" if applied is not None else "completed",
         completed_at=now, answers=dict(body.answers),
         questions=list(body.answers.keys()),
         assessment_score=body.initial_risk_score, risk_level=body.risk_level,
@@ -1037,8 +1063,8 @@ async def create_vendor_assessment(
                 "red_flags": body.red_flags, "recommendations": body.recommendations},
         findings=list(body.red_flags) + list(body.concerns),
         assessed_by_id=current_user.id,
-        approved_by_id=current_user.id if body.apply_score else None,
-        approved_at=now if body.apply_score else None,
+        approved_by_id=current_user.id if applied is not None else None,
+        approved_at=now if applied is not None else None,
         applied_risk_score=applied,
     )
     db.add(row)
@@ -1658,6 +1684,23 @@ async def upload_vendor_contract(
 
     # Extract the WHOLE text (PDF/DOCX/XLSX/TXT) off the event loop; an empty result is reported explicitly
     # by the background review instead of being analysed as if it were the contract.
+    # Follow-up C-3: the same bytes uploaded again for this vendor (a retry after a
+    # later step failed) return the contract already on file instead of a new
+    # version and a second AI review. A rejected one may be re-submitted.
+    same = (await db.execute(
+        select(VendorContract).where(
+            VendorContract.vendor_id == vendor_id,
+            VendorContract.file_sha256 == file_integrity.sha256_bytes(content),
+            VendorContract.validation_status != ContractValidationStatus.REJECTED.value,
+        ).order_by(VendorContract.version.desc()).limit(1)
+    )).scalar_one_or_none()
+    if same is not None:
+        try:
+            file_path.unlink()
+        except OSError:
+            pass
+        return VendorContractResponse.model_validate(same)
+
     extracted_text, extraction_note = await asyncio.to_thread(_extract_contract_text, content, safe_name, ct)
     if not extracted_text.strip():
         logger.warning("vendor.contract.no_text vendor_id=%s file=%s note=%s", vendor_id, safe_name, extraction_note)
@@ -1773,7 +1816,11 @@ async def analyze_contract_async(contract_id: str, extracted_text: str, vendor_n
             else:
                 contract.ai_review = _contract_failure_notice(failure[0], failure[1], lang)
                 contract.review_status = "error"
-            contract.validation_status = ContractValidationStatus.AI_REVIEWED.value
+            # Only a contract still waiting for the AI moves on: a CISO may have
+            # decided on it meanwhile (a stranded review is actionable), and a late
+            # AI result must not pull an approved or sent contract back to review.
+            if contract.validation_status == ContractValidationStatus.PENDING_AI.value:
+                contract.validation_status = ContractValidationStatus.AI_REVIEWED.value
             await db.commit()
     except Exception:  # noqa: BLE001
         logger.exception("vendor.contract.review_persist_failed contract_id=%s", contract_id)
@@ -1822,7 +1869,39 @@ async def list_contracts_pending_review(
         .order_by(VendorContract.created_at.desc())
     )
     contracts = result.scalars().all()
-    return [VendorContractResponse.model_validate(c) for c in contracts]
+    return await _with_vendor_names(db, contracts)
+
+
+async def _with_vendor_names(db: AsyncSession, contracts) -> list[VendorContractResponse]:
+    ids = {c.vendor_id for c in contracts}
+    names = dict((await db.execute(select(Vendor.id, Vendor.name).where(Vendor.id.in_(ids)))).all()) if ids else {}
+    out = []
+    for c in contracts:
+        o = VendorContractResponse.model_validate(c)
+        o.vendor_name = names.get(c.vendor_id)
+        out.append(o)
+    return out
+
+
+@router.get("/contracts/ready-to-send", response_model=list[VendorContractResponse])
+async def list_contracts_ready_to_send(
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(get_current_user),
+    tenant_id: str = Depends(get_tenant_id),
+):
+    """Contracts the CISO approved that have not been sent yet (follow-up C-3).
+
+    Approval took a contract out of the review queue, and the queue was the only
+    way to reach "Send to vendor" — so an approved contract could never be sent.
+    """
+    rows = (await db.execute(
+        select(VendorContract)
+        .join(Vendor, VendorContract.vendor_id == Vendor.id)
+        .where(Vendor.tenant_id == tenant_id,
+               VendorContract.validation_status == ContractValidationStatus.APPROVED.value)
+        .order_by(VendorContract.ciso_reviewed_at.desc())
+    )).scalars().all()
+    return await _with_vendor_names(db, rows)
 
 
 @router.get("/{vendor_id}/contracts", response_model=list[VendorContractResponse])
@@ -1905,6 +1984,13 @@ async def ciso_review_contract(
 
     if body.action not in ["approve", "reject"]:
         raise HTTPException(status_code=400, detail=_msg("bad_review_action", lang))
+    # A decision is final for this version: re-approving a contract already sent
+    # would silently pull it back to "approved" and overwrite the first sign-off.
+    if contract.validation_status in (ContractValidationStatus.APPROVED.value,
+                                      ContractValidationStatus.SENT_TO_VENDOR.value,
+                                      ContractValidationStatus.REJECTED.value):
+        raise HTTPException(status_code=409, detail=_msg("contract_already_decided", lang,
+                                                         status=contract.validation_status))
 
     # Update contract with CISO decision
     contract.ciso_reviewer_id = current_user.id

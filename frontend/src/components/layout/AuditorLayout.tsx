@@ -1,7 +1,7 @@
 import { Outlet, NavLink, useNavigate } from "react-router-dom";
 import { useAuthStore, authSession } from "../../store/auth";
 import {
-  ClipboardCheck, Settings, HelpCircle,
+  ClipboardCheck, Settings, HelpCircle, FileText,
   LogOut, Bell, ChevronRight,
 } from "lucide-react";
 import LanguageSwitcher from "../LanguageSwitcher";
@@ -17,6 +17,8 @@ export default function AuditorLayout() {
 
   const NAV = [
     { to: "/auditor/portal",   icon: ClipboardCheck, label: t("auditor_portal.my_assignments") },
+    // Auditors acknowledge the tenant's policies too (product decision, 2026-10-18).
+    { to: "/auditor/my-policies", icon: FileText,     label: t("nav.my_policies")              },
     { to: "/auditor/settings", icon: Settings,       label: t("settings.title")               },
     { to: "/auditor/help",     icon: HelpCircle,     label: t("help.title")                   },
   ];

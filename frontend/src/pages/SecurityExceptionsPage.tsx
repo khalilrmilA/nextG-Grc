@@ -28,6 +28,7 @@ const ACCEPTANCE_STATUS_BADGE: Record<string, string> = {
   rejected: "bg-red-100 text-red-700 border-red-200",
   expired: "bg-gray-100 text-gray-500 border-gray-200",
   revoked: "bg-red-100 text-red-700 border-red-200",
+  withdrawn: "bg-gray-100 text-gray-500 border-gray-200",
 };
 
 // Approve / reject / revoke an acceptance: CISO (admins auto-pass server-side).
@@ -96,7 +97,7 @@ export default function SecurityExceptionsPage() {
   const [riskOptions, setRiskOptions] = useState<MultiSelectOption[]>([]);
   const [scenarioOptions, setScenarioOptions] = useState<MultiSelectOption[]>([]);
   // Reject / revoke both ask for a reason in a dialog (the backend refuses an empty one).
-  const [decision, setDecision] = useState<{ kind: "reject" | "revoke"; item: any } | null>(null);
+  const [decision, setDecision] = useState<{ kind: "reject" | "revoke" | "withdraw"; item: any } | null>(null);
   const [decisionReason, setDecisionReason] = useState("");
   const [decisionError, setDecisionError] = useState("");
   const [decisionBusy, setDecisionBusy] = useState(false);
@@ -236,6 +237,7 @@ export default function SecurityExceptionsPage() {
     setDecisionBusy(true); setDecisionError("");
     try {
       if (decision.kind === "reject") await securityApi.rejectAcceptance(decision.item.id, decisionReason.trim());
+      else if (decision.kind === "withdraw") await securityApi.withdrawAcceptance(decision.item.id, decisionReason.trim());
       else await securityApi.revokeAcceptance(decision.item.id, decisionReason.trim());
       setDecision(null); setDecisionReason("");
       loadAcceptances();
@@ -440,8 +442,15 @@ export default function SecurityExceptionsPage() {
                           </button>
                         </div>
                       )}
-                      {canDecide && item.status === "pending" && item.requested_by_id === myId && (
-                        <span className="text-xs text-gray-400">{t("r2.acceptances.awaiting_other_approver")}</span>
+                      {/* The requester (any role) can take back their own pending request. */}
+                      {item.status === "pending" && item.requested_by_id === myId && (
+                        <div className="flex items-center justify-end gap-3">
+                          {canDecide && <span className="text-xs text-gray-400">{t("r2.acceptances.awaiting_other_approver")}</span>}
+                          <button onClick={() => { setDecision({ kind: "withdraw", item }); setDecisionReason(""); setDecisionError(""); }}
+                            className="inline-flex items-center gap-1 text-gray-600 hover:text-gray-800 text-xs font-medium">
+                            <Undo2 className="w-4 h-4" /> {t("r2b.acceptances.withdraw")}
+                          </button>
+                        </div>
                       )}
                       {canDecide && item.status === "approved" && !item.is_expired && (
                         <button onClick={() => { setDecision({ kind: "revoke", item }); setDecisionReason(""); setDecisionError(""); }}
@@ -566,11 +575,13 @@ export default function SecurityExceptionsPage() {
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 space-y-4" role="alertdialog" aria-modal="true">
             <h3 className="font-semibold text-gray-900">
-              {decision.kind === "reject" ? t("r2.acceptances.reject_title") : t("r2.acceptances.revoke_title")}
+              {decision.kind === "reject" ? t("r2.acceptances.reject_title")
+                : decision.kind === "withdraw" ? t("r2b.acceptances.withdraw_title") : t("r2.acceptances.revoke_title")}
             </h3>
             <p className="text-sm text-gray-600">
               {decision.kind === "reject"
                 ? t("r2.acceptances.reject_body", { name: decision.item.name })
+                : decision.kind === "withdraw" ? t("r2b.acceptances.withdraw_body", { name: decision.item.name })
                 : t("r2.acceptances.revoke_body", { name: decision.item.name })}
             </p>
             <div>
@@ -584,7 +595,8 @@ export default function SecurityExceptionsPage() {
               <button onClick={submitDecision} disabled={decisionBusy}
                 className="inline-flex items-center gap-2 bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white px-4 py-2 rounded-xl text-sm font-medium">
                 {decisionBusy && <Loader2 className="w-4 h-4 animate-spin" />}
-                {decision.kind === "reject" ? t("security_exceptions.reject") : t("r2.acceptances.revoke")}
+                {decision.kind === "reject" ? t("security_exceptions.reject")
+                  : decision.kind === "withdraw" ? t("r2b.acceptances.withdraw") : t("r2.acceptances.revoke")}
               </button>
             </div>
           </div>

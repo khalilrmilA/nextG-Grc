@@ -17,7 +17,7 @@ from app.models.asset import Asset
 from app.models.incident import Incident
 from app.models.notification import NotificationType
 from app.models.activity_log import ActivityLog
-from app.services import risk_scoring, scenario_priority
+from app.services import risk_scoring, risk_versioning, scenario_mirror, scenario_priority
 from app.services.notification_generator import create_notification, get_recipients_for_tenant, notification_exists
 from app.services.activity_chain import chain_and_add
 from app.api.v1.endpoints.risks import _apply_scoring, _assert_feature
@@ -525,6 +525,11 @@ async def update_scenario(sid: str, body: ScenarioUpdate, db: AsyncSession = Dep
             select(Risk).where(Risk.id == s.linked_risk_id, Risk.tenant_id == tenant_id)
         )).scalar_one_or_none()
         if linked is not None:
+            # Follow-up C-5: version the register entry BEFORE the re-score, so its
+            # History credits the scenario edit instead of showing an unexplained jump.
+            if (linked.likelihood, linked.impact) != (s.current_probability, s.current_impact):
+                await risk_versioning.archive(
+                    db, linked, current_user, change_reason=f"Re-scored from risk scenario: {s.name}")
             linked.likelihood = s.current_probability
             linked.impact = s.current_impact
             await _apply_scoring(db, tenant_id, linked)
@@ -557,6 +562,9 @@ async def delete_scenario(sid: str, db: AsyncSession = Depends(get_db), current_
     # readable from the tamper-evident chain.
     scenario_name = s.name
     payload = _version_snapshot(s)
+    # Recorded so a later reader (and scripts/backfill_scenario_mirrors.py) can
+    # tell which register entry this scenario had created.
+    payload["linked_risk_id"] = s.linked_risk_id
 
     # RiskScenarioVersion rows hang off scenario_id with no database-level
     # cascade (SQLite runs with foreign_keys off), and GET /scenario-versions/{id}
@@ -587,4 +595,27 @@ async def delete_scenario(sid: str, db: AsyncSession = Depends(get_db), current_
 
     for v in versions:
         await db.delete(v)
+
+    # Follow-up C-5: the register entry this scenario created goes with it —
+    # deleted if nothing else rests on it, otherwise closed ("Scenario deleted").
+    mirror_outcome = None
+    mirror_id = s.linked_risk_id
+    if mirror_id:
+        mirror = (await db.execute(
+            select(Risk).where(Risk.id == mirror_id, Risk.tenant_id == tenant_id))).scalar_one_or_none()
+        if mirror is not None:
+            mirror_title = mirror.title
+            mirror_outcome = await scenario_mirror.retire(
+                db, tenant_id, mirror, current_user, scenario_id=sid, scenario_name=scenario_name)
     await db.delete(s); await db.commit()
+    if mirror_outcome in ("deleted", "closed"):
+        try:
+            await chain_and_add(db, ActivityLog(
+                tenant_id=tenant_id, user_id=current_user.id, user_email=current_user.email,
+                action="delete" if mirror_outcome == "deleted" else "close", entity_type="risk",
+                entity_id=mirror_id, entity_name=mirror_title,
+                details={"reason": scenario_mirror.SCENARIO_DELETED, "scenario_id": sid,
+                         "scenario_name": scenario_name}, origin="api",
+            ))
+        except Exception:
+            pass

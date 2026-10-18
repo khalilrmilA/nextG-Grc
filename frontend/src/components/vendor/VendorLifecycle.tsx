@@ -440,22 +440,30 @@ export function UploadContractPanel({ vendor, onUploaded }: {
   const [expiry, setExpiry] = useState((vendor.contract_expiry ?? "").slice(0, 10));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const uploaded = useRef<File | null>(null);
 
   async function upload() {
     if (!file) { setError(t("r2.vendors.error_file_required")); return; }
     setBusy(true); setError("");
     try {
       // Same entry point as the wizard: AI review → CISO review → send to vendor.
-      await vendorsApi.uploadContract(vendor.id, file);
+      // A retry after the expiry step failed does not upload the file again
+      // (the server also answers a same-bytes re-upload with the contract on file).
+      if (uploaded.current !== file) {
+        await vendorsApi.uploadContract(vendor.id, file);
+        uploaded.current = file;
+      }
       // A renewal moves the expiry that drives the 90/60/30/7/0-day alerts.
       const newExpiry = expiry || null;
       if (newExpiry !== (vendor.contract_expiry ?? "").slice(0, 10) && newExpiry) {
         await vendorsApi.update(vendor.id, { contract_expiry: newExpiry });
       }
-      setOpen(false); setFile(null);
+      setOpen(false); setFile(null); uploaded.current = null;
       onUploaded(newExpiry);
     } catch (err) {
-      setError(apiError(err, t("r2.vendors.error_upload_failed")));
+      setError(uploaded.current === file
+        ? t("r2b.vendors.contract_saved_expiry_failed", { error: apiError(err, "") })
+        : apiError(err, t("r2.vendors.error_upload_failed")));
     } finally {
       setBusy(false);
     }

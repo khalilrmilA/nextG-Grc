@@ -748,8 +748,9 @@ function PolicyDetailModal({ policy, onClose, onStatusChange, onDelete, onUpdate
     if (!userIds.length) return;
     setSendingAtt(true); setAttError("");
     try {
-      const created = await policiesApi.createAttestations(policy.id, { user_ids: userIds, due_date: dueDate || undefined });
-      setAttestations(prev => [...created, ...prev]);
+      // The server returns existing pending requests instead of duplicating them — re-read the list.
+      await policiesApi.createAttestations(policy.id, { user_ids: userIds, due_date: dueDate || undefined });
+      await loadAttestations();
       setSelectedUserIds([]); setDueDate("");
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
@@ -826,6 +827,8 @@ function PolicyDetailModal({ policy, onClose, onStatusChange, onDelete, onUpdate
   };
   const ownerName = owner ? `${owner.first_name} ${owner.last_name}`.trim() : null;
 
+  // Mirrors create_attestations: approved/published, current version approved by a second person.
+  const attestable = (policy.status === "approved" || policy.status === "published") && !!policy.current_version_approved;
   const attAcked = attestations.filter(a => a.status === "acknowledged").length;
   const attTotal = attestations.length;
   const attPct = attTotal > 0 ? Math.round((attAcked / attTotal) * 100) : 0;
@@ -1056,7 +1059,17 @@ function PolicyDetailModal({ policy, onClose, onStatusChange, onDelete, onUpdate
               {loadingVer ? (
                 <div className="text-center py-10 text-gray-400 text-sm">{t("common.loading")}</div>
               ) : (
-                <>
+                !canManage ? (
+                  // Read-only roles see the current text; writing a version is policy_manager / CISO.
+                  <div className="space-y-2">
+                    {currentVersion && (
+                      <span className="text-xs font-mono bg-blue-50 text-blue-600 px-2 py-0.5 rounded">{t("policies.current_version")}: v{currentVersion.version_number}</span>
+                    )}
+                    <pre className="whitespace-pre-wrap text-sm text-gray-800 bg-gray-50 border border-gray-100 rounded-lg p-4 font-sans">
+                      {currentVersion?.content ?? t("policies.no_versions")}
+                    </pre>
+                  </div>
+                ) : <>
                   {/* AI banner */}
                   <div className="flex items-center justify-between gap-3 bg-gradient-to-r from-violet-50 to-indigo-50 border border-violet-200 rounded-xl px-4 py-3">
                     <div className="flex items-center gap-2">
@@ -1138,6 +1151,8 @@ function PolicyDetailModal({ policy, onClose, onStatusChange, onDelete, onUpdate
           {/* ── Version History ── */}
           {tab === "history" && (
             <div className="p-6 space-y-3">
+              {/* Approve / restore happen on this tab, so their refusals show here too. */}
+              {verError && <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{verError}</p>}
               {loadingVer ? (
                 <div className="text-center py-10 text-gray-400 text-sm">{t("common.loading")}</div>
               ) : versions.length === 0 ? (
@@ -1234,7 +1249,11 @@ function PolicyDetailModal({ policy, onClose, onStatusChange, onDelete, onUpdate
                 </div>
               )}
 
-              {/* Request form */}
+              {/* Request form — managers only, and only for a signed-off text in force. */}
+              {canManage && !attestable && (
+                <p className="text-xs text-orange-700 bg-orange-50 border border-orange-100 rounded-lg px-3 py-2">{t("r2b.policies.attest_needs_approval")}</p>
+              )}
+              {canManage && attestable && (
               <div className="bg-gray-50 rounded-xl p-4 space-y-3">
                 <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">{t("policies.request_attestation")}</p>
                 <div>
@@ -1275,6 +1294,7 @@ function PolicyDetailModal({ policy, onClose, onStatusChange, onDelete, onUpdate
                   </button>
                 </div>
               </div>
+              )}
 
               {/* List */}
               {loadingAtt ? (

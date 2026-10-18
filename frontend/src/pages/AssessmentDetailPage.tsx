@@ -7,7 +7,7 @@ import {
   CheckCircle, XCircle, AlertTriangle, MinusCircle,
   ChevronDown, ChevronUp, Sparkles, Globe, GitBranch,
   Download, Table2, Eye, EyeOff, Trash2, ExternalLink,
-  Link2, CheckSquare, History, Settings2, X, User as UserIcon, Archive,
+  Link2, CheckSquare, History, Settings2, X, User as UserIcon, Archive, CheckCircle2, CalendarClock,
 } from "lucide-react";
 import { complianceApi, usersApi, type EvidenceItem, type TenantUserRecord } from "@/api/endpoints";
 import type {
@@ -30,8 +30,11 @@ import { useAuthStore, hasAnyRole, currentUserId } from "@/store/auth";
 // R2 5.3 — mirrors compliance.py: CISO / compliance_manager act on every requirement
 // (and run the analysis); a control_owner self-assesses the rows they own.
 const COMPLIANCE_MANAGE_ROLES = ["ciso", "compliance_manager", "tenant_admin", "super_admin"];
-// Visibility toggle, evidence delete, share links, assessment settings stay CISO-only.
+// Visibility toggle, share links, assessment settings stay CISO-only.
 const COMPLIANCE_CISO_ROLES = ["ciso", "tenant_admin", "super_admin"];
+// services/perimeter.py: an organisation-wide role wins over control_owner — someone
+// who is also risk/compliance manager or CISO acts on every row (decision 2026-10-18).
+const ORGANISATION_WIDE_ROLES = ["super_admin", "tenant_admin", "ciso", "risk_manager", "compliance_manager"];
 
 /** Days from today to an ISO date (negative once past). */
 function daysUntil(iso?: string | null): number | null {
@@ -318,9 +321,11 @@ function ResultsTab({
   const canManage = hasAnyRole(authUser, COMPLIANCE_MANAGE_ROLES);
   const canCiso = hasAnyRole(authUser, COMPLIANCE_CISO_ROLES);
   const isControlOwner = !canManage && hasAnyRole(authUser, ["control_owner"]);
+  // control_owner + an organisation-wide role: every row, as the server allows.
+  const ownerScoped = isControlOwner && !hasAnyRole(authUser, ORGANISATION_WIDE_ROLES);
   const myId = currentUserId(authUser);
   // A control owner starts on the requirements they own — the only ones they can act on.
-  const [mineOnly, setMineOnly] = useState(isControlOwner);
+  const [mineOnly, setMineOnly] = useState(ownerScoped);
   const [validUntil, setValidUntil] = useState<Record<string, string>>({});
   const [sourceOverrides, setSourceOverrides] = useState<Record<string, string>>({});
   const [accepting, setAccepting] = useState<string | null>(null);
@@ -348,6 +353,8 @@ function ResultsTab({
   const [deletingEvidence, setDeletingEvidence] = useState<string | null>(null);
   const [historyFor, setHistoryFor] = useState<{ id: string; label: string } | null>(null);
   const [evidenceError, setEvidenceError] = useState("");
+  // Inline edit of an evidence's "valid until" date (follow-up C-4).
+  const [editingValidity, setEditingValidity] = useState<{ id: string; value: string } | null>(null);
   const [togglingVisibility, setTogglingVisibility] = useState<string | null>(null);
   const [viewingDoc, setViewingDoc] = useState<ViewableDoc | null>(null);
   const [shareModalCa, setShareModalCa] = useState<ControlAssessmentDetail | null>(null);
@@ -536,10 +543,11 @@ function ResultsTab({
         ...prev,
         [caId]: (prev[caId] ?? []).filter(e => e.id !== evidenceId),
       }));
-    } catch {
+    } catch (err) {
       // Previously swallowed: the row vanished from the screen whether or not
       // the server accepted the delete.
-      setEvidenceError(t("compliance.evidence_delete_failed", "Could not remove that evidence. Nothing was changed."));
+      const d = (err as { response?: { data?: { detail?: unknown } } })?.response?.data?.detail;
+      setEvidenceError(typeof d === "string" ? d : t("compliance.evidence_delete_failed", "Could not remove that evidence. Nothing was changed."));
     } finally {
       setDeletingEvidence(null);
     }
@@ -551,10 +559,31 @@ function ResultsTab({
       const updated = await complianceApi.toggleEvidenceVisibility(evidenceId);
       setEvidenceMap(prev => ({
         ...prev,
-        [caId]: (prev[caId] ?? []).map(e => e.id === evidenceId ? updated : e),
+        // Merge: a partial response must not drop the validity window (expiry badge).
+        [caId]: (prev[caId] ?? []).map(e => e.id === evidenceId ? { ...e, ...updated } : e),
       }));
     } catch {/* silent */} finally {
       setTogglingVisibility(null);
+    }
+  }
+
+  /** compliance.py _assert_may_change_evidence: managers, or whoever uploaded it. */
+  function canChangeEvidence(ev: EvidenceItem): boolean {
+    return canManage || (isControlOwner && !!myId && ev.uploaded_by_id === myId);
+  }
+
+  async function saveValidity(caId: string, ev: EvidenceItem, value: string) {
+    setEvidenceError("");
+    try {
+      const updated = await complianceApi.updateEvidence(ev.id, { valid_until: value });
+      setEvidenceMap(prev => ({
+        ...prev,
+        [caId]: (prev[caId] ?? []).map(e => e.id === ev.id ? { ...e, ...updated } : e),
+      }));
+      setEditingValidity(null);
+    } catch (err) {
+      const d = (err as { response?: { data?: { detail?: unknown } } })?.response?.data?.detail;
+      setEvidenceError(typeof d === "string" ? d : t("common.error_generic"));
     }
   }
 
@@ -598,7 +627,7 @@ function ResultsTab({
   }
   /** What the backend lets this user change on the row (perimeter rule). */
   function canEdit(ca: ControlAssessmentDetail): boolean {
-    return canManage || (hasAnyRole(authUser, ["control_owner"]) && !!myId && effectiveOwner(ca) === myId);
+    return canManage || (isControlOwner && (!ownerScoped || (!!myId && effectiveOwner(ca) === myId)));
   }
   function isHumanSet(ca: ControlAssessmentDetail): boolean {
     return (sourceOverrides[ca.id] ?? ca.status_source) === "human";
@@ -1228,7 +1257,27 @@ function ResultsTab({
                             <div key={ev.id} className="flex items-center gap-1.5 text-xs bg-white/60 px-2 py-1 rounded">
                               <FileText className="w-3.5 h-3.5 flex-shrink-0 text-green-600" />
                               <span className="truncate font-medium text-green-700 flex-1">{ev.file_name}</span>
-                              <EvidenceValidityBadge validUntil={ev.valid_until} />
+                              {editingValidity?.id === ev.id ? (
+                                <span className="flex items-center gap-1 flex-shrink-0">
+                                  <input type="date" aria-label={t("r2.compliance.valid_until")} value={editingValidity.value}
+                                    onChange={e => setEditingValidity({ id: ev.id, value: e.target.value })}
+                                    className="border border-gray-200 rounded px-1 py-0.5 text-[11px] bg-white" />
+                                  <button onClick={() => saveValidity(ca.id, ev, editingValidity.value)} title={t("common.save")}
+                                    className="text-green-600 hover:text-green-800"><CheckCircle2 className="w-3 h-3" /></button>
+                                  <button onClick={() => setEditingValidity(null)} title={t("common.cancel")}
+                                    className="text-gray-400 hover:text-gray-600"><X className="w-3 h-3" /></button>
+                                </span>
+                              ) : (
+                                <>
+                                  <EvidenceValidityBadge validUntil={ev.valid_until} />
+                                  {canChangeEvidence(ev) && (
+                                    <button onClick={() => setEditingValidity({ id: ev.id, value: (ev.valid_until ?? "").slice(0, 10) })}
+                                      title={t("r2b.compliance.edit_validity")} className="flex-shrink-0 text-gray-400 hover:text-gray-600">
+                                      <CalendarClock className="w-3 h-3" />
+                                    </button>
+                                  )}
+                                </>
+                              )}
                               {ev.is_shared && (
                                 <span title={t("compliance.evidence_auto_shared_title")} className="flex items-center gap-0.5 text-indigo-600 bg-indigo-50 rounded px-1 py-0.5 flex-shrink-0">
                                   <Globe className="w-2.5 h-2.5" />
@@ -1265,8 +1314,8 @@ function ResultsTab({
                               >
                                 <History className="w-3 h-3" />
                               </button>}
-                              {/* Delete (CISO-only route) */}
-                              {canCiso && <button
+                              {/* Delete: managers, or the person who uploaded it (follow-up C-4) */}
+                              {canChangeEvidence(ev) && <button
                                 onClick={() => handleDeleteEvidence(ca.id, ev.id)}
                                 disabled={deletingEvidence === ev.id}
                                 title={t("common.delete")}
@@ -1807,7 +1856,8 @@ export default function AssessmentDetailPage() {
             </div>
           </div>
           <div className="flex items-center gap-3">
-            {canCisoPage && (
+            {/* GET /files/deleted is CISO + compliance_manager. */}
+            {canManagePage && (
               <button
                 onClick={() => setShowDeleted(true)}
                 className="flex items-center gap-1.5 text-sm font-medium text-gray-600 border border-gray-200 hover:bg-gray-50 px-3 py-2 rounded-lg transition-colors"

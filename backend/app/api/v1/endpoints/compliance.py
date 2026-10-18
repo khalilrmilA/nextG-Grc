@@ -166,8 +166,16 @@ class EvidenceResponse(BaseModel):
     # Validity window (YYYY-MM-DD). The UI derives "expired" / "expires in N days".
     valid_from: str | None = None
     valid_until: str | None = None
+    uploaded_by_id: str | None = None
 
     model_config = {"from_attributes": True}
+
+
+class EvidenceUpdate(BaseModel):
+    """PATCH /evidence/{id}: the validity window, editable after upload (follow-up C-4).
+    "" clears a date; an omitted field is left as is."""
+    valid_from: str | None = None
+    valid_until: str | None = None
 
 
 class ControlAssessmentResponse(BaseModel):
@@ -4039,6 +4047,7 @@ async def upload_control_evidence(
         shared_count=shared_count,
         valid_from=valid_from,
         valid_until=valid_until,
+        uploaded_by_id=current_user.id,
     )
 
 
@@ -4079,6 +4088,7 @@ async def list_control_evidence(
         is_shared=bool(e.shared_from_evidence_id),
         valid_from=e.valid_from,
         valid_until=e.valid_until,
+        uploaded_by_id=e.uploaded_by_id,
     ) for e in items]
 
 
@@ -4113,14 +4123,86 @@ async def toggle_evidence_visibility(
         content_type=evidence.content_type,
         is_visible_to_auditor=evidence.is_visible_to_auditor,
         created_at=evidence.created_at,
+        # Follow-up C-4: the UI replaced the evidence object with this response and
+        # lost the validity window — and with it the expiry badge.
+        valid_from=evidence.valid_from,
+        valid_until=evidence.valid_until,
+        uploaded_by_id=evidence.uploaded_by_id,
     )
+
+
+async def _assert_may_change_evidence(db: AsyncSession, user: User, evidence: Evidence) -> None:
+    """Who may delete / re-date a piece of evidence — the same people who may add it.
+
+    CISO and compliance_manager act on all of it (admins auto-pass). Anyone else
+    who may upload (a control owner) acts on the evidence they uploaded, on a row
+    still inside their perimeter. Organisation-wide roles win over control_owner
+    (perimeter.is_perimeter_scoped), as everywhere else.
+    """
+    if user.role in (UserRole.SUPER_ADMIN, UserRole.TENANT_ADMIN):
+        return
+    roles = await get_effective_roles(user, db)
+    if roles & {r.value for r in _MANAGE_ROLES}:
+        return
+    if evidence.uploaded_by_id != user.id:
+        raise HTTPException(status_code=403, detail="You can only change evidence you uploaded.")
+    ca = (await db.execute(select(ControlAssessment).where(
+        ControlAssessment.id == evidence.control_assessment_id))).scalar_one_or_none()
+    if ca is not None:
+        perimeter.assert_in_perimeter(user, ca, roles, what="record")
+
+
+@router.patch("/evidence/{evidence_id}", response_model=EvidenceResponse)
+async def update_evidence(
+    evidence_id: str,
+    body: EvidenceUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_roles(*_ASSESS_ROLES)),
+    tenant_id: str = Depends(get_tenant_id),
+):
+    """Correct the validity window after upload (a renewed certificate, a typo)."""
+    evidence = (await db.execute(
+        select(Evidence).where(Evidence.id == evidence_id, Evidence.tenant_id == tenant_id)
+    )).scalar_one_or_none()
+    if not evidence:
+        raise HTTPException(status_code=404, detail="Evidence not found")
+    await _assert_may_change_evidence(db, current_user, evidence)
+
+    def _day(v: str | None, name: str) -> str | None:
+        if not v:
+            return None
+        try:
+            return date.fromisoformat(v[:10]).isoformat()
+        except ValueError:
+            raise HTTPException(status_code=422, detail=f"{name} must be a date (YYYY-MM-DD).")
+
+    new_from = _day(body.valid_from, "valid_from") if body.valid_from is not None else evidence.valid_from
+    new_until = _day(body.valid_until, "valid_until") if body.valid_until is not None else evidence.valid_until
+    if new_from and new_until and new_until < new_from:
+        raise HTTPException(status_code=422, detail="valid_until cannot be before valid_from.")
+    before = {"valid_from": evidence.valid_from, "valid_until": evidence.valid_until}
+    evidence.valid_from, evidence.valid_until = new_from, new_until
+    await db.commit()
+    await db.refresh(evidence)
+    out = EvidenceResponse.model_validate(evidence)
+    try:
+        await chain_and_add(db, ActivityLog(
+            tenant_id=tenant_id, user_id=current_user.id, user_email=current_user.email,
+            action="update_validity", entity_type="evidence", entity_id=out.id,
+            entity_name=(out.file_name or "")[:255] or None,
+            details={"before": before, "after": {"valid_from": new_from, "valid_until": new_until}},
+            origin="api",
+        ))
+    except Exception:
+        pass
+    return out
 
 
 @router.delete("/evidence/{evidence_id}", status_code=204)
 async def delete_evidence(
     evidence_id: str,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_roles(UserRole.CISO)),
+    current_user: User = Depends(require_roles(*_ASSESS_ROLES)),
     tenant_id: str = Depends(get_tenant_id),
 ):
     """Delete an evidence file.
@@ -4136,6 +4218,8 @@ async def delete_evidence(
     evidence = result.scalar_one_or_none()
     if not evidence:
         raise HTTPException(status_code=404, detail="Evidence not found")
+    # Follow-up C-4: whoever may upload may remove their own (was CISO-only).
+    await _assert_may_change_evidence(db, current_user, evidence)
     # The file is deliberately NOT unlinked. This used to destroy the bytes an
     # audit conclusion rested on, permanently and with no trace — one wrong
     # click and the evidence was unrecoverable. The version history is retired

@@ -506,6 +506,7 @@ export interface EvidenceItem {
   is_shared?: boolean;
   valid_from?: string | null;
   valid_until?: string | null;
+  uploaded_by_id?: string | null;
 }
 
 export interface ChecklistDocItem {
@@ -621,6 +622,10 @@ export const complianceApi = {
 
   deleteEvidence: (evidenceId: string) =>
     apiClient.delete(`/compliance/evidence/${evidenceId}`),
+
+  /** Correct the validity window after upload ("" clears a date). Managers or the uploader. */
+  updateEvidence: (evidenceId: string, data: { valid_from?: string; valid_until?: string }) =>
+    apiClient.patch<EvidenceItem>(`/compliance/evidence/${evidenceId}`, data).then(r => r.data),
 
   downloadEvidenceUrl: (evidenceId: string) =>
     `${API_BASE}/compliance/evidence/${evidenceId}/download`,
@@ -1702,6 +1707,10 @@ export const vendorsApi = {
   listContractsPendingReview: () =>
     apiClient.get("/vendors/contracts/pending-review").then((r) => r.data),
 
+  /** CISO-approved contracts not yet sent — the "Ready to send" section. */
+  listContractsReadyToSend: () =>
+    apiClient.get("/vendors/contracts/ready-to-send").then((r) => r.data),
+
   listVendorContracts: (vendorId: string) =>
     apiClient.get(`/vendors/${vendorId}/contracts`).then((r) => r.data),
 
@@ -2633,6 +2642,9 @@ export const securityApi = {
     apiClient.patch(`/security/acceptances/${id}/reject`, { reason }).then((r) => r.data),
   revokeAcceptance: (id: string, reason: string) =>
     apiClient.patch(`/security/acceptances/${id}/revoke`, { reason }).then((r) => r.data),
+  // The requester takes back their own pending request (reason required).
+  withdrawAcceptance: (id: string, reason: string) =>
+    apiClient.patch(`/security/acceptances/${id}/withdraw`, { reason }).then((r) => r.data),
 };
 
 // ─── Risk Matrices ──────────────────────────

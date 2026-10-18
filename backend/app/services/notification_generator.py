@@ -68,7 +68,7 @@ from app.models.notification import (
 )
 from app.models.user import User, UserRole
 from app.models.risk import Risk, RiskTreatment
-from app.models.vendor import Vendor, VendorContract, ContractValidationStatus
+from app.models.vendor import Vendor, VendorContract, VendorStatus, ContractValidationStatus
 from app.models.compliance import ComplianceGap, ComplianceAssessment, ControlAssessment, Evidence
 from app.models.framework import FrameworkControl
 from app.models.contract_collaboration import ContractCollaboration
@@ -580,7 +580,10 @@ async def check_vendor_contract_expiry(db: AsyncSession, tenant_id: str | None =
 
     # Get all active vendors
     result = await db.execute(
-        _scoped(select(Vendor).where(Vendor.contract_expiry.isnot(None)),
+        # Follow-up C-3: an offboarded relationship (offboarding / inactive) has
+        # no contract to renew — reminding about it is noise.
+        _scoped(select(Vendor).where(Vendor.contract_expiry.isnot(None),
+                                     Vendor.status.notin_([VendorStatus.OFFBOARDING, VendorStatus.INACTIVE])),
                 Vendor.tenant_id, tenant_id)
     )
     vendors = result.scalars().all()
@@ -2561,6 +2564,29 @@ async def check_recommendation_due(db: AsyncSession, outbox: list | None = None,
     return created
 
 
+async def sync_waiver_expiry(db: AsyncSession, tenant_id: str | None = None) -> int:
+    """Expire approved security exceptions and risk acceptances whose date passed.
+
+    Follow-up C-1: the transition ran only when someone opened Exceptions &
+    Waivers, so a waiver nobody looked at stayed "approved" — and its risks
+    "accepted" — indefinitely. Same code path as the page (_expire_due), which
+    writes only on the transition: with 2 workers both sweeps converge, the
+    second finds nothing left to change.
+    """
+    from app.api.v1.endpoints.security_exceptions import (
+        _LIVE_STATUSES, _expire_due, _is_past, _release_on_expiry)
+    from app.models.security_exception import RiskAcceptance, SecurityException
+    changed = 0
+    for model, kind, hook in ((SecurityException, "security_exception", None),
+                              (RiskAcceptance, "risk_acceptance", _release_on_expiry)):
+        stmt = _scoped(select(model).where(model.status.in_(_LIVE_STATUSES)), model.tenant_id, tenant_id)
+        due = [r for r in (await db.execute(stmt)).scalars().all() if _is_past(r.expiration_date)]
+        if due:
+            await _expire_due(db, stmt, kind, on_expire=hook)
+            changed += len(due)
+    return changed
+
+
 async def run_all_checks(db: AsyncSession, tenant_id: str | None = None) -> dict:
     """Run all notification checks and return a summary.
 
@@ -2587,6 +2613,7 @@ async def run_all_checks(db: AsyncSession, tenant_id: str | None = None) -> dict
     SMTP round-trips never happen while SQLite's single write lock is held.
     """
     results = {
+        "waiver_expiry": 0,
         "vendor_contracts": 0,
         "risk_reviews": 0,
         "risk_appetite": 0,
@@ -2636,6 +2663,8 @@ async def run_all_checks(db: AsyncSession, tenant_id: str | None = None) -> dict
             results[key] = 0
             logger.error("%s failed: %s", label, exc)
 
+    # First: an expired acceptance hands its risks back, which the risk checks below read.
+    await _run("waiver_expiry", "Waiver expiry sync", sync_waiver_expiry)
     await _run("vendor_contracts", "Vendor contract check", check_vendor_contract_expiry)
     await _run("risk_reviews", "Risk review check", check_risk_review_deadlines)
     await _run("risk_appetite", "Risk appetite check", check_risk_appetite_breaches)

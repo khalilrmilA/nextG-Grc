@@ -892,7 +892,21 @@ async def approve_version(pid: str, vid: str, db: AsyncSession = Depends(get_db)
         raise HTTPException(409, "Only the current version can be approved. Restore it first.")
     v.approved_by_id = user.id; v.approved_at = datetime.utcnow().isoformat()
     await db.commit(); await db.refresh(v)
-    return VersionOut.model_validate(v)
+    out = VersionOut.model_validate(v)
+    # Follow-up C-2: the sign-off of a text is the four-eyes fact an auditor
+    # looks for — recorded by name, not as a generic PATCH.
+    p = await _policy(db, pid, tenant_id)
+    title = (p.title or "")[:255] or None
+    try:
+        await chain_and_add(db, ActivityLog(
+            tenant_id=tenant_id, user_id=user.id, user_email=user.email,
+            action="approve_version", entity_type="policy", entity_id=pid, entity_name=title,
+            details={"version_id": out.id, "version_number": out.version_number,
+                     "authored_by_id": out.authored_by_id}, origin="api",
+        ))
+    except Exception:
+        pass
+    return out
 
 
 @router.post("/{pid}/versions/{vid}/restore", response_model=VersionOut, status_code=201)
@@ -988,13 +1002,24 @@ async def create_attestations(pid: str, body: AttestationCreate, db: AsyncSessio
     # Get current version
     cv = (await db.execute(select(PolicyVersion).where(PolicyVersion.policy_id == pid, PolicyVersion.is_current == True))).scalar_one_or_none()  # noqa: E712
     if not cv: raise HTTPException(400, "No current version to attest")
-    created = []
-    for uid in body.user_ids:
+    # Follow-up C-2: people are asked to accept a text only once it is signed off
+    # (second-person approval) and in force — not a draft that may still change.
+    if p.status not in (PolicyStatus.APPROVED, PolicyStatus.PUBLISHED) or not _independently_approved(cv):
+        raise HTTPException(409, "Acknowledgements can only be requested for an approved or published policy whose current version is approved.")
+    # No duplicates: someone already asked to accept this version keeps their one request.
+    already = {a.user_id: a for a in (await db.execute(select(PolicyAttestation).where(
+        PolicyAttestation.policy_version_id == cv.id,
+        PolicyAttestation.status == AttestationStatus.PENDING))).scalars().all()}
+    rows = []
+    for uid in dict.fromkeys(body.user_ids):
+        if uid in already:
+            rows.append(already[uid])
+            continue
         att = PolicyAttestation(policy_id=pid, policy_version_id=cv.id, user_id=uid, due_date=body.due_date)
-        db.add(att); created.append(att)
+        db.add(att); rows.append(att)
     await db.flush(); await db.commit()
-    for a in created: await db.refresh(a)
-    return [AttestationOut.model_validate(a) for a in created]
+    for a in rows: await db.refresh(a)
+    return [AttestationOut.model_validate(a) for a in rows]
 
 @router.patch("/{pid}/attestations/{aid}/acknowledge", response_model=AttestationOut)
 async def acknowledge_attestation(pid: str, aid: str, db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user), tenant_id: str = Depends(get_tenant_id)):
@@ -1002,10 +1027,12 @@ async def acknowledge_attestation(pid: str, aid: str, db: AsyncSession = Depends
     att = r.scalar_one_or_none()
     if not att: raise HTTPException(404, "Attestation not found")
     # Policy is checked in the caller's tenant too (the row is reached by ids only).
-    await _policy(db, pid, tenant_id)
+    p = await _policy(db, pid, tenant_id)
     if att.status == AttestationStatus.ACKNOWLEDGED:
         # Idempotent: a double click must not move the recorded acceptance time.
         return AttestationOut.model_validate(att)
+    if p.status == PolicyStatus.RETIRED:
+        raise HTTPException(409, "This policy has been retired; it can no longer be acknowledged.")
     att.status = AttestationStatus.ACKNOWLEDGED; att.acknowledged_at = datetime.utcnow().isoformat()
     await db.commit(); await db.refresh(att)
     return AttestationOut.model_validate(att)

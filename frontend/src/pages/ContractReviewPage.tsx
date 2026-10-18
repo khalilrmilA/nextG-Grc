@@ -6,6 +6,16 @@ import { useState, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { FileText, CheckCircle2, XCircle, Send, Clock, AlertTriangle, Sparkles, Loader2, ArrowLeft, Building2 } from "lucide-react";
 import { vendorsApi } from "@/api/endpoints";
+import { useAuthStore, hasAnyRole } from "@/store/auth";
+
+// vendors.py: ciso-review is CISO-only (maker-checker); send-to-vendor is vendor_manager + CISO.
+const DECIDE_ROLES = ["ciso", "tenant_admin", "super_admin"];
+const SEND_ROLES = ["vendor_manager", "ciso", "tenant_admin", "super_admin"];
+
+function apiError(err: unknown, fallback: string): string {
+  const d = (err as { response?: { data?: { detail?: unknown } } })?.response?.data?.detail;
+  return typeof d === "string" ? d : fallback;
+}
 
 interface VendorContract {
   id: string;
@@ -21,6 +31,7 @@ interface VendorContract {
   sent_to_vendor_at: string | null;
   version: number;
   created_at: string;
+  vendor_name?: string | null;
 }
 
 /** Display locale for dates, following the interface language. */
@@ -39,19 +50,25 @@ const STATUS_CONFIG: Record<string, { label: string; color: string; icon: typeof
 export default function ContractReviewPage() {
   const { t, i18n } = useTranslation();
   const [contracts, setContracts] = useState<VendorContract[]>([]);
+  // Approved, not yet sent (follow-up C-3): approval used to drop a contract out of
+  // the only list that led to "Send to vendor".
+  const [readyToSend, setReadyToSend] = useState<VendorContract[]>([]);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<VendorContract | null>(null);
   const [comments, setComments] = useState("");
   const [processing, setProcessing] = useState(false);
+  const [actionError, setActionError] = useState("");
+  const authUser = useAuthStore((u) => u);
+  const canDecide = hasAnyRole(authUser, DECIDE_ROLES);
+  const canSendRole = hasAnyRole(authUser, SEND_ROLES);
 
   async function loadContracts() {
     try {
       setLoading(true);
-      const data = await vendorsApi.listContractsPendingReview();
-      setContracts(data || []);
-    } catch (err) {
-      console.error("Failed to load contracts:", err);
-      setContracts([]);
+      const [pending, ready] = await Promise.allSettled([
+        vendorsApi.listContractsPendingReview(), vendorsApi.listContractsReadyToSend()]);
+      setContracts(pending.status === "fulfilled" ? pending.value || [] : []);
+      setReadyToSend(ready.status === "fulfilled" ? ready.value || [] : []);
     } finally {
       setLoading(false);
     }
@@ -64,14 +81,15 @@ export default function ContractReviewPage() {
   async function handleAction(action: "approve" | "reject") {
     if (!selected) return;
     try {
-      setProcessing(true);
-      await vendorsApi.cisoReviewContract(selected.id, action, comments);
+      setProcessing(true); setActionError("");
+      const decided = await vendorsApi.cisoReviewContract(selected.id, action, comments);
       await loadContracts();
-      setSelected(null);
       setComments("");
+      // Stay on an approved contract: "Send to vendor" is the next step.
+      if (action === "approve" && decided) setSelected({ ...selected, ...decided });
+      else setSelected(null);
     } catch (err) {
-      console.error("Failed to review contract:", err);
-      alert(t("contract_review.review_failed"));
+      setActionError(apiError(err, t("contract_review.review_failed")));
     } finally {
       setProcessing(false);
     }
@@ -79,12 +97,12 @@ export default function ContractReviewPage() {
 
   async function handleSendToVendor(contract: VendorContract) {
     try {
-      setProcessing(true);
-      await vendorsApi.sendContractToVendor(contract.id);
+      setProcessing(true); setActionError("");
+      const sent = await vendorsApi.sendContractToVendor(contract.id);
       await loadContracts();
+      if (selected?.id === contract.id) setSelected({ ...contract, ...sent });
     } catch (err) {
-      console.error("Failed to send contract:", err);
-      alert(t("contract_review.send_failed"));
+      setActionError(apiError(err, t("contract_review.send_failed")));
     } finally {
       setProcessing(false);
     }
@@ -102,13 +120,13 @@ export default function ContractReviewPage() {
   if (selected) {
     const statusCfg = STATUS_CONFIG[selected.validation_status] || STATUS_CONFIG.pending_ai;
     const StatusIcon = statusCfg.icon;
-    const canReview = selected.validation_status === "ai_reviewed" || selected.validation_status === "pending_ciso";
-    const canSend = selected.validation_status === "approved";
+    const canReview = canDecide && ["ai_reviewed", "pending_ciso", "pending_ai"].includes(selected.validation_status);
+    const canSend = canSendRole && selected.validation_status === "approved";
 
     return (
       <div className="max-w-5xl mx-auto p-6">
         <button
-          onClick={() => { setSelected(null); setComments(""); }}
+          onClick={() => { setSelected(null); setComments(""); setActionError(""); }}
           className="flex items-center gap-2 text-sm text-gray-600 hover:text-gray-900 mb-4"
         >
           <ArrowLeft className="w-4 h-4 rtl:rotate-180" /> {t("contract_review.back_to_list")}
@@ -124,6 +142,7 @@ export default function ContractReviewPage() {
                 </div>
                 <div>
                   <h1 className="text-xl font-bold text-gray-900">{selected.file_name}</h1>
+                  {selected.vendor_name && <p className="text-sm text-gray-500 mt-0.5 flex items-center gap-1"><Building2 className="w-3.5 h-3.5" />{selected.vendor_name}</p>}
                   <div className="flex items-center gap-2 mt-2">
                     <span className={`text-xs font-semibold px-2.5 py-1 rounded-full border flex items-center gap-1.5 ${statusCfg.color}`}>
                       <StatusIcon className="w-3 h-3" />
@@ -138,6 +157,16 @@ export default function ContractReviewPage() {
               </div>
             </div>
           </div>
+
+          {actionError && (
+            <div className="mx-6 mt-4 text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{actionError}</div>
+          )}
+          {selected.validation_status === "sent_to_vendor" && selected.sent_to_vendor_at && (
+            <div className="mx-6 mt-4 text-sm text-purple-700 bg-purple-50 border border-purple-100 rounded-lg px-3 py-2 flex items-center gap-2">
+              <Send className="w-4 h-4" />
+              {t("r2b.contracts.sent_on", { date: new Date(selected.sent_to_vendor_at).toLocaleString(dateLocale(i18n.language)) })}
+            </div>
+          )}
 
           {/* AI Review Content */}
           <div className="p-6">
@@ -245,6 +274,42 @@ export default function ContractReviewPage() {
         <p className="text-sm text-gray-500 mt-1">{t("contract_review.subtitle")}</p>
       </div>
 
+      {readyToSend.length > 0 && (
+        <div className="mb-8">
+          <h2 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
+            <Send className="w-4 h-4 text-purple-600" />{t("r2b.contracts.ready_to_send")} ({readyToSend.length})
+          </h2>
+          {actionError && <p className="mb-3 text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{actionError}</p>}
+          <div className="grid gap-3">
+            {readyToSend.map((c) => (
+              <div key={c.id} className="bg-white rounded-xl border border-green-100 p-4 flex items-center justify-between gap-4">
+                <button onClick={() => setSelected(c)} className="flex items-start gap-3 min-w-0 flex-1 text-start">
+                  <div className="w-10 h-10 bg-green-50 rounded-lg flex items-center justify-center flex-shrink-0">
+                    <CheckCircle2 className="w-5 h-5 text-green-600" />
+                  </div>
+                  <div className="min-w-0">
+                    <h3 className="text-sm font-semibold text-gray-900 truncate">{c.file_name}</h3>
+                    <p className="text-xs text-gray-500 mt-1">
+                      {c.vendor_name ?? c.vendor_id.slice(0, 8)} · v{c.version}
+                      {c.ciso_reviewed_at && <> · {t("contract_review.reviewed_on", { date: new Date(c.ciso_reviewed_at).toLocaleDateString(dateLocale(i18n.language)) })}</>}
+                    </p>
+                  </div>
+                </button>
+                {canSendRole && (
+                  <button onClick={() => handleSendToVendor(c)} disabled={processing}
+                    className="flex items-center gap-2 px-4 py-2 rounded-lg bg-purple-600 hover:bg-purple-700 text-white text-sm font-medium disabled:opacity-50 flex-shrink-0">
+                    <Send className="w-4 h-4" />{t("contract_review.send_to_vendor")}
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+          <h2 className="text-sm font-semibold text-gray-700 mt-8 mb-3 flex items-center gap-2">
+            <Clock className="w-4 h-4 text-orange-500" />{t("r2b.contracts.awaiting_review")} ({contracts.length})
+          </h2>
+        </div>
+      )}
+
       {contracts.length === 0 ? (
         <div className="bg-white rounded-2xl border border-gray-100 p-12 text-center">
           <div className="w-16 h-16 bg-gray-100 rounded-2xl flex items-center justify-center mx-auto mb-4">
@@ -274,7 +339,7 @@ export default function ContractReviewPage() {
                       <div className="flex items-center gap-2 mt-1">
                         <span className="text-xs text-gray-500 flex items-center gap-1">
                           <Building2 className="w-3 h-3" />
-                          {t("contract_review.vendor_id", { id: contract.vendor_id.slice(0, 8) })}
+                          {contract.vendor_name ?? t("contract_review.vendor_id", { id: contract.vendor_id.slice(0, 8) })}
                         </span>
                         <span className="text-xs text-gray-400">·</span>
                         <span className="text-xs text-gray-500">v{contract.version}</span>

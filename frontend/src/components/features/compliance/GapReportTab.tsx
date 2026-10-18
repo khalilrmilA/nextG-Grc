@@ -7,6 +7,12 @@ import {
   Sparkles, Loader2, Filter, FileText, Table2, ChevronDown, X,
 } from "lucide-react";
 import { complianceApi } from "@/api/endpoints";
+import { useAuthStore, hasAnyRole } from "@/store/auth";
+
+// compliance.py: accepting / rejecting a gap recommendation (one or in bulk) is a
+// CISO decision — accepting a non-conformity is a risk decision; the compliance
+// manager prepares, the CISO decides. Others see the report read-only.
+const GAP_DECISION_ROLES = ["ciso", "tenant_admin", "super_admin"];
 import type { GapDetail } from "@/types";
 import GapConfirmModal from "./GapConfirmModal";
 import { exportGapsCSV, exportComplianceReport } from "@/utils/exportUtils";
@@ -42,6 +48,7 @@ interface BulkActionResult {
 export default function GapReportTab({ assessmentId, assessmentName = "Assessment", frameworkName = "", frameworkShortName = "", gaps, onGapUpdated }: Props) {
   const { t, i18n } = useTranslation();
   const navigate = useNavigate();
+  const canDecide = hasAnyRole(useAuthStore((u) => u), GAP_DECISION_ROLES);
   const [confirmGap, setConfirmGap] = useState<GapDetail | null>(null);
   const [rejectingId, setRejectingId] = useState<string | null>(null);
   const [bulkAccepting, setBulkAccepting] = useState(false);
@@ -242,14 +249,14 @@ export default function GapReportTab({ assessmentId, assessmentName = "Assessmen
             </span>
           </div>
           <div className="flex items-center gap-2">
-            <button
+            {canDecide && <button
               onClick={handleBulkAcceptCritical}
               disabled={bulkAccepting || pendingCritical.length === 0}
               className="flex items-center gap-1.5 text-xs font-medium bg-green-600 hover:bg-green-700 disabled:opacity-40 text-white px-3 py-1.5 rounded-lg transition-colors"
             >
               {bulkAccepting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle className="w-3.5 h-3.5" />}
               {t("compliance.accept_all_critical")}
-            </button>
+            </button>}
             <button
               onClick={() => navigate(`/compliance/assessments/${assessmentId}/remediation-plan`)}
               className="flex items-center gap-1.5 text-xs font-medium bg-purple-600 hover:bg-purple-700 text-white px-3 py-1.5 rounded-lg transition-colors"
@@ -359,7 +366,7 @@ export default function GapReportTab({ assessmentId, assessmentName = "Assessmen
                         </span>
                       </td>
                       <td className="px-4 py-3 text-end">
-                        {!isDone ? (
+                        {!isDone && canDecide ? (
                           <div className="flex items-center justify-end gap-2">
                             <button
                               onClick={() => setConfirmGap(gap)}
@@ -383,6 +390,9 @@ export default function GapReportTab({ assessmentId, assessmentName = "Assessmen
                               {t("compliance.reject_gap")}
                             </button>
                           </div>
+                        ) : !isDone ? (
+                          // Pending, and this role does not decide: the status badge says it all.
+                          <span className="text-xs text-gray-300">—</span>
                         ) : (
                           <div className="flex items-center justify-end gap-1 text-xs text-gray-400">
                             {recStatus === "accepted" ? (

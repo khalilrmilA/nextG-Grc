@@ -25,8 +25,34 @@ const bundle: { en: Record<string, any>; fr: Record<string, any>; ar: Record<str
         "never_reviewed": "Not reviewed yet",
         "review_history": "Review history",
         "review_moved": "Next review {{from}} → {{to}}",
+        "attest_needs_approval": "Acknowledgements can be requested once the policy is approved or published and its current version has been approved by a second person.",
         "review_published_only": "Periodic review starts once the policy is published."
+      },
+      "acceptances": {
+        "withdraw": "Withdraw",
+        "withdraw_title": "Withdraw this request?",
+        "withdraw_body": "“{{name}}” has not been approved, so no risk changes. The request and your reason stay in the register and the activity log."
+      },
+      "contracts": {
+        "ready_to_send": "Ready to send",
+        "awaiting_review": "Awaiting CISO review",
+        "sent_on": "Sent to the vendor on {{date}}"
+      },
+      "vendors": {
+        "ai_unavailable": "The AI service is unavailable right now. Retry, or continue without the AI score: your answers are saved and can be scored later from Reassess.",
+        "retry": "Retry",
+        "continue_without_ai": "Continue without AI score",
+        "no_ai_notice": "No AI score: the questionnaire answers are kept unscored. Set the risk score yourself, and run Reassess when the AI is back.",
+        "manual_score": "Risk score (1–40)",
+        "partial_save": "The vendor was created but a later step failed ({{error}}). Save again to finish — it will not create a second vendor.",
+        "contract_saved_expiry_failed": "The contract was uploaded, but the new expiry date was not saved ({{error}}). Click Upload again to save the date only."
+      },
+      "compliance": {
+        "edit_validity": "Change the validity date"
       }
+    },
+    "vocab": {
+      "withdrawn": "Withdrawn"
     }
   },
   fr: {
@@ -49,8 +75,34 @@ const bundle: { en: Record<string, any>; fr: Record<string, any>; ar: Record<str
         "never_reviewed": "Pas encore revue",
         "review_history": "Historique des revues",
         "review_moved": "Prochaine revue {{from}} → {{to}}",
+        "attest_needs_approval": "Les prises de connaissance peuvent être demandées une fois la politique approuvée ou publiée et sa version courante approuvée par une seconde personne.",
         "review_published_only": "La revue périodique commence une fois la politique publiée."
+      },
+      "acceptances": {
+        "withdraw": "Retirer",
+        "withdraw_title": "Retirer cette demande ?",
+        "withdraw_body": "« {{name}} » n’a pas été approuvée : aucun risque ne change. La demande et votre motif restent dans le registre et le journal d’activité."
+      },
+      "contracts": {
+        "ready_to_send": "Prêts à envoyer",
+        "awaiting_review": "En attente de revue RSSI",
+        "sent_on": "Envoyé au fournisseur le {{date}}"
+      },
+      "vendors": {
+        "ai_unavailable": "Le service d’IA est indisponible pour le moment. Réessayez, ou continuez sans score IA : vos réponses sont enregistrées et pourront être évaluées plus tard via Réévaluer.",
+        "retry": "Réessayer",
+        "continue_without_ai": "Continuer sans score IA",
+        "no_ai_notice": "Pas de score IA : les réponses au questionnaire sont conservées sans score. Fixez le score de risque vous-même et lancez Réévaluer quand l’IA sera disponible.",
+        "manual_score": "Score de risque (1–40)",
+        "partial_save": "Le fournisseur a été créé mais une étape suivante a échoué ({{error}}). Enregistrez à nouveau pour terminer — aucun second fournisseur ne sera créé.",
+        "contract_saved_expiry_failed": "Le contrat a été téléversé, mais la nouvelle date d’échéance n’a pas été enregistrée ({{error}}). Cliquez à nouveau sur Téléverser pour enregistrer seulement la date."
+      },
+      "compliance": {
+        "edit_validity": "Modifier la date de validité"
       }
+    },
+    "vocab": {
+      "withdrawn": "Retirée"
     }
   },
   ar: {
@@ -73,8 +125,34 @@ const bundle: { en: Record<string, any>; fr: Record<string, any>; ar: Record<str
         "never_reviewed": "لم تتم مراجعتها بعد",
         "review_history": "سجل المراجعات",
         "review_moved": "المراجعة القادمة {{from}} ← {{to}}",
+        "attest_needs_approval": "يمكن طلب الإقرارات بمجرد اعتماد السياسة أو نشرها واعتماد نسختها الحالية من قِبل شخص ثانٍ.",
         "review_published_only": "تبدأ المراجعة الدورية بمجرد نشر السياسة."
+      },
+      "acceptances": {
+        "withdraw": "سحب",
+        "withdraw_title": "سحب هذا الطلب؟",
+        "withdraw_body": "لم تتم الموافقة على «{{name}}»، لذلك لا يتغير أي خطر. يبقى الطلب وسببك في السجل وفي سجل النشاط."
+      },
+      "contracts": {
+        "ready_to_send": "جاهزة للإرسال",
+        "awaiting_review": "بانتظار مراجعة مسؤول أمن المعلومات",
+        "sent_on": "أُرسل إلى المورّد في {{date}}"
+      },
+      "vendors": {
+        "ai_unavailable": "خدمة الذكاء الاصطناعي غير متاحة حاليًا. أعد المحاولة، أو تابع دون درجة الذكاء الاصطناعي: تُحفظ إجاباتك ويمكن تقييمها لاحقًا من «إعادة التقييم».",
+        "retry": "إعادة المحاولة",
+        "continue_without_ai": "المتابعة دون درجة الذكاء الاصطناعي",
+        "no_ai_notice": "لا توجد درجة ذكاء اصطناعي: تُحفظ إجابات الاستبيان دون تقييم. حدّد درجة المخاطر بنفسك، وشغّل «إعادة التقييم» عند عودة الذكاء الاصطناعي.",
+        "manual_score": "درجة المخاطر (1–40)",
+        "partial_save": "تم إنشاء المورّد لكن خطوة لاحقة فشلت ({{error}}). احفظ مرة أخرى للإكمال — لن يتم إنشاء مورّد ثانٍ.",
+        "contract_saved_expiry_failed": "تم رفع العقد، لكن تاريخ الانتهاء الجديد لم يُحفظ ({{error}}). انقر على «رفع» مرة أخرى لحفظ التاريخ فقط."
+      },
+      "compliance": {
+        "edit_validity": "تعديل تاريخ الصلاحية"
       }
+    },
+    "vocab": {
+      "withdrawn": "مسحوب"
     }
   },
 };

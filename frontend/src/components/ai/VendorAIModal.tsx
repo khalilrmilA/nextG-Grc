@@ -6,6 +6,7 @@ import { useState, useRef, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { X, RefreshCw, Copy, Download, Sparkles, ShieldCheck, ChevronDown, ChevronUp } from "lucide-react";
 import { vendorsApi } from "@/api/endpoints";
+import type { Vendor } from "@/types";
 import { useAiTokenRefresh } from "@/hooks/useAiTokenRefresh";
 import AiGate from "@/components/features/ai/AiGate";
 import { safeMarkdown } from "@/lib/safeMarkdown";
@@ -16,6 +17,8 @@ interface Props {
   vendorIndustry?: string;
   vendorServices?: string;
   onClose: () => void;
+  /** The vendor as saved after approval — its new score must show at once (follow-up C-3). */
+  onApproved?: (vendor: Vendor) => void;
 }
 
 // Default questionnaire for quick AI assessment when no custom Q&A provided.
@@ -97,7 +100,7 @@ function QuestionnairePanel({
 }
 
 // ── Main Modal ────────────────────────────────────────────────────────────────
-export default function VendorAIModal({ vendorId, vendorName, vendorIndustry, vendorServices, onClose }: Readonly<Props>) {
+export default function VendorAIModal({ vendorId, vendorName, vendorIndustry, vendorServices, onClose, onApproved }: Readonly<Props>) {
   const { t } = useTranslation();
   const { refreshAiTokens } = useAiTokenRefresh();
   const [responses, setResponses] = useState<Record<string, string>>(DEFAULT_QUESTIONNAIRE);
@@ -185,9 +188,8 @@ export default function VendorAIModal({ vendorId, vendorName, vendorIndustry, ve
 
     setApproving(true);
     try {
-      console.log(`Approving analysis for vendor ${vendorId} with risk score ${riskScore}`);
       const result = await vendorsApi.approveAnalysis(vendorId, riskScore, output);
-      console.log("Approval result:", result);
+      onApproved?.(result);
       setApproved(true);
       setError("");
       // Close modal after 2 seconds
