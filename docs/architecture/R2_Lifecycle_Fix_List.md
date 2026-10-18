@@ -159,7 +159,7 @@ BM-01 share to 69%.
 
 ### Needed for Strong
 
-- [ ] **R-1 (S) — Policy periodic review in the UI.**
+- [x] **R-1 (S) — Policy periodic review in the UI.**
   - No screen sets or moves `next_review_date`. The New policy form sends only
     `review_frequency_months` (PoliciesPage.tsx ~L93-99). The only `policiesApi.update` call
     changes the status (~L1153). The backend never computes the date (policies.py ~L395-402).
@@ -172,7 +172,7 @@ BM-01 share to 69%.
 
 ### Fix before deploying (bugs, not rating)
 
-- [ ] **D-1 (S, regression) — Deleting a draft assessment fails with 500.**
+- [x] **D-1 (S, regression) — Deleting a draft assessment fails with 500.**
   - Every new assessment now has rows, but the relationship has no delete cascade and
     `control_assessments.assessment_id` is NOT NULL.
   - Reproduced on the test copy: `IntegrityError … NOT NULL constraint failed`.
@@ -180,32 +180,32 @@ BM-01 share to 69%.
   - Fix: delete the draft's rows (and their gaps and evidence, retiring file versions) before the
     assessment, or refuse with a 409 and offer Archive.
   - Look at: compliance.py delete route ~L2150; models/compliance.py ~L99-101.
-- [ ] **D-2 (S) — `backfill_control_status_source.py` misses rows closed or reopened through the
+- [x] **D-2 (S) — `backfill_control_status_source.py` misses rows closed or reopened through the
   action plan.**
   - Those rows keep their `ai_confidence`, and the request path is `/action-plan/…`, not
     `/control-assessments/`.
   - The first AI re-run in production would then overwrite those closures.
   - Fix: also match action-plan close/reopen activity entries, or controls whose action items were
     closed by a person.
-- [ ] **D-3 (S) — `ai_suggested_at` is 32 characters** (`2026-10-18T19:10:48.975189+00:00`) in a
+- [x] **D-3 (S) — `ai_suggested_at` is 32 characters** (`2026-10-18T19:10:48.975189+00:00`) in a
   VARCHAR(30) column.
   - SQLite ignores the limit, but PostgreSQL rejects it, which would fail the whole analysis.
   - Fix: widen the column to 40 in both the model and the migration script.
 
 ### Worth fixing (major, not blocking)
 
-- [ ] An expired risk acceptance syncs `Risk.status` only when someone opens Exceptions & Waivers
+- [x] An expired risk acceptance syncs `Risk.status` only when someone opens Exceptions & Waivers
   (security_exceptions.py ~L351). Until then the risk stays "accepted". Run the sync in the daily
   notification check.
-- [ ] Policies:
+- [x] Policies:
   - Auditors receive attestations, but their portal has no My Policies page.
   - Attestations can be sent on an unapproved version, and acknowledged on a retired policy.
   - "Attest all" creates duplicate pending rows.
-- [ ] Vendors:
+- [x] Vendors:
   - After the CISO approves a contract it leaves the queue, so **Send to vendor** is never reachable
     (ContractReviewPage.tsx ~L69-70; this was already broken before R2).
   - After approving an AI analysis, the vendor list keeps the old score until the page is reloaded.
-- [ ] Compliance:
+- [x] Compliance:
   - The gap accept/reject buttons show to roles the backend refuses (403).
   - The visibility toggle response drops `valid_until`, so the badge disappears until reload.
   - A user who is both control_owner and an organisation-wide role is not limited to their own rows.
@@ -245,27 +245,68 @@ Strong. Fixing **R-1** (policy review) and **A-1** (audit page) makes all six St
 
 ### New from the live test
 
-- [ ] **A-1 (S, blocks Strong; already broken before R2, since `d565c20`, 2026-09-08)** — The audit
+- [x] **A-1 (S, blocks Strong; already broken before R2, since `d565c20`, 2026-09-08)** — The audit
   detail page spins forever.
   - The route is `audits/:auditId` (App.tsx ~L273), but the page reads `useParams<{ id }>()`
     (AuditDetailPage.tsx ~L426). So `auditId` is empty, `loadAudit()` returns early and
     `/api/v1/audits/{id}` is never called.
   - Every link to it is affected: AuditsPage rows and RecommendationsPage.
   - Fix: `const { auditId = "" } = useParams<{ auditId: string }>();`
-- [ ] **D-1 confirmed in production:** `DELETE /compliance/assessments/{draft}` returns **500**. The
+- [x] **D-1 confirmed in production:** `DELETE /compliance/assessments/{draft}` returns **500**. The
   test assessment had to be archived instead.
-- [ ] **(S) Deleting a scenario leaves its mirror risk in the register.** Creating a scenario adds a
+- [x] **(S) Deleting a scenario leaves its mirror risk in the register.** Creating a scenario adds a
   matching "[name]" risk to the register; deleting the scenario doesn't remove or close it.
-- [ ] **(S) Scenario table:** the Edit/Delete/History buttons are off-screen at 1440 px; users must
+- [x] **(S) Scenario table:** the Edit/Delete/History buttons are off-screen at 1440 px; users must
   scroll sideways.
-- [ ] **(S) Attestations go out on unapproved versions.** This is confirmed live: a version
+- [x] **(S) Attestations go out on unapproved versions.** This is confirmed live: a version
   "Awaiting approval" was sent and acknowledged.
-- [ ] **(S) A pending risk acceptance can't be withdrawn by its requester**, and there is no delete.
+- [x] **(S) A pending risk acceptance can't be withdrawn by its requester**, and there is no delete.
   A single-user tenant can never clear it. Left in the test tenant:
   `[R2 test] Accept VPN risk until patch window`. It needs a second user to reject it.
-- [ ] Minor:
+- [x] Minor:
   - The control status dropdown shows "Compliant" while a row is Not Started (its default value is
     `implemented`).
   - The gap text says "assessed as not compliant" for a *partially* compliant control.
   - The Risk/Governance dashboard widgets show "Restricted view" (403) to the account owner.
   - The AI prescreen failed once with 424 (transient); the retry worked.
+
+---
+
+## Follow-ups done (Prompt 2, branch `fix/r2-followups`, 2026-10-18)
+
+Every box above is closed. One commit per phase:
+`9a0c18e` (A), `1a9fa90` (B), `b7583d6` (C), `2b40a44` (D), then the Phase E docs commit.
+Product decisions taken by the owner on 2026-10-18: auditors attest policies; vendor onboarding may
+continue without the AI prescreen; an organisation-wide role wins over control_owner; the tenant
+owner sees every dashboard.
+
+| Item | What changed | Verified by |
+|---|---|---|
+| A-1 audit detail | `AuditDetailPage` reads `:auditId`; `scripts/check-route-params.mjs` (in `npm run lint`) fails on any route/page param mismatch | browser: AuditsPage + RecommendationsPage open the audit |
+| A-2 (R-1) policy review | publish sets the next review (a hand-set date is kept); **Mark as reviewed** (comment required, published only) records `last_reviewed_*`, a `policy_reviews` row, moves the date, answers the reminders, logs `review`; **Edit details**; reminders for published policies only | selftest + browser (en, ar) |
+| B-1 (D-1) draft delete | untouched draft deletes with rows/gaps/tokens/analysis documents (file versions retired); recorded work → 409 "archive it instead" (en/fr/ar) shown in the UI | selftest |
+| B-2 (D-2) backfill | `backfill_control_status_source` also marks rows closed/reopened through the action plan and rows of gaps closed by a completed action; per-source counts (prod copy: 17 rows) | dry run on a prod copy |
+| B-3 (D-3) widths | `ai_suggested_at` and `vendor_assessments.approved_at` → VARCHAR(40); `migrate_r2_lifecycle.py` ALTERs them on PostgreSQL | SQLite run; PostgreSQL path not executed (no server here) |
+| C-1 acceptances | daily check expires waivers/acceptances and hands risks back (idempotent); requester **Withdraw** (reason, logged) | selftest |
+| C-2 policies | acknowledgements only for an approved/published policy with a second-person-approved version; no duplicates; none on retired; `approve_version` logged; auditors get My Policies; History-tab errors; read-only content for non-managers | selftest |
+| C-3 vendors | **Ready to send** queue; review page stays on the approved contract; decided contracts final; late AI result cannot revert a decision; same-bytes re-upload idempotent; duplicate vendor name 409; wizard resumes; AI down → Retry / continue unscored; score refresh; Offboard wording; no expiry alerts for offboarded vendors | selftest |
+| C-4 compliance | gap decisions CISO-only (UI hidden for others); toggle keeps validity; uploader may delete / re-date their evidence (`PATCH /compliance/evidence/{id}`); organisation-wide role wins (UI aligned); Deleted files for compliance_manager | selftest |
+| C-5 scenarios | scenario delete deletes or closes ("Scenario deleted") its register entry (`services/scenario_mirror.py`); re-score versions the risk first; `scripts/backfill_scenario_mirrors.py` for past orphans (prod copy: 0) | selftest |
+| D minor | sticky actions column; status placeholders; status-aware gap text; clearable risk fields, no edit defaults; treatment buttons by role, supersede keeps hidden fields; uploads commit before returning; tenant owner sees every dashboard | selftest + tsc/lint |
+
+Selftests at the end: `selftest_r2_lifecycle` 178/0, `selftest_compliance_merge` 34/0; `tsc` and
+`npm run lint` clean.
+
+### Production run-book for the follow-ups (in order)
+
+1. Snapshot `backend/grc_dev.db` with the SQLite backup API (read-only source).
+2. `cd backend && venv/bin/python -m scripts.migrate_r2_lifecycle` (dry run) → expect 4 `policies`
+   columns (already applied if Phase A was deployed) and, on PostgreSQL only, two VARCHAR(40) widenings;
+   then the same with `--apply`.
+3. `venv/bin/python -m scripts.backfill_control_status_source` (dry run, review the per-source counts),
+   then `--apply`.
+4. `venv/bin/python -m scripts.backfill_scenario_mirrors` (dry run, review the list), then `--apply`.
+5. `pm2 restart grceye-backend` (creates `policy_reviews` if missing).
+6. `cd frontend && npm run build` (served by `grceye-gateway`).
+7. Check: `/health` 200; a policy's Overview shows Next review + Mark as reviewed; Contract Review shows
+   Ready to send; the tenant owner opens the Risk and Governance dashboards; an audit detail page opens.

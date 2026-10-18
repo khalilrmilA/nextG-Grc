@@ -267,7 +267,8 @@ export const kbEn: KbArticle[] = [
         heading: "How to edit or delete a scenario",
         steps: [
           "Click the pencil on a row to edit it: re-score current and target probability/impact, change the treatment or the linked threats, vulnerabilities, assets, incidents and controls. The linked register entry is re-scored too.",
-          "Click the bin to delete a scenario (risk managers and CISOs). Its final state is kept in the activity log; the linked risk-register entry is kept and can then be closed on its own.",
+          "Click the bin to delete a scenario (risk managers and CISOs). Its final state is kept in the activity log. The risk-register entry it created is deleted with it — or closed with the reason **Scenario deleted** when a treatment plan, an acceptance or a control still cites it.",
+          "The actions (History, Edit, Delete) stay pinned at the end of each row while the table scrolls sideways. Editing the probability or impact saves a version of the linked risk first, so its **History** shows the change.",
         ],
       },
       {
@@ -558,7 +559,9 @@ export const kbEn: KbArticle[] = [
           "A status set by a person is marked **Reviewed**. Re-running the AI never changes it and never removes evidence: the AI's opinion appears as **AI suggests …** with an **Accept** button. Before a re-run, the Upload tab says how many decisions will be kept.",
           "Compliance managers act on every requirement; a control owner assesses and uploads evidence only for the requirements assigned to them (**Only requirements I own**).",
           "When uploading evidence, set **Valid until**. Badges show expired or soon-expiring proof, a requirement whose only evidence has expired is flagged, and reminders go out 30, 7 and 0 days before expiry.",
-          "CISOs can open **Deleted files** to download any removed evidence, document or contract version.",
+          "CISOs and compliance managers can open **Deleted files** to download any removed evidence, document or contract version.",
+          "Whoever uploaded a piece of evidence can remove it (bin icon) or change its **Valid until** date afterwards (calendar icon); compliance managers and CISOs can do so for any evidence.",
+          "A **draft** assessment nobody has worked on can be deleted. Once it carries recorded work (a person’s status, evidence, actions, an auditor engagement or comments) delete is refused — **archive** it instead.",
         ],
       },
       {
@@ -770,6 +773,8 @@ export const kbEn: KbArticle[] = [
           "Click **New Risk Acceptance**, give a name, justification and expiry date, and pick the **Risks accepted** and **Risk scenarios accepted**.",
           "Another CISO approves it (you cannot decide on your own request). On approval each covered risk moves to **Accepted**.",
           "**Reject** or **Revoke** both ask for a reason. Revoking (or the expiry date passing) returns each risk to the status it had before, unless another active acceptance still covers it.",
+          "The requester can **Withdraw** their own pending request (a reason is required). Nothing was approved, so no risk changes; the request stays in the register as Withdrawn.",
+          "Expiry is applied every day by the automatic check, even if nobody opens this page: an expired acceptance hands its risks back on its own.",
         ],
       },
       {
@@ -909,6 +914,7 @@ export const kbEn: KbArticle[] = [
         steps: [
           "Open the **Attestations** tab.",
           "Click **Request Attestation**, pick users and a due date, then **Send** — or use **Send to All Users**.",
+          "Requests can be sent only once the policy is approved or published and its current version has been approved by a second person. Sending again to someone who already has a pending request does not create a duplicate.",
           "Track each person as Pending, Acknowledged or Overdue.",
         ],
       },
@@ -919,6 +925,15 @@ export const kbEn: KbArticle[] = [
           "**Approve** and **Publish** appear only once the current version carries that second approval. Adding or restoring a version sends an approved or published policy back to review.",
           "Only the moves allowed from the current status are offered (e.g. **Back to review**, **Retire**). Retiring asks for confirmation and keeps versions and acknowledgements; a retired policy can be revived as a draft.",
           "Employees acknowledge the policies assigned to them from **My Policies**; the **Attestations** tab updates each time you open it. Reminders go out for review dates and overdue acknowledgements.",
+        ],
+      },
+      {
+        heading: "How periodic review works",
+        steps: [
+          "When a policy is published, its **Next review** date is set to today plus its review cycle (unless you chose a date yourself in **Edit details**).",
+          "When the date passes, the policy shows **Review due** in the register and on its Overview.",
+          "A policy manager or CISO clicks **Mark as reviewed** on the Overview and writes a comment (what was checked, what was decided). The next review moves forward by the cycle, the reminders stop, and the review appears in the **Review history** and the activity log.",
+          "**Edit details** changes the title, description, category, owner, review cycle, next review date, effective / expiration dates and department / process — without changing the policy’s status.",
         ],
       },
       {
@@ -947,6 +962,7 @@ export const kbEn: KbArticle[] = [
         heading: "How to acknowledge a policy",
         steps: [
           "Open **My Policies** from the sidebar.",
+          "Auditors find the same list under **My Policies** in the auditor portal.",
           "Click a policy to read the version you were asked to accept.",
           "Click **I have read and accept this policy**. The date is recorded and the policy manager sees it in the Attestations tab.",
         ],
@@ -1047,6 +1063,7 @@ export const kbEn: KbArticle[] = [
           "Click **Add 3rd Party** and enter the company details, services, tier, status, DPA and contract expiry. You can attach the contract for AI review.",
           "Click **Next: Questionnaire** and answer the 15 prescreen questions on security, compliance and operations.",
           "Click **Analyze with AI**, review the AI insights (risk level, strengths, concerns, red flags) and the suggested risk score, then click **Save 3rd Party**.",
+          "If the AI service is unavailable, click **Retry**, or **Continue without AI score**: the answers are saved unscored, you set the risk score yourself, and you can run **Reassess** later. If a later step fails, **Save** again finishes the onboarding without creating a second third party.",
         ],
       },
       {
@@ -1054,7 +1071,7 @@ export const kbEn: KbArticle[] = [
         steps: [
           "Upload a contract. The AI analyses it (status **AI Analyzing**, then **Ready for CISO**).",
           "The CISO clicks **Contract Review**, opens the contract, reads the AI findings and clicks **Approve Contract** or **Reject Contract** (comments required to reject).",
-          "Once approved, click **Send to Vendor**.",
+          "Once approved, the contract moves to **Ready to send** at the top of **Contract Review**; click **Send to Vendor** there (vendor managers and CISOs). A decision is final for that version — upload a new version to start a new review.",
           "Use **Start Collaboration with Vendor** to negotiate: share a link, work on issues and a plan together, chat, **Mark Agreed**, then both sides sign the agreement by typing their full name.",
         ],
       },

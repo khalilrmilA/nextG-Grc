@@ -271,7 +271,8 @@ export const kbFr: KbArticle[] = [
         heading: "Comment modifier ou supprimer un scénario",
         steps: [
           "Cliquez sur le crayon d’une ligne pour la modifier : réévaluez la probabilité/l’impact actuels et cibles, changez le traitement ou les menaces, vulnérabilités, actifs, incidents et contrôles liés. L’entrée liée du registre est réévaluée aussi.",
-          "Cliquez sur la corbeille pour supprimer un scénario (gestionnaires de risques et RSSI). Son état final est conservé dans le journal d’activité ; l’entrée liée du registre des risques est conservée et peut ensuite être clôturée séparément.",
+          "Cliquez sur la corbeille pour supprimer un scénario (gestionnaires de risques et RSSI). Son état final est conservé dans le journal d’activité. L’entrée du registre des risques qu’il a créée est supprimée avec lui — ou clôturée avec le motif **Scénario supprimé** si un plan de traitement, une acceptation ou une mesure la cite encore.",
+          "Les actions (Historique, Modifier, Supprimer) restent fixées en bout de ligne quand le tableau défile horizontalement. Modifier la probabilité ou l’impact enregistre d’abord une version du risque lié : son **Historique** montre le changement.",
         ],
       },
       {
@@ -562,7 +563,9 @@ export const kbFr: KbArticle[] = [
           "Un statut fixé par une personne est marqué **Revue**. Relancer l’IA ne le modifie jamais et ne supprime jamais de preuve : l’avis de l’IA apparaît comme **L’IA suggère …** avec un bouton **Accepter**. Avant une relance, l’onglet de téléversement indique combien de décisions seront conservées.",
           "Les responsables conformité agissent sur toutes les exigences ; un propriétaire de contrôle évalue et dépose des preuves uniquement pour les exigences qui lui sont attribuées (**Seulement mes exigences**).",
           "En déposant une preuve, renseignez **Valable jusqu’au**. Des badges signalent les preuves expirées ou bientôt expirées, une exigence dont la seule preuve a expiré est signalée, et des rappels partent 30, 7 et 0 jours avant l’expiration.",
-          "Les RSSI peuvent ouvrir **Fichiers supprimés** pour télécharger toute version de preuve, document ou contrat supprimé.",
+          "Les RSSI et les responsables conformité peuvent ouvrir **Fichiers supprimés** pour télécharger toute version de preuve, document ou contrat supprimé.",
+          "La personne qui a déposé une preuve peut la retirer (icône corbeille) ou modifier ensuite sa date **Valide jusqu’au** (icône calendrier) ; les responsables conformité et les RSSI peuvent le faire pour toute preuve.",
+          "Une évaluation **brouillon** sur laquelle personne n’a travaillé peut être supprimée. Dès qu’elle contient du travail enregistré (statut fixé par une personne, preuves, actions, mission d’audit ou commentaires), la suppression est refusée — **archivez-la** plutôt.",
         ],
       },
       {
@@ -774,6 +777,8 @@ export const kbFr: KbArticle[] = [
           "Cliquez sur **Nouvelle acceptation de risque**, indiquez un nom, une justification et une date d’expiration, puis choisissez les **Risques acceptés** et les **Scénarios de risque acceptés**.",
           "Un autre RSSI l’approuve (vous ne pouvez pas statuer sur votre propre demande). À l’approbation, chaque risque couvert passe à **Accepté**.",
           "**Rejeter** ou **Révoquer** demandent un motif. La révocation (ou l’arrivée de la date d’expiration) remet chaque risque au statut qu’il avait avant, sauf si une autre acceptation active le couvre encore.",
+          "Le demandeur peut **Retirer** sa propre demande en attente (motif requis). Rien n’ayant été approuvé, aucun risque ne change ; la demande reste au registre avec le statut Retirée.",
+          "L’expiration est appliquée chaque jour par la vérification automatique, même si personne n’ouvre cette page : une acceptation expirée rend ses risques d’elle-même.",
         ],
       },
       {
@@ -913,6 +918,7 @@ export const kbFr: KbArticle[] = [
         steps: [
           "Ouvrez l’onglet **Attestations**.",
           "Cliquez sur **Demander une attestation**, choisissez les utilisateurs et une échéance, puis cliquez sur **Envoyer** — ou utilisez **Envoyer à tous les utilisateurs**.",
+          "Les demandes ne peuvent être envoyées qu’une fois la politique approuvée ou publiée et sa version courante approuvée par une seconde personne. Renvoyer à quelqu’un qui a déjà une demande en attente ne crée pas de doublon.",
           "Suivez chaque personne : En attente, Pris connaissance ou En retard.",
         ],
       },
@@ -923,6 +929,15 @@ export const kbFr: KbArticle[] = [
           "**Approuver** et **Publier** n’apparaissent qu’une fois cette seconde approbation obtenue. Ajouter ou restaurer une version renvoie une politique approuvée ou publiée en revue.",
           "Seules les transitions permises depuis le statut actuel sont proposées (p. ex. **Renvoyer en revue**, **Retirer**). Le retrait demande une confirmation et conserve versions et prises de connaissance ; une politique retirée peut être réactivée en brouillon.",
           "Les employés acceptent les politiques qui leur sont attribuées depuis **Mes politiques** ; l’onglet **Attestations** se met à jour à chaque ouverture. Des rappels sont envoyés pour les dates de revue et les prises de connaissance en retard.",
+        ],
+      },
+      {
+        heading: "Fonctionnement de la revue périodique",
+        steps: [
+          "À la publication, la date de **Prochaine revue** est fixée à aujourd’hui plus le cycle de revue (sauf si vous avez choisi une date dans **Modifier les détails**).",
+          "Une fois la date passée, la politique affiche **Revue à faire** dans le registre et sur sa Vue d’ensemble.",
+          "Un responsable des politiques ou un RSSI clique sur **Marquer comme revue** dans la Vue d’ensemble et rédige un commentaire (ce qui a été vérifié, ce qui a été décidé). La prochaine revue avance d’un cycle, les rappels s’arrêtent, et la revue apparaît dans l’**Historique des revues** et le journal d’activité.",
+          "**Modifier les détails** change le titre, la description, la catégorie, le propriétaire, le cycle de revue, la prochaine revue, les dates d’entrée en vigueur / d’expiration et le département / processus — sans changer le statut de la politique.",
         ],
       },
       {
@@ -951,6 +966,7 @@ export const kbFr: KbArticle[] = [
         heading: "Comment accepter une politique",
         steps: [
           "Ouvrez **Mes politiques** dans la barre latérale.",
+          "Les auditeurs retrouvent la même liste sous **Mes politiques** dans le portail auditeur.",
           "Cliquez sur une politique pour lire la version qui vous a été soumise.",
           "Cliquez sur **J’ai lu et j’accepte cette politique**. La date est enregistrée et le gestionnaire la voit dans l’onglet Attestations.",
         ],
@@ -1051,6 +1067,7 @@ export const kbFr: KbArticle[] = [
           "Cliquez sur **Ajouter un tiers** et saisissez les informations de l’entreprise, les services, le niveau, le statut, le DPA et l’expiration du contrat. Vous pouvez joindre le contrat pour une revue par l’IA.",
           "Cliquez sur **Next: Questionnaire** (étape suivante : questionnaire) et répondez aux 15 questions de présélection sur la sécurité, la conformité et les opérations.",
           "Cliquez sur **Analyze with AI** (analyser avec l’IA), examinez les conclusions de l’IA (niveau de risque, points forts, préoccupations, signaux d’alerte) et le score de risque proposé, puis cliquez sur **Save 3rd Party** (enregistrer le tiers).",
+          "Si le service d’IA est indisponible, cliquez sur **Réessayer**, ou **Continuer sans score IA** : les réponses sont enregistrées sans score, vous fixez vous-même le score de risque et pourrez lancer **Réévaluer** plus tard. Si une étape suivante échoue, **Enregistrer** à nouveau termine l’intégration sans créer de second tiers.",
         ],
       },
       {
@@ -1058,7 +1075,7 @@ export const kbFr: KbArticle[] = [
         steps: [
           "Téléversez un contrat. L’IA l’analyse (statut **AI Analyzing**, puis **Ready for CISO**, c’est-à-dire prêt pour le RSSI).",
           "Le RSSI clique sur **Révision des contrats**, ouvre le contrat, lit les conclusions de l’IA et clique sur **Approve Contract** (approuver) ou **Reject Contract** (rejeter ; commentaires obligatoires en cas de rejet).",
-          "Une fois le contrat approuvé, cliquez sur **Send to Vendor** (envoyer au fournisseur).",
+          "Une fois approuvé, le contrat passe dans **Prêts à envoyer** en haut de **Revue des contrats** ; cliquez là sur **Send to Vendor** (envoyer au fournisseur) — gestionnaires fournisseurs et RSSI. La décision est définitive pour cette version : téléversez une nouvelle version pour lancer une nouvelle revue.",
           "Utilisez **Start Collaboration with Vendor** pour négocier : partagez un lien, travaillez ensemble sur les points ouverts et un plan, échangez par messagerie, cliquez sur **Mark Agreed** (marquer comme convenu), puis les deux parties signent l’accord en saisissant leur nom complet.",
         ],
       },
