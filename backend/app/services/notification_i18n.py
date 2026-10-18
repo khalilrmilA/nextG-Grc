@@ -962,6 +962,37 @@ CATALOG: dict[str, dict] = {
                "partage « {link} »."),
         "ar": "رفع أحد أصحاب المصلحة الملف «{file}» ({size_kb} كيلوبايت){ctrl_for} عبر رابط المشاركة «{link}».",
     },
+    # ── Policies (R2) ──
+    "notifications.policy_review_overdue.title": {
+        "en": "Policy review OVERDUE: {policy:.50}",
+        "fr": "Revue de politique EN RETARD : {policy:.50}",
+        "ar": "مراجعة السياسة متأخرة: {policy:.50}",
+    },
+    "notifications.policy_review_overdue.message": {
+        "en": "Policy '{policy}' was due for review on {due}.",
+        "fr": "La politique « {policy} » devait être revue le {due}.",
+        "ar": "كان من المفترض مراجعة السياسة «{policy}» في {due}.",
+    },
+    "notifications.policy_review_due.title": {
+        "en": "Policy review due in {days} days: {policy:.50}",
+        "fr": "Revue de politique dans {ndays} : {policy:.50}",
+        "ar": "مراجعة السياسة مستحقة خلال {ndays}: {policy:.50}",
+    },
+    "notifications.policy_review_due.message": {
+        "en": "Policy '{policy}' is due for review on {due}.",
+        "fr": "La politique « {policy} » doit être revue le {due}.",
+        "ar": "يجب مراجعة السياسة «{policy}» في {due}.",
+    },
+    "notifications.attestation_overdue.title": {
+        "en": "Policy acknowledgement OVERDUE: {policy:.50}",
+        "fr": "Prise de connaissance EN RETARD : {policy:.50}",
+        "ar": "الإقرار بالسياسة متأخر: {policy:.50}",
+    },
+    "notifications.attestation_overdue.message": {
+        "en": "Please read and accept '{policy}' (due {due}).",
+        "fr": "Veuillez lire et accepter « {policy} » (échéance {due}).",
+        "ar": "يرجى قراءة السياسة «{policy}» وقبولها (الموعد {due}).",
+    },
 }
 
 # ── Platform vocabulary inside params ────────────────────────────────────────

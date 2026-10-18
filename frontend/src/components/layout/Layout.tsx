@@ -58,6 +58,8 @@ const NAV_GROUPS = [
     id: "overview", label: "Overview", icon: LayoutDashboard,
     items: [
       { to: "/dashboard",  icon: LayoutDashboard, label: "Dashboard",     module: "dashboard",  roles: null },
+      // Every employee acknowledges policies (no ROUTE_ROLES entry in App.tsx).
+      { to: "/my-policies", icon: FileText,      label: "My Policies",   module: "my-policies", roles: null },
       { to: "/analytics",  icon: BarChart3,       label: "Analytics",     module: "analytics",  roles: ["tenant_admin","ciso","risk_manager","compliance_manager","control_owner","business_owner","security_analyst","viewer","executive"] },
     ],
   },

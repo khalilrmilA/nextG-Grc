@@ -383,6 +383,10 @@ export interface Policy extends BaseEntity {
   version_count?: number;
   attestation_count?: number;
   pending_attestations?: number;
+  /** Workflow moves the backend accepts from the current status. */
+  allowed_transitions?: Policy["status"][];
+  /** The current version carries an approval by someone other than its author. */
+  current_version_approved?: boolean;
 }
 
 // ─── Vendor ──────────────────────────────────

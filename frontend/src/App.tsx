@@ -40,6 +40,7 @@ import RecommendationsPage from "./pages/RecommendationsPage";
 import AuditGridBuilderPage from "./pages/AuditGridBuilderPage";
 import RequirementsPage from "./pages/RequirementsPage";
 import PoliciesPage from "./pages/PoliciesPage";
+import MyPoliciesPage from "./pages/MyPoliciesPage";
 import VendorsPage from "./pages/VendorsPage";
 import ContractReviewPage from "./pages/ContractReviewPage";
 import ReportsPage from "./pages/ReportsPage";
@@ -144,6 +145,8 @@ const ROUTE_ROLES: Record<string, string[]> = {
   // backend's AUDIT_READERS / _archive_access. Purge itself stays tenant_admin-only.
   "/archiving":           [...CISO_AND_ADMIN, "compliance_manager", "auditor", "risk_manager"],
   "/policies":            [...CISO_AND_ADMIN, "compliance_manager", "policy_manager", "viewer", "executive"],
+  // "/my-policies" has no entry on purpose: every authenticated role acknowledges
+  // the policies assigned to it (Layout.tsx: roles null).
   "/policy-generator":    [...CISO_AND_ADMIN, "policy_manager", "viewer", "executive"],
   "/vendors":             [...CISO_AND_ADMIN, "vendor_manager", "viewer", "executive"],
   "/applied-controls":    [...CISO_AND_ADMIN, "risk_manager", "compliance_manager", "control_owner", "business_owner", "security_analyst", "viewer", "executive"],
@@ -239,6 +242,8 @@ export default function App() {
         }
       >
         <Route path="dashboard" element={<DashboardPage />} />
+        {/* Every role acknowledges policies — deliberately no ROUTE_ROLES entry (nav roles: null). */}
+        <Route path="my-policies" element={<MyPoliciesPage />} />
         <Route path="assets" element={<AssetsPage />} />
         <Route path="analytics" element={<RoleRoute path="/analytics"><AnalyticsPage /></RoleRoute>} />
         <Route path="risk-treatment" element={<RiskTreatmentPage />} />

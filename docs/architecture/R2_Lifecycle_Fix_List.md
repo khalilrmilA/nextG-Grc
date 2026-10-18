@@ -57,16 +57,16 @@ Size: **S** = small (hours to a couple of days), **M** = medium (about a week or
 
 ## 4. Policies
 
-- [ ] **S — Employees acknowledge a policy.** `policiesApi.acknowledgeAttestation`
+- [x] **S — Employees acknowledge a policy.** *(R2 phase 4: `GET /policies/my-attestations` + My Policies page for every role)* `policiesApi.acknowledgeAttestation`
   ([endpoints.ts:1493](../../frontend/src/api/endpoints.ts#L1493)) has no caller.
   PoliciesPage already *displays* acknowledged status. Add a "policies to acknowledge" view for the
   assigned user.
-- [ ] **S — Author must not approve their own version (four-eyes).**
+- [x] **S — Author must not approve their own version (four-eyes).** *(R2 phase 4: also after restore; Approve version in PoliciesPage history)*
   `approve_version` ([policies.py:606](../../backend/app/api/v1/endpoints/policies.py#L606)) has no
   author ≠ approver check. Copy the pattern from
   [security_exceptions.py:205](../../backend/app/api/v1/endpoints/security_exceptions.py#L205).
   Version approval is currently reachable only from the Doc Generator; add it to PoliciesPage too.
-- [ ] **M — Controlled status flow and reminders.** Status transitions are free today. Add review and
+- [x] **M — Controlled status flow and reminders.** *(R2 phase 4: transitions enforced, approved/published need a non-author version approval; review-due + overdue-acknowledgement reminders)* Status transitions are free today. Add review and
   attestation reminders (the notification deadline checker is the natural place).
 
 ## 5. Controls & evidence (compliance)

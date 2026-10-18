@@ -38,6 +38,49 @@ def _enum_or_400(enum_cls, value: str, field: str):
         )
 
 
+# ── Status workflow ──────────────────────────────────────────────────────
+# draft → in_review → approved → published → retired, with the way back each
+# step needs (send back to draft, rework a published text, revive a retired one).
+_TRANSITIONS: dict[PolicyStatus, set[PolicyStatus]] = {
+    PolicyStatus.DRAFT: {PolicyStatus.IN_REVIEW, PolicyStatus.RETIRED},
+    PolicyStatus.IN_REVIEW: {PolicyStatus.DRAFT, PolicyStatus.APPROVED, PolicyStatus.RETIRED},
+    PolicyStatus.APPROVED: {PolicyStatus.PUBLISHED, PolicyStatus.IN_REVIEW, PolicyStatus.RETIRED},
+    PolicyStatus.PUBLISHED: {PolicyStatus.IN_REVIEW, PolicyStatus.RETIRED},
+    PolicyStatus.RETIRED: {PolicyStatus.DRAFT},
+}
+# What the activity trail calls each move.
+_TRANSITION_ACTION = {
+    PolicyStatus.DRAFT: "return_to_draft", PolicyStatus.IN_REVIEW: "submit",
+    PolicyStatus.APPROVED: "approve", PolicyStatus.PUBLISHED: "publish",
+    PolicyStatus.RETIRED: "retire",
+}
+# A status that claims the text was signed off needs a second person's approval.
+_NEEDS_APPROVED_VERSION = {PolicyStatus.APPROVED, PolicyStatus.PUBLISHED}
+_CREATE_STATUSES = {PolicyStatus.DRAFT, PolicyStatus.IN_REVIEW}
+
+
+def _status_value(p) -> str:
+    return p.status.value if hasattr(p.status, "value") else str(p.status)
+
+
+async def _current_version(db, pid):
+    return (await db.execute(select(PolicyVersion).where(
+        PolicyVersion.policy_id == pid, PolicyVersion.is_current == True))).scalar_one_or_none()  # noqa: E712
+
+
+def _independently_approved(v) -> bool:
+    return bool(v and v.approved_by_id and v.approved_by_id != v.authored_by_id)
+
+
+async def _back_to_review(db, p) -> bool:
+    """A new current text is not the one that was signed off: an approved or
+    published policy goes back to review until someone approves the new version."""
+    if p.status in _NEEDS_APPROVED_VERSION:
+        p.status = PolicyStatus.IN_REVIEW
+        return True
+    return False
+
+
 # ── Schemas ──────────────────────────────────────────────────────────────
 
 class PolicyCreate(BaseModel):
@@ -79,6 +122,10 @@ class PolicyOut(BaseModel):
     business_process_id: str | None = None; org_entity_id: str | None = None
     version_count: int = 0
     attestation_count: int = 0; pending_attestations: int = 0
+    # Workflow moves allowed from here, and whether the current text carries an
+    # approval by someone other than its author (required for approved/published).
+    allowed_transitions: list[str] = []
+    current_version_approved: bool = False
     created_at: datetime; updated_at: datetime
     model_config = {"from_attributes": True}
 
@@ -143,6 +190,18 @@ class AttestationOut(BaseModel):
     status: str; due_date: str | None; acknowledged_at: str | None
     created_at: datetime
     model_config = {"from_attributes": True}
+
+class MyAttestationOut(BaseModel):
+    """One policy the current user is asked to read and accept."""
+    id: str; policy_id: str; policy_version_id: str
+    status: str; due_date: str | None; acknowledged_at: str | None
+    overdue: bool = False
+    policy_title: str; policy_number: str | None = None; policy_status: str
+    version_number: int | None = None
+    # The version the attestation was issued for — that is the text being accepted.
+    content: str | None = None
+    current_version_number: int | None = None
+    created_at: datetime
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────
@@ -315,6 +374,9 @@ async def _enrich(db, policy):
     pa = (await db.execute(select(func.count(PolicyAttestation.id)).where(PolicyAttestation.policy_id == policy.id, PolicyAttestation.status == AttestationStatus.PENDING))).scalar() or 0
     o = PolicyOut.model_validate(policy)
     o.version_count = vc; o.attestation_count = ac; o.pending_attestations = pa
+    o.current_version_approved = _independently_approved(await _current_version(db, policy.id))
+    o.allowed_transitions = [t.value for t in _TRANSITIONS.get(policy.status, set())
+                             if t not in _NEEDS_APPROVED_VERSION or o.current_version_approved]
     return o
 
 
@@ -340,6 +402,10 @@ async def create_policy(body: PolicyCreate, db: AsyncSession = Depends(get_db), 
                business_process_id=body.business_process_id, org_entity_id=body.org_entity_id)
     if body.status:
         p.status = _enum_or_400(PolicyStatus, body.status, "status")
+        # Approval needs a second person, so nothing is created already approved.
+        if p.status not in _CREATE_STATUSES:
+            raise HTTPException(
+                422, "A new policy starts as draft or in review: approval needs someone other than its author.")
     db.add(p); await db.flush()
     # Create initial version if content provided
     if body.content:
@@ -447,6 +513,43 @@ async def policies_by_control(control_id: str, db: AsyncSession = Depends(get_db
     )
 
 
+@router.get("/my-attestations", response_model=list[MyAttestationOut])
+async def my_attestations(
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+    tenant_id: str = Depends(get_tenant_id),
+):
+    """The policies the CURRENT user has been asked to read and accept — open to
+    every role, since every employee attests. Pending first, then by due date.
+    Declared before /{pid} so the path is not read as a policy id."""
+    rows = (await db.execute(
+        select(PolicyAttestation, Policy, PolicyVersion)
+        .join(Policy, Policy.id == PolicyAttestation.policy_id)
+        .join(PolicyVersion, PolicyVersion.id == PolicyAttestation.policy_version_id, isouter=True)
+        .where(PolicyAttestation.user_id == user.id, Policy.tenant_id == tenant_id)
+    )).all()
+    current = {
+        v.policy_id: v.version_number
+        for v in (await db.execute(select(PolicyVersion).where(
+            PolicyVersion.policy_id.in_({a.policy_id for a, _, _ in rows} or {""}),
+            PolicyVersion.is_current == True))).scalars().all()  # noqa: E712
+    }
+    today = datetime.utcnow().date().isoformat()
+    out = []
+    for a, p, v in rows:
+        st = a.status.value if hasattr(a.status, "value") else str(a.status)
+        out.append(MyAttestationOut(
+            id=a.id, policy_id=p.id, policy_version_id=a.policy_version_id, status=st,
+            due_date=a.due_date, acknowledged_at=a.acknowledged_at,
+            overdue=bool(st == AttestationStatus.PENDING.value and a.due_date and a.due_date[:10] < today),
+            policy_title=p.title, policy_number=p.policy_number, policy_status=_status_value(p),
+            version_number=v.version_number if v else None, content=v.content if v else None,
+            current_version_number=current.get(p.id), created_at=a.created_at,
+        ))
+    out.sort(key=lambda o: (o.status != AttestationStatus.PENDING.value, o.due_date or "9999", o.policy_title))
+    return out
+
+
 @router.get("/{pid}", response_model=PolicyOut)
 async def get_policy(pid: str, db: AsyncSession = Depends(get_db), _: User = Depends(get_current_user), tenant_id: str = Depends(get_tenant_id)):
     return await _enrich(db, await _policy(db, pid, tenant_id))
@@ -472,7 +575,19 @@ async def update_policy(pid: str, body: PolicyUpdate, db: AsyncSession = Depends
         if v is not None: setattr(p, f, v)
     if linked_after is not None:
         p.linked_controls = linked_after
-    if body.status: p.status = _enum_or_400(PolicyStatus, body.status, "status")
+    moved: tuple[str, str] | None = None
+    if body.status:
+        new_status = _enum_or_400(PolicyStatus, body.status, "status")
+        if new_status != p.status:
+            if new_status not in _TRANSITIONS.get(p.status, set()):
+                raise HTTPException(
+                    409, f"A policy cannot move from '{_status_value(p)}' to '{new_status.value}'.")
+            if new_status in _NEEDS_APPROVED_VERSION and \
+                    not _independently_approved(await _current_version(db, p.id)):
+                raise HTTPException(
+                    409, "The current version must be approved by someone other than its author first.")
+            moved = (_status_value(p), new_status.value)
+            p.status = new_status
     await db.commit(); await db.refresh(p)
 
     # The response is built BEFORE the audit entry: chain_and_add rolls back internally
@@ -484,6 +599,17 @@ async def update_policy(pid: str, body: PolicyUpdate, db: AsyncSession = Depends
     # Attaching a policy to (or detaching it from) a requirement changes what the
     # organisation claims to cover, which is exactly what an auditor re-reads later — so
     # it is recorded explicitly instead of as a generic "PATCH /policies/{id}".
+    if moved is not None:
+        try:
+            await chain_and_add(db, ActivityLog(
+                tenant_id=tenant_id, user_id=user.id, user_email=user.email,
+                action=_TRANSITION_ACTION[PolicyStatus(moved[1])], entity_type="policy",
+                entity_id=p.id, entity_name=(p.title or "")[:255] or None,
+                details={"from": moved[0], "to": moved[1]}, origin="api",
+            ))
+        except Exception:
+            pass
+
     if linked_after is not None and set(linked_after) != set(linked_before):
         entry = ActivityLog(
             tenant_id=tenant_id,
@@ -599,7 +725,9 @@ async def create_version(pid: str, body: VersionCreate, db: AsyncSession = Depen
     for o in old: o.is_current = False
     v = PolicyVersion(policy_id=pid, version_number=max_v + 1, content=body.content,
                       change_summary=body.change_summary, is_current=True, authored_by_id=user.id)
-    db.add(v); await db.flush(); await db.commit(); await db.refresh(v)
+    db.add(v)
+    await _back_to_review(db, await _policy(db, pid, tenant_id))
+    await db.flush(); await db.commit(); await db.refresh(v)
     return VersionOut.model_validate(v)
 
 @router.patch("/{pid}/versions/{vid}/approve", response_model=VersionOut)
@@ -608,6 +736,15 @@ async def approve_version(pid: str, vid: str, db: AsyncSession = Depends(get_db)
     r = await db.execute(select(PolicyVersion).where(PolicyVersion.id == vid, PolicyVersion.policy_id == pid))
     v = r.scalar_one_or_none()
     if not v: raise HTTPException(404, "Version not found")
+    # Four-eyes, as approve_exception: the author of a text cannot sign it off.
+    # A restore creates a version authored by the restorer, so it needs another
+    # approver too.
+    if v.authored_by_id == user.id:
+        raise HTTPException(403, "You cannot approve a version you wrote (four-eyes principle).")
+    if v.approved_by_id:
+        raise HTTPException(409, "This version is already approved.")
+    if not v.is_current:
+        raise HTTPException(409, "Only the current version can be approved. Restore it first.")
     v.approved_by_id = user.id; v.approved_at = datetime.utcnow().isoformat()
     await db.commit(); await db.refresh(v)
     return VersionOut.model_validate(v)
@@ -660,6 +797,7 @@ async def restore_version(
         authored_by_id=user.id,
     )
     db.add(restored)
+    await _back_to_review(db, await _policy(db, pid, tenant_id))
     await db.flush()
     await db.commit()
     await db.refresh(restored)
@@ -718,6 +856,11 @@ async def acknowledge_attestation(pid: str, aid: str, db: AsyncSession = Depends
     r = await db.execute(select(PolicyAttestation).where(PolicyAttestation.id == aid, PolicyAttestation.policy_id == pid, PolicyAttestation.user_id == user.id))
     att = r.scalar_one_or_none()
     if not att: raise HTTPException(404, "Attestation not found")
+    # Policy is checked in the caller's tenant too (the row is reached by ids only).
+    await _policy(db, pid, tenant_id)
+    if att.status == AttestationStatus.ACKNOWLEDGED:
+        # Idempotent: a double click must not move the recorded acceptance time.
+        return AttestationOut.model_validate(att)
     att.status = AttestationStatus.ACKNOWLEDGED; att.acknowledged_at = datetime.utcnow().isoformat()
     await db.commit(); await db.refresh(att)
     return AttestationOut.model_validate(att)

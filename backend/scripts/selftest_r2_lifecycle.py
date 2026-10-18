@@ -25,6 +25,11 @@ Sections
                offboard (date + reason, logged); reactivation clears it; prescreen and
                approved AI analysis kept as assessments, score follows the latest;
                delete refused once a contract carries a CISO decision
+* policies   — nothing created approved; transitions enforced; approved/published
+               need the current version approved by a non-author (four-eyes, also
+               after restore); a new version sends the policy back to review;
+               my-attestations for any role + idempotent acknowledge; review and
+               overdue-acknowledgement reminders
 """
 from __future__ import annotations
 
@@ -305,6 +310,85 @@ async def vendors(api: Api) -> None:
     check(s == 204, "vendor without records deletes")
 
 
+async def policies(api: Api) -> None:
+    print("[policies]")
+    # The employee: any non-manager role (viewer is a read-only demo role).
+    pm, viewer = role_email("policy_manager"), role_email("business_owner")
+    s, b = await api.req("POST", "/policies", who=pm, json={"title": "ST bad", "status": "published", "content": "x"})
+    check(s == 422, "cannot create a policy already published", b)
+    s, p = await api.req("POST", "/policies", who=pm, json={"title": "ST Acceptable Use", "content": "Be nice."})
+    pid = p["id"]
+    check(s == 201 and p["status"] == "draft" and "in_review" in p["allowed_transitions"]
+          and "approved" not in p["allowed_transitions"], "draft offers review, not approval", p.get("allowed_transitions"))
+    s, b = await api.req("PATCH", f"/policies/{pid}", who=pm, lang="fr", json={"status": "published"})
+    check(s == 409 and "politique" in str(b), "draft → published refused (fr)", b)
+    s, p = await api.req("PATCH", f"/policies/{pid}", who=pm, json={"status": "in_review"})
+    check(s == 200 and p["status"] == "in_review", "draft → in_review")
+    s, _ = await api.req("PATCH", f"/policies/{pid}", who=pm, json={"status": "approved"})
+    check(s == 409, "approve refused while the version is unapproved")
+    _, vs = await api.req("GET", f"/policies/{pid}/versions")
+    vid = vs[0]["id"]
+    s, _ = await api.req("PATCH", f"/policies/{pid}/versions/{vid}/approve", who=pm)
+    check(s == 403, "author cannot approve own version (four-eyes)")
+    s, v = await api.req("PATCH", f"/policies/{pid}/versions/{vid}/approve")
+    check(s == 200 and v["approved_by_id"], "second person approves the version")
+    s, _ = await api.req("PATCH", f"/policies/{pid}/versions/{vid}/approve", who="admin@demo.com")
+    check(s == 409, "already approved → 409")
+    s, p = await api.req("PATCH", f"/policies/{pid}", who=pm, json={"status": "approved"})
+    check(s == 200 and p["current_version_approved"] and "published" in p["allowed_transitions"], "in_review → approved")
+    s, p = await api.req("PATCH", f"/policies/{pid}", who=pm, json={"status": "published"})
+    check(s == 200 and p["status"] == "published", "approved → published")
+
+    async with AsyncSessionLocal() as db:
+        viewer_id = (await db.execute(select(User.id).where(User.email == viewer))).scalar_one()
+    s, atts = await api.req("POST", f"/policies/{pid}/attestations", who=pm, json={"user_ids": [viewer_id], "due_date": "2020-01-01"})
+    check(s == 201 and len(atts) == 1, "attestation requested")
+    aid = atts[0]["id"]
+    s, mine = await api.req("GET", "/policies/my-attestations", who=viewer)
+    mine_row = next((m for m in mine if m["id"] == aid), None) if s == 200 else None
+    check(mine_row is not None and mine_row["content"] == "Be nice." and mine_row["overdue"],
+          "employee sees it in my-attestations, with text, overdue", mine)
+
+    from app.services.notification_generator import run_all_checks
+    from app.models.policy import Policy
+    from app.models.notification import Notification
+    async with AsyncSessionLocal() as db:
+        tid = (await db.execute(select(Policy.tenant_id).where(Policy.id == pid))).scalar_one()
+        await db.execute(update(Policy).where(Policy.id == pid).values(next_review_date="2020-01-01"))
+        await db.commit()
+        res = await run_all_checks(db, tenant_id=tid)
+        keys = {n.title_key for n in (await db.execute(select(Notification).where(
+            Notification.tenant_id == tid, Notification.title_key.in_([
+                "notifications.policy_review_overdue.title", "notifications.attestation_overdue.title"])))).scalars()}
+    check(res.get("policy_reviews", 0) >= 1 and res.get("overdue_attestations", 0) >= 1
+          and len(keys) == 2, "review + overdue-acknowledgement reminders created", res)
+
+    s, a = await api.req("PATCH", f"/policies/{pid}/attestations/{aid}/acknowledge", who=viewer)
+    check(s == 200 and a["status"] == "acknowledged", "employee acknowledges")
+    s, a2 = await api.req("PATCH", f"/policies/{pid}/attestations/{aid}/acknowledge", who=viewer)
+    check(s == 200 and a2["acknowledged_at"] == a["acknowledged_at"], "acknowledge is idempotent")
+    s, _ = await api.req("PATCH", f"/policies/{pid}/attestations/{aid}/acknowledge", who=pm)
+    check(s == 404, "cannot acknowledge for someone else")
+
+    s, _ = await api.req("POST", f"/policies/{pid}/versions", who=pm, json={"content": "Be nicer.", "change_summary": "tone"})
+    _, p = await api.req("GET", f"/policies/{pid}")
+    check(p["status"] == "in_review" and not p["current_version_approved"], "new version → back to review")
+    _, vs = await api.req("GET", f"/policies/{pid}/versions")
+    old = next(v for v in vs if v["version_number"] == 1)
+    s, r = await api.req("POST", f"/policies/{pid}/versions/{old['id']}/restore", who="ciso@demo.com")
+    s, _ = await api.req("PATCH", f"/policies/{pid}/versions/{r['id']}/approve", who="ciso@demo.com")
+    check(s == 403, "restorer cannot approve the restored version")
+    s, _ = await api.req("PATCH", f"/policies/{pid}/versions/{r['id']}/approve", who=pm)
+    check(s == 200, "another person approves the restored version")
+    s, p = await api.req("PATCH", f"/policies/{pid}", who=pm, json={"status": "retired"})
+    check(s == 200 and p["status"] == "retired" and p["allowed_transitions"] == ["draft"], "retire (only revive left)")
+    s, logs = await api.req("GET", "/activity-log", params={"entity_type": "policy", "page_size": 100})
+    items = logs.get("items", logs) if isinstance(logs, dict) else logs
+    # The middleware files the acknowledgement under the attestation id (last id in the path).
+    acts = {x.get("action") for x in items or [] if x.get("entity_id") in (pid, aid)}
+    check({"submit", "approve", "publish", "retire", "acknowledge"} <= acts, "workflow + acknowledge in the activity log", acts)
+
+
 async def http_tests() -> None:
     from app.core.rate_limit import limiter
     limiter.enabled = False
@@ -316,6 +400,7 @@ async def http_tests() -> None:
         sc = await scenarios(api)
         await acceptances(api, sc)
         await vendors(api)
+        await policies(api)
 
 
 def main() -> None:

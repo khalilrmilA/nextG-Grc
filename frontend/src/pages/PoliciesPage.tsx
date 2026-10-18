@@ -9,6 +9,10 @@ import {
 import { policiesApi, usersApi, aiApi, assetGraphApi, frameworksApi, type PolicyVersion, type PolicyAttestation } from "../api/endpoints";
 import type { Policy, PolicyLinkedControl, Framework, FrameworkControl } from "../types";
 import i18n from "../i18n";
+import { useAuthStore, hasAnyRole, currentUserId } from "../store/auth";
+
+// POST/PATCH/DELETE /policies, versions, approve, attestations: policy_manager + CISO.
+const POLICY_WRITE_ROLES = ["policy_manager", "ciso", "tenant_admin", "super_admin"];
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -128,7 +132,8 @@ function NewPolicyModal({ onClose, onSaved }: { readonly onClose: () => void; re
               <label htmlFor="pol-status" className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">{t("policies.status_label")}</label>
               <select id="pol-status" className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
                 value={form.status} onChange={e => setForm(f => ({ ...f, status: e.target.value }))}>
-                {STATUS_KEYS.map(o => <option key={o} value={o}>{STATUS_MAP[o]?.label ?? o}</option>)}
+                {/* Approval needs a second person, so a new policy starts as draft or in review. */}
+                {STATUS_KEYS.filter(o => o === "draft" || o === "in_review").map(o => <option key={o} value={o}>{STATUS_MAP[o]?.label ?? o}</option>)}
               </select>
             </div>
           </div>
@@ -415,13 +420,20 @@ function PolicyControlsTab({ policy, onSaved }: {
 function PolicyDetailModal({ policy, onClose, onStatusChange, onDelete, onUpdated, users }: {
   readonly policy: Policy;
   readonly onClose: () => void;
-  readonly onStatusChange: (id: string, next: string) => void;
-  readonly onDelete: (id: string) => void;
+  readonly onStatusChange: (id: string, next: string) => Promise<void>;
+  readonly onDelete: (id: string) => Promise<void>;
   readonly onUpdated: (p: Policy) => void;
   readonly users: TenantUser[];
 }) {
   const { t } = useTranslation();
   const [tab, setTab] = useState<DetailTab>("overview");
+  const authUser = useAuthStore((u) => u);
+  const canManage = hasAnyRole(authUser, POLICY_WRITE_ROLES);
+  const myId = currentUserId(authUser);
+  const [workflowError, setWorkflowError] = useState("");
+  const [movingTo, setMovingTo] = useState<string | null>(null);
+  const [confirm, setConfirm] = useState<null | "delete" | "retired">(null);
+  const [approvingVer, setApprovingVer] = useState<string | null>(null);
 
   // version state
   const [versions, setVersions] = useState<PolicyVersion[]>([]);
@@ -463,6 +475,35 @@ function PolicyDetailModal({ policy, onClose, onStatusChange, onDelete, onUpdate
   }, [policy.id]);
 
   useEffect(() => { loadVersions(); loadAttestations(); }, [loadVersions, loadAttestations]);
+  // Acknowledgements happen elsewhere (My policies) — re-read when the tab opens.
+  useEffect(() => { if (tab === "attestations") loadAttestations(); }, [tab, loadAttestations]);
+
+  /** Status / allowed moves can change after a version is added, restored or approved. */
+  async function refreshPolicy() {
+    try { onUpdated(await policiesApi.get(policy.id)); } catch { /* keep what is on screen */ }
+  }
+
+  async function moveTo(next: string) {
+    setMovingTo(next); setWorkflowError("");
+    try {
+      await onStatusChange(policy.id, next);
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
+      setWorkflowError(typeof msg === "string" ? msg : t("common.error_generic"));
+    } finally { setMovingTo(null); }
+  }
+
+  async function handleApproveVersion(v: PolicyVersion) {
+    setApprovingVer(v.id); setVerError("");
+    try {
+      await policiesApi.approveVersion(policy.id, v.id);
+      await loadVersions();
+      await refreshPolicy();
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
+      setVerError(typeof msg === "string" ? msg : t("common.error_generic"));
+    } finally { setApprovingVer(null); }
+  }
 
   // When switching to content tab, pre-fill with current version
   useEffect(() => {
@@ -486,6 +527,7 @@ function PolicyDetailModal({ policy, onClose, onStatusChange, onDelete, onUpdate
     try {
       await policiesApi.restorePolicyVersion(policy.id, v.id);
       await loadVersions();
+      await refreshPolicy();
     } catch (err: any) {
       setVerError(
         err?.response?.data?.detail ??
@@ -503,6 +545,8 @@ function PolicyDetailModal({ policy, onClose, onStatusChange, onDelete, onUpdate
       const v = await policiesApi.createVersion(policy.id, { content: newContent.trim(), change_summary: changeSummary.trim() || undefined });
       setVersions(prev => [v, ...prev.map(x => ({ ...x, is_current: false }))]);
       setChangeSummary("");
+      // An approved/published policy goes back to review with its new text.
+      await refreshPolicy();
     } catch { setVerError(t("common.error_generic")); }
     finally { setSavingVer(false); }
   }
@@ -564,18 +608,29 @@ function PolicyDetailModal({ policy, onClose, onStatusChange, onDelete, onUpdate
     retired:   { label: t("policies.retired"),   icon: Clock,        color: "bg-gray-100 text-gray-400"     },
   };
 
-  const WORKFLOW_ACTIONS: Record<string, { label: string; next: string; color: string } | undefined> = {
-    draft:     { label: t("policies.submit_for_review"), next: "in_review", color: "bg-orange-500 hover:bg-orange-600 text-white" },
-    in_review: { label: t("policies.approve"),           next: "approved",  color: "bg-blue-600 hover:bg-blue-700 text-white"    },
-    approved:  { label: t("policies.publish"),           next: "published", color: "bg-green-600 hover:bg-green-700 text-white"  },
+  // One button per move the backend allows from here (policy.allowed_transitions).
+  const MOVE_CFG: Record<string, { label: string; color: string }> = {
+    in_review: { label: policy.status === "draft" ? t("policies.submit_for_review") : t("r2.policies.back_to_review"), color: "bg-orange-500 hover:bg-orange-600 text-white" },
+    approved:  { label: t("policies.approve"),  color: "bg-blue-600 hover:bg-blue-700 text-white" },
+    published: { label: t("policies.publish"),  color: "bg-green-600 hover:bg-green-700 text-white" },
+    draft:     { label: policy.status === "retired" ? t("r2.policies.revive") : t("r2.policies.back_to_draft"), color: "bg-white border border-gray-200 text-gray-700 hover:bg-gray-50" },
+    retired:   { label: t("r2.policies.retire"), color: "bg-white border border-red-200 text-red-700 hover:bg-red-50" },
   };
+  const moves = (policy.allowed_transitions ?? []).slice().sort(
+    (a, b) => ["in_review", "approved", "published", "draft", "retired"].indexOf(a) - ["in_review", "approved", "published", "draft", "retired"].indexOf(b));
+  // Approval of the text gates approved/published — say why the button is missing.
+  const awaitingVersionApproval = policy.status === "in_review" && !policy.current_version_approved;
 
   const s = STATUS_MAP[policy.status] ?? STATUS_MAP.draft;
   const StatusIcon = s.icon;
-  const action = WORKFLOW_ACTIONS[policy.status];
   const versionNum = typeof policy.version === "number" ? policy.version
     : (typeof policy.version === "string" ? parseInt(policy.version, 10) || 1 : 1);
   const owner = users.find(u => u.id === policy.owner_id);
+  const userName = (id?: string | null) => {
+    if (!id) return "—";
+    const u = users.find(x => x.id === id);
+    return u ? `${u.first_name} ${u.last_name}`.trim() || u.email : (id === myId ? t("r2.policies.you") : id.slice(0, 8));
+  };
   const ownerName = owner ? `${owner.first_name} ${owner.last_name}`.trim() : null;
 
   const attAcked = attestations.filter(a => a.status === "acknowledged").length;
@@ -726,23 +781,39 @@ function PolicyDetailModal({ policy, onClose, onStatusChange, onDelete, onUpdate
                     );
                   })}
                 </div>
-                {action && (
-                  <button onClick={() => { onStatusChange(policy.id, action.next); onClose(); }}
-                    className={`w-full py-2.5 rounded-lg text-sm font-medium transition-colors ${action.color}`}>
-                    {action.label} →
-                  </button>
+                {awaitingVersionApproval && (
+                  <p className="text-xs text-orange-700 bg-orange-50 border border-orange-100 rounded-lg px-3 py-2 mb-3">
+                    {t("r2.policies.needs_version_approval")}
+                  </p>
+                )}
+                {workflowError && <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2 mb-3">{workflowError}</p>}
+                {canManage && moves.length > 0 && (
+                  <div className="flex flex-wrap gap-2">
+                    {moves.map(next => {
+                      const cfg = MOVE_CFG[next];
+                      return (
+                        <button key={next} disabled={!!movingTo}
+                          onClick={() => (next === "retired" ? setConfirm("retired") : moveTo(next))}
+                          className={`flex-1 min-w-[140px] py-2.5 rounded-lg text-sm font-medium transition-colors disabled:opacity-50 inline-flex items-center justify-center gap-2 ${cfg.color}`}>
+                          {movingTo === next && <Loader2 className="w-4 h-4 animate-spin" />} {cfg.label}
+                        </button>
+                      );
+                    })}
+                  </div>
                 )}
                 {policy.status === "published" && (
                   <p className="text-center text-xs text-green-600 font-medium py-2">✓ {t("policies.policy_live")}</p>
                 )}
               </div>
 
-              <div className="pt-3 border-t border-gray-100">
-                <button onClick={() => { onDelete(policy.id); onClose(); }}
-                  className="flex items-center gap-2 text-red-500 hover:text-red-700 text-sm font-medium transition-colors">
-                  <Trash2 className="w-4 h-4" /> {t("common.delete")}
-                </button>
-              </div>
+              {canManage && (
+                <div className="pt-3 border-t border-gray-100">
+                  <button onClick={() => setConfirm("delete")}
+                    className="flex items-center gap-2 text-red-500 hover:text-red-700 text-sm font-medium transition-colors">
+                    <Trash2 className="w-4 h-4" /> {t("common.delete")}
+                  </button>
+                </div>
+              )}
             </div>
           )}
 
@@ -854,6 +925,11 @@ function PolicyDetailModal({ policy, onClose, onStatusChange, onDelete, onUpdate
                             {t("policies.current_version")}
                           </span>
                         )}
+                        {v.approved_by_id ? (
+                          <span className="rounded-full px-2.5 py-0.5 text-xs font-semibold bg-green-100 text-green-700">{t("r2.policies.version_approved")}</span>
+                        ) : v.is_current && (
+                          <span className="rounded-full px-2.5 py-0.5 text-xs font-semibold bg-orange-100 text-orange-700">{t("r2.policies.version_awaiting")}</span>
+                        )}
                         {v.change_summary && (
                           <span className="text-xs text-gray-400 truncate max-w-[200px]">— {v.change_summary}</span>
                         )}
@@ -867,7 +943,24 @@ function PolicyDetailModal({ policy, onClose, onStatusChange, onDelete, onUpdate
                         <pre className="text-sm text-gray-700 whitespace-pre-wrap font-sans leading-relaxed">
                           {v.content}
                         </pre>
-                        {!v.is_current && (
+                        <p className="mt-3 text-xs text-gray-500">
+                          {t("r2.policies.authored_by", { name: userName(v.authored_by_id) })}
+                          {v.approved_by_id && <> · {t("r2.policies.approved_by", { name: userName(v.approved_by_id), date: v.approved_at ? new Date(v.approved_at).toLocaleDateString(dateLocale(i18n.language)) : "" })}</>}
+                        </p>
+                        {canManage && v.is_current && !v.approved_by_id && (
+                          v.authored_by_id && v.authored_by_id === myId ? (
+                            <p className="mt-2 text-xs text-gray-500">{t("r2.policies.cannot_approve_own")}</p>
+                          ) : (
+                            <div className="mt-3 flex justify-end">
+                              <button onClick={() => handleApproveVersion(v)} disabled={approvingVer === v.id}
+                                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium rounded-lg disabled:opacity-50">
+                                {approvingVer === v.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle className="w-3.5 h-3.5" />}
+                                {t("r2.policies.approve_version")}
+                              </button>
+                            </div>
+                          )
+                        )}
+                        {canManage && !v.is_current && (
                           <div className="mt-3 pt-3 border-t border-gray-100 flex justify-end">
                             <button
                               onClick={() => handleRestoreVersion(v)}
@@ -1000,6 +1093,26 @@ function PolicyDetailModal({ policy, onClose, onStatusChange, onDelete, onUpdate
 
         </div>
       </div>
+
+      {confirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 space-y-4" role="alertdialog" aria-modal="true">
+            <h3 className="font-semibold text-gray-900">{confirm === "delete" ? t("r2.policies.delete_confirm_title") : t("r2.policies.retire_confirm_title")}</h3>
+            <p className="text-sm text-gray-600">{confirm === "delete" ? t("r2.policies.delete_confirm_body", { title: policy.title }) : t("r2.policies.retire_confirm_body", { title: policy.title })}</p>
+            <div className="flex justify-end gap-2">
+              <button onClick={() => setConfirm(null)} className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800">{t("common.cancel")}</button>
+              <button
+                onClick={async () => {
+                  const what = confirm; setConfirm(null);
+                  if (what === "delete") { await onDelete(policy.id); onClose(); } else { await moveTo("retired"); }
+                }}
+                className="inline-flex items-center gap-2 bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg text-sm font-medium">
+                {confirm === "delete" ? t("common.delete") : t("r2.policies.retire")}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -1015,6 +1128,7 @@ export default function PoliciesPage() {
   const [search, setSearch]           = useState("");
   const [showAdd, setShowAdd]         = useState(false);
   const [selected, setSelected]       = useState<Policy | null>(null);
+  const canManagePolicies = hasAnyRole(useAuthStore((u) => u), POLICY_WRITE_ROLES);
 
   const STATUS_MAP: Record<string, { label: string; icon: typeof CheckCircle; color: string }> = {
     draft:     { label: t("policies.draft"),     icon: Clock,        color: "bg-gray-100 text-gray-500"     },
@@ -1034,11 +1148,11 @@ export default function PoliciesPage() {
 
   useEffect(() => { load(); }, [load]);
 
+  // Throws so the detail modal can show the backend's refusal (409 transition / approval).
   async function handleStatusChange(id: string, next: string) {
-    try {
-      const updated = await policiesApi.update(id, { status: next as Policy["status"] });
-      setPolicies(prev => prev.map(p => p.id === id ? updated : p));
-    } catch { /* ignore */ }
+    const updated = await policiesApi.update(id, { status: next as Policy["status"] });
+    setPolicies(prev => prev.map(p => p.id === id ? updated : p));
+    setSelected(prev => (prev && prev.id === id ? updated : prev));
   }
 
   async function handleDelete(id: string) {
@@ -1089,10 +1203,12 @@ export default function PoliciesPage() {
             {t("policies.subtitle", { published: published.length, review: policies.filter(p => p.status === "in_review").length })}
           </p>
         </div>
-        <button onClick={() => setShowAdd(true)}
-          className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors">
-          <Plus className="w-4 h-4" /> {t("policies.new_policy")}
-        </button>
+        {canManagePolicies && (
+          <button onClick={() => setShowAdd(true)}
+            className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors">
+            <Plus className="w-4 h-4" /> {t("policies.new_policy")}
+          </button>
+        )}
       </div>
 
       {published.length < 3 && (

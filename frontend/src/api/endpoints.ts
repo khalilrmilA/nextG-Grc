@@ -1479,6 +1479,23 @@ export interface PolicyAttestation {
   created_at: string;
 }
 
+export interface MyPolicyAttestation {
+  id: string;
+  policy_id: string;
+  policy_version_id: string;
+  status: "pending" | "acknowledged" | "declined" | "expired";
+  due_date?: string | null;
+  acknowledged_at?: string | null;
+  overdue: boolean;
+  policy_title: string;
+  policy_number?: string | null;
+  policy_status: string;
+  version_number?: number | null;
+  content?: string | null;
+  current_version_number?: number | null;
+  created_at: string;
+}
+
 export const policiesApi = {
   /** GET /policies declares NO query parameters (list_policies in policies.py):
    *  it always returns every policy of the tenant, newest first. `page`,
@@ -1489,6 +1506,10 @@ export const policiesApi = {
     apiClient.get<Policy[]>("/policies", { params }).then((r) => r.data),
 
   get: (id: string) => apiClient.get<Policy>(`/policies/${id}`).then((r) => r.data),
+
+  // The signed-in user's own acknowledgements (any role) — the My policies page.
+  myAttestations: () =>
+    apiClient.get<MyPolicyAttestation[]>("/policies/my-attestations").then((r) => r.data),
 
   create: (data: Partial<Policy>) =>
     apiClient.post<Policy>("/policies", data).then((r) => r.data),

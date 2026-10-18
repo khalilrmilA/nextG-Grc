@@ -76,6 +76,45 @@ const bundle: { en: Record<string, any>; fr: Record<string, any>; ar: Record<str
         "upload_contract_flow": "The new version goes through the same AI review, then CISO review, then can be sent to the vendor.",
         "new_contract_expiry": "Contract expiry after this renewal"
       },
+      "policies": {
+        "back_to_review": "Back to review",
+        "back_to_draft": "Back to draft",
+        "revive": "Revive as draft",
+        "retire": "Retire",
+        "needs_version_approval": "The current version must be approved by someone other than its author (History tab) before the policy can be approved or published.",
+        "version_approved": "Approved",
+        "version_awaiting": "Awaiting approval",
+        "approve_version": "Approve this version",
+        "cannot_approve_own": "You wrote this version: another approver must sign it off (four-eyes principle).",
+        "authored_by": "Written by {{name}}",
+        "approved_by": "approved by {{name}} on {{date}}",
+        "you": "you",
+        "delete_confirm_title": "Delete this policy?",
+        "delete_confirm_body": "“{{title}}”, all its versions and acknowledgements will be deleted (a trace is kept in the activity log). To stop using a policy but keep its record, retire it instead.",
+        "retire_confirm_title": "Retire this policy?",
+        "retire_confirm_body": "“{{title}}” will no longer be in force. Its versions and acknowledgements are kept; it can be revived as a draft later.",
+        "submitted_status": "Submitted for approval",
+        "submitted_for_approval": "Saved — another approver must approve it in Policies",
+        "auditor_visible_hint": "It becomes visible to auditors once another person approves and publishes it."
+      },
+      "mypolicies": {
+        "title": "My Policies",
+        "subtitle": "Policies you are asked to read and accept.",
+        "pending": "To acknowledge",
+        "acknowledged": "Acknowledged",
+        "empty": "No policy is waiting for your acknowledgement.",
+        "none_done": "Nothing acknowledged yet.",
+        "load_failed": "Your policies could not be loaded.",
+        "due": "Due {{date}}",
+        "overdue": "Overdue",
+        "acknowledged_on": "Acknowledged on {{date}}",
+        "version": "Version {{n}}",
+        "newer_version": "A newer version (v{{n}}) exists; you are accepting the version you were asked to read.",
+        "read": "Read",
+        "accept": "I have read and accept this policy",
+        "accept_failed": "Your acknowledgement could not be recorded.",
+        "no_content": "This version has no text."
+      },
       "treatment": {
         "justification": "Justification",
         "error_justification": "A justification is required for every treatment decision"
@@ -100,6 +139,9 @@ const bundle: { en: Record<string, any>; fr: Record<string, any>; ar: Record<str
         "hide_changes": "Hide changes",
         "no_field_changes": "No tracked field changed in this edit."
       }
+    },
+    "nav": {
+      "my_policies": "My Policies"
     }
   },
   fr: {
@@ -172,6 +214,45 @@ const bundle: { en: Record<string, any>; fr: Record<string, any>; ar: Record<str
         "upload_contract_flow": "La nouvelle version suit le même parcours : revue IA, puis revue du RSSI, puis envoi au fournisseur.",
         "new_contract_expiry": "Échéance du contrat après ce renouvellement"
       },
+      "policies": {
+        "back_to_review": "Renvoyer en revue",
+        "back_to_draft": "Renvoyer en brouillon",
+        "revive": "Réactiver en brouillon",
+        "retire": "Retirer",
+        "needs_version_approval": "La version actuelle doit être approuvée par une autre personne que son auteur (onglet Historique) avant que la politique puisse être approuvée ou publiée.",
+        "version_approved": "Approuvée",
+        "version_awaiting": "En attente d’approbation",
+        "approve_version": "Approuver cette version",
+        "cannot_approve_own": "Vous avez rédigé cette version : un autre approbateur doit la valider (principe des quatre yeux).",
+        "authored_by": "Rédigée par {{name}}",
+        "approved_by": "approuvée par {{name}} le {{date}}",
+        "you": "vous",
+        "delete_confirm_title": "Supprimer cette politique ?",
+        "delete_confirm_body": "« {{title}} », toutes ses versions et prises de connaissance seront supprimées (une trace est conservée dans le journal d’activité). Pour cesser d’utiliser une politique en gardant son historique, retirez-la plutôt.",
+        "retire_confirm_title": "Retirer cette politique ?",
+        "retire_confirm_body": "« {{title}} » ne sera plus en vigueur. Ses versions et prises de connaissance sont conservées ; elle pourra être réactivée en brouillon.",
+        "submitted_status": "Soumise pour approbation",
+        "submitted_for_approval": "Enregistrée — un autre approbateur doit l’approuver dans Politiques",
+        "auditor_visible_hint": "Elle devient visible des auditeurs une fois approuvée et publiée par une autre personne."
+      },
+      "mypolicies": {
+        "title": "Mes politiques",
+        "subtitle": "Les politiques que vous devez lire et accepter.",
+        "pending": "À accepter",
+        "acknowledged": "Acceptées",
+        "empty": "Aucune politique n’attend votre prise de connaissance.",
+        "none_done": "Rien d’accepté pour l’instant.",
+        "load_failed": "Vos politiques n’ont pas pu être chargées.",
+        "due": "Échéance {{date}}",
+        "overdue": "En retard",
+        "acknowledged_on": "Acceptée le {{date}}",
+        "version": "Version {{n}}",
+        "newer_version": "Une version plus récente (v{{n}}) existe ; vous acceptez la version qui vous a été soumise.",
+        "read": "Lire",
+        "accept": "J’ai lu et j’accepte cette politique",
+        "accept_failed": "Votre prise de connaissance n’a pas pu être enregistrée.",
+        "no_content": "Cette version n’a pas de texte."
+      },
       "treatment": {
         "justification": "Justification",
         "error_justification": "Une justification est requise pour chaque décision de traitement"
@@ -196,6 +277,9 @@ const bundle: { en: Record<string, any>; fr: Record<string, any>; ar: Record<str
         "hide_changes": "Masquer les modifications",
         "no_field_changes": "Aucun champ suivi n’a changé lors de cette modification."
       }
+    },
+    "nav": {
+      "my_policies": "Mes politiques"
     }
   },
   ar: {
@@ -268,6 +352,45 @@ const bundle: { en: Record<string, any>; fr: Record<string, any>; ar: Record<str
         "upload_contract_flow": "تمر النسخة الجديدة بالمسار نفسه: مراجعة الذكاء الاصطناعي، ثم مراجعة مسؤول أمن المعلومات، ثم الإرسال إلى المورّد.",
         "new_contract_expiry": "تاريخ انتهاء العقد بعد هذا التجديد"
       },
+      "policies": {
+        "back_to_review": "إعادة إلى المراجعة",
+        "back_to_draft": "إعادة إلى المسودة",
+        "revive": "إعادة التفعيل كمسودة",
+        "retire": "سحب السياسة",
+        "needs_version_approval": "يجب أن يوافق على الإصدار الحالي شخص غير كاتبه (تبويب السجل) قبل أن تتم الموافقة على السياسة أو نشرها.",
+        "version_approved": "معتمد",
+        "version_awaiting": "بانتظار الموافقة",
+        "approve_version": "الموافقة على هذا الإصدار",
+        "cannot_approve_own": "أنت من كتب هذا الإصدار: يجب أن يعتمده موافق آخر (مبدأ العيون الأربع).",
+        "authored_by": "كتبه {{name}}",
+        "approved_by": "اعتمده {{name}} في {{date}}",
+        "you": "أنت",
+        "delete_confirm_title": "حذف هذه السياسة؟",
+        "delete_confirm_body": "سيتم حذف «{{title}}» وجميع إصداراتها وإقراراتها (مع الاحتفاظ بأثر في سجل النشاط). لإيقاف استخدام السياسة مع الاحتفاظ بسجلها، اسحبها بدلاً من ذلك.",
+        "retire_confirm_title": "سحب هذه السياسة؟",
+        "retire_confirm_body": "لن تبقى «{{title}}» سارية. تُحفظ إصداراتها وإقراراتها؛ ويمكن إعادة تفعيلها كمسودة لاحقاً.",
+        "submitted_status": "مُرسلة للموافقة",
+        "submitted_for_approval": "تم الحفظ — يجب أن يوافق عليها موافق آخر في السياسات",
+        "auditor_visible_hint": "تصبح مرئية للمدققين بعد أن يوافق عليها شخص آخر وينشرها."
+      },
+      "mypolicies": {
+        "title": "سياساتي",
+        "subtitle": "السياسات المطلوب منك قراءتها وقبولها.",
+        "pending": "بانتظار الإقرار",
+        "acknowledged": "تم الإقرار",
+        "empty": "لا توجد سياسة بانتظار إقرارك.",
+        "none_done": "لم يتم الإقرار بأي شيء بعد.",
+        "load_failed": "تعذّر تحميل سياساتك.",
+        "due": "الموعد {{date}}",
+        "overdue": "متأخر",
+        "acknowledged_on": "تم الإقرار في {{date}}",
+        "version": "الإصدار {{n}}",
+        "newer_version": "يوجد إصدار أحدث (v{{n}})؛ أنت تقبل الإصدار الذي طُلب منك قراءته.",
+        "read": "قراءة",
+        "accept": "لقد قرأت هذه السياسة وأقبلها",
+        "accept_failed": "تعذّر تسجيل إقرارك.",
+        "no_content": "لا يحتوي هذا الإصدار على نص."
+      },
       "treatment": {
         "justification": "المبرر",
         "error_justification": "يلزم تقديم مبرر لكل قرار معالجة"
@@ -292,6 +415,9 @@ const bundle: { en: Record<string, any>; fr: Record<string, any>; ar: Record<str
         "hide_changes": "إخفاء التغييرات",
         "no_field_changes": "لم يتغير أي حقل متتبَّع في هذا التعديل."
       }
+    },
+    "nav": {
+      "my_policies": "سياساتي"
     }
   },
 };

@@ -483,6 +483,9 @@ export default function PolicyGeneratorPage() {
   const [editing, setEditing] = useState(false);
   const [editContent, setEditContent] = useState("");
   const [approved, setApproved] = useState(false);
+  // Four-eyes: when the clicker wrote the current version, "Approve & Save" can only
+  // submit it for review — someone else approves it in Policies.
+  const [submittedForReview, setSubmittedForReview] = useState(false);
 
   const abortRef = useRef<AbortController | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -753,8 +756,23 @@ ${currentContent
         const versions = await policiesApi.getVersions(id);
         versionId = (versions.find(v => v.is_current) ?? versions[0])?.id ?? null;
       }
-      if (versionId) await policiesApi.approveVersion(id, versionId);
-      await policiesApi.update(id, { status: "approved" });
+      let ownText = false;
+      if (versionId) {
+        try {
+          await policiesApi.approveVersion(id, versionId);
+        } catch (err: unknown) {
+          const code = (err as { response?: { status?: number } })?.response?.status;
+          if (code === 403) ownText = true;          // author cannot approve their own text
+          else if (code !== 409) throw err;          // 409 = already approved by someone
+        }
+      }
+      // draft → in_review → approved: the workflow has no shortcut.
+      const current = await policiesApi.get(id);
+      if (current.status === "draft") await policiesApi.update(id, { status: "in_review" });
+      if (!ownText && current.status !== "approved" && current.status !== "published") {
+        await policiesApi.update(id, { status: "approved" });
+      }
+      setSubmittedForReview(ownText);
       // An approved record is never silently rewritten by a regeneration.
       reuseOnRegenRef.current = false;
       setApproved(true);
@@ -1037,8 +1055,8 @@ ${currentContent
                   </span>
                 )}
                 {approved && (
-                  <span className="text-xs text-green-700 bg-green-50 border border-green-200 px-2 py-0.5 rounded-full flex items-center gap-1">
-                    <CheckCircle className="w-3 h-3" /> {t("docgen.approved_status")}
+                  <span className={`text-xs px-2 py-0.5 rounded-full flex items-center gap-1 border ${submittedForReview ? "text-orange-700 bg-orange-50 border-orange-200" : "text-green-700 bg-green-50 border-green-200"}`}>
+                    <CheckCircle className="w-3 h-3" /> {submittedForReview ? t("r2.policies.submitted_status") : t("docgen.approved_status")}
                   </span>
                 )}
               </>
@@ -1107,7 +1125,7 @@ ${currentContent
               ) : (
                 <span className={`flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg ${approved ? "text-green-700 bg-green-50 border border-green-200" : "text-blue-700 bg-blue-50 border border-blue-200"}`}>
                   <CheckCheck className="w-3.5 h-3.5" />
-                  {approved ? t("docgen.approved_saved") : t("docgen.save_draft")}
+                  {approved ? (submittedForReview ? t("r2.policies.submitted_for_approval") : t("docgen.approved_saved")) : t("docgen.save_draft")}
                 </span>
               )}
             </div>

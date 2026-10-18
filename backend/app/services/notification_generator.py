@@ -78,6 +78,7 @@ from app.models.login_event import LoginEvent
 from app.models.risk_scenario import RiskScenario
 from app.models.audit import Audit, AuditFinding, AuditStatus, FindingStatus
 from app.models.tenant import Tenant
+from app.models.policy import Policy, PolicyAttestation, PolicyStatus, AttestationStatus
 
 logger = logging.getLogger(__name__)
 
@@ -717,6 +718,85 @@ async def check_risk_review_deadlines(db: AsyncSession, tenant_id: str | None = 
                 )
                 created += 1
 
+    return created
+
+
+async def check_policy_reviews(db: AsyncSession, tenant_id: str | None = None) -> int:
+    """Policies whose next_review_date is within 30 days or past (R2: the review
+    date was stored and shown but nothing ever reminded anyone of it).
+
+    The owner and the tenant's stakeholders are told; a retired policy is not
+    reviewed. Weekly at most per person and policy.
+    """
+    created = 0
+    today = datetime.utcnow().date()
+    policies = (await db.execute(_scoped(
+        select(Policy).where(Policy.next_review_date.isnot(None), Policy.status != PolicyStatus.RETIRED),
+        Policy.tenant_id, tenant_id))).scalars().all()
+    for policy in policies:
+        try:
+            due = datetime.fromisoformat(policy.next_review_date[:10]).date()
+        except (ValueError, TypeError):
+            continue
+        days = (due - today).days
+        if days > 30:
+            continue
+        if days < 0:
+            severity, key = "high", "notifications.policy_review_overdue"
+            title = f"Policy review OVERDUE: {policy.title[:50]}"
+            message = f"Policy '{policy.title}' was due for review on {policy.next_review_date[:10]}."
+        else:
+            severity, key = ("medium" if days <= 7 else "info"), "notifications.policy_review_due"
+            title = f"Policy review due in {days} days: {policy.title[:50]}"
+            message = f"Policy '{policy.title}' is due for review on {policy.next_review_date[:10]}."
+        recipients = {u.id: u for u in await get_recipients_for_tenant(db, policy.tenant_id)}
+        owner = await get_owner_in_tenant(db, policy.owner_id, policy.tenant_id)
+        if owner:
+            recipients[owner.id] = owner
+        for user in recipients.values():
+            if await notification_exists(db, user.id, NotificationType.POLICY_REVIEW_DUE, policy.id, within_days=7):
+                continue
+            await create_notification(
+                db, user=user, notif_type=NotificationType.POLICY_REVIEW_DUE,
+                title=title, message=message, entity_id=policy.id, entity_type="policy",
+                link=f"/policies?highlight={policy.id}", severity=severity,
+                title_key=f"{key}.title", message_key=f"{key}.message",
+                params={"policy": policy.title, "days": abs(days), "due": policy.next_review_date[:10]},
+            )
+            created += 1
+    return created
+
+
+async def check_overdue_attestations(db: AsyncSession, tenant_id: str | None = None) -> int:
+    """Pending policy acknowledgements past their due date — the employee is
+    reminded (weekly), in the place they can act: My policies."""
+    created = 0
+    today = datetime.utcnow().date().isoformat()
+    rows = (await db.execute(_scoped(
+        select(PolicyAttestation, Policy)
+        .join(Policy, Policy.id == PolicyAttestation.policy_id)
+        .where(PolicyAttestation.status == AttestationStatus.PENDING,
+               PolicyAttestation.due_date.isnot(None),
+               Policy.status != PolicyStatus.RETIRED),
+        Policy.tenant_id, tenant_id))).all()
+    for att, policy in rows:
+        if not att.due_date or att.due_date[:10] >= today:
+            continue
+        user = await get_owner_in_tenant(db, att.user_id, policy.tenant_id)
+        if not user:
+            continue
+        if await notification_exists(db, user.id, NotificationType.POLICY_REVIEW_DUE, att.id, within_days=7):
+            continue
+        await create_notification(
+            db, user=user, notif_type=NotificationType.POLICY_REVIEW_DUE,
+            title=f"Policy acknowledgement OVERDUE: {policy.title[:50]}",
+            message=f"Please read and accept '{policy.title}' (due {att.due_date[:10]}).",
+            entity_id=att.id, entity_type="policy_attestation", link="/my-policies",
+            severity="high", title_key="notifications.attestation_overdue.title",
+            message_key="notifications.attestation_overdue.message",
+            params={"policy": policy.title, "due": att.due_date[:10]},
+        )
+        created += 1
     return created
 
 
@@ -2459,6 +2539,9 @@ async def run_all_checks(db: AsyncSession, tenant_id: str | None = None) -> dict
         "audit_schedule": 0,
         "finding_assigned": 0,
         "recommendation_due": 0,
+        # R2: policy review dates and overdue acknowledgements.
+        "policy_reviews": 0,
+        "overdue_attestations": 0,
     }
     # Queued e-mails for this run; drained after the commits below.
     outbox: list[dict] = []
@@ -2511,6 +2594,8 @@ async def run_all_checks(db: AsyncSession, tenant_id: str | None = None) -> dict
     # the next restart; it probes for it rather than catching the error, and it
     # is committed like every other check.
     await _run("recommendation_due", "Recommendation deadline check", check_recommendation_due, True)
+    await _run("policy_reviews", "Policy review check", check_policy_reviews)
+    await _run("overdue_attestations", "Overdue attestation check", check_overdue_attestations)
 
     results["total"] = sum(results.values())
 

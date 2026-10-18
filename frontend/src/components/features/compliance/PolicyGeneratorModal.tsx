@@ -138,7 +138,9 @@ export default function PolicyGeneratorModal({
         title: `${gap.control_identifier} — ${gap.control_title}`,
         description: t("policy_gen.desc_assigned", { framework: frameworkShortName, control: gap.control_identifier, name: `${assignee.name}${assignee.email ? ` (${assignee.email})` : ""}`, date: dateStr }),
         category: "Compliance",
-        status: auditorVisible ? "published" : "draft",
+        // Publishing needs the text approved by a second person, so the most a
+        // generated policy can start as is "in review" (policies.py refuses more).
+        status: auditorVisible ? "in_review" : "draft",
         linked_controls: [gap.control_id],
         content: finalContent,
       } as never);
@@ -256,6 +258,7 @@ export default function PolicyGeneratorModal({
                         />
                         <span className="text-xs text-gray-600">{t("compliance.checklist_visible_auditor")}</span>
                       </label>
+                      {auditorVisible && <p className="text-[11px] text-gray-500">{t("r2.policies.auditor_visible_hint")}</p>}
                       <input
                         type="text"
                         placeholder={t("policy_gen.controller_name")}
