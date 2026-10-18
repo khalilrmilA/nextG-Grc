@@ -132,3 +132,140 @@ and work on SQLite and PostgreSQL. From `backend/`:
 
 Tests: `scripts/selftest_r2_lifecycle.py` (103 checks) and `scripts/selftest_compliance_merge.py`
 (34 checks) on a migrated snapshot copy.
+
+---
+
+## Re-check after the fixes (2026-10-18, main @ `2e2399c`)
+
+This was an independent review: 4 code reviews (one per area), plus both selftests run on a fresh
+database. The database was built from the current models, the demo tenant, 77 frameworks and the
+demo role accounts.
+
+- `selftest_r2_lifecycle`: **112 passed, 0 failed**.
+- `selftest_compliance_merge`: **34 passed, 0 failed**.
+- `migrate_r2_lifecycle`: 22 columns added, and idempotent when re-run.
+
+| Area | Verdict |
+|---|---|
+| Risks | ✅ Strong |
+| Third parties | ✅ Strong |
+| Controls | ✅ Strong |
+| Evidence | ✅ Strong |
+| Audits | ✅ Strong |
+| Policies | 🟡 Partial: the periodic **review** step is API-only |
+
+**R2 is still Partial (5 of 6 areas Strong).** Fixing item R-1 makes it Strong, which takes the
+BM-01 share to 69%.
+
+### Needed for Strong
+
+- [ ] **R-1 (S) — Policy periodic review in the UI.**
+  - No screen sets or moves `next_review_date`. The New policy form sends only
+    `review_frequency_months` (PoliciesPage.tsx ~L93-99). The only `policiesApi.update` call
+    changes the status (~L1153). The backend never computes the date (policies.py ~L395-402).
+  - So the review-due reminder never fires for policies created in the UI, and nobody can record
+    that a review was done. Title, description and owner can't be edited either.
+  - Fix:
+    - On publish, set `next_review_date = today + review_frequency_months`.
+    - Add **Mark as reviewed**, which records who and when and moves the date forward.
+    - Add an **Edit details** form: title, description, owner, frequency and next review date.
+
+### Fix before deploying (bugs, not rating)
+
+- [ ] **D-1 (S, regression) — Deleting a draft assessment fails with 500.**
+  - Every new assessment now has rows, but the relationship has no delete cascade and
+    `control_assessments.assessment_id` is NOT NULL.
+  - Reproduced on the test copy: `IntegrityError … NOT NULL constraint failed`.
+  - In production, a 5xx sends the SPA to `/service-down`.
+  - Fix: delete the draft's rows (and their gaps and evidence, retiring file versions) before the
+    assessment, or refuse with a 409 and offer Archive.
+  - Look at: compliance.py delete route ~L2150; models/compliance.py ~L99-101.
+- [ ] **D-2 (S) — `backfill_control_status_source.py` misses rows closed or reopened through the
+  action plan.**
+  - Those rows keep their `ai_confidence`, and the request path is `/action-plan/…`, not
+    `/control-assessments/`.
+  - The first AI re-run in production would then overwrite those closures.
+  - Fix: also match action-plan close/reopen activity entries, or controls whose action items were
+    closed by a person.
+- [ ] **D-3 (S) — `ai_suggested_at` is 32 characters** (`2026-10-18T19:10:48.975189+00:00`) in a
+  VARCHAR(30) column.
+  - SQLite ignores the limit, but PostgreSQL rejects it, which would fail the whole analysis.
+  - Fix: widen the column to 40 in both the model and the migration script.
+
+### Worth fixing (major, not blocking)
+
+- [ ] An expired risk acceptance syncs `Risk.status` only when someone opens Exceptions & Waivers
+  (security_exceptions.py ~L351). Until then the risk stays "accepted". Run the sync in the daily
+  notification check.
+- [ ] Policies:
+  - Auditors receive attestations, but their portal has no My Policies page.
+  - Attestations can be sent on an unapproved version, and acknowledged on a retired policy.
+  - "Attest all" creates duplicate pending rows.
+- [ ] Vendors:
+  - After the CISO approves a contract it leaves the queue, so **Send to vendor** is never reachable
+    (ContractReviewPage.tsx ~L69-70; this was already broken before R2).
+  - After approving an AI analysis, the vendor list keeps the old score until the page is reloaded.
+- [ ] Compliance:
+  - The gap accept/reject buttons show to roles the backend refuses (403).
+  - The visibility toggle response drops `valid_until`, so the badge disappears until reload.
+  - A user who is both control_owner and an organisation-wide role is not limited to their own rows.
+
+### Minor (from the reviews)
+
+- Risk edit can't clear optional fields (owner, review date, residual), and saves 3×3 or
+  "Technical" when values are empty.
+- Vendor contract upload can create duplicate versions after a partial failure; delete-refusal
+  messages say "set to inactive", but Edit now refuses that (use Offboard); expiry alerts still fire
+  for offboarded vendors.
+- Policy version approval is not in the activity log; errors on the History tab are invisible.
+- Evidence upload and document upload never commit before returning, so the activity log entry
+  times out and is lost. This was already the case before R2.
+
+Not verified here: `tsc` and `eslint`, because `frontend/node_modules` isn't installed on this
+machine. UI flows were checked by code tracing and API tests, not by clicking.
+
+---
+
+## Live browser test on grceye.com (2026-10-18, test tenant "Elite Pack Demo")
+
+Each step was clicked in a real Chrome browser with the test account. Everything created was
+labelled `[R2 test]` and removed afterwards, except one pending acceptance (see below).
+
+| Area | Live result |
+|---|---|
+| Risks | ✅ Create with a status, re-score (16→8), close, reopen refused without a reason, reopen with a reason, History tab, treatment "Mitigate", scenario create/edit/delete, acceptance linked to the risk (requester sees "Awaiting another approver"), delete |
+| Third parties | ✅ Onboard with the AI prescreen, edit and re-tier, new contract → AI review → CISO queue, reassess (2 assessments, one "Current"), offboard with date and reason, delete |
+| Controls | ✅ 16 rows "Not Started" right after creation, manual status, owner and justification saved |
+| Evidence | ✅ Upload with "valid until" ("Expires in 18 days" badge), delete, shown in **Deleted files** |
+| Policies | 🟡 Draft → In Review; the author sees no Approve button and the API refuses it with 403 (four-eyes); publishing an unapproved version is refused (409); attestation → **My Policies** → "I have read and accept" → Acknowledged; retire; delete. **No way to set or record a periodic review (R-1).** |
+| Audits | ❌ **The audit detail page never loads** (see A-1). You can create an audit, but findings, recommendations, the report and delete can't be reached. |
+
+**Verdict in the live UI: R2 is still Partial.** Risks, third parties, controls and evidence are
+Strong. Fixing **R-1** (policy review) and **A-1** (audit page) makes all six Strong.
+
+### New from the live test
+
+- [ ] **A-1 (S, blocks Strong; already broken before R2, since `d565c20`, 2026-09-08)** — The audit
+  detail page spins forever.
+  - The route is `audits/:auditId` (App.tsx ~L273), but the page reads `useParams<{ id }>()`
+    (AuditDetailPage.tsx ~L426). So `auditId` is empty, `loadAudit()` returns early and
+    `/api/v1/audits/{id}` is never called.
+  - Every link to it is affected: AuditsPage rows and RecommendationsPage.
+  - Fix: `const { auditId = "" } = useParams<{ auditId: string }>();`
+- [ ] **D-1 confirmed in production:** `DELETE /compliance/assessments/{draft}` returns **500**. The
+  test assessment had to be archived instead.
+- [ ] **(S) Deleting a scenario leaves its mirror risk in the register.** Creating a scenario adds a
+  matching "[name]" risk to the register; deleting the scenario doesn't remove or close it.
+- [ ] **(S) Scenario table:** the Edit/Delete/History buttons are off-screen at 1440 px; users must
+  scroll sideways.
+- [ ] **(S) Attestations go out on unapproved versions.** This is confirmed live: a version
+  "Awaiting approval" was sent and acknowledged.
+- [ ] **(S) A pending risk acceptance can't be withdrawn by its requester**, and there is no delete.
+  A single-user tenant can never clear it. Left in the test tenant:
+  `[R2 test] Accept VPN risk until patch window`. It needs a second user to reject it.
+- [ ] Minor:
+  - The control status dropdown shows "Compliant" while a row is Not Started (its default value is
+    `implemented`).
+  - The gap text says "assessed as not compliant" for a *partially* compliant control.
+  - The Risk/Governance dashboard widgets show "Restricted view" (403) to the account owner.
+  - The AI prescreen failed once with 424 (transient); the retry worked.
