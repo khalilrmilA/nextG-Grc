@@ -23,7 +23,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.models.user import User, UserRole
-from app.models.subscription import Subscription, SubscriptionTier, TIER_LIMITS
+from app.models.subscription import ELITE_FEATURES, Subscription, SubscriptionTier, TIER_LIMITS
 from app.api.v1.dependencies.auth import get_current_user
 
 
@@ -56,6 +56,36 @@ async def get_tenant_features(
     return sub.limits
 
 
+def feature_gate_detail(feature: str) -> dict:
+    """The 402 body for a feature the plan does not include. Elite Pack flags
+    name the Elite pack; platform features (e.g. ai_copilot) start at Enterprise."""
+    if feature in ELITE_FEATURES:
+        return {
+            "error": "feature_not_in_plan",
+            "feature": feature,
+            "pack": "elite",
+            "message": (
+                "This capability is part of the Elite Pack. "
+                f"Upgrade the subscription to enable '{feature}'."
+            ),
+        }
+    if feature == "ai_copilot":
+        from app.services.plan_limits import COPILOT_MESSAGE
+        message = COPILOT_MESSAGE
+    else:
+        message = (
+            "This capability is included in the Enterprise and Elite plans. "
+            f"Upgrade the subscription to enable '{feature}'."
+        )
+    return {
+        "error": "feature_not_in_plan",
+        "code": "plan_feature",
+        "feature": feature,
+        "pack": "enterprise",
+        "message": message,
+    }
+
+
 def require_feature(feature: str):
     """Dependency factory: HTTP 402 unless the tenant's plan unlocks ``feature``."""
 
@@ -69,15 +99,7 @@ def require_feature(feature: str):
         if not (sub and sub.has_feature(feature)):
             raise HTTPException(
                 status_code=status.HTTP_402_PAYMENT_REQUIRED,
-                detail={
-                    "error": "feature_not_in_plan",
-                    "feature": feature,
-                    "pack": "elite",
-                    "message": (
-                        "This capability is part of the Elite Pack. "
-                        f"Upgrade the subscription to enable '{feature}'."
-                    ),
-                },
+                detail=feature_gate_detail(feature),
             )
         return current_user
 

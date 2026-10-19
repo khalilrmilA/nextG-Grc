@@ -31,6 +31,7 @@ from app.models.mfa_device import MfaDevice
 from app.models.tenant import Tenant
 from app.models.subscription import Subscription
 from app.services.activity_chain import log_system_activity
+from app.services import plan_limits
 from app.services.directory_auth import (
     authenticate,
     group_map_configured,
@@ -240,6 +241,17 @@ async def ldap_login(request: Request, body: LdapLoginRequest, db: Annotated[Asy
     if user is None:
         if not cfg.get("auto_create", True):
             raise HTTPException(status_code=403, detail="No account provisioned for this directory user.")
+        # Plan quota: auto-provisioning a contributor needs a free seat. Refuse
+        # the sign-in with a clear message rather than creating an over-limit
+        # account (or silently downgrading it to a role the directory did not say).
+        if plan_limits.is_contributor_role(mapped_role or default_role):
+            try:
+                await plan_limits.ensure_contributor_seat(db, tenant.id)
+            except HTTPException as exc:
+                await _journal_login(request, dir_user.email, False, "sso_plan_limit")
+                detail = dict(exc.detail) if isinstance(exc.detail, dict) else {}
+                detail["message"] = plan_limits.LDAP_CONTRIBUTOR_MESSAGE.format(max=detail.get("max"))
+                raise HTTPException(status_code=exc.status_code, detail=detail)
         user = User(
             tenant_id=tenant.id,
             email=dir_user.email,
@@ -270,7 +282,23 @@ async def ldap_login(request: Request, body: LdapLoginRequest, db: Annotated[Asy
         desired = mapped_role or default_role
         before_role = user.role.value if hasattr(user.role, "value") else user.role
         before_roles = list(user.roles or [])
-        if user.role != desired:
+        if (
+            user.role != desired
+            and not plan_limits.counts_as_contributor(user.role, user.is_active)
+            and plan_limits.counts_as_contributor(desired, user.is_active)
+        ):
+            # Free role -> contributor role. Over the plan's contributor quota the
+            # promotion is NOT applied (the account keeps its current role) —
+            # refusing the sign-in would lock out an existing user.
+            try:
+                await plan_limits.ensure_contributor_seat(db, tenant.id, exclude_user_id=user.id)
+            except HTTPException:
+                logger.warning(
+                    "LDAP role sync: %s -> %s skipped for user %s (contributor quota full)",
+                    user.role, desired.value, user.id,
+                )
+                desired = None
+        if desired is not None and user.role != desired:
             logger.info(
                 "LDAP role sync: user %s %s -> %s (%d directory groups)",
                 user.id, user.role, desired.value, len(dir_user.groups),
@@ -280,7 +308,7 @@ async def ldap_login(request: Request, body: LdapLoginRequest, db: Annotated[Asy
         # it whenever the multi-role JSON is non-empty (app/services/authz.py),
         # so a sync that only wrote `role` would appear to work and change
         # nothing. Keep the directory's answer authoritative in both places.
-        if user.roles and list(user.roles) != [desired.value]:
+        if desired is not None and user.roles and list(user.roles) != [desired.value]:
             logger.info("LDAP role sync: user %s roles %s -> [%s]", user.id, user.roles, desired.value)
             user.roles = [desired.value]
 

@@ -8,7 +8,9 @@ import AIAssistant from "../ai/AIAssistant";
 import LanguageSwitcher from "../LanguageSwitcher";
 import OnboardingTour from "../onboarding/OnboardingTour";
 import TrialBanner from "../TrialBanner";
-import { notificationsApi } from "../../api/endpoints";
+import PlanUsageBanner from "../PlanUsageBanner";
+import { planDisplayName } from "../../lib/plans";
+import { notificationsApi, subscriptionsApi, type PlanUsage } from "../../api/endpoints";
 import type { AppNotification } from "../../types";
 import { useAppearance } from "../../store/appearance";
 import { useFramework } from "../../context/FrameworkContext";
@@ -680,6 +682,16 @@ export default function Layout() {
   const toggleGroup = (id: string) => setOpenGroups(prev => ({ ...prev, [id]: !prev[id] }));
 
   const plan        = user?.plan ?? "free_trial";
+  const [planUsage, setPlanUsage] = useState<PlanUsage | null>(null);
+  const usageRole = user?.role;
+  useEffect(() => {
+    if (!usageRole || usageRole === "super_admin" || usageRole === "auditor") return;
+    let cancelled = false;
+    subscriptionsApi.getUsage()
+      .then((u) => { if (!cancelled) setPlanUsage(u); })
+      .catch(() => { /* silent: badge falls back to the stored plan, no banner */ });
+    return () => { cancelled = true; };
+  }, [usageRole]);
   const isAdmin     = user?.role === "tenant_admin";
   const isSuperAdmin = user?.role === "super_admin";
   const isUser      = user?.role !== "auditor" && user?.role !== "super_admin";
@@ -688,11 +700,15 @@ export default function Layout() {
   const { Icon: RoleIcon, color: roleColor } = roleIcon(user?.role ?? "viewer");
   const initials = (user?.name ?? "U").charAt(0).toUpperCase();
   // Role label: super_admin → "Admin", everyone else → their company name
-  const planName = t(`layout_ui.plans.${plan}` as never, PLAN_FEATURES[plan]?.label ?? t("layout_ui.plans.elite"));
+  // The stored `plan` is cosmetic (see store/auth.ts); the real package comes
+  // from the usage endpoint when it answers (Growth / Enterprise / Elite).
+  const planName = planUsage
+    ? planDisplayName(planUsage.plan_tier || planUsage.tier, t)
+    : t(`layout_ui.plans.${plan}` as never, PLAN_FEATURES[plan]?.label ?? t("layout_ui.plans.elite"));
   const planLabel = isSuperAdmin ? t("roles.admin") : (user?.org ?? planName);
   function resolvePlanSub() {
     if (isSuperAdmin) return t("nav.platform_owner");
-    if (isAdmin) return t("nav.account_owner");
+    if (isAdmin) return planUsage ? `${t("nav.account_owner")} · ${planName}` : t("nav.account_owner");
     if (plan === "free_trial") return t("plan.days_remaining", { days: user?.daysRemaining ?? 14 });
     return planName;
   }
@@ -923,6 +939,9 @@ export default function Layout() {
 
         {/* Trial banner */}
         <TrialBanner />
+
+        {/* Plan quota usage (tenant admins; silent on error) */}
+        <PlanUsageBanner enabled={isAdmin} usage={planUsage} />
 
         {/* Top bar */}
         <header className="bg-white border-b border-gray-100 px-3 sm:px-8 py-3.5 flex items-center justify-between gap-2 flex-shrink-0">

@@ -114,6 +114,12 @@ async function streamChat(
   });
   clearTimeout(timeoutId);
 
+  if (resp.status === 402) {
+    // The AI GRC assistant is an Enterprise / Elite capability (Growth: 402
+    // feature_not_in_plan ai_copilot). Raw fetch bypasses client.ts, so surface
+    // it here as a plan message rather than "assistant unreachable".
+    throw Object.assign(new Error("plan_copilot"), { code: "plan_copilot" });
+  }
   if (!resp.ok) throw new Error(`API error: ${resp.status}`);
   if (!resp.body) throw new Error("No response body");
 
@@ -206,10 +212,13 @@ export default function AIAssistant() {
       );
     } catch (err: any) {
       if (err?.name === "AbortError") return;
+      const content = err?.code === "plan_copilot"
+        ? t("plan_limits.copilot_locked")
+        : t("ai_assistant.error_unreachable");
       setMessages(prev =>
         prev.map(m =>
           m.id === assistantId
-            ? { ...m, content: t("ai_assistant.error_unreachable"), loading: false }
+            ? { ...m, content, loading: false }
             : m
         )
       );

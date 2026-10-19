@@ -79,8 +79,13 @@ initial admin password out-of-band — it is not written into the bundle.
 1. Log into the SaaS as a super admin (the server whose `.env` holds
    `LICENSE_PRIVATE_KEY`).
 2. Super Admin → **Licenses** tab → issue a key: customer name, contact email,
-   duration in days (max 3650), optional notes. The API equivalent is
-   `POST /api/v1/admin/licenses` (super-admin only).
+   plan, duration in days (max 3650), optional notes. The API equivalent is
+   `POST /api/v1/admin/licenses` (super-admin only), body field
+   `"plan": "professional" | "enterprise" | "elite"` (marketing names Growth /
+   Enterprise / Elite; default `enterprise`). Enterprise = unlimited
+   contributors / frameworks / third parties + AI assistant; only `elite`
+   unlocks the Elite Pack (AD/LDAP SSO, MFA, CVE base, RACI, archiving, ...).
+   On activation a licensed build sets the tenant's subscription to that plan.
 3. Send the key string to the client. They paste it on their `/license`
    screen (tenant_admin or super_admin role required to activate).
 4. **Renewal** = issue a fresh key with a new duration and have the client

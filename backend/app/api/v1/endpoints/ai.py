@@ -21,6 +21,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_, or_
 
 from app.core.database import get_db
+from app.api.v1.dependencies.features import require_feature
 from app.api.v1.dependencies.auth import get_current_user, bearer_scheme_optional
 from app.models.user import User
 from app.models.ai_access import AiUsageQuota
@@ -1225,7 +1226,10 @@ async def _quota_only_sse_generator(
 @router.post("/chat")
 async def chat(
     request: ChatRequest,
-    current_user: Annotated[User, Depends(get_current_user)],
+    # Conversational assistant = the "AI copilot" of the Enterprise / Elite
+    # packages (Growth: HTTP 402). Document generation, gap / risk / vendor /
+    # contract analysis stay on every package and are NOT gated.
+    current_user: Annotated[User, Depends(require_feature("ai_copilot"))],
     db: Annotated[AsyncSession, Depends(get_db)],
     header_lang: Annotated[str, Depends(get_request_language)],
 ):

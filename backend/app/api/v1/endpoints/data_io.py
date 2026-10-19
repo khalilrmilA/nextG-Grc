@@ -760,14 +760,27 @@ async def import_vendors(file: UploadFile = File(...), format: str = "csv", db: 
     """Import vendors from CSV or XML (``?format=csv|xml``, default csv).
     Fields: name, industry, country, risk_tier, services_provided, website."""
     rows, start = await _read_import_rows(file, format)
-    created = 0; errors = []
+    # Plan quota on third parties: rows past the remaining slots are refused (and
+    # reported per row); nothing already registered is touched.
+    from app.services import plan_limits
+    left, current, maximum, tier = await plan_limits.vendor_slots_left(db, tenant_id)
+    if left == 0 and rows:
+        raise plan_limits.plan_limit_exception("max_vendors", current, maximum, tier)
+    created = 0; errors = []; refused = 0
     for i, row in enumerate(rows, start):
         vendor, err = _validate_vendor_row(row, tenant_id)
         if err:
             errors.append(f"Row {i}: {err}"); continue
+        if left is not None and created >= left:
+            refused += 1
+            errors.append(f"Row {i}: plan limit reached ({maximum} third parties)"); continue
         db.add(vendor); created += 1
     await db.commit()
-    return {"created": created, "errors": errors, "total_rows": created + len(errors)}
+    out = {"created": created, "errors": errors, "total_rows": created + len(errors)}
+    if refused:
+        out["plan_limit"] = plan_limits.plan_limit_detail("max_vendors", current + created, maximum, tier)
+        out["plan_limit"]["refused_rows"] = refused
+    return out
 
 @router.post("/import/assets")
 async def import_assets(file: UploadFile = File(...), format: str = "csv", db: AsyncSession = Depends(get_db), _: User = Depends(require_roles(UserRole.BUSINESS_OWNER, UserRole.CISO)), tenant_id: str = Depends(get_tenant_id)):
