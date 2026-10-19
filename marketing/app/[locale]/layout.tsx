@@ -12,7 +12,7 @@ import {
 
 const TITLE        = "GRC Eye | Governance, Risk & Compliance Platform";
 const DESCRIPTION  =
-  "All-in-one GRC SaaS: 70+ frameworks, AI gap analysis, risk quantification, audits, policies, vendor risk and a public trust center.";
+  "All-in-one GRC platform: 85+ frameworks incl. Saudi NCA, SAMA and PDPL in official English and Arabic, AI gap analysis, risk, audits, policies and third-party risk.";
 
 export function generateStaticParams() {
   return LOCALES.map((locale) => ({ locale }));
@@ -195,8 +195,13 @@ function buildJsonLd(locale: Language) {
       availability: "https://schema.org/InStock",
     },
     featureList: [
-      "70+ compliance frameworks", "AI-powered gap analysis", "Risk quantification",
-      "Audit management", "Policy governance", "Vendor risk management", "Trust center",
+      "85+ built-in compliance frameworks", "5,000+ pre-loaded controls",
+      "Saudi NCA, SAMA and SDAIA frameworks in official English and Arabic",
+      "AI-powered gap analysis", "AI document generator (27 document types)",
+      "Risk register, scenarios and heatmap", "Audit management and external auditor portal",
+      "Policy governance and employee acknowledgement", "Third-party risk management with vendor portal and e-signature",
+      "Asset cartography and vulnerability management", "Active Directory / LDAP sign-in and TOTP MFA",
+      "English, French and Arabic (RTL)", "SaaS or private on-premises edition",
     ],
   };
 

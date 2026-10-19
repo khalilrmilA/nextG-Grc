@@ -93,7 +93,7 @@ La démarche pragmatique pour la plupart des équipes sécurité :
 
 1. Sélectionnez vos **cinq risques principaux** dans le registre existant.
 2. Recueillez des **estimations à trois points** pour le SLE et l'ARO de chacun, lors d'un atelier réunissant risque, sécurité, finance et juridique.
-3. Exécutez une **simulation de Monte Carlo**. La plupart des [outils de quantification du risque](/features-landing) modernes intègrent cette fonctionnalité en standard, avec 10 000 itérations exécutées en moins d'une seconde.
+3. Exécutez une **simulation de Monte Carlo**. La plupart des outils de quantification du risque modernes intègrent cette fonctionnalité en standard, avec 10 000 itérations exécutées en moins d'une seconde.
 4. Présentez, la première fois, ces résultats **aux côtés de la heatmap existante**, afin que le comité d'audit puisse comparer et développer son intuition.
 5. Itérez trimestriellement. Les chiffres s'amélioreront à mesure que vous accumulerez des données d'incidents et de sinistres d'assurance.
 
@@ -122,7 +122,7 @@ L'analyse quantitative du risque ne remplace pas le jugement de sécurité. C'es
       },
       {
         q: "Peut-on réaliser une analyse quantitative du risque sans formation en statistiques ?",
-        a: "Oui. La plupart des plateformes GRC modernes (dont la nôtre) intègrent un moteur de Monte Carlo qui prend en entrée de simples estimations à trois points (bas, le plus probable, haut) et produit des distributions complètes. La courbe d'apprentissage conceptuelle tient en un après-midi. La discipline opérationnelle continue consiste à recueillir et mettre à jour les estimations, pas à faire les calculs.",
+        a: "Oui. De nombreux outils modernes de quantification du risque intègrent un moteur de Monte Carlo qui prend en entrée de simples estimations à trois points (bas, le plus probable, haut) et produit des distributions complètes. La courbe d'apprentissage conceptuelle tient en un après-midi. La discipline opérationnelle continue consiste à recueillir et mettre à jour les estimations, pas à faire les calculs.",
       },
     ],
   },
@@ -218,7 +218,7 @@ L'analyse quantitative du risque ne remplace pas le jugement de sécurité. C'es
 
 1. اختر **أهم خمسة مخاطر** من السجل الحالي.
 2. اجمع **تقديرات من ثلاث نقاط** لـ SLE وARO لكل منها، في ورشة عمل تضم فرق المخاطر والأمن والمالية والشؤون القانونية.
-3. شغّل **محاكاة مونت كارلو**. تتضمن معظم [أدوات القياس الكمي للمخاطر](/features-landing) الحديثة هذه الميزة جاهزة، مع اكتمال 10,000 عملية تكرار في أقل من ثانية.
+3. شغّل **محاكاة مونت كارلو**. تتضمن معظم أدوات القياس الكمي للمخاطر الحديثة هذه الميزة جاهزة، مع اكتمال 10,000 عملية تكرار في أقل من ثانية.
 4. اعرض النتائج **جنبًا إلى جنب مع الخريطة الحرارية الحالية** في المرة الأولى، حتى تتمكن لجنة التدقيق من المقارنة وتكوين حدس حولها.
 5. كرر العملية كل ربع سنة. ستتحسن الأرقام مع تراكم بيانات الحوادث وبيانات مطالبات التأمين.
 
@@ -247,7 +247,7 @@ L'analyse quantitative du risque ne remplace pas le jugement de sécurité. C'es
       },
       {
         q: "هل يمكنني إجراء تحليل كمي للمخاطر دون خلفية إحصائية؟",
-        a: "نعم. تتضمن معظم منصات GRC الحديثة (بما فيها منصتنا) محرك مونت كارلو يأخذ تقديرات بسيطة من ثلاث نقاط (منخفض، الأرجح، مرتفع) وينتج توزيعات كاملة. منحنى التعلم النظري لا يتجاوز فترة بعد ظهر واحدة. أما الانضباط التشغيلي المستمر فيتمثل في جمع التقديرات وتحديثها، لا في إجراء الحسابات.",
+        a: "نعم. تتضمن كثير من أدوات القياس الكمي للمخاطر الحديثة محرك مونت كارلو يأخذ تقديرات بسيطة من ثلاث نقاط (منخفض، الأرجح، مرتفع) وينتج توزيعات كاملة. منحنى التعلم النظري لا يتجاوز فترة بعد ظهر واحدة. أما الانضباط التشغيلي المستمر فيتمثل في جمع التقديرات وتحديثها، لا في إجراء الحسابات.",
       },
     ],
   },

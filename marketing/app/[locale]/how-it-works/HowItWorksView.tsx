@@ -11,21 +11,22 @@ import {
 } from "lucide-react";
 
 const DOC_TYPES = [
+  // Real entries from the in-app Document Generator catalogue (27 types in total).
   "Information Security Policy",
-  "Risk Management Policy",
-  "Incident Response Plan",
-  "Business Continuity Plan",
-  "Data Protection Policy (GDPR)",
-  "Vendor Risk Management Policy",
+  "ISMS Scope Statement",
+  "Statement of Applicability (SoA) Template",
   "Access Control Policy",
-  "Patch Management Procedure",
   "Acceptable Use Policy",
-  "Disaster Recovery Plan",
-  "AI Governance Policy (EU AI Act)",
-  "SOC 2 Readiness Checklist",
-  "ISO 27001 Statement of Applicability",
-  "DORA ICT Risk Policy",
-  "NIS2 Security Baseline",
+  "Data Classification & Handling Policy",
+  "Cryptography & Encryption Policy",
+  "Third-Party & Supplier Security Policy",
+  "Incident Response Procedure",
+  "Change Management Procedure",
+  "Vulnerability Management Procedure",
+  "Business Continuity Plan (BCP)",
+  "Disaster Recovery Plan (DRP)",
+  "Incident Response Plan (IRP)",
+  "Risk Assessment & Treatment Plan",
 ];
 
 const CROSSWALK_STATIC = [
@@ -347,7 +348,7 @@ export default function HowItWorksView() {
               <div className="flex items-center gap-2 mb-4 pb-3 border-b border-white/10">
                 <Bot className="w-4 h-4 text-emerald-400" />
                 <p className="text-sm font-semibold text-white">AI Document Generator</p>
-                <span className="ml-auto text-xs text-emerald-400 font-semibold">29 types available</span>
+                <span className="ml-auto text-xs text-emerald-400 font-semibold">27 types available</span>
               </div>
               <div className="space-y-1.5 mb-4">
                 {DOC_TYPES.map((doc, i) => (

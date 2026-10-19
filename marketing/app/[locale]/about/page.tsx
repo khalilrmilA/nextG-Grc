@@ -89,43 +89,49 @@ export default async function AboutPage(props: { params: Promise<{ locale: Local
         <h2>What the platform does</h2>
         <ul>
           <li>
-            <strong>Compliance across 70+ frameworks</strong> &mdash; ISO/IEC 27001, SOC 2,
-            GDPR, PCI DSS, NIST CSF, NIS2, DORA, the EU AI Act and more, assessed in
-            parallel with evidence mapped once and reused across every framework it
-            satisfies.
+            <strong>Compliance across 85+ built-in frameworks</strong> &mdash; ISO/IEC 27001,
+            SOC 2, GDPR, PCI DSS, NIST CSF, NIS2, DORA, the EU AI Act and more, with over
+            5,000 pre-loaded controls, assessed in parallel with evidence mapped once and
+            reused across every framework it satisfies. Eight Saudi regulatory frameworks
+            (NCA ECC, CCC, DCC, CSCC, OTCC, TCC, SAMA CSF and the SDAIA PDPL) ship in their
+            official English and Arabic wording, cross-mapped to NCA ECC.
           </li>
           <li>
-            <strong>Risk management and quantification</strong> &mdash; a 5&times;5 heatmap
-            for the qualitative view, and Monte Carlo simulation producing ALE, SLE and
-            P90/P95 figures for the board-level conversation.
+            <strong>Risk management</strong> &mdash; a risk register scored on a configurable
+            matrix, inherent, residual and target risk, appetite thresholds, risk scenarios
+            linking threats, vulnerabilities, assets and controls, a heatmap and treatment
+            plans.
           </li>
           <li>
             <strong>Audit management</strong> &mdash; internal and external audits end to
             end: auditor assignment, control checklists, findings, remediation tracking and
-            PDF reporting.
+            PDF reporting, plus a dedicated portal for external auditors.
           </li>
           <li>
-            <strong>Policy and document generation</strong> &mdash; audit-ready documents
-            generated against your industry, size and selected frameworks.
+            <strong>Policy and document generation</strong> &mdash; 27 document types generated
+            by AI against your industry, size and selected frameworks, with approval
+            workflows and employee acknowledgement.
           </li>
           <li>
-            <strong>Third-party risk management</strong> &mdash; vendor register, contract
-            review, risk cartography and prescreening questionnaires.
+            <strong>Third-party risk management</strong> &mdash; vendor register, AI contract
+            review, risk cartography, prescreening questionnaires and a vendor portal with
+            e-signature.
           </li>
           <li>
-            <strong>Trust center</strong> &mdash; a public compliance page you can point
-            prospects at instead of answering the same security questionnaire again.
+            <strong>Assets and security operations</strong> &mdash; asset inventory with CIA
+            valuation and cartography, vulnerability management with scanner connectors, a
+            CVE knowledge base, a threat library and incident tracking.
           </li>
         </ul>
 
         <h2>Where the AI runs</h2>
         <p>
-          GRC Eye&apos;s AI features run on your own infrastructure. The platform uses a
-          locally hosted model rather than sending your control evidence, contracts or
-          policies to a third-party API. For regulated customers, and for anyone whose
-          compliance posture would be undermined by shipping audit evidence to an external
-          provider, this is the difference between a usable tool and one that fails its own
-          vendor review.
+          Private AI on your terms: run GRC Eye on-premises with a local model &mdash; zero
+          data egress &mdash; or connect your own AI endpoint (Ollama or OpenAI-compatible).
+          For regulated customers, and for anyone whose compliance posture would be
+          undermined by shipping audit evidence to an external provider, the Private
+          edition keeps the application, the database and the model on infrastructure you
+          control.
         </p>
 
         <h2>Who builds GRC Eye</h2>

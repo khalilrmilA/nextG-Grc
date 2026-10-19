@@ -1,6 +1,9 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
+  // Lets a deploy build into a staging folder (NEXT_DIST_DIR=.next-staging) while the
+  // live server keeps serving .next, then swap — `next build` wipes its distDir first.
+  distDir: process.env.NEXT_DIST_DIR || ".next",
   async redirects() {
     return [
       // Canonical: redirect www → non-www so canonical URL is always grceye.com
@@ -8,6 +11,18 @@ const nextConfig = {
         source: "/:path*",
         has: [{ type: "host", value: "www.grceye.com" }],
         destination: "https://grceye.com/:path*",
+        permanent: true,
+      },
+      // Retired 2026-10-19: the article implied in-product Monte Carlo
+      // quantification, which the platform does not offer. Keep old links alive.
+      {
+        source: "/:locale(en|fr|ar)/blog/automated-risk-management-monte-carlo-quantification",
+        destination: "/:locale/blog",
+        permanent: true,
+      },
+      {
+        source: "/blog/automated-risk-management-monte-carlo-quantification",
+        destination: "/en/blog",
         permanent: true,
       },
     ];

@@ -27,6 +27,7 @@ function buildNavItems(t: (key: string) => string): NavItem[] {
     { kind: "link", to: "/features-landing", label: t("public.nav.features")     },
     { kind: "link", to: "/solutions",        label: t("public.nav.solutions")    },
     { kind: "link", to: "/frameworks",       label: t("public.nav.frameworks")   },
+    { kind: "link", to: "/pricing",          label: t("public.nav.pricing")      },
     {
       kind: "dropdown",
       label: t("public.nav.resources"),

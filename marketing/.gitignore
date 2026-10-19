@@ -1,5 +1,7 @@
 node_modules
 .next
+.next-old
+.next-staging
 out
 .env*.local
 *.log

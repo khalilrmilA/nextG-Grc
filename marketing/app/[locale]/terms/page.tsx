@@ -48,7 +48,7 @@ export default async function TermsPage(props: { params: Promise<{ locale: Local
       <h2>2. The service</h2>
       <p>
         GRC Eye provides a governance, risk and compliance platform covering compliance
-        assessment, risk management and quantification, audit management, policy and
+        assessment, risk management, audit management, policy and
         document generation, third-party risk management and related functionality. We may
         add, change or remove features; we will not materially degrade the core
         functionality of a paid subscription during its term.

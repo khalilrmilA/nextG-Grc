@@ -31,6 +31,7 @@ export default function PublicFooter() {
               {[
                 { label: t("public.nav.features"),  to: "/features-landing" },
                 { label: t("public.nav.solutions"), to: "/solutions"         },
+                { label: t("public.nav.pricing"),   to: "/pricing"           },
                 { label: t("public.nav.faq"),       to: "/faq"               },
                 { label: t("public.nav.blog"),      to: "/blog"              },
                 { label: t("public.nav.news"),      to: "/news"              },

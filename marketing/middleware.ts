@@ -19,7 +19,7 @@ const LOCALE_COOKIE = "grceye_lang";
 // small and stable, so allow-listing it is the safer list to maintain as the
 // SPA grows.
 const MARKETING_PAGE_ROOTS = [
-  "contact", "frameworks", "news", "blog", "changelog", "faq", "how-it-works", "solutions", "features-landing",
+  "contact", "frameworks", "news", "blog", "changelog", "faq", "how-it-works", "solutions", "features-landing", "pricing",
   // Company + legal pages. These were previously absent, so the footer's links
   // to them fell through to the SPA proxy: /en/terms answered 200 with the Vite
   // shell and bare /terms answered 500.

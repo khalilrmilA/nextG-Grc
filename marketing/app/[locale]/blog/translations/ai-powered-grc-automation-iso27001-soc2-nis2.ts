@@ -4,9 +4,9 @@ const translations: PostTranslations = {
   fr: {
     title: "Comment les logiciels GRC dotés d'IA automatisent la conformité ISO 27001, SOC 2 et NIS2",
     metaTitle: "Automatisation GRC par IA pour ISO 27001, SOC 2 et NIS2 | GRC Eye",
-    metaDescription: "Les plateformes GRC dotées d'IA cartographient les contrôles sur plus de 70 référentiels, génèrent les preuves et détectent les écarts avant les auditeurs. ROI en 90 jours.",
+    metaDescription: "Les plateformes GRC dotées d'IA cartographient les contrôles sur plus de 85 référentiels, génèrent les preuves et détectent les écarts avant les auditeurs. ROI en 90 jours.",
     keywords: "automatisation conformité IA, logiciel GRC intelligence artificielle, automatisation ISO 27001, automatisation SOC 2, conformité NIS2 IA, analyse d'écarts automatisée, gestion des risques par IA",
-    excerpt: "Les plateformes GRC modernes utilisent l'IA pour cartographier les contrôles sur plus de 70 référentiels, générer automatiquement les justifications de preuves et détecter les écarts de conformité avant les auditeurs. Découvrez comment fonctionne l'automatisation de la conformité par IA, ce qu'il faut rechercher dans un outil GRC, et le retour sur investissement à attendre dans les 90 premiers jours.",
+    excerpt: "Les plateformes GRC modernes utilisent l'IA pour cartographier les contrôles sur plus de 85 référentiels, générer automatiquement les justifications de preuves et détecter les écarts de conformité avant les auditeurs. Découvrez comment fonctionne l'automatisation de la conformité par IA, ce qu'il faut rechercher dans un outil GRC, et le retour sur investissement à attendre dans les 90 premiers jours.",
     body: `
 ## Pourquoi l'IA a sa place dans votre programme de conformité, et ce qu'elle fait réellement
 
@@ -26,7 +26,7 @@ La plupart des entreprises, quelle que soit leur taille, doivent démontrer leur
 
 L'approche manuelle de la conformité multi-référentiels est éprouvante : chaque référentiel est traité comme un projet distinct, avec ses propres dossiers de preuves, ses propres responsables de contrôles et ses propres missions d'audit. Des contrôles identiques, ou se recouvrant à 80 %, d'un référentiel à l'autre, sont documentés, testés et justifiés plusieurs fois. Un analyste conformité senior peut passer une semaine entière à cartographier manuellement les contrôles de l'Annexe A de l'ISO 27001 vers les TSC de SOC 2. Puis une autre semaine pour NIS2.
 
-L'IA élimine ce problème. Une plateforme GRC moderne précharge des correspondances croisées entre plus de 70 référentiels et les met à jour au fil de leur évolution. Lorsque vous ajoutez un nouveau référentiel, la plateforme indique immédiatement quels contrôles existants couvrent déjà les nouvelles exigences et quels écarts subsistent. Une analyse d'écarts inter-référentiels qui prend une semaine manuellement prend 20 minutes avec l'IA.
+L'IA élimine ce problème. Une plateforme GRC moderne précharge des correspondances croisées entre plus de 85 référentiels et les met à jour au fil de leur évolution. Lorsque vous ajoutez un nouveau référentiel, la plateforme indique immédiatement quels contrôles existants couvrent déjà les nouvelles exigences et quels écarts subsistent. Une analyse d'écarts inter-référentiels qui prend une semaine manuellement prend 20 minutes avec l'IA.
 
 ## Comment fonctionne l'analyse d'écarts par IA en pratique
 
@@ -101,16 +101,16 @@ L'externalisation auprès d'un cabinet de conseil constitue la troisième option
     faqs: [
       { q: "L'IA peut-elle remplacer notre équipe conformité ?", a: "Non, et elle ne le devrait pas. L'IA réduit le temps consacré à la collecte de preuves et à l'analyse d'écarts, afin que votre équipe conformité puisse se concentrer sur l'amélioration du programme, l'engagement des parties prenantes et les décisions stratégiques. L'équipe conformité reste essentielle ; l'IA lui retire les tâches répétitives." },
       { q: "Quelle est la fiabilité de l'analyse d'écarts par IA ?", a: "L'analyse d'écarts par IA de GRC Eye atteint une précision de 85 à 92 % sur des documents de conformité standards, validée par comparaison avec des évaluations d'experts humains. Tous les résultats de l'IA incluent des scores de confiance et les preuves précises citées, afin que les relecteurs humains puissent vérifier et, le cas échéant, corriger tout constat." },
-      { q: "L'IA fonctionne-t-elle au-delà des trois grands référentiels (ISO, SOC 2, NIS2) ?", a: "Oui. L'IA de GRC Eye est entraînée sur plus de 70 référentiels, dont le RGPD, DORA, HIPAA, PCI DSS, NIST CSF, les CIS Controls, l'ISO 27701 et bien d'autres. Les correspondances croisées entre référentiels sont préchargées et maintenues par l'équipe GRC Eye." },
+      { q: "L'IA fonctionne-t-elle au-delà des trois grands référentiels (ISO, SOC 2, NIS2) ?", a: "Oui. L'IA de GRC Eye couvre plus de 85 référentiels intégrés, dont le RGPD, DORA, HIPAA, PCI DSS, NIST CSF, les CIS Controls, l'ISO 27701 et bien d'autres. Les correspondances croisées entre référentiels sont préchargées et maintenues par l'équipe GRC Eye." },
       { q: "Que se passe-t-il lorsqu'un référentiel est mis à jour ?", a: "GRC Eye surveille les publications des référentiels et met à jour la bibliothèque de contrôles dès qu'une nouvelle version est publiée. Les clients sont notifiés des changements affectant leurs évaluations, et l'IA réanalyse automatiquement les contrôles concernés." },
     ],
   },
   ar: {
     title: "كيف تعمل برمجيات الحوكمة والمخاطر والامتثال المدعومة بالذكاء الاصطناعي على أتمتة الامتثال لمعايير ISO 27001 وSOC 2 وNIS2",
     metaTitle: "أتمتة الحوكمة والمخاطر والامتثال بالذكاء الاصطناعي لمعايير ISO 27001 وSOC 2 وNIS2 | GRC Eye",
-    metaDescription: "منصات GRC المدعومة بالذكاء الاصطناعي تربط الضوابط عبر أكثر من 70 إطارًا، وتُنشئ الأدلة تلقائيًا، وتكتشف الثغرات قبل المدققين. تعرّف على العائد خلال 90 يومًا.",
+    metaDescription: "منصات GRC المدعومة بالذكاء الاصطناعي تربط الضوابط عبر أكثر من 85 إطارًا، وتُنشئ الأدلة تلقائيًا، وتكتشف الثغرات قبل المدققين. تعرّف على العائد خلال 90 يومًا.",
     keywords: "أتمتة الامتثال بالذكاء الاصطناعي, برمجيات GRC بالذكاء الاصطناعي, أتمتة ISO 27001, أتمتة SOC 2, امتثال NIS2 بالذكاء الاصطناعي, تحليل الفجوات الآلي, إدارة المخاطر بالذكاء الاصطناعي",
-    excerpt: "تستخدم منصات GRC الحديثة الذكاء الاصطناعي لربط الضوابط عبر أكثر من 70 إطارًا، وإنشاء مبررات الأدلة تلقائيًا، واكتشاف ثغرات الامتثال قبل المدققين. تعرّف على كيفية عمل أتمتة الامتثال بالذكاء الاصطناعي، وما الذي يجب البحث عنه في أداة GRC، والعائد على الاستثمار المتوقع خلال أول 90 يومًا.",
+    excerpt: "تستخدم منصات GRC الحديثة الذكاء الاصطناعي لربط الضوابط عبر أكثر من 85 إطارًا، وإنشاء مبررات الأدلة تلقائيًا، واكتشاف ثغرات الامتثال قبل المدققين. تعرّف على كيفية عمل أتمتة الامتثال بالذكاء الاصطناعي، وما الذي يجب البحث عنه في أداة GRC، والعائد على الاستثمار المتوقع خلال أول 90 يومًا.",
     body: `
 ## لماذا يستحق الذكاء الاصطناعي مكانًا في برنامج الامتثال لديك، وما الذي يفعله فعليًا
 
@@ -130,7 +130,7 @@ L'externalisation auprès d'un cabinet de conseil constitue la troisième option
 
 النهج اليدوي في الامتثال متعدد الأطر شاق للغاية: يُعامَل كل إطار كمشروع منفصل، بحزمة أدلة منفصلة، ومالكي ضوابط منفصلين، ومهام تدقيق منفصلة. الضوابط المتطابقة، أو المتداخلة بنسبة 80%، بين الأطر المختلفة، تُوثَّق وتُختبر ويُقدَّم عليها الدليل عدة مرات. قد يقضي محلل امتثال أول أسبوعًا كاملاً في ربط ضوابط الملحق A من ISO 27001 يدويًا بمعايير TSC الخاصة بـSOC 2. ثم أسبوعًا آخر لNIS2.
 
-يُلغي الذكاء الاصطناعي هذا العبء. تُحمِّل منصة GRC الحديثة مسبقًا خرائط ربط متقاطعة بين أكثر من 70 إطارًا وتُحدّثها مع تطوّر الأطر. عند إضافة إطار جديد، تُظهر المنصة فورًا أي الضوابط الحالية تغطي المتطلبات الجديدة وأي الفجوات ما تزال قائمة. تحليل الفجوات متعدد الأطر الذي يستغرق أسبوعًا يدويًا يستغرق 20 دقيقة باستخدام الذكاء الاصطناعي.
+يُلغي الذكاء الاصطناعي هذا العبء. تُحمِّل منصة GRC الحديثة مسبقًا خرائط ربط متقاطعة بين أكثر من 85 إطارًا وتُحدّثها مع تطوّر الأطر. عند إضافة إطار جديد، تُظهر المنصة فورًا أي الضوابط الحالية تغطي المتطلبات الجديدة وأي الفجوات ما تزال قائمة. تحليل الفجوات متعدد الأطر الذي يستغرق أسبوعًا يدويًا يستغرق 20 دقيقة باستخدام الذكاء الاصطناعي.
 
 ## كيف يعمل تحليل الفجوات بالذكاء الاصطناعي عمليًا
 
@@ -205,7 +205,7 @@ L'externalisation auprès d'un cabinet de conseil constitue la troisième option
     faqs: [
       { q: "هل يمكن للذكاء الاصطناعي أن يحل محل فريق الامتثال لدينا؟", a: "لا، ولا ينبغي ذلك. يختصر الذكاء الاصطناعي الوقت المستغرَق في جمع الأدلة وتحليل الفجوات، بحيث يتمكن فريق الامتثال من التركيز على تحسين البرنامج، والتفاعل مع أصحاب المصلحة، واتخاذ القرارات الاستراتيجية. يبقى فريق الامتثال أساسيًا؛ والذكاء الاصطناعي يزيل عنه الأعمال الروتينية الشاقة." },
       { q: "ما مدى دقة تحليل الفجوات بالذكاء الاصطناعي؟", a: "يحقق تحليل الفجوات بالذكاء الاصطناعي في GRC Eye دقة تتراوح بين 85% و92% على مستندات الامتثال القياسية، وقد جرى التحقق منها مقارنة بتقييمات خبراء بشريين. تتضمن جميع مخرجات الذكاء الاصطناعي درجات ثقة والأدلة المحددة المستشهد بها، بحيث يمكن للمراجعين البشريين التحقق من أي نتيجة أو تجاوزها." },
-      { q: "هل يعمل الذكاء الاصطناعي على أطر تتجاوز الأطر الثلاثة الكبرى (ISO وSOC 2 وNIS2)؟", a: "نعم. جرى تدريب الذكاء الاصطناعي في GRC Eye على أكثر من 70 إطارًا، بما في ذلك GDPR وDORA وHIPAA وPCI DSS وNIST CSF وضوابط CIS وISO 27701 وغيرها الكثير. خرائط الربط المتقاطعة بين الأطر محمَّلة مسبقًا ويُحافظ عليها فريق GRC Eye." },
+      { q: "هل يعمل الذكاء الاصطناعي على أطر تتجاوز الأطر الثلاثة الكبرى (ISO وSOC 2 وNIS2)؟", a: "نعم. يعمل الذكاء الاصطناعي في GRC Eye عبر أكثر من 85 إطارًا مدمجًا، بما في ذلك GDPR وDORA وHIPAA وPCI DSS وNIST CSF وضوابط CIS وISO 27701 وغيرها الكثير. خرائط الربط المتقاطعة بين الأطر محمَّلة مسبقًا ويُحافظ عليها فريق GRC Eye." },
       { q: "ماذا يحدث عند تحديث أحد الأطر؟", a: "تراقب GRC Eye إصدارات الأطر وتُحدّث مكتبة الضوابط عند صدور نسخ جديدة. يُخطَر العملاء بالتغييرات التي تؤثر على تقييماتهم، ويعيد الذكاء الاصطناعي تحليل الضوابط المتأثرة تلقائيًا." },
     ],
   },

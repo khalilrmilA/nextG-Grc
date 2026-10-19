@@ -10,62 +10,101 @@ import {
 } from "lucide-react";
 
 /* ─── Static data (proper names / technical IDs - not translated) ─── */
+// `scope` describes the published standard itself (not a claim that every
+// item is loaded verbatim) — keep it factual about the source text.
 const FEATURED_STATIC = [
-  { name: "ISO 27001:2022", controls: 93, badgeColor: "bg-blue-600 text-white" },
-  { name: "SOC 2 Type II", controls: 64, badgeColor: "bg-indigo-100 text-indigo-800" },
-  { name: "GDPR", controls: 99, badgeColor: "bg-violet-100 text-violet-800" },
-  { name: "DORA", controls: 78, badgeColor: "bg-amber-100 text-amber-800" },
-  { name: "NIS2 Directive", controls: 52, badgeColor: "bg-violet-100 text-violet-800" },
-  { name: "NIST CSF 2.0", controls: 106, badgeColor: "bg-emerald-100 text-emerald-800" },
+  { name: "ISO 27001:2022", badgeColor: "bg-blue-600 text-white" },
+  { name: "SOC 2 Type II", badgeColor: "bg-indigo-100 text-indigo-800" },
+  { name: "GDPR", badgeColor: "bg-violet-100 text-violet-800" },
+  { name: "DORA", badgeColor: "bg-amber-100 text-amber-800" },
+  { name: "NIS2 Directive", badgeColor: "bg-violet-100 text-violet-800" },
+  { name: "NIST CSF 2.0", badgeColor: "bg-emerald-100 text-emerald-800" },
 ];
 
+/* Saudi frameworks shipped in the regulator's official EN + AR wording. */
+const SAUDI_FRAMEWORKS = [
+  "NCA ECC-2:2024", "NCA CCC-2:2024", "NCA DCC-1:2022", "NCA CSCC-1:2019",
+  "NCA OTCC-1:2022", "NCA TCC-1:2021", "SAMA CSF", "SDAIA PDPL",
+];
+
+// Every name below must exist as an active built-in framework in the platform
+// DB (frameworks.is_builtin=1). Re-check before adding names.
 const FRAMEWORK_GROUPS_STATIC = [
   {
+    labelKey: "lib_cat7",
+    color: "bg-teal-50 border-teal-200 text-teal-800",
+    dotColor: "bg-teal-500",
+    frameworks: [
+      ...SAUDI_FRAMEWORKS,
+      "UAE NESA IAS", "UAE IA Standard", "Dubai DESC ISR", "Qatar NIA CSF",
+      "Bahrain CBB ISR", "BCT Circular 2021-05 (Tunisia)", "BCT Circular 2006-19 (Tunisia)",
+      "Décret 2004-1250 (Tunisia)", "Loi 2004-5 (Tunisia)", "Loi organique 2004-63 (Tunisia)",
+    ],
+  },
+  {
+    labelKey: "lib_cat1",
     color: "bg-blue-50 border-blue-200 text-blue-800",
     dotColor: "bg-blue-500",
     frameworks: [
-      "ISO/IEC 27001:2022", "ISO/IEC 27002:2022", "ISO/IEC 27017",
-      "ISO/IEC 27018", "ISO/IEC 27701", "ISO 22301", "ISO 9001:2015",
+      "ISO/IEC 27001:2022", "ISO/IEC 27002:2022", "ISO/IEC 27005:2022", "ISO/IEC 27017",
+      "ISO/IEC 27018", "ISO/IEC 27701", "ISO/IEC 42001:2023", "ISO 22301",
+      "ISO/IEC 20000-1", "ISO 31000", "ISO 9001:2015",
     ],
   },
   {
+    labelKey: "lib_cat2",
     color: "bg-violet-50 border-violet-200 text-violet-800",
     dotColor: "bg-violet-500",
     frameworks: [
-      "GDPR (EU)", "NIS2 Directive", "DORA", "EU AI Act",
-      "CCPA (California)", "LGPD (Brazil)", "PIPEDA (Canada)", "PDPA (Thailand)",
+      "GDPR (EU)", "NIS2 Directive", "DORA", "EU AI Act", "PSD2",
+      "BSI C5 (Germany)", "ANSSI RGS (France)", "UK Cyber Essentials", "FINMA Circ. 2023/1 (Switzerland)",
     ],
   },
   {
+    labelKey: "lib_cat3",
     color: "bg-emerald-50 border-emerald-200 text-emerald-800",
     dotColor: "bg-emerald-500",
     frameworks: [
-      "NIST CSF 2.0", "NIST SP 800-53 Rev5", "NIST SP 800-171",
-      "FedRAMP", "FISMA", "CMMC 2.0", "StateRAMP",
+      "NIST CSF 2.0", "NIST SP 800-53 Rev 5", "NIST SP 800-171", "NIST SP 800-37 (RMF)",
+      "NIST Privacy Framework", "FedRAMP Rev 5", "CMMC 2.0", "CJIS", "ITAR",
+      "NYDFS Part 500", "CCPA / CPRA (California)",
     ],
   },
   {
+    labelKey: "lib_cat4",
     color: "bg-amber-50 border-amber-200 text-amber-800",
     dotColor: "bg-amber-500",
     frameworks: [
       "SOC 2 Type II", "PCI DSS 4.0", "HIPAA", "HITRUST CSF",
-      "CIS Controls v8", "SWIFT CSCF", "COBIT 2019", "ITIL 4",
+      "CIS Controls v8", "SWIFT CSP", "COBIT 2019", "ITIL 4", "Secure Controls Framework (SCF)",
     ],
   },
   {
+    labelKey: "lib_cat5",
     color: "bg-rose-50 border-rose-200 text-rose-800",
     dotColor: "bg-rose-500",
     frameworks: [
-      "MITRE ATT&CK", "MITRE D3FEND", "OWASP Top 10",
-      "CSA CCM v4", "Zero Trust Architecture (NIST SP 800-207)",
+      "MITRE ATT&CK", "OWASP Top 10", "OWASP ASVS 4.0", "CSA CCM",
+      "CIS FortiGate 7.4 Benchmark", "Google SAIF", "NIST AI RMF 1.0",
     ],
   },
   {
+    labelKey: "lib_cat6",
     color: "bg-cyan-50 border-cyan-200 text-cyan-800",
     dotColor: "bg-cyan-500",
     frameworks: [
-      "NERC CIP (Energy)", "IEC 62443 (OT/ICS)", "TISAX (Automotive)",
-      "NHS DSPT (UK Health)", "ENISA Good Practice", "SOX (Sarbanes-Oxley)",
+      "IEC 62443 (OT/ICS)", "NIST SP 800-82 Rev 3 (OT/ICS)", "ENISA ICS/SCADA",
+      "NERC CIP (Energy)", "NCA OTCC-1:2022 (OT)", "TISAX (Automotive)",
+    ],
+  },
+  {
+    labelKey: "lib_cat8",
+    color: "bg-orange-50 border-orange-200 text-orange-800",
+    dotColor: "bg-orange-500",
+    frameworks: [
+      "Essential Eight (Australia)", "APRA CPS 234 (Australia)", "PIPL (China)",
+      "DPDPA (India)", "PDPA (Singapore)", "PDPA (Thailand)",
+      "LGPD (Brazil)", "PIPEDA (Canada)", "POPIA (South Africa)",
     ],
   },
 ];
@@ -81,14 +120,15 @@ const CROSSWALK_ROWS = [
 export default function FrameworksView() {
   const { t, lang } = useI18n();
 
-  const FRAMEWORK_GROUPS = FRAMEWORK_GROUPS_STATIC.map((g, i) => ({
+  const FRAMEWORK_GROUPS = FRAMEWORK_GROUPS_STATIC.map((g) => ({
     ...g,
-    label: t(`public.fw_page.lib_cat${i + 1}`),
+    label: t(`public.fw_page.${g.labelKey}`),
   }));
 
   const FEATURED = FEATURED_STATIC.map((f, i) => ({
     ...f,
     badge: t(`public.fw_page.fw${i + 1}_badge`),
+    scope: t(`public.fw_page.fw${i + 1}_scope`),
     desc: t(`public.fw_page.fw${i + 1}_desc`),
   }));
 
@@ -192,7 +232,7 @@ export default function FrameworksView() {
             </p>
           </div>
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
-            {FEATURED.map(({ name, controls, desc, badge, badgeColor }) => (
+            {FEATURED.map(({ name, scope, desc, badge, badgeColor }) => (
               <div key={name} className="border border-gray-200 rounded-2xl p-6 hover:shadow-md transition-shadow group">
                 <div className="flex items-start justify-between mb-3">
                   <div className="w-10 h-10 bg-blue-50 rounded-xl flex items-center justify-center group-hover:bg-blue-100 transition-colors">
@@ -201,7 +241,7 @@ export default function FrameworksView() {
                   <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${badgeColor}`}>{badge}</span>
                 </div>
                 <h3 className="font-bold text-gray-900 text-lg mb-1">{name}</h3>
-                <p className="text-xs text-gray-400 mb-3">{controls} {t("public.fw_page.controls_loaded")}</p>
+                <p className="text-xs text-gray-400 mb-3">{scope}</p>
                 <p className="text-sm text-gray-500 leading-relaxed mb-4">{desc}</p>
                 <div className="flex items-center gap-2 text-xs text-blue-600 font-semibold">
                   <CheckCircle2 className="w-3.5 h-3.5" />
@@ -213,6 +253,44 @@ export default function FrameworksView() {
           <p className="text-center text-sm text-gray-400 mt-8">
             {t("public.fw_page.featured_footer")}
           </p>
+        </div>
+      </section>
+
+      {/* ── Saudi regulatory frameworks highlight ── */}
+      <section className="pb-20 px-6">
+        <div className="max-w-6xl mx-auto">
+          <div className="relative overflow-hidden rounded-3xl border border-teal-200 bg-gradient-to-br from-teal-50 via-white to-emerald-50 p-8 sm:p-10">
+            <div className="grid lg:grid-cols-2 gap-10 items-center">
+              <div>
+                <div className="inline-flex items-center gap-2 bg-teal-600 text-white text-xs font-semibold px-3 py-1 rounded-full mb-4">
+                  <Star className="w-3.5 h-3.5" />
+                  {t("public.fw_page.saudi_badge")}
+                </div>
+                <h2 className="text-2xl sm:text-3xl font-extrabold text-gray-900 mb-4">
+                  {t("public.fw_page.saudi_title")}
+                </h2>
+                <p className="text-gray-600 leading-relaxed mb-6">
+                  {t("public.fw_page.saudi_subtitle")}
+                </p>
+                <ul className="space-y-2.5">
+                  {[1, 2, 3].map((n) => (
+                    <li key={n} className="flex items-start gap-2.5 text-sm text-gray-700">
+                      <CheckCircle2 className="w-4 h-4 text-teal-600 flex-shrink-0 mt-0.5" />
+                      {t(`public.fw_page.saudi_p${n}`)}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                {SAUDI_FRAMEWORKS.map((fw) => (
+                  <div key={fw} className="bg-white border border-teal-100 rounded-xl px-4 py-3 shadow-sm">
+                    <p className="text-sm font-bold text-gray-900">{fw}</p>
+                    <p className="text-xs text-teal-700 mt-0.5">{t("public.fw_page.saudi_official")}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
         </div>
       </section>
 
@@ -289,7 +367,7 @@ export default function FrameworksView() {
                 <p className="text-sm font-semibold text-white">Framework Library</p>
                 <div className="ml-auto flex items-center gap-1.5 bg-white/10 rounded-lg px-2 py-1">
                   <Search className="w-3 h-3 text-white/40" />
-                  <span className="text-xs text-white/40">Search 70+ frameworks…</span>
+                  <span className="text-xs text-white/40">Search 85+ frameworks…</span>
                 </div>
               </div>
               <div className="bg-white/10 border border-violet-500/30 rounded-xl p-4 mb-3">

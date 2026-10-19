@@ -135,7 +135,7 @@ Trois opérations dominent le coût du TPRM : la revue des questionnaires, la re
 - La **revue de contrats par IA** signale en quelques minutes plutôt qu'en heures les clauses manquantes, les dispositions de responsabilité faibles et les formulations atypiques.
 - La **cartographie des risques fournisseurs par IA** visualise automatiquement le risque fournisseur selon plusieurs dimensions.
 
-Dans une [plateforme GRC dotée d'IA sur site](/features-landing), cette capacité est disponible sans envoyer les contrats fournisseurs ni les données propriétaires à des fournisseurs de LLM externes, ce qui est déterminant pour les entités réglementées et celles soumises à des obligations de confidentialité vis-à-vis de leurs fournisseurs.
+Dans une [plateforme GRC avec option d'IA privée](/features-landing), cette capacité est disponible sans envoyer les contrats fournisseurs ni les données propriétaires à des fournisseurs de LLM externes, ce qui est déterminant pour les entités réglementées et celles soumises à des obligations de confidentialité vis-à-vis de leurs fournisseurs.
 
 ## Une feuille de route pragmatique pour 2026
 
@@ -309,7 +309,7 @@ Le risque fournisseur est la dimension de la cybersécurité où l'écart entre 
 - **مراجعة العقود بالذكاء الاصطناعي** ترصد البنود الناقصة، وأحكام المسؤولية الضعيفة، والصياغات غير المعتادة في دقائق بدلاً من ساعات.
 - **رسم خرائط مخاطر الموردين بالذكاء الاصطناعي** يُصوّر مخاطر المورد تلقائياً عبر أبعاد متعددة.
 
-وفي [منصة GRC مزودة بذكاء اصطناعي محلي](/features-landing)، تتوفر هذه القدرة دون إرسال عقود الموردين أو البيانات الخاصة إلى مزودي نماذج لغوية كبيرة خارجيين، وهو أمر بالغ الأهمية للجهات الخاضعة للتنظيم وللجهات المرتبطة بالتزامات سرية تجاه مورديها.
+وفي [منصة GRC مع خيار ذكاء اصطناعي خاص](/features-landing)، تتوفر هذه القدرة دون إرسال عقود الموردين أو البيانات الخاصة إلى مزودي نماذج لغوية كبيرة خارجيين، وهو أمر بالغ الأهمية للجهات الخاضعة للتنظيم وللجهات المرتبطة بالتزامات سرية تجاه مورديها.
 
 ## خارطة طريق عملية لعام 2026
 

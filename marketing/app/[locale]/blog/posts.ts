@@ -394,7 +394,7 @@ The pragmatic on-ramp for most security teams:
 
 1. Pick your **top five risks** from the existing register.
 2. Gather **three-point estimates** for SLE and ARO for each, in a workshop with risk, security, finance, and legal.
-3. Run a **Monte Carlo simulation**. Most modern [risk quantification tools](/features-landing) include this out of the box, with 10,000 iterations completing in under a second.
+3. Run a **Monte Carlo simulation**. Most modern risk quantification tools include this out of the box, with 10,000 iterations completing in under a second.
 4. Present **alongside the existing heatmap** the first time, so the audit committee can compare and develop intuition.
 5. Iterate quarterly. The numbers will get better as you accumulate incident data and insurance claims data.
 
@@ -423,7 +423,7 @@ Quantitative risk analysis is not a replacement for security judgment. It is a *
     },
     {
       q: "Can I do quantitative risk analysis without a statistics background?",
-      a: "Yes. Most modern GRC platforms (including ours) include a Monte Carlo engine that takes simple three-point estimates (low, most-likely, high) and produces full distributions. The conceptual learning curve is one afternoon. The ongoing operational discipline is gathering and updating estimates, not the math.",
+      a: "Yes. Many modern risk quantification tools include a Monte Carlo engine that takes simple three-point estimates (low, most-likely, high) and produces full distributions. The conceptual learning curve is one afternoon. The ongoing operational discipline is gathering and updating estimates, not the math.",
     },
   ],
 };
@@ -713,7 +713,7 @@ Three operations dominate TPRM cost: questionnaire review, contract review, and 
 - **AI contract review** flags missing clauses, weak liability provisions, and atypical language in minutes rather than hours.
 - **AI risk cartography** visualizes vendor risk across multiple dimensions automatically.
 
-In a [GRC platform with on-premise AI](/features-landing), this capability is available without sending vendor contracts or proprietary data to external LLM providers, which is critical for regulated entities and entities with vendor confidentiality obligations.
+In a [GRC platform with a private AI option](/features-landing), this capability is available without sending vendor contracts or proprietary data to external LLM providers, which is critical for regulated entities and entities with vendor confidentiality obligations.
 
 ## A pragmatic 2026 roadmap
 
@@ -1024,9 +1024,9 @@ const POST_AI_GRC: BlogPost = {
   slug: "ai-powered-grc-automation-iso27001-soc2-nis2",
   title: "How AI-Powered GRC Software Automates ISO 27001, SOC 2 and NIS2 Compliance",
   metaTitle: "AI-Powered GRC Automation for ISO 27001, SOC 2 & NIS2 | GRC Eye",
-  metaDescription: "AI GRC platforms map controls across 70+ frameworks, auto-generate evidence, and detect compliance gaps before auditors do. Learn how and what ROI to expect in 90 days.",
+  metaDescription: "AI GRC platforms map controls across 85+ frameworks, auto-generate evidence, and detect compliance gaps before auditors do. Learn how and what ROI to expect in 90 days.",
   keywords: "AI compliance automation, AI GRC software, ISO 27001 automation, SOC 2 automation, NIS2 AI compliance, automated gap analysis, AI risk management",
-  excerpt: "Modern GRC platforms use AI to map controls across 70+ frameworks, auto-generate evidence justifications, and detect compliance gaps before auditors do. Learn how AI compliance automation works, what to look for in a GRC tool, and the ROI you can expect in the first 90 days.",
+  excerpt: "Modern GRC platforms use AI to map controls across 85+ frameworks, auto-generate evidence justifications, and detect compliance gaps before auditors do. Learn how AI compliance automation works, what to look for in a GRC tool, and the ROI you can expect in the first 90 days.",
   date: "2026-05-05",
   author: "GRC Eye Team",
   authorRole: "GRC Eye Team",
@@ -1052,7 +1052,7 @@ Most companies of any size need to demonstrate compliance with more than one fra
 
 The manual approach to multi-framework compliance is brutal: each framework is treated as a separate project, with separate evidence packs, separate control owners, and separate auditor engagements. Controls that are identical, or 80% overlapping, across frameworks are documented, tested, and evidenced multiple times. A senior compliance analyst can spend a full week mapping ISO 27001 Annex A controls to SOC 2 TSCs manually. Then another week for NIS2.
 
-AI eliminates this. A modern GRC platform pre-loads cross-walk mappings between 70+ frameworks and updates them as frameworks evolve. When you add a new framework, the platform immediately shows which of your existing controls cover the new requirements and which gaps remain. A cross-framework gap analysis that takes a week manually takes 20 minutes with AI.
+AI eliminates this. A modern GRC platform pre-loads cross-walk mappings between 85+ frameworks and updates them as frameworks evolve. When you add a new framework, the platform immediately shows which of your existing controls cover the new requirements and which gaps remain. A cross-framework gap analysis that takes a week manually takes 20 minutes with AI.
 
 ## How AI gap analysis works in practice
 
@@ -1127,115 +1127,8 @@ Outsourcing to a consultancy is the third option. It is the most expensive per a
   faqs: [
     { q: "Can AI replace our compliance team?", a: "No, and it should not. AI compresses the time spent on evidence collection and gap analysis so your compliance team can focus on programme improvement, stakeholder engagement, and strategic decisions. The compliance team remains essential; AI removes the grunt work." },
     { q: "How accurate is AI gap analysis?", a: "GRC Eye's AI gap analysis achieves 85–92% accuracy on standard compliance documents, validated against human expert assessments. All AI outputs include confidence scores and the specific evidence cited, so human reviewers can verify and override any finding." },
-    { q: "Does AI work for frameworks beyond the big three (ISO, SOC 2, NIS2)?", a: "Yes. GRC Eye's AI is trained on 70+ frameworks including GDPR, DORA, HIPAA, PCI DSS, NIST CSF, CIS Controls, ISO 27701, and many others. Cross-walk mappings between frameworks are pre-loaded and maintained by the GRC Eye team." },
+    { q: "Does AI work for frameworks beyond the big three (ISO, SOC 2, NIS2)?", a: "Yes. GRC Eye's AI works across 85+ built-in frameworks including GDPR, DORA, HIPAA, PCI DSS, NIST CSF, CIS Controls, ISO 27701, and many others. Cross-walk mappings between frameworks are pre-loaded and maintained by the GRC Eye team." },
     { q: "What happens when a framework is updated?", a: "GRC Eye monitors framework publications and updates the control library when new versions are released. Customers are notified of changes that affect their assessments, and the AI re-analyses affected controls automatically." },
-  ],
-};
-
-// ─────────────────────────────────────────────────────────────────────────────
-// 9. Automated Risk Management
-// ─────────────────────────────────────────────────────────────────────────────
-const POST_AUTO_RISK: BlogPost = {
-  slug: "automated-risk-management-monte-carlo-quantification",
-  title: "Automated Risk Management: From Risk Register to Monte Carlo in One Click",
-  metaTitle: "Automated Risk Management & Monte Carlo Risk Quantification | GRC Eye",
-  metaDescription: "Stop scoring risks on a 1–5 scale your board doesn't trust. Automated risk quantification translates cyber risk into dollars with Monte Carlo ALE/SLE numbers CFOs understand.",
-  keywords: "automated risk management, Monte Carlo risk quantification, risk register automation, ALE SLE risk, cyber risk quantification, risk management software, GRC risk platform",
-  excerpt: "Stop scoring risks on a 1–5 scale your board doesn't trust. Automated risk quantification with Monte Carlo simulation translates cyber risk into dollars, gives CFOs ALE/SLE numbers they understand, and replaces opinion-based heatmaps with statistical rigor.",
-  date: "2026-05-02",
-  author: "GRC Eye Team",
-  authorRole: "GRC Eye Team",
-  category: "Risk Management",
-  readTime: "10 min read",
-  region: "Global",
-  body: `
-## The board doesn't trust your risk heatmap, and they're right
-
-Every CISO has presented a red-amber-green risk heatmap to the board. Every board member has looked at it and asked the same question, politely or bluntly: "What does this actually mean for us in euros?"
-
-The honest answer, in a manual risk programme, is: we don't know exactly. The likelihood score of "3 out of 5" and the impact score of "4 out of 5" are judgement calls made by a risk analyst on a Tuesday afternoon. They are not wrong. They are also not defensible in the way that financial projections are defensible.
-
-This is why quantified risk management, translating cyber risk into monetary terms using statistical methods, has moved from a niche academic discipline to a mainstream expectation for boards of mid-market and enterprise companies. The question is no longer whether to quantify risk. It is how to do it without hiring a team of actuaries.
-
-## What Monte Carlo simulation does for risk managers
-
-Monte Carlo simulation is a mathematical technique that uses repeated random sampling to model the probability distribution of outcomes. In risk management, it works like this:
-
-1. For each risk, you define two distributions: the probability of the risk occurring in any given year (loss event frequency), and the magnitude of the financial loss if it does occur (loss magnitude).
-2. The simulation runs 10,000 scenarios, drawing randomly from those distributions.
-3. The output is not a single number but a distribution of outcomes: the most likely loss, the 90th percentile loss, the 95th percentile loss.
-
-The key output metrics are:
-
-- **ALE (Annualised Loss Expectancy):** The expected financial loss from this risk in any given year, accounting for the probability of occurrence.
-- **SLE (Single Loss Expectancy):** The expected financial loss from a single occurrence of the risk.
-- **P90 / P95:** The loss you should expect to not exceed 90% / 95% of the time. This is the number your CFO wants for insurance sizing and board disclosure.
-
-A risk heatmap tells you "ransomware is a high-likelihood, high-impact risk." Monte Carlo tells you "ransomware has an ALE of €840,000, and there is a 5% chance of a single event exceeding €3.2M in any given year." The second sentence changes the conversation.
-
-## The CEO's case for quantified risk management
-
-For CEOs, quantified risk management solves three problems that qualitative heatmaps cannot:
-
-### Problem 1: Capital allocation decisions are impossible without numbers
-
-When the CISO asks for a €200,000 budget to deploy endpoint detection and response, the CFO's question is reasonable: what does it buy us? A qualitative answer ("it reduces our ransomware risk from High to Medium") is not a business case. A quantitative answer ("it reduces our ransomware ALE from €840,000 to €290,000, a risk reduction of €550,000 per year, for a cost of €200,000") is a business case.
-
-Quantified risk management makes security investment decisions tractable. Every control can be evaluated against the risk reduction it delivers. Priorities become defensible. Rejected investments become documented. The security budget conversation changes from a negotiation to an analysis.
-
-### Problem 2: Cyber insurance is increasingly model-dependent
-
-Insurers are no longer willing to price cyber coverage based on a questionnaire and a heatmap. They want to understand the financial exposure your risk programme has modelled. Organizations that can present Monte Carlo output (ALE, SLE, P90, P95 by risk category) negotiate better coverage, better terms, and better premiums. Those that cannot are increasingly finding coverage limited or excluded.
-
-### Problem 3: Board disclosure requirements are tightening
-
-SEC rules (for US-listed companies) and emerging EU requirements under DORA and NIS2 require boards to demonstrate that they have assessed material cyber risks in financial terms. "Our risk heatmap shows ransomware as High" may no longer satisfy that requirement. "Our Monte Carlo analysis of ransomware risk yields an ALE of €840,000 with a P95 tail of €3.2M, covered by our cyber insurance policy to €2M" does.
-
-## What automated risk quantification looks like in practice
-
-Historically, Monte Carlo risk analysis required specialized tools (often Excel-based with custom macros), significant actuarial expertise, and weeks of preparation per risk. Modern GRC platforms have changed this completely.
-
-In GRC Eye, the quantification workflow works as follows:
-
-**Define the risk scenario.** The risk manager describes the threat (ransomware via phishing), the vulnerable asset (production database), and the business process affected (customer-facing application).
-
-**Set the frequency and magnitude inputs.** The platform provides industry benchmark data for common risk scenarios, drawn from datasets like the Verizon DBIR and ENISA threat landscape reports, as default values. The risk manager adjusts these based on organization-specific factors: industry, size, maturity of controls.
-
-**Run the simulation.** With one click, the platform executes 10,000 Monte Carlo iterations. The computation takes seconds.
-
-**Review the output.** The platform displays ALE, SLE, P90, and P95 for the risk, alongside a distribution chart that shows the full range of modelled outcomes. The risk manager can see immediately which tail scenarios drive the most exposure.
-
-**Link controls.** For each risk scenario, the platform links the applied controls that reduce the risk. If a new control is added (say, MFA on all privileged accounts), the risk manager updates the control set and re-runs the simulation to see the quantified risk reduction.
-
-**Export for the board.** A one-click PDF report presents the risk quantification in language the board can act on: ALE by risk category, P95 tail exposure, insurance adequacy, and control investment ROI.
-
-## Building a risk register that earns board trust
-
-The risk register is the foundation of a quantified risk programme. Here is how to build one that a board will actually trust:
-
-**Start with scenarios, not abstract risks.** "Ransomware" is not a risk scenario. "Ransomware attack via phishing email targeting finance department, encrypting production ERP system, resulting in 72-hour outage and data exfiltration of customer records" is a risk scenario. The specificity matters because it makes the frequency and magnitude inputs defensible.
-
-**Use threat-vulnerability-asset chains.** A good risk scenario links a specific threat (ransomware operator), a specific vulnerability (users with administrative rights opening email attachments), a specific asset (production ERP), and the controls applied (endpoint protection, MFA, backup recovery). This structure makes it clear where controls reduce risk and where gaps remain.
-
-**Review quarterly, not annually.** Risk registers updated annually are stale the day they are published. Automated platforms allow quarterly review cycles with automated reminders to risk owners. The effort per review drops from days to hours when the register is maintained continuously.
-
-**Present trends, not snapshots.** A board wants to know whether the risk environment is improving or deteriorating. An automated platform tracks risk scores over time and shows the trend: control investment is reducing ALE, or a new threat scenario has increased tail exposure. Trends are more actionable than point-in-time snapshots.
-
-## The CISO's implementation path
-
-**Month 1:** Migrate your existing risk register into the platform. Even if your current register is a spreadsheet with subjective likelihood/impact scores, import it as a starting point. The platform can convert qualitative scores to quantitative ranges as a first approximation.
-
-**Month 2:** Select your top 10 risks by perceived impact and run Monte Carlo analysis on each. Use industry benchmarks for frequency and magnitude where you do not have organization-specific data. The output will not be perfectly calibrated, but it will be more defensible than a heatmap and will reveal which risks have disproportionate tail exposure.
-
-**Month 3:** Present the first quantified risk report to the board. The ALE and P95 numbers will generate questions: good questions, the kind that lead to better capital allocation. Use those questions to refine the model.
-
-**Ongoing:** Review and update the model quarterly. Add new risk scenarios as the threat landscape evolves. Measure the impact of new controls quantitatively. Build a risk register the CFO and board can rely on for investment decisions and disclosure.
-`,
-  faqs: [
-    { q: "Do we need actuarial expertise to run Monte Carlo analysis?", a: "No. Modern GRC platforms provide industry benchmark data for frequency and magnitude inputs, and the simulation runs automatically. Risk managers need to understand the outputs and validate the inputs, not build statistical models from scratch." },
-    { q: "How accurate are the Monte Carlo outputs?", a: "The outputs are as accurate as the inputs. Industry benchmark data provides a reasonable starting point; organization-specific data (from historical incidents, insurance claims, and threat intelligence) improves accuracy over time. Even a well-calibrated approximation is more defensible than a qualitative heatmap." },
-    { q: "Can we use Monte Carlo output for cyber insurance purposes?", a: "Yes. Many insurers will accept Monte Carlo quantification as part of the underwriting process, and organizations with quantified risk programmes typically negotiate better coverage and premiums. Check with your broker." },
-    { q: "How many risk scenarios should we model?", a: "Start with your top 10–15 risk scenarios. These will account for the majority of your modelled exposure. Expand the register as your programme matures." },
   ],
 };
 
@@ -1586,7 +1479,6 @@ export const POSTS: BlogPost[] = [
   POST_AI_ACT,
   POST_GRC_AUTOMATION_COST,
   POST_AI_GRC,
-  POST_AUTO_RISK,
   POST_CONTINUOUS_COMPLIANCE,
   POST_VENDOR_RISK_AUTO,
   POST_CROSS_FRAMEWORK,

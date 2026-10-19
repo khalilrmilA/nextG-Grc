@@ -49,7 +49,7 @@ const BACKEND = { host: "127.0.0.1", port: 8000 };
 // search results.
 const MARKETING_PAGE_ROOTS = new Set([
   "", "contact", "frameworks", "news", "blog", "changelog", "faq", "how-it-works", "solutions", "features-landing",
-  "about", "privacy", "terms", "security",
+  "about", "privacy", "terms", "security", "pricing",
 ]);
 const LOCALES = new Set(["en", "fr", "ar"]);
 

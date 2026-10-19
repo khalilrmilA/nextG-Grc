@@ -10,6 +10,7 @@ import {
   Building2, BarChart2, BookOpen, Zap, Shield, ChevronRight,
   Database, Globe, Cpu, Bell, RefreshCw, Download,
   Users, Activity, TrendingUp, GitBranch, Upload, Link2,
+  Server, Network, Bug, Search, ChartPie, Calendar, Archive, Lock,
 } from "lucide-react";
 
 function useInView(threshold = 0.12) {
@@ -115,15 +116,39 @@ const MODULES = [
     ],
   },
   {
+    id: "assets", k: "assets",
+    icon: Server, color: "from-cyan-500 to-teal-600", bgLight: "bg-cyan-50", border: "border-cyan-100", badge: "text-cyan-700 bg-cyan-50",
+    features: [
+      { icon: Database, fk: "f1" },
+      { icon: Network,  fk: "f2" },
+      { icon: RefreshCw, fk: "f3" },
+      { icon: Bug,      fk: "f4" },
+      { icon: Search,   fk: "f5" },
+      { icon: Shield,   fk: "f6" },
+    ],
+  },
+  {
+    id: "reporting", k: "reporting",
+    icon: ChartPie, color: "from-emerald-500 to-green-600", bgLight: "bg-emerald-50", border: "border-emerald-100", badge: "text-emerald-700 bg-emerald-50",
+    features: [
+      { icon: FileText,  fk: "f1" },
+      { icon: BarChart2, fk: "f2" },
+      { icon: Calendar,  fk: "f3" },
+      { icon: ChartPie,  fk: "f4" },
+      { icon: TrendingUp, fk: "f5" },
+      { icon: Download,  fk: "f6" },
+    ],
+  },
+  {
     id: "governance", k: "gov",
     icon: Shield, color: "from-slate-600 to-slate-800", bgLight: "bg-slate-50", border: "border-slate-200", badge: "text-slate-700 bg-slate-100",
     features: [
       { icon: AlertTriangle, fk: "f1" },
-      { icon: Database,      fk: "f2" },
-      { icon: BookOpen,      fk: "f3" },
+      { icon: Users,         fk: "f2" },
+      { icon: Lock,          fk: "f3" },
       { icon: Bell,          fk: "f4" },
       { icon: RefreshCw,     fk: "f5" },
-      { icon: Download,      fk: "f6" },
+      { icon: Archive,       fk: "f6" },
     ],
   },
 ] as const;
@@ -165,10 +190,10 @@ export default function FeaturesView() {
       <section className="py-12 px-6 bg-white border-y border-sky-100">
         <div className="max-w-5xl mx-auto grid grid-cols-2 md:grid-cols-4 gap-8 text-center">
           {[
-            { value: "38",     label: t("public.features_page.stat_pages") },
-            { value: "70+",    label: t("public.features_page.stat_frameworks") },
-            { value: "3,500+", label: t("public.features_page.stat_controls") },
-            { value: "29",     label: t("public.features_page.stat_ai") },
+            { value: "85+",    label: t("public.features_page.stat_frameworks") },
+            { value: "5,000+", label: t("public.features_page.stat_controls") },
+            { value: "27",     label: t("public.features_page.stat_ai") },
+            { value: "3",      label: t("public.features_page.stat_languages") },
           ].map((s, i) => (
             <Reveal key={s.label} delay={i * 80}>
               <p className="text-3xl font-extrabold text-blue-600 mb-1">{s.value}</p>
@@ -251,7 +276,7 @@ export default function FeaturesView() {
           </Reveal>
           <Reveal delay={80}>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              {[1,2,3,4,5,6,7,8,9,10,11,12].map(n => (
+              {[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16].map(n => (
                 <div key={n} className="flex items-start gap-3 bg-[#E8F3FC] rounded-xl p-4 border border-sky-100">
                   <CheckCircle className="w-4 h-4 text-green-500 flex-shrink-0 mt-0.5" />
                   <p className="text-sm text-gray-700">{t(`public.fp.cap${n}`)}</p>

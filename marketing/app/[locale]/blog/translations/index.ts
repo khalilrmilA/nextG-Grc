@@ -10,7 +10,6 @@ import tprm from "./ciso-guide-vendor-risk-management-tprm-2026";
 import aiAct from "./eu-ai-act-security-teams-ai-governance";
 import automationCost from "./grc-automation-2026-cost-of-manual-compliance";
 import aiGrc from "./ai-powered-grc-automation-iso27001-soc2-nis2";
-import autoRisk from "./automated-risk-management-monte-carlo-quantification";
 import continuousCompliance from "./continuous-compliance-monitoring-vs-annual-audits";
 import vendorRiskAuto from "./vendor-risk-management-automation-ai-contract-review";
 import crossFramework from "./cross-framework-compliance-iso-nist-soc2-gdpr-dora";
@@ -24,7 +23,6 @@ const TRANSLATIONS: Record<string, PostTranslations> = {
   "eu-ai-act-security-teams-ai-governance": aiAct,
   "grc-automation-2026-cost-of-manual-compliance": automationCost,
   "ai-powered-grc-automation-iso27001-soc2-nis2": aiGrc,
-  "automated-risk-management-monte-carlo-quantification": autoRisk,
   "continuous-compliance-monitoring-vs-annual-audits": continuousCompliance,
   "vendor-risk-management-automation-ai-contract-review": vendorRiskAuto,
   "cross-framework-compliance-iso-nist-soc2-gdpr-dora": crossFramework,

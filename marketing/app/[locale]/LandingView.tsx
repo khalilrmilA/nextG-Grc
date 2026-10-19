@@ -91,7 +91,7 @@ function useTypewriter(words: string[], pause = 2200) {
 
 function CountUp({ to, suffix = "", prefix = "" }: { to: number; suffix?: string; prefix?: string }) {
   // Seed at the final value so the server-rendered HTML carries the real figure
-  // ("70+", "3,500+", "60%") instead of "0+". Googlebot does not run the
+  // ("85+", "5,000+", "60%") instead of "0+". Googlebot does not run the
   // IntersectionObserver, so a 0-seeded counter shipped three meaningless zeros
   // as the page's only hard numbers. Client and server agree on first render;
   // the effect rewinds to 0 and animates only once JS is actually running.
@@ -131,14 +131,20 @@ const FEATURES = [
   { icon: BarChart2,     key: "reporting",  color: "from-teal-500 to-cyan-600",    bg: "bg-teal-50",   text: "text-teal-600" },
   { icon: BookOpen,      key: "library",    color: "from-green-500 to-emerald-600", bg: "bg-green-50",  text: "text-green-600" },
   { icon: Zap,           key: "ai",         color: "from-yellow-500 to-orange-500", bg: "bg-yellow-50", text: "text-yellow-600" },
+  { icon: Database,      key: "assets",     color: "from-sky-500 to-blue-600",     bg: "bg-sky-50",    text: "text-sky-600" },
+  { icon: Activity,      key: "secops",     color: "from-rose-500 to-red-600",     bg: "bg-rose-50",   text: "text-rose-600" },
+  { icon: Lock,          key: "access",     color: "from-slate-500 to-slate-700",  bg: "bg-slate-50",  text: "text-slate-600" },
+  { icon: Globe,         key: "regional",   color: "from-emerald-500 to-teal-600", bg: "bg-emerald-50", text: "text-emerald-600" },
 ] as const;
 
 const ALL_FRAMEWORKS = [
-  "ISO 27001:2022", "SOC 2 Type II", "GDPR", "PCI DSS 4.0",
-  "HIPAA", "NIST CSF 2.0", "NIST 800-53 Rev5", "CIS Controls v8",
-  "NIS2 Directive", "DORA", "ISO 42001", "NIST AI RMF",
-  "MITRE ATT&CK", "CSA CCM", "SOX ITGC", "FedRAMP", "HITRUST",
-  "ISO 22301", "COBIT 2019", "ISO 31000", "ISO 27701", "SWIFT CSP",
+  "ISO 27001:2022", "NCA ECC-2:2024", "SOC 2 Type II", "SAMA CSF",
+  "GDPR", "SDAIA PDPL", "PCI DSS 4.0", "NCA OTCC-1:2022",
+  "NIST CSF 2.0", "NCA CCC-2:2024", "NIS2 Directive", "DORA",
+  "IEC 62443", "ISO 42001", "UAE NESA IAS", "Qatar NIA",
+  "HIPAA", "NIST 800-53 Rev 5", "CIS Controls v8", "EU AI Act",
+  "MITRE ATT&CK", "CSA CCM", "FedRAMP", "HITRUST CSF", "TISAX",
+  "ISO 22301", "COBIT 2019", "ISO 27701", "SWIFT CSP", "NIST AI RMF",
 ];
 
 const TESTIMONIALS = [
@@ -597,8 +603,8 @@ export default function LandingView() {
 
           <div className="animate-fade-in-up animation-delay-1000 mt-14 grid grid-cols-3 gap-4 max-w-md mx-auto">
             {[
-              { value: 70, suffix: "+", label: t("public.landing.stat_frameworks") },
-              { value: 3500, suffix: "+", label: t("public.landing.stat_controls") },
+              { value: 85, suffix: "+", label: t("public.landing.stat_frameworks") },
+              { value: 5000, suffix: "+", label: t("public.landing.stat_controls") },
               { value: 60, suffix: "%", label: t("public.landing.stat_faster") },
             ].map(s => (
               <div key={s.label} className="text-center glass-card rounded-2xl py-4 px-2 border border-white/80 shadow-sm">
@@ -825,10 +831,10 @@ export default function LandingView() {
           </Reveal>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             {[
-              { icon: Shield,     to: 70,   suffix: "+", label: t("public.landing.stats_frameworks_label"), sub: t("public.landing.stats_frameworks_sub"), accent: "from-blue-500 to-indigo-500",   iconBg: "bg-blue-500/15",  iconColor: "text-blue-400"   },
-              { icon: Activity,   to: 3500, suffix: "+", label: t("public.landing.stats_controls_label"),   sub: t("public.landing.stats_controls_sub"),   accent: "from-violet-500 to-purple-500", iconBg: "bg-violet-500/15", iconColor: "text-violet-400" },
+              { icon: Shield,     to: 85,   suffix: "+", label: t("public.landing.stats_frameworks_label"), sub: t("public.landing.stats_frameworks_sub"), accent: "from-blue-500 to-indigo-500",   iconBg: "bg-blue-500/15",  iconColor: "text-blue-400"   },
+              { icon: Activity,   to: 5000, suffix: "+", label: t("public.landing.stats_controls_label"),   sub: t("public.landing.stats_controls_sub"),   accent: "from-violet-500 to-purple-500", iconBg: "bg-violet-500/15", iconColor: "text-violet-400" },
               { icon: TrendingUp, to: 60,   suffix: "%", label: t("public.landing.stats_faster_label"),     sub: t("public.landing.stats_faster_sub"),     accent: "from-teal-500 to-cyan-500",     iconBg: "bg-teal-500/15",   iconColor: "text-teal-400"   },
-              { icon: Database,   to: 0,    suffix: "",  label: t("public.landing.stats_egress_label"),     sub: t("public.landing.stats_egress_sub"),     accent: "from-green-500 to-emerald-500", iconBg: "bg-green-500/15",  iconColor: "text-green-400"  },
+              { icon: FileText,   to: 27,   suffix: "",  label: t("public.landing.stats_ai_label"),         sub: t("public.landing.stats_ai_sub"),     accent: "from-green-500 to-emerald-500", iconBg: "bg-green-500/15",  iconColor: "text-green-400"  },
             ].map((s, i) => (
               <Reveal key={s.label} delay={i * 100}>
                 <div className="relative bg-slate-900 rounded-2xl p-6 border border-slate-800 hover:border-slate-700 transition-colors overflow-hidden group text-center">
@@ -898,9 +904,9 @@ export default function LandingView() {
 
         <div className="max-w-3xl mx-auto grid grid-cols-1 sm:grid-cols-3 gap-5">
           {[
-            { icon: Lock,  label: t("public.landing.iso_certified"),      value: "ISO 27001 · ISO 27002 · ISO 42001",   color: "from-blue-500 to-indigo-600" },
-            { icon: Award, label: t("public.landing.regulatory"),         value: "GDPR · HIPAA · PCI DSS · DORA · NIS2", color: "from-purple-500 to-pink-600" },
-            { icon: Globe, label: t("public.landing.industry_standards"), value: "SOC 2 · CIS v8 · NIST · CSA CCM",       color: "from-teal-500 to-cyan-600" },
+            { icon: Lock,  label: t("public.landing.iso_certified"),      value: "ISO 27001 · ISO 27002 · ISO 42001 · ISO 22301",   color: "from-blue-500 to-indigo-600" },
+            { icon: Award, label: t("public.landing.regulatory"),         value: "NCA ECC · SAMA CSF · PDPL · GDPR · DORA · NIS2", color: "from-purple-500 to-pink-600" },
+            { icon: Globe, label: t("public.landing.industry_standards"), value: "SOC 2 · PCI DSS · NIST · CIS v8 · IEC 62443",       color: "from-teal-500 to-cyan-600" },
           ].map((s, i) => (
             <Reveal key={s.label} delay={i * 100}>
               <div className="bg-slate-800 rounded-2xl p-5 text-left border border-slate-700 hover:border-slate-600 hover:bg-slate-700/60 transition-all">

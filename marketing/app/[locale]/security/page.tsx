@@ -8,7 +8,7 @@ export async function generateMetadata(props: { params: Promise<{ locale: Locale
   const params = await props.params;
   const title = "Security at GRC Eye | How We Protect Your Compliance Data";
   const description =
-    "The security controls built into GRC Eye: multi-factor authentication, role-based access control, tenant isolation, audit logging and self-hosted AI.";
+    "The security controls built into GRC Eye: multi-factor authentication, 13 built-in roles, Active Directory / LDAP sign-in, tenant isolation, a tamper-evident activity log and private AI options.";
   return {
     title: { absolute: title },
     description,
@@ -35,7 +35,7 @@ export default async function SecurityPage(props: { params: Promise<{ locale: Lo
     <LegalPage
       title="Security"
       subtitle="A GRC platform holds the evidence of your entire control environment. Here is how GRC Eye protects it."
-      updated="8 September 2026"
+      updated="19 October 2026"
     >
       <h2>Why this page exists</h2>
       <p>
@@ -53,9 +53,13 @@ export default async function SecurityPage(props: { params: Promise<{ locale: Lo
           enrolment option.
         </li>
         <li>
-          <strong>Role-based access control</strong> &mdash; every account carries a role
-          (administrator, CISO, user, auditor) that determines which modules and records it
-          can reach.
+          <strong>Account protection</strong> &mdash; account lockout after repeated failed
+          sign-ins and a configurable password policy.
+        </li>
+        <li>
+          <strong>Role-based access control</strong> &mdash; 13 built-in roles determine which
+          modules and records an account can reach. A user can hold several roles, and team
+          groups make assignment easier.
         </li>
         <li>
           <strong>Scoped auditor access</strong> &mdash; external auditors get a dedicated
@@ -63,8 +67,9 @@ export default async function SecurityPage(props: { params: Promise<{ locale: Lo
           audits. They never see the wider tenant.
         </li>
         <li>
-          <strong>Single sign-on</strong> &mdash; SSO integration is available for
-          organisations that centralise identity.
+          <strong>Active Directory / LDAP sign-in</strong> &mdash; organisations that
+          centralise identity can let users sign in with their directory account, with AD
+          groups mapped to GRC Eye roles.
         </li>
       </ul>
 
@@ -79,24 +84,35 @@ export default async function SecurityPage(props: { params: Promise<{ locale: Lo
       <h2>Audit trail</h2>
       <p>
         The platform records user actions &mdash; what was changed, by whom, and when
-        &mdash; in an activity log available to tenant administrators. This is both a
-        security control and a compliance feature: most of the frameworks GRC Eye supports
-        require an audit trail of changes to the control environment.
+        &mdash; in an activity log available to tenant administrators. The log is
+        tamper-evident: entries are hash-chained so the trail can be independently
+        verified. This is both a security control and a compliance feature: most of the
+        frameworks GRC Eye supports require an audit trail of changes to the control
+        environment.
+      </p>
+      <p>
+        Uploaded evidence and contracts carry file integrity checks and a version history,
+        so you can show which version of a document was reviewed and that it has not been
+        altered since.
       </p>
 
-      <h2>AI processing stays with you</h2>
+      <h2>Private AI on your terms</h2>
       <p>
-        This is the control that matters most for a GRC tool, and the one most competing
-        platforms cannot offer. GRC Eye&apos;s AI features &mdash; gap analysis, contract
-        review, document generation, vendor prescreening &mdash; run on a locally hosted
-        model rather than a third-party AI API.
+        GRC Eye&apos;s AI features &mdash; gap analysis, contract review, document
+        generation, vendor prescreening &mdash; are advisory: people make the final
+        decisions. Where the AI runs is your choice:
       </p>
-      <p>
-        Your control evidence, contracts and draft policies are not sent to an external
-        model vendor. For an on-premise deployment, they never leave your network at all.
-        If you have ever had a compliance tool fail its own vendor security review because
-        it shipped your audit evidence to an external API, this is the difference.
-      </p>
+      <ul>
+        <li>
+          <strong>Private edition</strong> &mdash; run GRC Eye on-premises or air-gapped
+          with a local model. Your control evidence, contracts and draft policies never
+          leave your network: zero data egress.
+        </li>
+        <li>
+          <strong>Bring your own AI model</strong> &mdash; connect your own Ollama or
+          OpenAI-compatible endpoint, so AI processing runs where you decide.
+        </li>
+      </ul>
 
       <h2>Data protection</h2>
       <ul>
@@ -121,9 +137,11 @@ export default async function SecurityPage(props: { params: Promise<{ locale: Lo
 
       <h2>Deployment options</h2>
       <p>
-        GRC Eye can be run as a managed SaaS deployment or installed on-premise in your own
-        environment. On-premise deployments give you full data residency: the application,
-        the database and the AI model all run on infrastructure you control, with no egress
+        GRC Eye can be run as a managed SaaS deployment or, with the Private edition,
+        installed on-premises in your own environment &mdash; as Docker containers, a VMware
+        OVA appliance or an offline installer for air-gapped networks, with offline licence
+        keys. On-premises deployments give you full data residency: the application, the
+        database and the AI model all run on infrastructure you control, with no egress
         to us.
       </p>
 
@@ -145,8 +163,7 @@ export default async function SecurityPage(props: { params: Promise<{ locale: Lo
       <p>
         If you need a completed security questionnaire, a data processing agreement, or
         architecture detail for your vendor review, ask via the{" "}
-        <Link href={to("/contact")}>contact form</Link> and we will turn it around. Customers can
-        also publish their own posture through the platform&apos;s built-in trust center.
+        <Link href={to("/contact")}>contact form</Link> and we will turn it around.
       </p>
     </LegalPage>
   );

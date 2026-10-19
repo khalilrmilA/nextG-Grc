@@ -70,7 +70,9 @@ export const KNOWS_ABOUT = [
   "NIS2 Directive",
   "DORA",
   "Third-party risk management",
-  "Risk quantification",
+  "Risk management",
+  "NCA Essential Cybersecurity Controls (ECC)",
+  "SAMA Cyber Security Framework",
   "Internal audit",
   "Security policy management",
 ];

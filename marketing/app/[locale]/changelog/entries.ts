@@ -36,4 +36,5 @@ export const CHANGELOG_ENTRIES: ChangelogEntry[] = [
   { id: "31", key: "c31", date: "2026-09-03", theme: "enterprise" },
   { id: "37", key: "c37", date: "2026-09-25", theme: "platform" },
   { id: "38", key: "c38", date: "2026-09-28", theme: "platform" },
+  { id: "39", key: "c39", date: "2026-10-19", theme: "compliance" },
 ];

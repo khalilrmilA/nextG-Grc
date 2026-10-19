@@ -5,10 +5,10 @@ import { useState } from "react";
 import { ArrowRight, ChevronDown, FileText, ExternalLink } from "lucide-react";
 import PublicNav from "@/components/landing/PublicNav";
 import { useI18n } from "@/i18n";
-import { FAQ_ITEMS, FAQ_CATEGORY_KEYS } from "./faqData";
+import { FAQ_ITEMS, FAQ_CATEGORY_KEYS, FAQ_LINKS } from "./faqData";
 
 function FAQAccordion({ category, ids }: { category: string; ids: readonly string[] }) {
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
   const [expanded, setExpanded] = useState<number | null>(0);
   const localizedCategory = FAQ_CATEGORY_KEYS[category] ? t(FAQ_CATEGORY_KEYS[category]) : category;
 
@@ -42,6 +42,14 @@ function FAQAccordion({ category, ids }: { category: string; ids: readonly strin
               <div className="overflow-hidden">
                 <div className="px-6 py-4 bg-blue-50/50 border-t border-gray-200">
                   <p className="text-gray-700 leading-relaxed text-sm">{t(`public.faq_q.${id}_a`)}</p>
+                  {FAQ_LINKS[id] && (
+                    <Link
+                      href={`/${lang}${FAQ_LINKS[id].href}`}
+                      className="mt-3 inline-flex items-center gap-1.5 text-sm font-semibold text-blue-600 hover:text-blue-700"
+                    >
+                      {t(FAQ_LINKS[id].labelKey)} <ArrowRight className="w-4 h-4 rtl:rotate-180" />
+                    </Link>
+                  )}
                 </div>
               </div>
             </div>
