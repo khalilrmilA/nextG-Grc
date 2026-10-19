@@ -254,7 +254,8 @@ function FrameworkDrawer({
             <p className="text-xs text-gray-500 leading-relaxed">{pickText(fw, "description", showOriginal)}</p>
           )}
           {(fw.translated || controls.some(c => c.translated)) && (
-            <AutoTranslatedBadge showingOriginal={showOriginal} onToggle={() => setShowOriginal(v => !v)} />
+            <AutoTranslatedBadge showingOriginal={showOriginal} onToggle={() => setShowOriginal(v => !v)}
+              official={controls.some(c => c.translated) && controls.every(c => !c.translated || c.translation_official)} />
           )}
         </div>
 

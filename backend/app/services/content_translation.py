@@ -270,21 +270,34 @@ async def translate_texts(
 
 # ── Cache ─────────────────────────────────────────────────────────────────────
 
-async def lookup(db: AsyncSession, lang: str, hashes: Iterable[str]) -> dict[str, str]:
-    """{source_hash: translated text} for the hashes already translated into ``lang``."""
+async def lookup(db: AsyncSession, lang: str, hashes: Iterable[str],
+                 official: set[str] | None = None) -> dict[str, str]:
+    """{source_hash: translated text} for the hashes already translated into ``lang``.
+    ``official``, when given, receives the hashes whose text is the regulator's own."""
     wanted = list({h for h in hashes if h})
     found: dict[str, str] = {}
     if not wanted or lang not in LANGS:
         return found
+    if official is None:
+        official = set()
     for i in range(0, len(wanted), 500):   # SQLite variable limit
         rows = (await db.execute(
-            select(ContentTranslation.source_hash, ContentTranslation.text).where(
+            select(ContentTranslation.source_hash, ContentTranslation.text,
+                   ContentTranslation.engine).where(
                 ContentTranslation.lang == lang,
                 ContentTranslation.source_hash.in_(wanted[i:i + 500]),
             )
         )).all()
-        for h, text in rows:
-            found.setdefault(h, text)
+        for h, text, engine in rows:
+            # A regulator's own translation (engine "official:...", written by
+            # scripts/import_saudi_frameworks.py) beats a machine one for the same
+            # English text — e.g. a heading shared with another framework.
+            if (engine or "").startswith("official:"):
+                if h not in official:
+                    found[h] = text
+                    official.add(h)
+            else:
+                found.setdefault(h, text)
     return found
 
 
@@ -452,24 +465,32 @@ async def localize_fields(
                     wanted.add(source_hash(text))
         if not wanted:
             return 0
-        found = await lookup(db, lang, wanted)
+        official: set[str] = set()
+        found = await lookup(db, lang, wanted, official)
         if not found:
             return 0
         n = 0
         for target, fields in entries:
-            changed = False
+            changed = is_official = False
             for attr, text in fields.items():
                 if not text:
                     continue
-                translated = found.get(source_hash(text))
+                h = source_hash(text)
+                translated = found.get(h)
                 if translated and translated != text:
                     _set(target, attr, translated)
                     if original_prefix is not None:
                         _set(target, original_prefix + attr, text)
                     changed = True
+                    is_official = is_official or h in official
                     n += 1
             if changed and flag:
                 _set(target, flag, True)
+            # The regulator's own wording (e.g. NCA's binding Arabic), not a machine
+            # translation — the UI labels it "Official text" instead of "Auto-translated".
+            if is_official and (isinstance(target, dict)
+                                or "translation_official" in getattr(type(target), "model_fields", {})):
+                _set(target, "translation_official", True)
         return n
     except Exception as exc:   # noqa: BLE001 — a failure leaves the stored text
         logger.warning("content localisation failed (%s): %s", lang, exc)

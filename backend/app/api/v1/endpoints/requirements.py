@@ -98,6 +98,7 @@ class RequirementOut(BaseModel):
     # Machine translation of a framework requirement / feed regulatory item for
     # display (content_translations). Stored text in original_*.
     translated: bool = False
+    translation_official: bool = False
     original_title: str | None = None
     original_description: str | None = None
     model_config = {"from_attributes": True}

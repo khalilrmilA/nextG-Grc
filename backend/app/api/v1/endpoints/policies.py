@@ -198,6 +198,7 @@ class LinkedControlOut(BaseModel):
     requirement_type: str | None = None
     # Machine translation for display (content_translations); stored text in original_*.
     translated: bool = False
+    translation_official: bool = False
     original_title: str | None = None
     original_framework_name: str | None = None
 

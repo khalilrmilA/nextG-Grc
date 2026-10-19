@@ -382,6 +382,7 @@ class FrameworkResponse(BaseModel):
     # caller's language (content_translations). Additive: the stored text is kept
     # in original_*; ``?original=1`` (edit screens) switches the overlay off.
     translated: bool = False
+    translation_official: bool = False
     original_name: str | None = None
     original_description: str | None = None
 
@@ -425,6 +426,7 @@ class ControlResponse(BaseModel):
     # Machine translation (content_translations) for the fields no human translation
     # covered. original_* carry the stored text; ``?original=1`` switches it off.
     translated: bool = False
+    translation_official: bool = False
     original_title: str | None = None
     original_description: str | None = None
     original_guidance: str | None = None

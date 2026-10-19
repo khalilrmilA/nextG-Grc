@@ -1,0 +1,1585 @@
+{
+  "framework": {
+    "short_name": "nca-tcc-1-2021",
+    "name": "Telework Cybersecurity Controls (TCC-1:2021)",
+    "name_ar": "ضوابط الأمن السيبراني للعمل عن بعد (TCC-1:2021)",
+    "version": "1:2021",
+    "issuing_body": "National Cybersecurity Authority (NCA)",
+    "issuing_body_ar": "الهيئة الوطنية للأمن السيبراني",
+    "description": "From this national perspective towards teleworking, with the purpose to achieve a secure and reliable Saudi cyber space enabling growth and prosperity, the NCA developed the Telework Cybersecurity Controls (TCC-1: 2021) to set the minimum cybersecurity requirements to enable national organizations to perform telework in a secure manner, in addition to the Essential Cybersecurity Controls (ECC-1:2018).",
+    "description_ar": "وتماشياً مع هذا التوجه الوطني نحو العمل عن بعد؛ وبهدف الوصول إلى فضاء سيبراني سعودي آمن وموثوق يُمكن النمو والازدهار؛ قامت الهيئة الوطنية للأمن السيبراني بإعداد ضوابط الأمن السيبراني للعمل عن بعد (TCC – 1: 2021) لوضع الحد الأدنى من متطلبات الأمن السيبراني لتمكين الجهة من تنفيذ أعمالها عن بعد بطريقة آمنة، بالإضافة إلى الضوابط الأساسية للأمن السيبراني (ECC – 1: 2018).",
+    "source_type": "reglementation",
+    "binding_language": "ar",
+    "sources": [
+      {
+        "lang": "en",
+        "url": "https://nca.gov.sa/telework_cybersecurity_controls-en.pdf",
+        "file": "src/tcc/telework_cybersecurity_controls-en.pdf",
+        "sha256": "be0a18f65b60e5a82ec5efb6814b2844f1545b512fc7bf56d903879c924393ef"
+      },
+      {
+        "lang": "ar",
+        "url": "https://nca.gov.sa/Telework-Cybersecurity-Controls.pdf",
+        "file": "src/tcc/tcc-ar-final.pdf",
+        "sha256": "fb034c1189650aa36f28402ef3825ba82e722a4ac4b7ab79797352800cbe831f"
+      },
+      {
+        "lang": "ar",
+        "url": "https://nca.gov.sa/NCA_TCC-1-2021_Assessment_and_Compliance_Tool_v2.0.xlsx",
+        "file": "src/tcc/NCA_TCC-1-2021_Assessment_and_Compliance_Tool_v2.0.xlsx",
+        "sha256": "a7800661f5a94066c8f74efc3e4c2a069c15c90a86c72daa4e97c64790baaf48",
+        "role": "cross-check only (wording differs from the PDF in places; not used as text source)"
+      }
+    ],
+    "official_counts": {
+      "main_domains": 3,
+      "subdomains": 16,
+      "controls": 21,
+      "subcontrols": 42,
+      "stated_in": "Introduction, page 9 of EN doc; same totals on page 6 of AR doc"
+    }
+  },
+  "controls": [
+    {
+      "control_id": "1",
+      "level": "domain",
+      "parent_id": null,
+      "title": "Cybersecurity Governance",
+      "title_ar": "حوكمة الأمن السيبراني",
+      "description": null,
+      "description_ar": null,
+      "guidance": null,
+      "guidance_ar": null,
+      "domain": "Cybersecurity Governance",
+      "domain_ar": "حوكمة الأمن السيبراني",
+      "applicability": null,
+      "refs": [],
+      "sort_order": 1
+    },
+    {
+      "control_id": "1-1",
+      "level": "subdomain",
+      "parent_id": "1",
+      "title": "Cybersecurity Policies and Procedures",
+      "title_ar": "سياسات وإجراءات الأمن السيبراني",
+      "description": "To ensure that cybersecurity requirements are documented, communicated and complied with by the organization as per related laws and regulations, and organizational requirements.",
+      "description_ar": "ضمان توثيق واعتماد ونشر متطلبات الأمن السيبراني والتزام الجهة بها، وذلك وفقاً لمتطلبات الأعمال التنظيمية للجهة، والمتطلبات التشريعية والتنظيمية ذات العلاقة.",
+      "guidance": null,
+      "guidance_ar": null,
+      "domain": "Cybersecurity Governance",
+      "domain_ar": "حوكمة الأمن السيبراني",
+      "applicability": null,
+      "refs": [
+        {
+          "framework": "nca-ecc-1-2018",
+          "control": "1-3",
+          "basis": "Appendix A, Figure 5 (figure names the ECC subdomain; ID per ECC-1:2018 numbering)"
+        }
+      ],
+      "sort_order": 2
+    },
+    {
+      "control_id": "1-1-1",
+      "level": "control",
+      "parent_id": "1-1",
+      "title": "Referring to control 1-3-1 in the ECC, cybersecurity policies and procedures must include the following:",
+      "title_ar": "رجوعا للضابط ١-٣-١ في الضوابط الأساسية للأمن السيبراني، يجب أن تغطي سياسات وإجراءات الأمن السيبراني بحد أدنى، مايلي:",
+      "description": "Referring to control 1-3-1 in the ECC, cybersecurity policies and procedures must include the following:",
+      "description_ar": "رجوعا للضابط ١-٣-١ في الضوابط الأساسية للأمن السيبراني، يجب أن تغطي سياسات وإجراءات الأمن السيبراني بحد أدنى، مايلي:",
+      "guidance": null,
+      "guidance_ar": null,
+      "domain": "Cybersecurity Governance",
+      "domain_ar": "حوكمة الأمن السيبراني",
+      "applicability": null,
+      "refs": [
+        {
+          "framework": "nca-ecc-1-2018",
+          "control": "1-3-1",
+          "basis": "control text"
+        }
+      ],
+      "sort_order": 3
+    },
+    {
+      "control_id": "1-1-1-1",
+      "level": "subcontrol",
+      "parent_id": "1-1-1",
+      "title": "Defining and documenting the telework cybersecurity requirements and controls as part of the organization’s cybersecurity policies.",
+      "title_ar": "تحديد وتوثيق متطلبات وضوابط الأمن السيبراني للعمل عن بعد ضمن سياسات الأمن السيبراني للجهة.",
+      "description": "Defining and documenting the telework cybersecurity requirements and controls as part of the organization’s cybersecurity policies.",
+      "description_ar": "تحديد وتوثيق متطلبات وضوابط الأمن السيبراني للعمل عن بعد ضمن سياسات الأمن السيبراني للجهة.",
+      "guidance": null,
+      "guidance_ar": null,
+      "domain": "Cybersecurity Governance",
+      "domain_ar": "حوكمة الأمن السيبراني",
+      "applicability": null,
+      "refs": [],
+      "sort_order": 4
+    },
+    {
+      "control_id": "1-2",
+      "level": "subdomain",
+      "parent_id": "1",
+      "title": "Cybersecurity Risk Management",
+      "title_ar": "إدارة مخاطر الأمن السيبراني",
+      "description": "To ensure managing cybersecurity risks in a methodological approach in order to protect the organization’s information and technology assets as per organizational policies and procedures, and related laws and regulations.",
+      "description_ar": "ضمان إدارة مخاطر الأمن السيبراني؛ لحماية الأصول المعلوماتية والتقنية للجهة، على نحو ممنهج؛ وذلك وفقاً للسياسات والإجراءات التنظيمية للجهة، والمتطلبات التشريعية والتنظيمية ذات العلاقة.",
+      "guidance": null,
+      "guidance_ar": null,
+      "domain": "Cybersecurity Governance",
+      "domain_ar": "حوكمة الأمن السيبراني",
+      "applicability": null,
+      "refs": [
+        {
+          "framework": "nca-ecc-1-2018",
+          "control": "1-5",
+          "basis": "Appendix A, Figure 5 (figure names the ECC subdomain; ID per ECC-1:2018 numbering)"
+        }
+      ],
+      "sort_order": 5
+    },
+    {
+      "control_id": "1-2-1",
+      "level": "control",
+      "parent_id": "1-2",
+      "title": "In addition to the controls within subdomain 1-5 in the ECC, requirements for cybersecurity risk management should include at least the following:",
+      "title_ar": "بالإضافة للضوابط ضمن المكون الفرعي ١-٥ في الضوابط الأساسية للأمن السيبراني، يجب أن تغطي منهجية إدارة مخاطر الأمن السيبراني بحد أدنى ما يلي:",
+      "description": "In addition to the controls within subdomain 1-5 in the ECC, requirements for cybersecurity risk management should include at least the following:",
+      "description_ar": "بالإضافة للضوابط ضمن المكون الفرعي ١-٥ في الضوابط الأساسية للأمن السيبراني، يجب أن تغطي منهجية إدارة مخاطر الأمن السيبراني بحد أدنى ما يلي:",
+      "guidance": null,
+      "guidance_ar": null,
+      "domain": "Cybersecurity Governance",
+      "domain_ar": "حوكمة الأمن السيبراني",
+      "applicability": null,
+      "refs": [
+        {
+          "framework": "nca-ecc-1-2018",
+          "control": "1-5",
+          "basis": "control text"
+        }
+      ],
+      "sort_order": 6
+    },
+    {
+      "control_id": "1-2-1-1",
+      "level": "subcontrol",
+      "parent_id": "1-2-1",
+      "title": "Assessment of the cybersecurity risks for telework systems, once per year at least.",
+      "title_ar": "تقييم مخاطر الأمن السيبراني لأنظمة العمل عن بعد، مرة واحدة سنوياً، على الأقل.",
+      "description": "Assessment of the cybersecurity risks for telework systems, once per year at least.",
+      "description_ar": "تقييم مخاطر الأمن السيبراني لأنظمة العمل عن بعد، مرة واحدة سنوياً، على الأقل.",
+      "guidance": null,
+      "guidance_ar": null,
+      "domain": "Cybersecurity Governance",
+      "domain_ar": "حوكمة الأمن السيبراني",
+      "applicability": null,
+      "refs": [],
+      "sort_order": 7
+    },
+    {
+      "control_id": "1-2-1-2",
+      "level": "subcontrol",
+      "parent_id": "1-2-1",
+      "title": "Assessment of cybersecurity risks during planning and before permitting telework for any service or system.",
+      "title_ar": "تقييم مخاطر الأمن السيبراني عند التخطيط وقبل السماح بالعمل عن بعد لأي خدمة أو نظام.",
+      "description": "Assessment of cybersecurity risks during planning and before permitting telework for any service or system.",
+      "description_ar": "تقييم مخاطر الأمن السيبراني عند التخطيط وقبل السماح بالعمل عن بعد لأي خدمة أو نظام.",
+      "guidance": null,
+      "guidance_ar": null,
+      "domain": "Cybersecurity Governance",
+      "domain_ar": "حوكمة الأمن السيبراني",
+      "applicability": null,
+      "refs": [],
+      "sort_order": 8
+    },
+    {
+      "control_id": "1-2-1-3",
+      "level": "subcontrol",
+      "parent_id": "1-2-1",
+      "title": "Including the cybersecurity risks related to telework systems and its related services and systems in the entity's cybersecurity risk register, and monitoring it at least once a year.",
+      "title_ar": "تضمين مخاطر الأمن السيبراني الخاصة بأنظمة العمل عن بعد والخدمات والأنظمة المسموح لها بالعمل عن بعد في سجل مخاطر الأمن السيبراني الخاص بالجهة، ومتابعته مرة واحدة سنويا، على الأقل.",
+      "description": "Including the cybersecurity risks related to telework systems and its related services and systems in the entity's cybersecurity risk register, and monitoring it at least once a year.",
+      "description_ar": "تضمين مخاطر الأمن السيبراني الخاصة بأنظمة العمل عن بعد والخدمات والأنظمة المسموح لها بالعمل عن بعد في سجل مخاطر الأمن السيبراني الخاص بالجهة، ومتابعته مرة واحدة سنويا، على الأقل.",
+      "guidance": null,
+      "guidance_ar": null,
+      "domain": "Cybersecurity Governance",
+      "domain_ar": "حوكمة الأمن السيبراني",
+      "applicability": null,
+      "refs": [],
+      "sort_order": 9
+    },
+    {
+      "control_id": "1-3",
+      "level": "subdomain",
+      "parent_id": "1",
+      "title": "Cybersecurity Awareness and Training Program",
+      "title_ar": "برنامج التوعية والتدريب بالأمن السيبراني",
+      "description": "To ensure that personnel are aware of their cybersecurity responsibilities and have the essential cybersecurity awareness. It is also to ensure that personnel are provided with the required cybersecurity training, skills and credentials needed to accomplish their cybersecurity responsibilities and to protect the organization’s information and technology assets.",
+      "description_ar": "ضمان التأكد من أن العاملين بالجهة لديهم التوعية الأمنية اللازمة وعلى دراية بمسؤولياتهم في مجال الأمن السيبراني. والتأكد من تزويد العاملين بالجهة بالمهارات والمؤهلات والدورات التدريبية المطلوبة في مجال الأمن السيبراني لحماية الأصول المعلوماتية والتقنية للجهة والقيام بمسؤولياتهم تجاه الأمن السيبراني.",
+      "guidance": null,
+      "guidance_ar": null,
+      "domain": "Cybersecurity Governance",
+      "domain_ar": "حوكمة الأمن السيبراني",
+      "applicability": null,
+      "refs": [
+        {
+          "framework": "nca-ecc-1-2018",
+          "control": "1-10",
+          "basis": "Appendix A, Figure 5 (figure names the ECC subdomain; ID per ECC-1:2018 numbering)"
+        }
+      ],
+      "sort_order": 10
+    },
+    {
+      "control_id": "1-3-1",
+      "level": "control",
+      "parent_id": "1-3",
+      "title": "In addition to the sub-controls within control 1-10-3 in the ECC, the cybersecurity awareness program must cover the awareness about the potential cyber risks and threats related to telework, including the following:",
+      "title_ar": "بالإضافة للضوابط الفرعية ضمن الضابط ١-١٠-٣ في الضوابط الأساسية للأمن السيبراني، فإنه يجب أن يغطي برنامج التوعية بالأمن السيبراني المخاطر والتهديدات السيبرانية للعمل عن بعد والاستخدام الآمن للحد من هذه المخاطر والتهديدات، بما في ذلك:",
+      "description": "In addition to the sub-controls within control 1-10-3 in the ECC, the cybersecurity awareness program must cover the awareness about the potential cyber risks and threats related to telework, including the following:",
+      "description_ar": "بالإضافة للضوابط الفرعية ضمن الضابط ١-١٠-٣ في الضوابط الأساسية للأمن السيبراني، فإنه يجب أن يغطي برنامج التوعية بالأمن السيبراني المخاطر والتهديدات السيبرانية للعمل عن بعد والاستخدام الآمن للحد من هذه المخاطر والتهديدات، بما في ذلك:",
+      "guidance": null,
+      "guidance_ar": null,
+      "domain": "Cybersecurity Governance",
+      "domain_ar": "حوكمة الأمن السيبراني",
+      "applicability": null,
+      "refs": [
+        {
+          "framework": "nca-ecc-1-2018",
+          "control": "1-10-3",
+          "basis": "control text"
+        }
+      ],
+      "sort_order": 11
+    },
+    {
+      "control_id": "1-3-1-1",
+      "level": "subcontrol",
+      "parent_id": "1-3-1",
+      "title": "Secure use of telework devices and how to protect them.",
+      "title_ar": "الاستخدام الآمن للأجهزة المخصصة للعمل عن بعد والمحافظة عليها وحمايتها.",
+      "description": "Secure use of telework devices and how to protect them.",
+      "description_ar": "الاستخدام الآمن للأجهزة المخصصة للعمل عن بعد والمحافظة عليها وحمايتها.",
+      "guidance": null,
+      "guidance_ar": null,
+      "domain": "Cybersecurity Governance",
+      "domain_ar": "حوكمة الأمن السيبراني",
+      "applicability": null,
+      "refs": [],
+      "sort_order": 12
+    },
+    {
+      "control_id": "1-3-1-2",
+      "level": "subcontrol",
+      "parent_id": "1-3-1",
+      "title": "Secure handling of identities and passwords.",
+      "title_ar": "التعامل الآمن مع هويات الدخول وكلمات المرور.",
+      "description": "Secure handling of identities and passwords.",
+      "description_ar": "التعامل الآمن مع هويات الدخول وكلمات المرور.",
+      "guidance": null,
+      "guidance_ar": null,
+      "domain": "Cybersecurity Governance",
+      "domain_ar": "حوكمة الأمن السيبراني",
+      "applicability": null,
+      "refs": [],
+      "sort_order": 13
+    },
+    {
+      "control_id": "1-3-1-3",
+      "level": "subcontrol",
+      "parent_id": "1-3-1",
+      "title": "Protection of the stored data on the telework devices, and to be handled based on its classification.",
+      "title_ar": "حماية البيانات التي يتم حفظها على الأجهزة المستخدمة للعمل عن بعد والتعامل معها حسب تصنيفها وإجراءات وسياسات الجهة.",
+      "description": "Protection of the stored data on the telework devices, and to be handled based on its classification.",
+      "description_ar": "حماية البيانات التي يتم حفظها على الأجهزة المستخدمة للعمل عن بعد والتعامل معها حسب تصنيفها وإجراءات وسياسات الجهة.",
+      "guidance": null,
+      "guidance_ar": null,
+      "domain": "Cybersecurity Governance",
+      "domain_ar": "حوكمة الأمن السيبراني",
+      "applicability": null,
+      "refs": [],
+      "sort_order": 14
+    },
+    {
+      "control_id": "1-3-1-4",
+      "level": "subcontrol",
+      "parent_id": "1-3-1",
+      "title": "Secure handling of applications and solutions used for telework such as: virtual conferencing and collaboration, and file sharing solutions.",
+      "title_ar": "التعامل الآمن مع التطبيقات والحلول المستخدمة للعمل عن بعد كالاجتماعات الافتراضية، والتعاون ومشاركة الملفات.",
+      "description": "Secure handling of applications and solutions used for telework such as: virtual conferencing and collaboration, and file sharing solutions.",
+      "description_ar": "التعامل الآمن مع التطبيقات والحلول المستخدمة للعمل عن بعد كالاجتماعات الافتراضية، والتعاون ومشاركة الملفات.",
+      "guidance": null,
+      "guidance_ar": null,
+      "domain": "Cybersecurity Governance",
+      "domain_ar": "حوكمة الأمن السيبراني",
+      "applicability": null,
+      "refs": [],
+      "sort_order": 15
+    },
+    {
+      "control_id": "1-3-1-5",
+      "level": "subcontrol",
+      "parent_id": "1-3-1",
+      "title": "Secure handling of home networks, making sure it is configured in a secure way.",
+      "title_ar": "التعامل الآمن مع الشبكات المنزلية والتأكد من إعدادت الحماية الخاصة بها.",
+      "description": "Secure handling of home networks, making sure it is configured in a secure way.",
+      "description_ar": "التعامل الآمن مع الشبكات المنزلية والتأكد من إعدادت الحماية الخاصة بها.",
+      "guidance": null,
+      "guidance_ar": null,
+      "domain": "Cybersecurity Governance",
+      "domain_ar": "حوكمة الأمن السيبراني",
+      "applicability": null,
+      "refs": [],
+      "sort_order": 16
+    },
+    {
+      "control_id": "1-3-1-6",
+      "level": "subcontrol",
+      "parent_id": "1-3-1",
+      "title": "Avoidance of teleworking using unreliable public devices or networks or while in public places.",
+      "title_ar": "تجنب العمل عن بعد باستخدام أجهزة أو شبكات عامة غير موثوقة أو أثناء التواجد في أماكن عامة.",
+      "description": "Avoidance of teleworking using unreliable public devices or networks or while in public places.",
+      "description_ar": "تجنب العمل عن بعد باستخدام أجهزة أو شبكات عامة غير موثوقة أو أثناء التواجد في أماكن عامة.",
+      "guidance": null,
+      "guidance_ar": null,
+      "domain": "Cybersecurity Governance",
+      "domain_ar": "حوكمة الأمن السيبراني",
+      "applicability": null,
+      "refs": [],
+      "sort_order": 17
+    },
+    {
+      "control_id": "1-3-1-7",
+      "level": "subcontrol",
+      "parent_id": "1-3-1",
+      "title": "Unauthorized physical access, loss, theft, and sabotage of technical assets and telework systems.",
+      "title_ar": "الوصول المادي غير المصرح به والفقدان والسرقة والتخريب للأصول التقنية وأنظمة العمل عن بعد.",
+      "description": "Unauthorized physical access, loss, theft, and sabotage of technical assets and telework systems.",
+      "description_ar": "الوصول المادي غير المصرح به والفقدان والسرقة والتخريب للأصول التقنية وأنظمة العمل عن بعد.",
+      "guidance": null,
+      "guidance_ar": null,
+      "domain": "Cybersecurity Governance",
+      "domain_ar": "حوكمة الأمن السيبراني",
+      "applicability": null,
+      "refs": [],
+      "sort_order": 18
+    },
+    {
+      "control_id": "1-3-1-8",
+      "level": "subcontrol",
+      "parent_id": "1-3-1",
+      "title": "To Communicate directly with the cybersecurity department If a cybersecurity threat is suspected.",
+      "title_ar": "التواصل مباشرة مع الإدارة المعنية بالأمن السيبراني في الجهة حال الاشتباه بتهديد أمن سيبراني.",
+      "description": "To Communicate directly with the cybersecurity department If a cybersecurity threat is suspected.",
+      "description_ar": "التواصل مباشرة مع الإدارة المعنية بالأمن السيبراني في الجهة حال الاشتباه بتهديد أمن سيبراني.",
+      "guidance": null,
+      "guidance_ar": null,
+      "domain": "Cybersecurity Governance",
+      "domain_ar": "حوكمة الأمن السيبراني",
+      "applicability": null,
+      "refs": [],
+      "sort_order": 19
+    },
+    {
+      "control_id": "1-3-2",
+      "level": "control",
+      "parent_id": "1-3",
+      "title": "In addition to the sub-controls within control 1-10-4 in the ECC, employees must be trained with the required technical skills to ensure the implementation of the cybersecurity requirements when handling telework systems.",
+      "title_ar": "بالإضافة للضوابط الفرعية ضمن الضابط ١-١٠-٤ في الضوابط الأساسية للأمن السيبراني، فإنه يجب تدريب العاملين على المهارات التقنية اللازمة لضمان تطبيق متطلبات وممارسات الأمن السيبراني عند التعامل مع أنظمة العمل عن بعد.",
+      "description": "In addition to the sub-controls within control 1-10-4 in the ECC, employees must be trained with the required technical skills to ensure the implementation of the cybersecurity requirements when handling telework systems.",
+      "description_ar": "بالإضافة للضوابط الفرعية ضمن الضابط ١-١٠-٤ في الضوابط الأساسية للأمن السيبراني، فإنه يجب تدريب العاملين على المهارات التقنية اللازمة لضمان تطبيق متطلبات وممارسات الأمن السيبراني عند التعامل مع أنظمة العمل عن بعد.",
+      "guidance": null,
+      "guidance_ar": null,
+      "domain": "Cybersecurity Governance",
+      "domain_ar": "حوكمة الأمن السيبراني",
+      "applicability": null,
+      "refs": [
+        {
+          "framework": "nca-ecc-1-2018",
+          "control": "1-10-4",
+          "basis": "control text"
+        }
+      ],
+      "sort_order": 20
+    },
+    {
+      "control_id": "2",
+      "level": "domain",
+      "parent_id": null,
+      "title": "Cybersecurity Defense",
+      "title_ar": "تعزيز الأمن السيبراني",
+      "description": null,
+      "description_ar": null,
+      "guidance": null,
+      "guidance_ar": null,
+      "domain": "Cybersecurity Defense",
+      "domain_ar": "تعزيز الأمن السيبراني",
+      "applicability": null,
+      "refs": [],
+      "sort_order": 21
+    },
+    {
+      "control_id": "2-1",
+      "level": "subdomain",
+      "parent_id": "2",
+      "title": "Asset Management",
+      "title_ar": "إدارة الأصول",
+      "description": "To ensure that the organization has an accurate and detailed inventory of information and technology assets in order to support the organization’s cybersecurity and operational requirements to maintain the confidentiality, integrity and availability of information and technology assets.",
+      "description_ar": "التأكد من أن الجهة لديها قائمة جرد دقيقة، وحديثة للأصول؛ تشمل التفاصيل ذات العلاقة، لجميع الأصول المعلوماتية، والتقنية المتاحة للجهة؛ وذلك من أجل دعم العمليات التشغيلية للجهة، ومتطلبات الأمن السيبراني، بهدف تحقيق سرية الأصول المعلوماتية والتقنية للجهة، وسلامتها ودقتها وتوافرها.",
+      "guidance": null,
+      "guidance_ar": null,
+      "domain": "Cybersecurity Defense",
+      "domain_ar": "تعزيز الأمن السيبراني",
+      "applicability": null,
+      "refs": [
+        {
+          "framework": "nca-ecc-1-2018",
+          "control": "2-1",
+          "basis": "Appendix A, Figure 5 (figure names the ECC subdomain; ID per ECC-1:2018 numbering)"
+        }
+      ],
+      "sort_order": 22
+    },
+    {
+      "control_id": "2-1-1",
+      "level": "control",
+      "parent_id": "2-1",
+      "title": "In addition to the controls within subdomain 2-1 in the ECC, cybersecurity requirements for asset management related to telework systems should include at least the following:",
+      "title_ar": "بالإضافة للضوابط ضمن المكون الفرعي ٢-١ في الضوابط الأساسية للأمن السيبراني، يجب أن تغطي متطلبات الأمن السيبراني لإدارة الأصول المعلوماتية والتقنية، بحد أدنى، مايلي:",
+      "description": "In addition to the controls within subdomain 2-1 in the ECC, cybersecurity requirements for asset management related to telework systems should include at least the following:",
+      "description_ar": "بالإضافة للضوابط ضمن المكون الفرعي ٢-١ في الضوابط الأساسية للأمن السيبراني، يجب أن تغطي متطلبات الأمن السيبراني لإدارة الأصول المعلوماتية والتقنية، بحد أدنى، مايلي:",
+      "guidance": null,
+      "guidance_ar": null,
+      "domain": "Cybersecurity Defense",
+      "domain_ar": "تعزيز الأمن السيبراني",
+      "applicability": null,
+      "refs": [
+        {
+          "framework": "nca-ecc-1-2018",
+          "control": "2-1",
+          "basis": "control text"
+        }
+      ],
+      "sort_order": 23
+    },
+    {
+      "control_id": "2-1-1-1",
+      "level": "subcontrol",
+      "parent_id": "2-1-1",
+      "title": "Identifying and maintaining an annually-updated Inventory of information and technology assets of the telework systems.",
+      "title_ar": "تحديد وحصر الأصول المعلوماتية والتقنية لأنظمة العمل عن بعد، وتحديثها مرة واحدة، كل سنة؛ على الأقل.",
+      "description": "Identifying and maintaining an annually-updated Inventory of information and technology assets of the telework systems.",
+      "description_ar": "تحديد وحصر الأصول المعلوماتية والتقنية لأنظمة العمل عن بعد، وتحديثها مرة واحدة، كل سنة؛ على الأقل.",
+      "guidance": null,
+      "guidance_ar": null,
+      "domain": "Cybersecurity Defense",
+      "domain_ar": "تعزيز الأمن السيبراني",
+      "applicability": null,
+      "refs": [],
+      "sort_order": 24
+    },
+    {
+      "control_id": "2-2",
+      "level": "subdomain",
+      "parent_id": "2",
+      "title": "Identity and Access Management",
+      "title_ar": "إدارة هويات الدخول والصلاحيات",
+      "description": "To ensure the secure and restricted logical access to information and technology assets in order to prevent unauthorized access and allow only authorized access for users which are necessary to accomplish assigned tasks.",
+      "description_ar": "ضمان حماية الأمن السيبراني للوصول المنطقي (Logical Access) إلى الأصول المعلوماتية والتقنية للجهة؛ من أجل منع الوصول غير المصرح به، وتقييد الوصول إلى ماهو مطلوب؛ لإنجاز الأعمال المتعلقة بالجهة.",
+      "guidance": null,
+      "guidance_ar": null,
+      "domain": "Cybersecurity Defense",
+      "domain_ar": "تعزيز الأمن السيبراني",
+      "applicability": null,
+      "refs": [
+        {
+          "framework": "nca-ecc-1-2018",
+          "control": "2-2",
+          "basis": "Appendix A, Figure 5 (figure names the ECC subdomain; ID per ECC-1:2018 numbering)"
+        }
+      ],
+      "sort_order": 25
+    },
+    {
+      "control_id": "2-2-1",
+      "level": "control",
+      "parent_id": "2-2",
+      "title": "In addition to the sub-controls within control 2-2-3 in the ECC, cybersecurity requirements for identity and access management related to telework systems shall include at least the following:",
+      "title_ar": "بالإضافة للضوابط الفرعية ضمن الضابط ٢-٢-٣ في الضوابط الأساسية للأمن السيبراني، يجب أن تغطي متطلبات الأمن السيبراني المتعلقة بإدارة هويات الدخول، والصلاحيات للأنظمة المستخدمة في العمل عن بعد في الجهة، بحد أدنى، مايلي:",
+      "description": "In addition to the sub-controls within control 2-2-3 in the ECC, cybersecurity requirements for identity and access management related to telework systems shall include at least the following:",
+      "description_ar": "بالإضافة للضوابط الفرعية ضمن الضابط ٢-٢-٣ في الضوابط الأساسية للأمن السيبراني، يجب أن تغطي متطلبات الأمن السيبراني المتعلقة بإدارة هويات الدخول، والصلاحيات للأنظمة المستخدمة في العمل عن بعد في الجهة، بحد أدنى، مايلي:",
+      "guidance": null,
+      "guidance_ar": null,
+      "domain": "Cybersecurity Defense",
+      "domain_ar": "تعزيز الأمن السيبراني",
+      "applicability": null,
+      "refs": [
+        {
+          "framework": "nca-ecc-1-2018",
+          "control": "2-2-3",
+          "basis": "control text"
+        }
+      ],
+      "sort_order": 26
+    },
+    {
+      "control_id": "2-2-1-1",
+      "level": "subcontrol",
+      "parent_id": "2-2-1",
+      "title": "Managing telework access rights based on need, considering the sensitivity of the systems, the level of access rights and the type of devices used by employees for telework.",
+      "title_ar": "إدارة صلاحيات المستخدمين للعمل عن بعد بناءً على احتياجات العمل، مع مراعاة حساسية الأنظمة ومستوى الصلاحيات، ونوعية الأجهزة المستخدمة من قبل الموظفين للعمل عن بعد.",
+      "description": "Managing telework access rights based on need, considering the sensitivity of the systems, the level of access rights and the type of devices used by employees for telework.",
+      "description_ar": "إدارة صلاحيات المستخدمين للعمل عن بعد بناءً على احتياجات العمل، مع مراعاة حساسية الأنظمة ومستوى الصلاحيات، ونوعية الأجهزة المستخدمة من قبل الموظفين للعمل عن بعد.",
+      "guidance": null,
+      "guidance_ar": null,
+      "domain": "Cybersecurity Defense",
+      "domain_ar": "تعزيز الأمن السيبراني",
+      "applicability": null,
+      "refs": [],
+      "sort_order": 27
+    },
+    {
+      "control_id": "2-2-1-2",
+      "level": "subcontrol",
+      "parent_id": "2-2-1",
+      "title": "Restricting remote access for the same user from multiple computers at the same time (Concurrent Logins).",
+      "title_ar": "تقييد إمكانية الوصول عن بعد لنفس المستخدم من أجهزة حاسبات متعددة في نفس الوقت (Concurrent Logins).",
+      "description": "Restricting remote access for the same user from multiple computers at the same time (Concurrent Logins).",
+      "description_ar": "تقييد إمكانية الوصول عن بعد لنفس المستخدم من أجهزة حاسبات متعددة في نفس الوقت (Concurrent Logins).",
+      "guidance": null,
+      "guidance_ar": null,
+      "domain": "Cybersecurity Defense",
+      "domain_ar": "تعزيز الأمن السيبراني",
+      "applicability": null,
+      "refs": [],
+      "sort_order": 28
+    },
+    {
+      "control_id": "2-2-1-3",
+      "level": "subcontrol",
+      "parent_id": "2-2-1",
+      "title": "Using secure standards to manage identities and passwords used in the telework systems.",
+      "title_ar": "استخدام معايير آمنة لإدارة الهويات وكلمات المرور المستخدمة في أنظمة العمل عن بعد.",
+      "description": "Using secure standards to manage identities and passwords used in the telework systems.",
+      "description_ar": "استخدام معايير آمنة لإدارة الهويات وكلمات المرور المستخدمة في أنظمة العمل عن بعد.",
+      "guidance": null,
+      "guidance_ar": null,
+      "domain": "Cybersecurity Defense",
+      "domain_ar": "تعزيز الأمن السيبراني",
+      "applicability": null,
+      "refs": [],
+      "sort_order": 29
+    },
+    {
+      "control_id": "2-2-2",
+      "level": "control",
+      "parent_id": "2-2",
+      "title": "With reference to the ECC subcontrol 2-2-3-5, user’s identities and access rights used for telework must be reviewed at least once every year.",
+      "title_ar": "رجوعاً للضابط الفرعي ٢-٢-٣-٥ في الضوابط الأساسية للأمن السيبراني، يجب مراجعة هويات الدخول والصلاحيات المستخدمة للعمل عن بعد، بحد أدنى مرة واحدة كل سنة.",
+      "description": "With reference to the ECC subcontrol 2-2-3-5, user’s identities and access rights used for telework must be reviewed at least once every year.",
+      "description_ar": "رجوعاً للضابط الفرعي ٢-٢-٣-٥ في الضوابط الأساسية للأمن السيبراني، يجب مراجعة هويات الدخول والصلاحيات المستخدمة للعمل عن بعد، بحد أدنى مرة واحدة كل سنة.",
+      "guidance": null,
+      "guidance_ar": null,
+      "domain": "Cybersecurity Defense",
+      "domain_ar": "تعزيز الأمن السيبراني",
+      "applicability": null,
+      "refs": [
+        {
+          "framework": "nca-ecc-1-2018",
+          "control": "2-2-3-5",
+          "basis": "control text"
+        }
+      ],
+      "sort_order": 30
+    },
+    {
+      "control_id": "2-3",
+      "level": "subdomain",
+      "parent_id": "2",
+      "title": "Information System and Processing Facilities Protection",
+      "title_ar": "حماية الأنظمة وأجهزة معالجة المعلومات",
+      "description": "To ensure the protection of information systems and information processing facilities (including workstations and infrastructures) against cyber risks.",
+      "description_ar": "ضمان حماية الأنظمة وأجهزة معالجة المعلومات بما في ذلك أجهزة المستخدمين والبنى التحتية للجهة من المخاطر السيبرانية.",
+      "guidance": null,
+      "guidance_ar": null,
+      "domain": "Cybersecurity Defense",
+      "domain_ar": "تعزيز الأمن السيبراني",
+      "applicability": null,
+      "refs": [
+        {
+          "framework": "nca-ecc-1-2018",
+          "control": "2-3",
+          "basis": "Appendix A, Figure 5 (figure names the ECC subdomain; ID per ECC-1:2018 numbering)"
+        }
+      ],
+      "sort_order": 31
+    },
+    {
+      "control_id": "2-3-1",
+      "level": "control",
+      "parent_id": "2-3",
+      "title": "In addition to the subcontrols in the ECC control 2-3-3, cybersecurity requirements for protecting telework systems and information processing facilities must include at least the following:",
+      "title_ar": "بالإضافة للضوابط الفرعية ضمن الضابط ٢-٣-٣ في الضوابط الأساسية للأمن السيبراني، يجب أن تغطي متطلبات الأمن السيبراني لحماية أنظمة العمل عن بعد، وأجهزة المعلومات الخاصة بها، بحد أدنى، مايلي:",
+      "description": "In addition to the subcontrols in the ECC control 2-3-3, cybersecurity requirements for protecting telework systems and information processing facilities must include at least the following:",
+      "description_ar": "بالإضافة للضوابط الفرعية ضمن الضابط ٢-٣-٣ في الضوابط الأساسية للأمن السيبراني، يجب أن تغطي متطلبات الأمن السيبراني لحماية أنظمة العمل عن بعد، وأجهزة المعلومات الخاصة بها، بحد أدنى، مايلي:",
+      "guidance": null,
+      "guidance_ar": null,
+      "domain": "Cybersecurity Defense",
+      "domain_ar": "تعزيز الأمن السيبراني",
+      "applicability": null,
+      "refs": [
+        {
+          "framework": "nca-ecc-1-2018",
+          "control": "2-3-3",
+          "basis": "control text"
+        }
+      ],
+      "sort_order": 32
+    },
+    {
+      "control_id": "2-3-1-1",
+      "level": "subcontrol",
+      "parent_id": "2-3-1",
+      "title": "Applying updates and security patches for telework systems at least once every three months.",
+      "title_ar": "تطبيق حزم التحديثات، والإصلاحات الأمنية لأنظمة العمل عن بعد، مرة واحدة شهريا على الأقل.",
+      "description": "Applying updates and security patches for telework systems at least once every three months.",
+      "description_ar": "تطبيق حزم التحديثات، والإصلاحات الأمنية لأنظمة العمل عن بعد، مرة واحدة شهريا على الأقل.",
+      "guidance": null,
+      "guidance_ar": null,
+      "domain": "Cybersecurity Defense",
+      "domain_ar": "تعزيز الأمن السيبراني",
+      "applicability": null,
+      "refs": [],
+      "sort_order": 33
+    },
+    {
+      "control_id": "2-3-1-2",
+      "level": "subcontrol",
+      "parent_id": "2-3-1",
+      "title": "Reviewing telework systems’ configurations and hardening at least once every year.",
+      "title_ar": "مراجعة إعدادات الحماية لأنظمة العمل عن بعد والتحصين (Secure Configuration and Hardening)، مرة واحدة كل سنة على الأقل.",
+      "description": "Reviewing telework systems’ configurations and hardening at least once every year.",
+      "description_ar": "مراجعة إعدادات الحماية لأنظمة العمل عن بعد والتحصين (Secure Configuration and Hardening)، مرة واحدة كل سنة على الأقل.",
+      "guidance": null,
+      "guidance_ar": null,
+      "domain": "Cybersecurity Defense",
+      "domain_ar": "تعزيز الأمن السيبراني",
+      "applicability": null,
+      "refs": [],
+      "sort_order": 34
+    },
+    {
+      "control_id": "2-3-1-3",
+      "level": "subcontrol",
+      "parent_id": "2-3-1",
+      "title": "Reviewing and changing default configurations, and ensuring the removal of hard-coded, backdoor and/or default passwords.",
+      "title_ar": "مراجعة وتحصين الإعدادت المصنعية (Default Configuration) للأصول التقنية لأنظمة العمل عن بعد، ومنها وجود كلمات مرور ثابتة، وخلفية افتراضية.",
+      "description": "Reviewing and changing default configurations, and ensuring the removal of hard-coded, backdoor and/or default passwords.",
+      "description_ar": "مراجعة وتحصين الإعدادت المصنعية (Default Configuration) للأصول التقنية لأنظمة العمل عن بعد، ومنها وجود كلمات مرور ثابتة، وخلفية افتراضية.",
+      "guidance": null,
+      "guidance_ar": null,
+      "domain": "Cybersecurity Defense",
+      "domain_ar": "تعزيز الأمن السيبراني",
+      "applicability": null,
+      "refs": [],
+      "sort_order": 35
+    },
+    {
+      "control_id": "2-3-1-4",
+      "level": "subcontrol",
+      "parent_id": "2-3-1",
+      "title": "Securing Session Management which includes the session authenticity, lockout, and timeout.",
+      "title_ar": "الإدارة الآمنة للجلسات (Secure Session Management)، ويشمل موثوقية الجلسات (Authenticity)، وإقفالها (Lockout)، وإنهاء مهلتها (Timeout).",
+      "description": "Securing Session Management which includes the session authenticity, lockout, and timeout.",
+      "description_ar": "الإدارة الآمنة للجلسات (Secure Session Management)، ويشمل موثوقية الجلسات (Authenticity)، وإقفالها (Lockout)، وإنهاء مهلتها (Timeout).",
+      "guidance": null,
+      "guidance_ar": null,
+      "domain": "Cybersecurity Defense",
+      "domain_ar": "تعزيز الأمن السيبراني",
+      "applicability": null,
+      "refs": [],
+      "sort_order": 36
+    },
+    {
+      "control_id": "2-3-1-5",
+      "level": "subcontrol",
+      "parent_id": "2-3-1",
+      "title": "Restricting the activation of the features and services of the telework systems based on needs, provided that potential cyber risks are analyzed in case there is a need to activate them.",
+      "title_ar": "تقييد تفعيل الخصائص والخدمات في أنظمة العمل عن بعد حسب الحاجة، على أن يتم تحليل المخاطر السيبرانية المحتملة في حال الحاجة لتفعيلها.",
+      "description": "Restricting the activation of the features and services of the telework systems based on needs, provided that potential cyber risks are analyzed in case there is a need to activate them.",
+      "description_ar": "تقييد تفعيل الخصائص والخدمات في أنظمة العمل عن بعد حسب الحاجة، على أن يتم تحليل المخاطر السيبرانية المحتملة في حال الحاجة لتفعيلها.",
+      "guidance": null,
+      "guidance_ar": null,
+      "domain": "Cybersecurity Defense",
+      "domain_ar": "تعزيز الأمن السيبراني",
+      "applicability": null,
+      "refs": [],
+      "sort_order": 37
+    },
+    {
+      "control_id": "2-4",
+      "level": "subdomain",
+      "parent_id": "2",
+      "title": "Network Security Management",
+      "title_ar": "إدارة أمن الشبكات",
+      "description": "To ensure the protection of organization’s network from cyber risks.",
+      "description_ar": "ضمان حماية شبكات الجهة من المخاطر السيبرانية.",
+      "guidance": null,
+      "guidance_ar": null,
+      "domain": "Cybersecurity Defense",
+      "domain_ar": "تعزيز الأمن السيبراني",
+      "applicability": null,
+      "refs": [
+        {
+          "framework": "nca-ecc-1-2018",
+          "control": "2-5",
+          "basis": "Appendix A, Figure 5 (figure names the ECC subdomain; ID per ECC-1:2018 numbering)"
+        }
+      ],
+      "sort_order": 38
+    },
+    {
+      "control_id": "2-4-1",
+      "level": "control",
+      "parent_id": "2-4",
+      "title": "In addition to the subcontrols in the ECC control 2-5-3, cybersecurity requirements of telework systems’ network security management must include at least the following:",
+      "title_ar": "بالإضافة للضوابط الفرعية ضمن الضابط ٢-٥-٣ في الضوابط الأساسية للأمن السيبراني، يجب أن تغطي متطلبات الأمن السيبراني لإدارة أمن شبكات الجهة للعمل عن بعد، بحد أدنى، مايلي:",
+      "description": "In addition to the subcontrols in the ECC control 2-5-3, cybersecurity requirements of telework systems’ network security management must include at least the following:",
+      "description_ar": "بالإضافة للضوابط الفرعية ضمن الضابط ٢-٥-٣ في الضوابط الأساسية للأمن السيبراني، يجب أن تغطي متطلبات الأمن السيبراني لإدارة أمن شبكات الجهة للعمل عن بعد، بحد أدنى، مايلي:",
+      "guidance": null,
+      "guidance_ar": null,
+      "domain": "Cybersecurity Defense",
+      "domain_ar": "تعزيز الأمن السيبراني",
+      "applicability": null,
+      "refs": [
+        {
+          "framework": "nca-ecc-1-2018",
+          "control": "2-5-3",
+          "basis": "control text"
+        }
+      ],
+      "sort_order": 39
+    },
+    {
+      "control_id": "2-4-1-1",
+      "level": "subcontrol",
+      "parent_id": "2-4-1",
+      "title": "Restrictions on network services, protocols and ports used to access remotely, specifically to internal systems and to only be opened based on need.",
+      "title_ar": "تقييد منافذ وبروتوكولات وخدمات الشبكة المستخدمة لعمليات الدخول عن بعد، وخصوصاً على الأنظمة الداخلية، وفتحها حسب الحاجة.",
+      "description": "Restrictions on network services, protocols and ports used to access remotely, specifically to internal systems and to only be opened based on need.",
+      "description_ar": "تقييد منافذ وبروتوكولات وخدمات الشبكة المستخدمة لعمليات الدخول عن بعد، وخصوصاً على الأنظمة الداخلية، وفتحها حسب الحاجة.",
+      "guidance": null,
+      "guidance_ar": null,
+      "domain": "Cybersecurity Defense",
+      "domain_ar": "تعزيز الأمن السيبراني",
+      "applicability": null,
+      "refs": [],
+      "sort_order": 40
+    },
+    {
+      "control_id": "2-4-1-2",
+      "level": "subcontrol",
+      "parent_id": "2-4-1",
+      "title": "Reviewing firewall rules and configurations, at least once every year.",
+      "title_ar": "مراجعة إعدادات وقوائم جدار الحماية (Firewall Rules) ذات العلاقة بأنظمة العمل عن بعد؛ مرة واحدة كل سنة على الأقل.",
+      "description": "Reviewing firewall rules and configurations, at least once every year.",
+      "description_ar": "مراجعة إعدادات وقوائم جدار الحماية (Firewall Rules) ذات العلاقة بأنظمة العمل عن بعد؛ مرة واحدة كل سنة على الأقل.",
+      "guidance": null,
+      "guidance_ar": null,
+      "domain": "Cybersecurity Defense",
+      "domain_ar": "تعزيز الأمن السيبراني",
+      "applicability": null,
+      "refs": [],
+      "sort_order": 41
+    },
+    {
+      "control_id": "2-4-1-3",
+      "level": "subcontrol",
+      "parent_id": "2-4-1",
+      "title": "Protecting against Distributed Denial of Service Attack (DDoS) attacks to limit risks arising from these attacks.",
+      "title_ar": "الحماية من هجمات تعطيل الشبكات (Distributed Denial of Service (DDoS)) على أنظمة العمل عن بعد للحد من المخاطر الناتجة عن هجمات تعطيل الشبكات.",
+      "description": "Protecting against Distributed Denial of Service Attack (DDoS) attacks to limit risks arising from these attacks.",
+      "description_ar": "الحماية من هجمات تعطيل الشبكات (Distributed Denial of Service (DDoS)) على أنظمة العمل عن بعد للحد من المخاطر الناتجة عن هجمات تعطيل الشبكات.",
+      "guidance": null,
+      "guidance_ar": null,
+      "domain": "Cybersecurity Defense",
+      "domain_ar": "تعزيز الأمن السيبراني",
+      "applicability": null,
+      "refs": [],
+      "sort_order": 42
+    },
+    {
+      "control_id": "2-4-1-4",
+      "level": "subcontrol",
+      "parent_id": "2-4-1",
+      "title": "Protecting against Advanced Persistent Threats (APT) at the network layer.",
+      "title_ar": "الحماية من التهديدات المتقدمة المستمرة على مستوى الشبكة لأنظمة العمل عن بعد (Network APT).",
+      "description": "Protecting against Advanced Persistent Threats (APT) at the network layer.",
+      "description_ar": "الحماية من التهديدات المتقدمة المستمرة على مستوى الشبكة لأنظمة العمل عن بعد (Network APT).",
+      "guidance": null,
+      "guidance_ar": null,
+      "domain": "Cybersecurity Defense",
+      "domain_ar": "تعزيز الأمن السيبراني",
+      "applicability": null,
+      "refs": [],
+      "sort_order": 43
+    },
+    {
+      "control_id": "2-5",
+      "level": "subdomain",
+      "parent_id": "2",
+      "title": "Mobile Device Security",
+      "title_ar": "أمن الأجهزة المحمولة",
+      "description": "To ensure the protection of mobile devices (including laptops, smartphones, tablets) from cyber risks and to ensure the secure handling of the organization’s information (including sensitive information) while utilizing Bring Your Own Device (BYOD) policy.",
+      "description_ar": "ضمان حماية أجهزة الجهة المحمولة (بما في ذلك أجهزة الحاسب المحمول والهواتف الذكية والأجهزة الذكية اللوحية) من المخاطر السيبرانية. وضمان التعامل بشكل آمن مع المعلومات الحساسة والمعلومات الخاصة بأعمال الجهة وحمايتها أثناء النقل والتخزين عند استخدام الأجهزة الشخصية للعاملين في الجهة (مبدأ BYOD).",
+      "guidance": null,
+      "guidance_ar": null,
+      "domain": "Cybersecurity Defense",
+      "domain_ar": "تعزيز الأمن السيبراني",
+      "applicability": null,
+      "refs": [
+        {
+          "framework": "nca-ecc-1-2018",
+          "control": "2-6",
+          "basis": "Appendix A, Figure 5 (figure names the ECC subdomain; ID per ECC-1:2018 numbering)"
+        }
+      ],
+      "sort_order": 44
+    },
+    {
+      "control_id": "2-5-1",
+      "level": "control",
+      "parent_id": "2-5",
+      "title": "In addition to the sub-controls within control 2-6-3 in the ECC, cybersecurity requirements for mobile device security related to telework systems shall include at least the following:",
+      "title_ar": "بالإضافة للضوابط الفرعية ضمن الضابط ٢-٦-٣ في الضوابط الأساسية للأمن السيبراني، يجب أن تغطي متطلبات الأمن السيبراني الخاصة بأمن الأجهزة المحمولة للعمل عن بعد في الجهة، بحد أدنى، مايلي:",
+      "description": "In addition to the sub-controls within control 2-6-3 in the ECC, cybersecurity requirements for mobile device security related to telework systems shall include at least the following:",
+      "description_ar": "بالإضافة للضوابط الفرعية ضمن الضابط ٢-٦-٣ في الضوابط الأساسية للأمن السيبراني، يجب أن تغطي متطلبات الأمن السيبراني الخاصة بأمن الأجهزة المحمولة للعمل عن بعد في الجهة، بحد أدنى، مايلي:",
+      "guidance": null,
+      "guidance_ar": null,
+      "domain": "Cybersecurity Defense",
+      "domain_ar": "تعزيز الأمن السيبراني",
+      "applicability": null,
+      "refs": [
+        {
+          "framework": "nca-ecc-1-2018",
+          "control": "2-6-3",
+          "basis": "control text"
+        }
+      ],
+      "sort_order": 45
+    },
+    {
+      "control_id": "2-5-1-1",
+      "level": "subcontrol",
+      "parent_id": "2-5-1",
+      "title": "Central management of mobile devices and BYODs using a Mobile Device Management system (MDM).",
+      "title_ar": "إدارة الأجهزة المحمولة وأجهزة (BYOD) مركزياً باستخدام نظام إدارة الأجهزة المحمولة (Mobile Device Management (MDM)).",
+      "description": "Central management of mobile devices and BYODs using a Mobile Device Management system (MDM).",
+      "description_ar": "إدارة الأجهزة المحمولة وأجهزة (BYOD) مركزياً باستخدام نظام إدارة الأجهزة المحمولة (Mobile Device Management (MDM)).",
+      "guidance": null,
+      "guidance_ar": null,
+      "domain": "Cybersecurity Defense",
+      "domain_ar": "تعزيز الأمن السيبراني",
+      "applicability": null,
+      "refs": [],
+      "sort_order": 46
+    },
+    {
+      "control_id": "2-5-1-2",
+      "level": "subcontrol",
+      "parent_id": "2-5-1",
+      "title": "Applying updates and security patches on mobile devices, at least once every month.",
+      "title_ar": "تطبيق حزم التحديثات، والإصلاحات الأمنية للأجهزة المحمولة، مرة واحدة شهريا، على الأقل.",
+      "description": "Applying updates and security patches on mobile devices, at least once every month.",
+      "description_ar": "تطبيق حزم التحديثات، والإصلاحات الأمنية للأجهزة المحمولة، مرة واحدة شهريا، على الأقل.",
+      "guidance": null,
+      "guidance_ar": null,
+      "domain": "Cybersecurity Defense",
+      "domain_ar": "تعزيز الأمن السيبراني",
+      "applicability": null,
+      "refs": [],
+      "sort_order": 47
+    },
+    {
+      "control_id": "2-6",
+      "level": "subdomain",
+      "parent_id": "2",
+      "title": "Data and Information Protection",
+      "title_ar": "حماية البيانات والمعلومات",
+      "description": "To ensure the confidentiality, integrity and availability of organization’s data and information as per organizational policies and procedures, and related laws and regulations.",
+      "description_ar": "ضمان حماية السرية، وسلامة بيانات ومعلومات الجهة، ودقتها، وتوافرها، وذلك وفقاً للسياسات والإجراءات التنظيمية للجهة، والمتطلبات التشريعية والتنظيمية ذات العلاقة.",
+      "guidance": null,
+      "guidance_ar": null,
+      "domain": "Cybersecurity Defense",
+      "domain_ar": "تعزيز الأمن السيبراني",
+      "applicability": null,
+      "refs": [
+        {
+          "framework": "nca-ecc-1-2018",
+          "control": "2-7",
+          "basis": "Appendix A, Figure 5 (figure names the ECC subdomain; ID per ECC-1:2018 numbering)"
+        }
+      ],
+      "sort_order": 48
+    },
+    {
+      "control_id": "2-6-1",
+      "level": "control",
+      "parent_id": "2-6",
+      "title": "In addition to the subcontrols in the ECC control 2-7-3, cybersecurity requirements for protecting and handling data and information must include at least the following:",
+      "title_ar": "بالإضافة للضوابط الفرعية ضمن الضابط ٢-٧-٣ في الضوابط الأساسية للأمن السيبراني، يجب أن تغطي متطلبات الأمن السيبراني لحماية البيانات والمعلومات للعمل عن بعد في الجهة، بحد أدنى، مايلي:",
+      "description": "In addition to the subcontrols in the ECC control 2-7-3, cybersecurity requirements for protecting and handling data and information must include at least the following:",
+      "description_ar": "بالإضافة للضوابط الفرعية ضمن الضابط ٢-٧-٣ في الضوابط الأساسية للأمن السيبراني، يجب أن تغطي متطلبات الأمن السيبراني لحماية البيانات والمعلومات للعمل عن بعد في الجهة، بحد أدنى، مايلي:",
+      "guidance": null,
+      "guidance_ar": null,
+      "domain": "Cybersecurity Defense",
+      "domain_ar": "تعزيز الأمن السيبراني",
+      "applicability": null,
+      "refs": [
+        {
+          "framework": "nca-ecc-1-2018",
+          "control": "2-7-3",
+          "basis": "control text"
+        }
+      ],
+      "sort_order": 49
+    },
+    {
+      "control_id": "2-6-1-1",
+      "level": "subcontrol",
+      "parent_id": "2-6-1",
+      "title": "Identifying classified data, according to the relevant regulations, that can be used, accessed or dealt with through telework systems.",
+      "title_ar": "تحديد البيانات المصنفة، حسب التشريعات ذات العلاقة، التي يمكن استخدامها أو الوصول إليها أو التعامل معها من خلال أنظمة العمل عن بعد.",
+      "description": "Identifying classified data, according to the relevant regulations, that can be used, accessed or dealt with through telework systems.",
+      "description_ar": "تحديد البيانات المصنفة، حسب التشريعات ذات العلاقة، التي يمكن استخدامها أو الوصول إليها أو التعامل معها من خلال أنظمة العمل عن بعد.",
+      "guidance": null,
+      "guidance_ar": null,
+      "domain": "Cybersecurity Defense",
+      "domain_ar": "تعزيز الأمن السيبراني",
+      "applicability": null,
+      "refs": [],
+      "sort_order": 50
+    },
+    {
+      "control_id": "2-6-1-2",
+      "level": "subcontrol",
+      "parent_id": "2-6-1",
+      "title": "Protecting classified data, which was identified in control 2-6-1-1, using controls such as: not allowing the use of a specific type of classified data, or by the use of technology (e.g. Data leakage Prevention), such controls and technologies can be determined by analyzing the cyber risks of the organization.",
+      "title_ar": "حماية البيانات المصنفة، التي تم تحديدها في الضابط ٢-٦-١-١، باستخدام ضوابط مثل منع استخدام نوع من البيانات المصنفة أو تقنيات مثل منع تسريب البيانات (Data Leakage Prevention). ويمكن تحديد هذه الضوابط والتقنيات عن طريق تحليل المخاطر السيبرانية للجهة.",
+      "description": "Protecting classified data, which was identified in control 2-6-1-1, using controls such as: not allowing the use of a specific type of classified data, or by the use of technology (e.g. Data leakage Prevention), such controls and technologies can be determined by analyzing the cyber risks of the organization.",
+      "description_ar": "حماية البيانات المصنفة، التي تم تحديدها في الضابط ٢-٦-١-١، باستخدام ضوابط مثل منع استخدام نوع من البيانات المصنفة أو تقنيات مثل منع تسريب البيانات (Data Leakage Prevention). ويمكن تحديد هذه الضوابط والتقنيات عن طريق تحليل المخاطر السيبرانية للجهة.",
+      "guidance": null,
+      "guidance_ar": null,
+      "domain": "Cybersecurity Defense",
+      "domain_ar": "تعزيز الأمن السيبراني",
+      "applicability": null,
+      "refs": [
+        {
+          "framework": "nca-tcc-1-2021",
+          "control": "2-6-1-1",
+          "basis": "control text"
+        }
+      ],
+      "sort_order": 51
+    },
+    {
+      "control_id": "2-7",
+      "level": "subdomain",
+      "parent_id": "2",
+      "title": "Cryptography",
+      "title_ar": "التشفير",
+      "description": "In addition to the sub-controls within control 2-8-3 in the ECC, cybersecurity requirements for cryptography related to telework systems shall include at least the following:",
+      "description_ar": "ضمان الاستخدام السليم والفعال للتشفير؛ لحماية الأصول المعلوماتية الإلكترونية للجهة، وذلك وفقاً للسياسات، والإجراءات التنظيمية للجهة، والمتطلبات التشريعية والتنظيمية، ذات العلاقة.",
+      "guidance": null,
+      "guidance_ar": null,
+      "domain": "Cybersecurity Defense",
+      "domain_ar": "تعزيز الأمن السيبراني",
+      "applicability": null,
+      "refs": [
+        {
+          "framework": "nca-ecc-1-2018",
+          "control": "2-8",
+          "basis": "Appendix A, Figure 5 (figure names the ECC subdomain; ID per ECC-1:2018 numbering)"
+        }
+      ],
+      "sort_order": 52
+    },
+    {
+      "control_id": "2-7-1",
+      "level": "control",
+      "parent_id": "2-7",
+      "title": "In addition to the sub-controls within control 2-8-3 in the ECC, cybersecurity requirements for cryptography related to telework systems shall include at least the following:",
+      "title_ar": "بالإضافة للضوابط الفرعية ضمن الضابط ٢-٨-٣ في الضوابط الأساسية للأمن السيبراني، يجب أن تغطي متطلبات الأمن السيبراني الخاصة بالتشفير لدى المشتركين، بحد أدنى مايلي:",
+      "description": "In addition to the sub-controls within control 2-8-3 in the ECC, cybersecurity requirements for cryptography related to telework systems shall include at least the following:",
+      "description_ar": "بالإضافة للضوابط الفرعية ضمن الضابط ٢-٨-٣ في الضوابط الأساسية للأمن السيبراني، يجب أن تغطي متطلبات الأمن السيبراني الخاصة بالتشفير لدى المشتركين، بحد أدنى مايلي:",
+      "guidance": null,
+      "guidance_ar": null,
+      "domain": "Cybersecurity Defense",
+      "domain_ar": "تعزيز الأمن السيبراني",
+      "applicability": null,
+      "refs": [
+        {
+          "framework": "nca-ecc-1-2018",
+          "control": "2-8-3",
+          "basis": "control text"
+        }
+      ],
+      "sort_order": 53
+    },
+    {
+      "control_id": "2-7-1-1",
+      "level": "subcontrol",
+      "parent_id": "2-7-1",
+      "title": "The use of updated and secure methods and algorithms for encryption over the entire network connection used for telework, according to the Advanced level within the National Cryptography Standards (NCS 1:2020).",
+      "title_ar": "استخدام طرق وخوارزميات محدثة وآمنة للتشفير على كامل الاتصال الشبكي المستخدم للعمل عن بعد وفقاً للمستوى المتقدم (Advanced) ضمن المعايير الوطنية للتشفير (NCS – 1:2020).",
+      "description": "The use of updated and secure methods and algorithms for encryption over the entire network connection used for telework, according to the Advanced level within the National Cryptography Standards (NCS 1:2020).",
+      "description_ar": "استخدام طرق وخوارزميات محدثة وآمنة للتشفير على كامل الاتصال الشبكي المستخدم للعمل عن بعد وفقاً للمستوى المتقدم (Advanced) ضمن المعايير الوطنية للتشفير (NCS – 1:2020).",
+      "guidance": null,
+      "guidance_ar": null,
+      "domain": "Cybersecurity Defense",
+      "domain_ar": "تعزيز الأمن السيبراني",
+      "applicability": null,
+      "refs": [],
+      "sort_order": 54
+    },
+    {
+      "control_id": "2-8",
+      "level": "subdomain",
+      "parent_id": "2",
+      "title": "Backup and Recovery Management",
+      "title_ar": "إدارة النسخ الاحتياطية",
+      "description": "To ensure the protection of organization’s data and information including information systems and software configurations from cyber risks as per organizational policies and procedures, and related laws and regulations.",
+      "description_ar": "ضمان حماية بيانات ومعلومات الجهة، والإعدادات التقنية للأنظمة، والتطبيقات الخاصة بالجهة، من الأضرار الناجمة عن المخاطر السيبرانية، وذلك وفقاً للسياسات، والإجراءات التنظيمية للجهة، والمتطلبات التشريعية والتنظيمية، ذات العلاقة.",
+      "guidance": null,
+      "guidance_ar": null,
+      "domain": "Cybersecurity Defense",
+      "domain_ar": "تعزيز الأمن السيبراني",
+      "applicability": null,
+      "refs": [
+        {
+          "framework": "nca-ecc-1-2018",
+          "control": "2-9",
+          "basis": "Appendix A, Figure 5 (figure names the ECC subdomain; ID per ECC-1:2018 numbering)"
+        }
+      ],
+      "sort_order": 55
+    },
+    {
+      "control_id": "2-8-1",
+      "level": "control",
+      "parent_id": "2-8",
+      "title": "In addition to the subcontrols in the ECC control 2-9-3, cybersecurity requirements for backup and recovery management must include at least the following:",
+      "title_ar": "بالإضافة للضوابط الفرعية ضمن الضابط ٢-٩-٣ في الضوابط الأساسية للأمن السيبراني، يجب أن تغطي متطلبات الأمن السيبراني لإدارة النسخ الاحتياطية لأنظمة العمل عن بعد في الجهة، بحد أدنى، مايلي:",
+      "description": "In addition to the subcontrols in the ECC control 2-9-3, cybersecurity requirements for backup and recovery management must include at least the following:",
+      "description_ar": "بالإضافة للضوابط الفرعية ضمن الضابط ٢-٩-٣ في الضوابط الأساسية للأمن السيبراني، يجب أن تغطي متطلبات الأمن السيبراني لإدارة النسخ الاحتياطية لأنظمة العمل عن بعد في الجهة، بحد أدنى، مايلي:",
+      "guidance": null,
+      "guidance_ar": null,
+      "domain": "Cybersecurity Defense",
+      "domain_ar": "تعزيز الأمن السيبراني",
+      "applicability": null,
+      "refs": [
+        {
+          "framework": "nca-ecc-1-2018",
+          "control": "2-9-3",
+          "basis": "control text"
+        }
+      ],
+      "sort_order": 56
+    },
+    {
+      "control_id": "2-8-1-1",
+      "level": "subcontrol",
+      "parent_id": "2-8-1",
+      "title": "Performing backup within planned intervals, according to the organization’s risk assessment.",
+      "title_ar": "عمل النسخ الاحتياطي على فترات زمنية مخطط لها؛ بناء على تقييم المخاطر للجهة، لأنظمة العمل عن بعد. وتوصي الهيئة بأن يتم عمل النسخ الاحتياطية، لأنظمة العمل عن بعد مرة واحدة كل أسبوع.",
+      "description": "Performing backup within planned intervals, according to the organization’s risk assessment.",
+      "description_ar": "عمل النسخ الاحتياطي على فترات زمنية مخطط لها؛ بناء على تقييم المخاطر للجهة، لأنظمة العمل عن بعد. وتوصي الهيئة بأن يتم عمل النسخ الاحتياطية، لأنظمة العمل عن بعد مرة واحدة كل أسبوع.",
+      "guidance": null,
+      "guidance_ar": null,
+      "domain": "Cybersecurity Defense",
+      "domain_ar": "تعزيز الأمن السيبراني",
+      "applicability": null,
+      "refs": [],
+      "sort_order": 57
+    },
+    {
+      "control_id": "2-8-2",
+      "level": "control",
+      "parent_id": "2-8",
+      "title": "With reference to the ECC subcontrol 2-9-3-3, a periodical test must be conducted at least once every six months in order to determine the efficiency of recovering telework systems backups.",
+      "title_ar": "رجوعاً للضابط ٢-٩-٣-٣ في الضوابط الأساسية للأمن السيبراني، يجب إجراء فحص دوري؛ كل ستة أشهر على الأقل، لتحديد مدى فعالية استعادة النسخ الاحتياطية، الخاصة بأنظمة العمل عن بعد.",
+      "description": "With reference to the ECC subcontrol 2-9-3-3, a periodical test must be conducted at least once every six months in order to determine the efficiency of recovering telework systems backups.",
+      "description_ar": "رجوعاً للضابط ٢-٩-٣-٣ في الضوابط الأساسية للأمن السيبراني، يجب إجراء فحص دوري؛ كل ستة أشهر على الأقل، لتحديد مدى فعالية استعادة النسخ الاحتياطية، الخاصة بأنظمة العمل عن بعد.",
+      "guidance": null,
+      "guidance_ar": null,
+      "domain": "Cybersecurity Defense",
+      "domain_ar": "تعزيز الأمن السيبراني",
+      "applicability": null,
+      "refs": [
+        {
+          "framework": "nca-ecc-1-2018",
+          "control": "2-9-3-3",
+          "basis": "control text"
+        }
+      ],
+      "sort_order": 58
+    },
+    {
+      "control_id": "2-9",
+      "level": "subdomain",
+      "parent_id": "2",
+      "title": "Vulnerabilities Management",
+      "title_ar": "إدارة الثغرات",
+      "description": "To ensure timely detection and effective remediation of technical vulnerabilities to prevent or minimize the probability of exploiting these vulnerabilities to launch cyber attacks against the organization.",
+      "description_ar": "ضمان اكتشاف الثغرات التقنية في الوقت المناسب، ومعالجتها بشكل فعال؛ وذلك لمنع احتمالية استغلال هذه الثغرات من قبل الهجمات السيبرانية أو تقليلها، وكذلك التقليل من الآثار المترتبة على أعمال الجهة.",
+      "guidance": null,
+      "guidance_ar": null,
+      "domain": "Cybersecurity Defense",
+      "domain_ar": "تعزيز الأمن السيبراني",
+      "applicability": null,
+      "refs": [
+        {
+          "framework": "nca-ecc-1-2018",
+          "control": "2-10",
+          "basis": "Appendix A, Figure 5 (figure names the ECC subdomain; ID per ECC-1:2018 numbering)"
+        }
+      ],
+      "sort_order": 59
+    },
+    {
+      "control_id": "2-9-1",
+      "level": "control",
+      "parent_id": "2-9",
+      "title": "In addition to the subcontrols in the ECC control 2-10-3, cybersecurity requirements for technical vulnerabilities management of telework systems must include at least the following:",
+      "title_ar": "بالإضافة للضوابط الفرعية ضمن الضابط ٢-١٠-٣ في الضوابط الأساسية للأمن السيبراني، يجب أن تغطي متطلبات الأمن السيبراني لإدارة الثغرات للأصول التقنية وأنظمة العمل عن بعد، بحد أدنى، مايلي:",
+      "description": "In addition to the subcontrols in the ECC control 2-10-3, cybersecurity requirements for technical vulnerabilities management of telework systems must include at least the following:",
+      "description_ar": "بالإضافة للضوابط الفرعية ضمن الضابط ٢-١٠-٣ في الضوابط الأساسية للأمن السيبراني، يجب أن تغطي متطلبات الأمن السيبراني لإدارة الثغرات للأصول التقنية وأنظمة العمل عن بعد، بحد أدنى، مايلي:",
+      "guidance": null,
+      "guidance_ar": null,
+      "domain": "Cybersecurity Defense",
+      "domain_ar": "تعزيز الأمن السيبراني",
+      "applicability": null,
+      "refs": [
+        {
+          "framework": "nca-ecc-1-2018",
+          "control": "2-10-3",
+          "basis": "control text"
+        }
+      ],
+      "sort_order": 60
+    },
+    {
+      "control_id": "2-9-1-1",
+      "level": "subcontrol",
+      "parent_id": "2-9-1",
+      "title": "Assessing vulnerabilities on technical components of telework systems, and to be classified based on criticality at least once every three months.",
+      "title_ar": "فحص الثغرات واكتشافها على أنظمة العمل عن بعد وتصنيفها حسب خطورتها، مرة واحدة كل ثلاثة أشهر على الأقل.",
+      "description": "Assessing vulnerabilities on technical components of telework systems, and to be classified based on criticality at least once every three months.",
+      "description_ar": "فحص الثغرات واكتشافها على أنظمة العمل عن بعد وتصنيفها حسب خطورتها، مرة واحدة كل ثلاثة أشهر على الأقل.",
+      "guidance": null,
+      "guidance_ar": null,
+      "domain": "Cybersecurity Defense",
+      "domain_ar": "تعزيز الأمن السيبراني",
+      "applicability": null,
+      "refs": [],
+      "sort_order": 61
+    },
+    {
+      "control_id": "2-9-1-2",
+      "level": "subcontrol",
+      "parent_id": "2-9-1",
+      "title": "Remediating vulnerabilities for telework systems, at least once every three months.",
+      "title_ar": "معالجة الثغرات على أنظمة العمل عن بعد، مرة واحدة كل ثلاثة أشهر على الأقل.",
+      "description": "Remediating vulnerabilities for telework systems, at least once every three months.",
+      "description_ar": "معالجة الثغرات على أنظمة العمل عن بعد، مرة واحدة كل ثلاثة أشهر على الأقل.",
+      "guidance": null,
+      "guidance_ar": null,
+      "domain": "Cybersecurity Defense",
+      "domain_ar": "تعزيز الأمن السيبراني",
+      "applicability": null,
+      "refs": [],
+      "sort_order": 62
+    },
+    {
+      "control_id": "2-10",
+      "level": "subdomain",
+      "parent_id": "2",
+      "title": "Penetration Testing",
+      "title_ar": "اختبار الاختراق",
+      "description": "To assess and evaluate the efficiency of the organization’s cybersecurity defense capabilities through simulated cyber-attacks to discover unknown weaknesses within the technical infrastructure that may lead to a cyber breach.",
+      "description_ar": "تقييم مدى فعالية قدرات تعزيز الأمن السيبراني واختباره في الجهة؛ وذلك من خلال عمل محاكاة لتقنيات الهجوم السيبراني الفعلية وأساليبه، وكذلك اكتشاف نقاط الضعف الأمنية غير المعروفةالتي قد تؤدي إلى الاختراق السيبراني للجهة؛ وذلك وفقاً للمتطلبات التشريعية والتنظيمية ذات العلاقة.",
+      "guidance": null,
+      "guidance_ar": null,
+      "domain": "Cybersecurity Defense",
+      "domain_ar": "تعزيز الأمن السيبراني",
+      "applicability": null,
+      "refs": [
+        {
+          "framework": "nca-ecc-1-2018",
+          "control": "2-11",
+          "basis": "Appendix A, Figure 5 (figure names the ECC subdomain; ID per ECC-1:2018 numbering)"
+        }
+      ],
+      "sort_order": 63
+    },
+    {
+      "control_id": "2-10-1",
+      "level": "control",
+      "parent_id": "2-10",
+      "title": "In addition to the sub-controls within control 2-11-3 in the ECC, cybersecurity requirements for penetration testing related to telework systems shall include at least the following:",
+      "title_ar": "بالإضافة للضوابط الفرعية ضمن الضابط ٢-١١-٣ في الضوابط الأساسية للأمن السيبراني، يجب أن تغطي متطلبات الأمن السيبراني لاختبار الاختراق لأنظمة العمل عن بعد، بحد أدنى، ما يلي:",
+      "description": "In addition to the sub-controls within control 2-11-3 in the ECC, cybersecurity requirements for penetration testing related to telework systems shall include at least the following:",
+      "description_ar": "بالإضافة للضوابط الفرعية ضمن الضابط ٢-١١-٣ في الضوابط الأساسية للأمن السيبراني، يجب أن تغطي متطلبات الأمن السيبراني لاختبار الاختراق لأنظمة العمل عن بعد، بحد أدنى، ما يلي:",
+      "guidance": null,
+      "guidance_ar": null,
+      "domain": "Cybersecurity Defense",
+      "domain_ar": "تعزيز الأمن السيبراني",
+      "applicability": null,
+      "refs": [
+        {
+          "framework": "nca-ecc-1-2018",
+          "control": "2-11-3",
+          "basis": "control text"
+        }
+      ],
+      "sort_order": 64
+    },
+    {
+      "control_id": "2-10-1-1",
+      "level": "subcontrol",
+      "parent_id": "2-10-1",
+      "title": "Scope of penetration tests must cover all of the telework systems’ technical components.",
+      "title_ar": "نطاق عمل اختبار الاختراق، ليشمل جميع المكونات التقنية لأنظمة العمل عن بعد.",
+      "description": "Scope of penetration tests must cover all of the telework systems’ technical components.",
+      "description_ar": "نطاق عمل اختبار الاختراق، ليشمل جميع المكونات التقنية لأنظمة العمل عن بعد.",
+      "guidance": null,
+      "guidance_ar": null,
+      "domain": "Cybersecurity Defense",
+      "domain_ar": "تعزيز الأمن السيبراني",
+      "applicability": null,
+      "refs": [],
+      "sort_order": 65
+    },
+    {
+      "control_id": "2-10-2",
+      "level": "control",
+      "parent_id": "2-10",
+      "title": "With reference to the ECC subcontrol 2-11-3-2, penetration tests must be conducted on telework systems at least once every year.",
+      "title_ar": "رجوعاً للضابط ٢-١١-٣-٢ في الضوابط الأساسية للأمن السيبراني، يجب عمل اختبار الاختراق على أنظمة العمل عن بعد مرة واحدة كل سنة على الأقل.",
+      "description": "With reference to the ECC subcontrol 2-11-3-2, penetration tests must be conducted on telework systems at least once every year.",
+      "description_ar": "رجوعاً للضابط ٢-١١-٣-٢ في الضوابط الأساسية للأمن السيبراني، يجب عمل اختبار الاختراق على أنظمة العمل عن بعد مرة واحدة كل سنة على الأقل.",
+      "guidance": null,
+      "guidance_ar": null,
+      "domain": "Cybersecurity Defense",
+      "domain_ar": "تعزيز الأمن السيبراني",
+      "applicability": null,
+      "refs": [
+        {
+          "framework": "nca-ecc-1-2018",
+          "control": "2-11-3-2",
+          "basis": "control text"
+        }
+      ],
+      "sort_order": 66
+    },
+    {
+      "control_id": "2-11",
+      "level": "subdomain",
+      "parent_id": "2",
+      "title": "Cybersecurity Events Logs and Monitoring Management",
+      "title_ar": "إدارة سجلات الأحداث ومراقبة الأمن السيبراني",
+      "description": "To ensure timely collection, analysis and monitoring of cybersecurity events for early detection of potential cyber-attacks in order to prevent or minimize the negative impacts on the organization’s operations.",
+      "description_ar": "ضمان تجميع سجلات الأمن السيبراني وتحليلها ومراقبتها في الوقت المناسب؛ من أجل الاكتشاف الاستباقي للهجمات السيبرانية، وإدارة مخاطرها بفعالية؛ لمنع الآثار المترتبة على أعمال الجهة أو تقليلها.",
+      "guidance": null,
+      "guidance_ar": null,
+      "domain": "Cybersecurity Defense",
+      "domain_ar": "تعزيز الأمن السيبراني",
+      "applicability": null,
+      "refs": [
+        {
+          "framework": "nca-ecc-1-2018",
+          "control": "2-12",
+          "basis": "Appendix A, Figure 5 (figure names the ECC subdomain; ID per ECC-1:2018 numbering)"
+        }
+      ],
+      "sort_order": 67
+    },
+    {
+      "control_id": "2-11-1",
+      "level": "control",
+      "parent_id": "2-11",
+      "title": "In addition to the subcontrols in the ECC control 2-12-3, cybersecurity requirements for event logs and monitoring management for telework systems must include at least the following:",
+      "title_ar": "بالإضافة للضوابط الفرعية ضمن الضابط ٢-١٢-٣ في الضوابط الأساسية للأمن السيبراني، يجب أن تغطي متطلبات إدارة سجلات الأحداث، ومراقبة الأمن السيبراني للأصول التقنية وأنظمة العمل عن بعد، بحد أدنى، مايلي:",
+      "description": "In addition to the subcontrols in the ECC control 2-12-3, cybersecurity requirements for event logs and monitoring management for telework systems must include at least the following:",
+      "description_ar": "بالإضافة للضوابط الفرعية ضمن الضابط ٢-١٢-٣ في الضوابط الأساسية للأمن السيبراني، يجب أن تغطي متطلبات إدارة سجلات الأحداث، ومراقبة الأمن السيبراني للأصول التقنية وأنظمة العمل عن بعد، بحد أدنى، مايلي:",
+      "guidance": null,
+      "guidance_ar": null,
+      "domain": "Cybersecurity Defense",
+      "domain_ar": "تعزيز الأمن السيبراني",
+      "applicability": null,
+      "refs": [
+        {
+          "framework": "nca-ecc-1-2018",
+          "control": "2-12-3",
+          "basis": "control text"
+        }
+      ],
+      "sort_order": 68
+    },
+    {
+      "control_id": "2-11-1-1",
+      "level": "subcontrol",
+      "parent_id": "2-11-1",
+      "title": "Activating cybersecurity events logs on all technical components of telework systems.",
+      "title_ar": "تفعيل سجلات الأحداث (Event Logs) الخاصة بالأمن السيبراني على الأصول التقنية وأنظمة العمل عن بعد.",
+      "description": "Activating cybersecurity events logs on all technical components of telework systems.",
+      "description_ar": "تفعيل سجلات الأحداث (Event Logs) الخاصة بالأمن السيبراني على الأصول التقنية وأنظمة العمل عن بعد.",
+      "guidance": null,
+      "guidance_ar": null,
+      "domain": "Cybersecurity Defense",
+      "domain_ar": "تعزيز الأمن السيبراني",
+      "applicability": null,
+      "refs": [],
+      "sort_order": 69
+    },
+    {
+      "control_id": "2-11-1-2",
+      "level": "subcontrol",
+      "parent_id": "2-11-1",
+      "title": "Monitoring and analyzing user behavior (UBA).",
+      "title_ar": "مراقبة سلوك مستخدمي أنظمة العمل عن بعد (User Behavior Analytics (UBA)) وتحليله.",
+      "description": "Monitoring and analyzing user behavior (UBA).",
+      "description_ar": "مراقبة سلوك مستخدمي أنظمة العمل عن بعد (User Behavior Analytics (UBA)) وتحليله.",
+      "guidance": null,
+      "guidance_ar": null,
+      "domain": "Cybersecurity Defense",
+      "domain_ar": "تعزيز الأمن السيبراني",
+      "applicability": null,
+      "refs": [],
+      "sort_order": 70
+    },
+    {
+      "control_id": "2-11-1-3",
+      "level": "subcontrol",
+      "parent_id": "2-11-1",
+      "title": "Monitoring telework systems events around the clock.",
+      "title_ar": "مراقبة سجلات الأحداث، الخاصة بالأصول التقنية وأنظمة العمل عن بعد على مدار الساعة.",
+      "description": "Monitoring telework systems events around the clock.",
+      "description_ar": "مراقبة سجلات الأحداث، الخاصة بالأصول التقنية وأنظمة العمل عن بعد على مدار الساعة.",
+      "guidance": null,
+      "guidance_ar": null,
+      "domain": "Cybersecurity Defense",
+      "domain_ar": "تعزيز الأمن السيبراني",
+      "applicability": null,
+      "refs": [],
+      "sort_order": 71
+    },
+    {
+      "control_id": "2-11-1-4",
+      "level": "subcontrol",
+      "parent_id": "2-11-1",
+      "title": "Updating and implementing cybersecurity monitoring procedures around the clock, to include monitoring remote access operations, especially remote access from outside the Kingdom of Saudi Arabia, after checking their authenticity.",
+      "title_ar": "تحديث إجراءات مراقبة الأمن السيبراني على مدار الساعة وتطبيقها، بحيث تشمل مراقبة عمليات الدخول عن بعد، ولاسيما عمليات الدخول عن بعد من خارج المملكة والتحقق من صحتها.",
+      "description": "Updating and implementing cybersecurity monitoring procedures around the clock, to include monitoring remote access operations, especially remote access from outside the Kingdom of Saudi Arabia, after checking their authenticity.",
+      "description_ar": "تحديث إجراءات مراقبة الأمن السيبراني على مدار الساعة وتطبيقها، بحيث تشمل مراقبة عمليات الدخول عن بعد، ولاسيما عمليات الدخول عن بعد من خارج المملكة والتحقق من صحتها.",
+      "guidance": null,
+      "guidance_ar": null,
+      "domain": "Cybersecurity Defense",
+      "domain_ar": "تعزيز الأمن السيبراني",
+      "applicability": null,
+      "refs": [],
+      "sort_order": 72
+    },
+    {
+      "control_id": "2-11-2",
+      "level": "control",
+      "parent_id": "2-11",
+      "title": "With reference to the ECC subcontrol 2-12-3-5, retention period of cybersecurity’s telework systems event logs must be 12 months minimum, in accordance with relevant legislative and regulatory requirements.",
+      "title_ar": "رجوعاً للضابط ٢-١٢-٣-٥ في الضوابط الأساسية للأمن السيبراني، يجب ألا تقل مدة الاحتفاظ بسجلات الأحداث الخاصة بالأمن السيبراني لأنظمة العمل عن بعد عن 12 شهراً؛ حسب المتطلبات التشريعية والتنظيمية ذات العلاقة.",
+      "description": "With reference to the ECC subcontrol 2-12-3-5, retention period of cybersecurity’s telework systems event logs must be 12 months minimum, in accordance with relevant legislative and regulatory requirements.",
+      "description_ar": "رجوعاً للضابط ٢-١٢-٣-٥ في الضوابط الأساسية للأمن السيبراني، يجب ألا تقل مدة الاحتفاظ بسجلات الأحداث الخاصة بالأمن السيبراني لأنظمة العمل عن بعد عن 12 شهراً؛ حسب المتطلبات التشريعية والتنظيمية ذات العلاقة.",
+      "guidance": null,
+      "guidance_ar": null,
+      "domain": "Cybersecurity Defense",
+      "domain_ar": "تعزيز الأمن السيبراني",
+      "applicability": null,
+      "refs": [
+        {
+          "framework": "nca-ecc-1-2018",
+          "control": "2-12-3-5",
+          "basis": "control text"
+        }
+      ],
+      "sort_order": 73
+    },
+    {
+      "control_id": "2-12",
+      "level": "subdomain",
+      "parent_id": "2",
+      "title": "Cybersecurity Incident and Threat Management",
+      "title_ar": "إدارة حوادث وتهديدات الأمن السيبراني",
+      "description": "To ensure timely identification, detection, effective management and handling of cybersecurity incidents and threats to prevent or minimize negative impacts on organization’s operation taking into consideration the Royal Decree number 37140, dated 14/8/1438H.",
+      "description_ar": "ضمان تحديد واكتشاف حوادث الأمن السيبراني في الوقت المناسب وإدارتها بشكل فعال والتعامل مع تهديدات الأمن السيبراني استباقياً من أجل منع أو تقليل الآثار المترتبة على أعمال الجهة، مع مراعاة ماورد في الأمر السامي الكريم رقم (37140) وتاريخ 1438/8/14هــ.",
+      "guidance": null,
+      "guidance_ar": null,
+      "domain": "Cybersecurity Defense",
+      "domain_ar": "تعزيز الأمن السيبراني",
+      "applicability": null,
+      "refs": [
+        {
+          "framework": "nca-ecc-1-2018",
+          "control": "2-13",
+          "basis": "Appendix A, Figure 5 (figure names the ECC subdomain; ID per ECC-1:2018 numbering)"
+        }
+      ],
+      "sort_order": 74
+    },
+    {
+      "control_id": "2-12-1",
+      "level": "control",
+      "parent_id": "2-12",
+      "title": "In addition to the sub-controls within control 2-13-3 in the ECC, cybersecurity requirements for incident and threat management related to telework systems shall include at least the following:",
+      "title_ar": "بالإضافة للضوابط الفرعية ضمن الضابط ٢-١٣-٣ في الضوابط الأساسية للأمن السيبراني، يجب أن تغطي متطلبات إدارة حوادث وتهديدات الأمن السيبراني في الجهة، بحد أدنى، مايلي:",
+      "description": "In addition to the sub-controls within control 2-13-3 in the ECC, cybersecurity requirements for incident and threat management related to telework systems shall include at least the following:",
+      "description_ar": "بالإضافة للضوابط الفرعية ضمن الضابط ٢-١٣-٣ في الضوابط الأساسية للأمن السيبراني، يجب أن تغطي متطلبات إدارة حوادث وتهديدات الأمن السيبراني في الجهة، بحد أدنى، مايلي:",
+      "guidance": null,
+      "guidance_ar": null,
+      "domain": "Cybersecurity Defense",
+      "domain_ar": "تعزيز الأمن السيبراني",
+      "applicability": null,
+      "refs": [
+        {
+          "framework": "nca-ecc-1-2018",
+          "control": "2-13-3",
+          "basis": "control text"
+        }
+      ],
+      "sort_order": 75
+    },
+    {
+      "control_id": "2-12-1-1",
+      "level": "subcontrol",
+      "parent_id": "2-12-1",
+      "title": "Updating cyber security incidents response plans and contact information within the organization in a way that is compatible with the telework situation and to ensure the ability to communicate and the preparedness of the incident response teams.",
+      "title_ar": "تحديث خطط الاستجابة لحوادث الأمن السيبراني ومعلومات التواصل داخل الجهة بما يتوافق مع حالة العمل عن بعد، وبما يضمن القدرة على التواصل وجاهزية فرق الاستجابة للحوادث.",
+      "description": "Updating cyber security incidents response plans and contact information within the organization in a way that is compatible with the telework situation and to ensure the ability to communicate and the preparedness of the incident response teams.",
+      "description_ar": "تحديث خطط الاستجابة لحوادث الأمن السيبراني ومعلومات التواصل داخل الجهة بما يتوافق مع حالة العمل عن بعد، وبما يضمن القدرة على التواصل وجاهزية فرق الاستجابة للحوادث.",
+      "guidance": null,
+      "guidance_ar": null,
+      "domain": "Cybersecurity Defense",
+      "domain_ar": "تعزيز الأمن السيبراني",
+      "applicability": null,
+      "refs": [],
+      "sort_order": 76
+    },
+    {
+      "control_id": "2-12-1-2",
+      "level": "subcontrol",
+      "parent_id": "2-12-1",
+      "title": "Periodically obtaining and dealing with threat intelligence information related to telework systems.",
+      "title_ar": "الحصول على المعلومات الاستباقية (Threat Intelligence) ذات العلاقة بأنظمة العمل عن بعد بشكل دوري والتعامل معها.",
+      "description": "Periodically obtaining and dealing with threat intelligence information related to telework systems.",
+      "description_ar": "الحصول على المعلومات الاستباقية (Threat Intelligence) ذات العلاقة بأنظمة العمل عن بعد بشكل دوري والتعامل معها.",
+      "guidance": null,
+      "guidance_ar": null,
+      "domain": "Cybersecurity Defense",
+      "domain_ar": "تعزيز الأمن السيبراني",
+      "applicability": null,
+      "refs": [],
+      "sort_order": 77
+    },
+    {
+      "control_id": "2-12-1-3",
+      "level": "subcontrol",
+      "parent_id": "2-12-1",
+      "title": "Addressing and implementing the recommendations and alerts for cyber security incidents and threats issued by the Sector regulator or by the National Cybersecurity Authority (NCA).",
+      "title_ar": "تنفيذ وتطبيق التوصيات والتنبيهات الخاصة بحوادث وتهديدات الأمن السيبراني الصادرة من مشرف القطاع أو الهيئة الوطنية للأمن السيبراني.",
+      "description": "Addressing and implementing the recommendations and alerts for cyber security incidents and threats issued by the Sector regulator or by the National Cybersecurity Authority (NCA).",
+      "description_ar": "تنفيذ وتطبيق التوصيات والتنبيهات الخاصة بحوادث وتهديدات الأمن السيبراني الصادرة من مشرف القطاع أو الهيئة الوطنية للأمن السيبراني.",
+      "guidance": null,
+      "guidance_ar": null,
+      "domain": "Cybersecurity Defense",
+      "domain_ar": "تعزيز الأمن السيبراني",
+      "applicability": null,
+      "refs": [],
+      "sort_order": 78
+    },
+    {
+      "control_id": "3",
+      "level": "domain",
+      "parent_id": null,
+      "title": "Third Party And Cloud Computing Cybersecurity",
+      "title_ar": "الأمن السيبراني المتعلق بالأطراف الخارجية والحوسبة السحابية",
+      "description": null,
+      "description_ar": null,
+      "guidance": null,
+      "guidance_ar": null,
+      "domain": "Third Party And Cloud Computing Cybersecurity",
+      "domain_ar": "الأمن السيبراني المتعلق بالأطراف الخارجية والحوسبة السحابية",
+      "applicability": null,
+      "refs": [],
+      "sort_order": 79
+    },
+    {
+      "control_id": "3-1",
+      "level": "subdomain",
+      "parent_id": "3",
+      "title": "Cloud Computing and Hosting Cybersecurity",
+      "title_ar": "الأمن السيبراني المتعلق بالحوسبة السحابية والاستضافة",
+      "description": "To ensure the proper and efficient remediation of cyber risks and the implementation of cybersecurity requirements related to hosting and cloud computing as per organizational policies and procedures, and related laws and regulations. It is also to ensure the protection of the organization’s information and technology assets hosted on the cloud or processed/managed by third-parties.",
+      "description_ar": "ضمان معالجة المخاطر السيبرانية، وتنفيذ متطلبات الأمن السيبراني للحوسبة السحابية، والاستضافة بشكل ملائم وفعّال؛ وذلك وفقاً للسياسات والإجراءات التنظيمية للجهة، والمتطلبات التشريعية، والتنظيمية، والأوامر، والقرارات ذات العلاقة. وضمان حماية الأصول المعلوماتية والتقنية للجهة، على خدمات الحوسبة السحابية؛ التي تتم استضافتها، أو معالجتها، أو إدارتها بواسطة أطراف خارجية.",
+      "guidance": null,
+      "guidance_ar": null,
+      "domain": "Third Party And Cloud Computing Cybersecurity",
+      "domain_ar": "الأمن السيبراني المتعلق بالأطراف الخارجية والحوسبة السحابية",
+      "applicability": null,
+      "refs": [
+        {
+          "framework": "nca-ecc-1-2018",
+          "control": "4-2",
+          "basis": "Appendix A, Figure 5 (figure names the ECC subdomain; ID per ECC-1:2018 numbering); figure labels this cell '4-1'"
+        }
+      ],
+      "sort_order": 80
+    },
+    {
+      "control_id": "3-1-1",
+      "level": "control",
+      "parent_id": "3-1",
+      "title": "In addition to the subcontrols in the ECC control 4-2-3, cybersecurity requirements related to the use of hosting and cloud computing services must include at least the following:",
+      "title_ar": "بالإضافة للضوابط الفرعية ضمن الضابط ٤-٢-٣ في الضوابط الأساسية للأمن السيراني، يجب أن تغطي متطلبات الأمن السيبراني الخاصة باستخدام خدمات الحوسبة السحابية والاستضافة، بحد أدنى، ما يلي:",
+      "description": "In addition to the subcontrols in the ECC control 4-2-3, cybersecurity requirements related to the use of hosting and cloud computing services must include at least the following:",
+      "description_ar": "بالإضافة للضوابط الفرعية ضمن الضابط ٤-٢-٣ في الضوابط الأساسية للأمن السيراني، يجب أن تغطي متطلبات الأمن السيبراني الخاصة باستخدام خدمات الحوسبة السحابية والاستضافة، بحد أدنى، ما يلي:",
+      "guidance": null,
+      "guidance_ar": null,
+      "domain": "Third Party And Cloud Computing Cybersecurity",
+      "domain_ar": "الأمن السيبراني المتعلق بالأطراف الخارجية والحوسبة السحابية",
+      "applicability": null,
+      "refs": [
+        {
+          "framework": "nca-ecc-1-2018",
+          "control": "4-2-3",
+          "basis": "control text"
+        }
+      ],
+      "sort_order": 81
+    },
+    {
+      "control_id": "3-1-1-1",
+      "level": "subcontrol",
+      "parent_id": "3-1-1",
+      "title": "The location of the hosted telework systems must be inside the Kingdom of Saudi Arabia.",
+      "title_ar": "موقع استضافة أنظمة العمل عن بعد يجب أن يكون داخل المملكة.",
+      "description": "The location of the hosted telework systems must be inside the Kingdom of Saudi Arabia.",
+      "description_ar": "موقع استضافة أنظمة العمل عن بعد يجب أن يكون داخل المملكة.",
+      "guidance": null,
+      "guidance_ar": null,
+      "domain": "Third Party And Cloud Computing Cybersecurity",
+      "domain_ar": "الأمن السيبراني المتعلق بالأطراف الخارجية والحوسبة السحابية",
+      "applicability": null,
+      "refs": [],
+      "sort_order": 82
+    }
+  ],
+  "ecc1_to_ecc2": null
+}

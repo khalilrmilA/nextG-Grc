@@ -85,6 +85,7 @@ export interface Framework extends BaseEntity {
   cloned_from_framework_id?: string | null;
   /** Machine translation into the UI language (stored text in original_*). */
   translated?: boolean;
+  translation_official?: boolean;
   original_name?: string | null;
   original_description?: string | null;
 }
@@ -117,6 +118,7 @@ export interface FrameworkControl extends BaseEntity {
   translation_source?: string | null;
   /** Machine translation into the UI language (stored text in original_*). */
   translated?: boolean;
+  translation_official?: boolean;
   original_title?: string | null;
   original_description?: string | null;
   original_guidance?: string | null;

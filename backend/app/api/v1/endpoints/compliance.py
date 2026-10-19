@@ -217,6 +217,7 @@ class ControlAssessmentResponse(BaseModel):
     # Machine translation of the requirement text for display (content_translations);
     # the stored text stays in original_*. Additive/optional.
     translated: bool = False
+    translation_official: bool = False
     original_control_title: str | None = None
     original_control_description: str | None = None
 
@@ -237,6 +238,7 @@ class GapResponse(BaseModel):
     remediation_priority: int = 50
     action_item_id: str | None = None
     translated: bool = False
+    translation_official: bool = False
     original_control_title: str | None = None
     original_control_description: str | None = None
 
@@ -273,6 +275,7 @@ class AssessmentDetailResponse(BaseModel):
     gaps: list[GapResponse] = []
     cross_framework_summary: dict = {}
     translated: bool = False
+    translation_official: bool = False
     original_framework_name: str | None = None
 
     model_config = {"from_attributes": True}
@@ -295,6 +298,7 @@ class AssessmentListItem(BaseModel):
     scale_id: str | None = None
     created_at: datetime
     translated: bool = False
+    translation_official: bool = False
     original_framework_name: str | None = None
 
     model_config = {"from_attributes": True}
@@ -4685,6 +4689,7 @@ class ActionPlanItem(BaseModel):
     owner_name: str | None
     # Machine translation of control_title / framework_name for display.
     translated: bool = False
+    translation_official: bool = False
     original_control_title: str | None = None
     original_framework_name: str | None = None
     model_config = {"from_attributes": True}

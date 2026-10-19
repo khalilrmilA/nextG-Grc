@@ -5,7 +5,7 @@
  * existing translation in the main locale files always wins.
  */
 export const fixFr = {
-  common: { auto_translated: "Traduit automatiquement", auto_translated_hint: "Traduction automatique du texte original", show_original: "Voir l’original", show_translation: "Voir la traduction", original_text: "Original" },
+  common: { auto_translated: "Traduit automatiquement", auto_translated_hint: "Traduction automatique du texte original", show_original: "Voir l’original", show_translation: "Voir la traduction", original_text: "Original", official_text: "Texte officiel", official_text_hint: "Texte officiel publié par le régulateur" },
   threats: { auto_translated: "Traduit automatiquement", auto_translated_hint: "Traduction automatique du texte original", show_original: "Voir l’original", show_translation: "Voir la traduction" },
   vulnerabilities: {
     interval_daily: "Quotidienne", interval_weekly: "Hebdomadaire", interval_monthly: "Mensuelle", interval_hours: "Toutes les {{count}} h",
@@ -53,7 +53,7 @@ export const fixFr = {
 };
 
 export const fixAr = {
-  common: { auto_translated: "مترجم آليًا", auto_translated_hint: "ترجمة آلية من النص الأصلي", show_original: "عرض النص الأصلي", show_translation: "عرض الترجمة", original_text: "النص الأصلي" },
+  common: { auto_translated: "مترجم آليًا", auto_translated_hint: "ترجمة آلية من النص الأصلي", show_original: "عرض النص الأصلي", show_translation: "عرض الترجمة", original_text: "النص الأصلي", official_text: "النص الرسمي", official_text_hint: "النص الرسمي الصادر عن الجهة التنظيمية" },
   threats: { auto_translated: "مترجم آليًا", auto_translated_hint: "ترجمة آلية من النص الأصلي", show_original: "عرض النص الأصلي", show_translation: "عرض الترجمة" },
   vulnerabilities: {
     interval_daily: "يوميًا", interval_weekly: "أسبوعيًا", interval_monthly: "شهريًا", interval_hours: "كل {{count}} ساعة",
