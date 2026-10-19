@@ -25,9 +25,13 @@ from app.core.config import settings
 
 LICENSE_PRODUCT = "grc-platform"
 
-# License plans mirror SubscriptionTier values. Enterprise is the default — it
-# unlocks every module/feature, which is what most self-hosted clients receive.
-LICENSE_PLANS = ("starter", "professional", "enterprise")
+# License plans mirror SubscriptionTier values (marketing names: professional =
+# Growth, enterprise = Enterprise, elite = Elite; starter is legacy = Growth).
+# Enterprise is the default for self-hosted clients: unlimited contributors,
+# frameworks and third parties plus the AI assistant — but NOT the Elite Pack
+# (AD/LDAP SSO, MFA, CVE base, RACI, archiving, ...). Issue an "elite" key for
+# those; before "elite" was listed here an elite key silently became enterprise.
+LICENSE_PLANS = ("starter", "professional", "enterprise", "elite")
 DEFAULT_LICENSE_PLAN = "enterprise"
 
 

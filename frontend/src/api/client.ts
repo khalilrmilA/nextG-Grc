@@ -3,6 +3,7 @@
  */
 import axios, { AxiosInstance, InternalAxiosRequestConfig } from "axios";
 import i18n from "../i18n";
+import { isPlanLimitDetail, planLimitMessage } from "../lib/plans";
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:8000/api/v1";
 
@@ -185,6 +186,22 @@ class ApiClient {
         // 402 handling: distinguish an Elite Pack feature-gate from a license issue.
         if (status === 402) {
           const detail = (error.response?.data as { detail?: unknown } | undefined)?.detail;
+          // Commercial quota (contributors / frameworks / vendors) — the action was
+          // refused, nothing else is affected: toast it, never redirect.
+          if (isPlanLimitDetail(detail)) {
+            window.dispatchEvent(new CustomEvent("plan-limit", { detail }));
+            const e = error as unknown as { isPlanLimit?: boolean; planLimit?: unknown };
+            e.isPlanLimit = true;
+            e.planLimit = detail;
+            // Call sites render `response.data.detail` as a string in their own
+            // error line ("detail ?? fallback"); an object there would crash the
+            // React tree. Hand them the localised sentence — the structured
+            // payload stays on error.planLimit.
+            try {
+              (error.response.data as { detail?: unknown }).detail = planLimitMessage(detail, i18n.t.bind(i18n) as never);
+            } catch { /* keep the original detail */ }
+            return Promise.reject(error);
+          }
           const isFeatureGate =
             !!detail && typeof detail === "object" &&
             (detail as { error?: string }).error === "feature_not_in_plan";

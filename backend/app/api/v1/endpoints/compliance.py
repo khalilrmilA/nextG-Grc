@@ -1769,6 +1769,11 @@ async def create_assessment(
     if not fw_result.scalar_one_or_none():
         raise HTTPException(status_code=404, detail="Framework not found")
 
+    # Plan quota: a framework the tenant has never assessed takes an
+    # active-framework slot. One already assessed always passes.
+    from app.services import plan_limits
+    await plan_limits.ensure_framework_slot(db, tenant_id, body.framework_id)
+
     scope_type = body.scope_type or "tenant"
     in_scope_assets = list(body.in_scope_assets or [])
     # Keep only the id the declared scope_type actually names — see _normalize_scope:

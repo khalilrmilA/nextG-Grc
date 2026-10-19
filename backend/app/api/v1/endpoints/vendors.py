@@ -842,6 +842,9 @@ async def create_vendor(
     ).limit(1))).scalar_one_or_none()
     if twin is not None:
         raise HTTPException(status_code=409, detail=_msg("vendor_name_taken", lang, name=twin.name))
+    # Plan quota on third parties (new vendors only; existing ones untouched).
+    from app.services import plan_limits
+    await plan_limits.ensure_vendor_slot(db, tenant_id)
     vendor = Vendor(
         tenant_id=tenant_id,
         name=body.name.strip(),

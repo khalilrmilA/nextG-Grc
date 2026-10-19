@@ -11,6 +11,7 @@ from pydantic import BaseModel, EmailStr, Field, field_serializer
 
 from app.core.config import settings
 from app.core.database import get_db
+from app.services import plan_limits
 from app.core.licensing import LICENSE_PRODUCT, sign_license, normalize_plan
 from app.core.security import hash_password_async
 from app.models.license import IssuedLicense
@@ -21,6 +22,8 @@ from app.models.subscription import (
     SubscriptionTier,
     SubscriptionStatus,
     TIER_LIMITS,
+    NON_TOGGLE_LIMITS,
+    ENFORCED_QUOTAS,
     togglable_features,
 )
 from app.models.ai_access import AiAccessRequest, AiUsageQuota
@@ -122,6 +125,9 @@ class TenantAccessUpdate(BaseModel):
     """
     pack: str | None = None
     features: dict[str, bool] | None = None
+    # Per-tenant quota overrides for a custom deal, e.g. {"max_contributors": 40}.
+    # -1 = unlimited; null removes the override (back to the package default).
+    quotas: dict[str, int | None] | None = None
 
 
 class FeatureCatalogueEntry(BaseModel):
@@ -196,6 +202,10 @@ async def create_user(
         # Platform admins must never be mintable over HTTP.
         raise HTTPException(status_code=403, detail="Cannot create super admin accounts")
 
+    # Plan quota (the super admin raises it with a custom_limits override).
+    if plan_limits.is_contributor_role(role):
+        await plan_limits.ensure_contributor_seat(db, tenant.id)
+
     alphabet = string.ascii_letters + string.digits
     password = body.password or "".join(secrets.choice(alphabet) for _ in range(16))
 
@@ -254,6 +264,7 @@ async def update_user(
     if is_system_actor(user.email):
         raise HTTPException(status_code=403, detail="The automated-task account cannot be modified.")
 
+    was_active, old_role = bool(user.is_active), user.role
     if body.is_active is not None:
         user.is_active = body.is_active
     if "expires_at" in body.model_fields_set:
@@ -268,6 +279,13 @@ async def update_user(
         if new_role == UserRole.SUPER_ADMIN:
             raise HTTPException(status_code=403, detail="Cannot promote users to super admin")
         user.role = new_role
+
+    if user.tenant_id:
+        await plan_limits.ensure_contributor_change_allowed(
+            db, user.tenant_id, user.id,
+            was_active=was_active, old_role=old_role,
+            new_active=bool(user.is_active), new_role=user.role,
+        )
 
     await db.flush()
     # Commit here rather than relying on get_db()'s teardown: that runs after
@@ -368,8 +386,7 @@ MODULE_DEFAULTS = ["dashboard", "risks", "compliance", "frameworks", "audits", "
 CORE_MODULES = MODULE_DEFAULTS
 
 # Numeric limits are shown but not toggled, so keep them out of the switch list.
-_NON_TOGGLE = {"max_frameworks", "max_admin_users", "max_vendors",
-               "max_integrations", "sla_uptime"}
+_NON_TOGGLE = set(NON_TOGGLE_LIMITS)
 
 
 def _togglable_features() -> list[tuple[str, str]]:
@@ -484,7 +501,8 @@ async def update_tenant_access(
             )
         # Store only genuine deviations from the pack, so switching pack later
         # does not leave stale overrides silently pinning old values.
-        defaults = TIER_LIMITS[sub.tier]
+        # The package actually in force (a trial is Growth), not the raw tier.
+        defaults = sub.plan_defaults()
         overrides = dict(sub.custom_limits or {})
         for key, value in body.features.items():
             is_elite = sub.tier == SubscriptionTier.ELITE
@@ -495,6 +513,20 @@ async def update_tenant_access(
                 overrides[key] = bool(value)
         # Reassign rather than mutate: SQLAlchemy does not track in-place edits
         # of a JSON column, so mutating it would not be persisted.
+        sub.custom_limits = overrides
+
+    if body.quotas is not None:
+        unknown = sorted(set(body.quotas) - set(ENFORCED_QUOTAS))
+        if unknown:
+            raise HTTPException(status_code=422, detail="Unknown quota(s): %s" % unknown)
+        overrides = dict(sub.custom_limits or {})
+        for key, value in body.quotas.items():
+            if value is None:
+                overrides.pop(key, None)
+            elif isinstance(value, bool) or value < -1:
+                raise HTTPException(status_code=422, detail="A quota must be -1 (unlimited) or a number of zero or more")
+            else:
+                overrides[key] = int(value)
         sub.custom_limits = overrides
 
     await db.commit()
@@ -867,7 +899,7 @@ class IssueLicenseRequest(BaseModel):
     customer_name: str = Field(..., min_length=1, max_length=255)
     contact_email: EmailStr
     duration_days: int = Field(..., ge=1, le=3650)
-    plan: str = "enterprise"  # starter | professional | enterprise
+    plan: str = "enterprise"  # starter | professional (Growth) | enterprise | elite
     notes: str | None = None
 
 

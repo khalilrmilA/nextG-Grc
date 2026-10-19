@@ -30,6 +30,7 @@ from app.models.auditor_assignment import AuditorAssignment
 from app.models.activity_log import ActivityLog
 from app.services.activity_chain import chain_and_add, is_system_actor
 from app.services.authz import get_effective_roles
+from app.services import plan_limits
 from app.services.ai_locale import get_request_language
 from app.api.v1.dependencies import get_tenant_id
 from app.api.v1.dependencies.auth import get_current_user, require_roles
@@ -268,6 +269,9 @@ async def create_user(
         validated_roles.append(role_enum)
 
     primary_role = validated_roles[0]
+    # Plan quota: a new active contributor needs a free seat (free roles never do).
+    if plan_limits.is_contributor_role(primary_role):
+        await plan_limits.ensure_contributor_seat(db, tenant_id)
     temp_password = _generate_password()
     new_user = User(
         tenant_id=tenant_id,
@@ -393,6 +397,14 @@ async def update_user(
     if body.roles is not None or body.excluded_roles is not None:
         if not await get_effective_roles(user, db):
             raise HTTPException(400, "This would leave the user with no module access.")
+
+    # Plan quota: refuse only an edit that makes this account start counting as
+    # a contributor (re-activation, or free role -> contributor role).
+    await plan_limits.ensure_contributor_change_allowed(
+        db, tenant_id, user.id,
+        was_active=bool(old_entitlements["is_active"]), old_role=old_role,
+        new_active=bool(user.is_active), new_role=user.role,
+    )
 
     await db.commit()
 

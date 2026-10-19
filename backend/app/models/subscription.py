@@ -67,41 +67,63 @@ ELITE_FEATURES = (
     "tamper_evident_log",     # hash-chained activity log integrity + login journaling views
 )
 
+# ---------------------------------------------------------------------------
+# Commercial packages (what marketing sells) and the quotas the API enforces.
+#
+#   Growth     = tier "professional"  (also: legacy "starter", any non-Elite trial)
+#   Enterprise = tier "enterprise"
+#   Elite      = tier "elite"
+#
+# The stored tier values never change — only the display names do. The quotas
+# below are ENFORCED by app/services/plan_limits.py (HTTP 402 "plan_limit") on
+# every path that ADDS a contributor, a framework or a vendor. Existing data
+# over a quota is never touched. -1 = unlimited. A super admin can override any
+# quota per tenant via Subscription.custom_limits (e.g. {"max_contributors": 40}).
+# ---------------------------------------------------------------------------
+UNLIMITED = -1
+
+# Scalar User.role values that never consume a contributor seat. super_admin is
+# a platform account and is never counted either (see plan_limits).
+FREE_ROLES = frozenset({"viewer", "executive", "auditor"})
+
+# The quotas plan_limits enforces, and the usage counter that backs each one.
+ENFORCED_QUOTAS = ("max_contributors", "max_frameworks", "max_vendors")
+
+# Marketing display names per stored tier value (EN; the frontend localises).
+PLAN_DISPLAY_NAMES = {
+    "starter": "Growth",
+    "professional": "Growth",
+    "enterprise": "Enterprise",
+    "elite": "Elite",
+}
+
+_GROWTH_LIMITS = {
+    "max_contributors": 25,
+    "max_frameworks": 10,     # active frameworks = distinct frameworks assessed
+    "max_vendors": 100,
+    "max_admin_users": 50,    # legacy, not enforced (kept: admin UI reads it)
+    "max_integrations": 75,   # legacy, not enforced
+    "ai_copilot": False,      # conversational GRC assistant (POST /ai/chat)
+    "trust_center": True,
+    "sso_saml": False,
+    "custom_frameworks": True,
+    "audit_module": True,
+    "financial_risk_quantification": False,
+    "white_label": False,
+    "sla_uptime": 99.9,
+}
+
 # Feature limits per tier
 TIER_LIMITS = {
-    SubscriptionTier.STARTER: {
-        "max_frameworks": 3,
-        "max_admin_users": 10,
-        "max_vendors": 25,
-        "max_integrations": 25,
-        "ai_copilot": False,
-        "trust_center": False,
-        "sso_saml": False,
-        "custom_frameworks": False,
-        "audit_module": False,
-        "financial_risk_quantification": False,
-        "white_label": False,
-        "sla_uptime": 99.5,
-    },
-    SubscriptionTier.PROFESSIONAL: {
-        "max_frameworks": 10,
-        "max_admin_users": 50,
-        "max_vendors": 100,
-        "max_integrations": 75,
-        "ai_copilot": False,
-        "trust_center": True,
-        "sso_saml": False,
-        "custom_frameworks": True,
-        "audit_module": True,
-        "financial_risk_quantification": False,
-        "white_label": False,
-        "sla_uptime": 99.9,
-    },
+    # Legacy tier: sold as nothing any more, treated exactly like Growth.
+    SubscriptionTier.STARTER: dict(_GROWTH_LIMITS),
+    SubscriptionTier.PROFESSIONAL: dict(_GROWTH_LIMITS),
     SubscriptionTier.ENTERPRISE: {
-        "max_frameworks": -1,     # Unlimited
-        "max_admin_users": -1,    # Unlimited
-        "max_vendors": -1,        # Unlimited
-        "max_integrations": -1,   # Unlimited
+        "max_contributors": UNLIMITED,
+        "max_frameworks": UNLIMITED,
+        "max_vendors": UNLIMITED,
+        "max_admin_users": UNLIMITED,
+        "max_integrations": UNLIMITED,
         "ai_copilot": True,
         "trust_center": True,
         "sso_saml": True,
@@ -166,9 +188,35 @@ class Subscription(Base):
     tenant: Mapped["Tenant"] = relationship("Tenant", back_populates="subscription")
 
     @property
+    def plan_tier(self) -> SubscriptionTier:
+        """The commercial package whose defaults apply to this subscription.
+
+        A trial is Growth (whatever tier the row names), and the legacy Starter
+        tier is Growth too. Elite is the exception: a super admin who puts a
+        tenant on Elite — trial or not — means Elite (same rule as
+        auth.get_accessible_modules, which gives Elite every module regardless
+        of status).
+        """
+        tier = self.tier
+        if tier == SubscriptionTier.ELITE:
+            return tier
+        if tier == SubscriptionTier.STARTER or self.status == SubscriptionStatus.TRIALING:
+            return SubscriptionTier.PROFESSIONAL
+        return tier if tier in TIER_LIMITS else SubscriptionTier.PROFESSIONAL
+
+    @property
+    def plan_name(self) -> str:
+        """Marketing name of the package in force (Growth / Enterprise / Elite)."""
+        return PLAN_DISPLAY_NAMES.get(self.plan_tier.value, "Growth")
+
+    def plan_defaults(self) -> dict:
+        """Package defaults before custom_limits overrides."""
+        return dict(TIER_LIMITS[self.plan_tier])
+
+    @property
     def limits(self) -> dict:
-        """Get effective limits, merging tier defaults with custom overrides."""
-        base = TIER_LIMITS.get(self.tier, TIER_LIMITS[SubscriptionTier.STARTER]).copy()
+        """Get effective limits, merging package defaults with custom overrides."""
+        base = self.plan_defaults()
         base.update(self.custom_limits or {})
         return base
 
@@ -208,7 +256,7 @@ class Subscription(Base):
 # Numeric or non-boolean limits. They are quotas, not on/off switches, so they
 # are never rendered as toggles and never gate a page.
 NON_TOGGLE_LIMITS = frozenset({
-    "max_frameworks", "max_admin_users", "max_vendors",
+    "max_contributors", "max_frameworks", "max_admin_users", "max_vendors",
     "max_integrations", "sla_uptime",
 })
 

@@ -2,7 +2,8 @@ import { useState, useEffect, useCallback } from "react";
 import { Navigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { useAuthStore } from "../store/auth";
-import { usersApi, groupsApi, activityLogApi, type TeamGroupRecord } from "../api/endpoints";
+import { usersApi, groupsApi, activityLogApi, subscriptionsApi, type TeamGroupRecord, type PlanUsage } from "../api/endpoints";
+import { planDisplayName } from "../lib/plans";
 import type { ActivityActionCatalogue } from "../types";
 import {
   UserPlus, Trash2, KeyRound, Users, Search, X,
@@ -967,8 +968,11 @@ function CompanyAdminPageContent() {
   const [groupEditTarget,  setGroupEditTarget]  = useState<TeamGroup | null>(null);
   const [deleteGroupId,    setDeleteGroupId]    = useState<string | null>(null);
 
+  // Package + contributor seats (silent on error; never blocks the page).
+  const [planUsage, setPlanUsage] = useState<PlanUsage | null>(null);
   const loadUsers = useCallback(async () => {
     setLoading(true);
+    subscriptionsApi.getUsage().then(setPlanUsage).catch(() => {});
     try {
       const data = await usersApi.list();
       // exclude self and super_admin from the list
@@ -1151,6 +1155,16 @@ function CompanyAdminPageContent() {
           </div>
         ))}
       </div>
+
+      {planUsage && (
+        <p className={`text-xs ${planUsage.over_limit.includes("contributors") ? "text-red-600 font-semibold"
+          : planUsage.near_limit.includes("contributors") ? "text-amber-600 font-semibold" : "text-gray-500"}`}>
+          {planDisplayName(planUsage.plan_tier || planUsage.tier, t)} · {String(t("plan_limits.item_contributors", {
+            used: planUsage.usage.contributors,
+            max: planUsage.limits.max_contributors < 0 ? "∞" : planUsage.limits.max_contributors,
+          }))}
+        </p>
+      )}
 
       {/* Error */}
       {error && (

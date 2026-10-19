@@ -255,11 +255,12 @@ ALL_MODULES = [
 # Module access mapping by subscription tier/status
 TIER_MODULES = {
     "trialing": ["dashboard", "risks", "compliance", "frameworks", "audits", "policies", "vendors", "incidents", "vulnerabilities", "threats", "risk-scenarios", "risk-quantification", "applied-controls", "security-exceptions", "trust-center", "regulatory", "activity-log", "webhooks", "reports", "policy-generator"],
-    "starter": ["dashboard", "risks", "compliance", "frameworks", "audits", "policies"],
     "professional": ["dashboard", "risks", "compliance", "frameworks", "audits", "policies", "vendors", "incidents", "vulnerabilities", "threats", "risk-scenarios", "risk-quantification", "applied-controls", "security-exceptions", "trust-center", "regulatory", "activity-log", "webhooks", "reports", "policy-generator"],
     "enterprise": ["dashboard", "risks", "compliance", "frameworks", "audits", "policies", "vendors", "incidents", "vulnerabilities", "threats", "risk-scenarios", "risk-quantification", "applied-controls", "security-exceptions", "trust-center", "regulatory", "activity-log", "webhooks", "reports", "policy-generator"],
     "elite": ALL_MODULES,
 }
+# Legacy Starter is sold as Growth now (= professional), modules included.
+TIER_MODULES["starter"] = TIER_MODULES["professional"]
 
 async def get_accessible_modules(tenant_id: str, db: AsyncSession) -> list[str]:
     """Get accessible modules based on subscription tier and status."""
@@ -621,6 +622,14 @@ async def register(request: Request, body: RegisterRequest, db: AsyncSession = D
 
     # Auto-create a draft assessment for every selected framework
     all_fw_ids = list({body.primary_framework_id, *(body.selected_framework_ids or [])} - {None})
+    # A trial is Growth: draft assessments are opened for at most max_frameworks
+    # frameworks (primary first). The selection itself is saved on the tenant.
+    from app.models.subscription import TIER_LIMITS as _TL
+    _fw_cap = int(_TL[SubscriptionTier.PROFESSIONAL].get("max_frameworks", -1))
+    if _fw_cap >= 0 and len(all_fw_ids) > _fw_cap:
+        ordered = [body.primary_framework_id] if body.primary_framework_id else []
+        ordered += [f for f in (body.selected_framework_ids or []) if f and f not in ordered]
+        all_fw_ids = ordered[:_fw_cap]
     if all_fw_ids:
         from app.models.compliance import ComplianceAssessment, AssessmentStatus, ControlAssessment, ControlStatus
         from app.models.framework import FrameworkControl, Framework

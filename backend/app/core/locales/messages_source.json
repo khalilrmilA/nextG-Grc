@@ -37,6 +37,9 @@
   "A platform-provided source cannot be deleted — switch it off instead (PATCH /regulatory/feeds/{id} with is_active=false).": [
    "app/api/v1/endpoints/regulatory.py:1094"
   ],
+  "A quota must be -1 (unlimited) or a number of zero or more": [
+   "app/api/v1/endpoints/admin.py"
+  ],
   "A reason is required to reject a risk acceptance.": [
    "app/api/v1/endpoints/security_exceptions.py:401"
   ],
@@ -1034,6 +1037,9 @@
   "That version is already the current one.": [
    "app/api/v1/endpoints/policies.py:780"
   ],
+  "The AI GRC assistant is included in the Enterprise and Elite plans. Contact us to upgrade.": [
+   "app/services/plan_limits.py"
+  ],
   "The EASM API returned a pagination URL on a different host; stopping.": [
    "app/services/easm_connector.py:625"
   ],
@@ -1895,6 +1901,9 @@
   "This audit could not be archived before withdrawal: {exc}": [
    "app/api/v1/endpoints/audits.py:1221"
   ],
+  "This capability is included in the Enterprise and Elite plans. Upgrade the subscription to enable '{feature}'.": [
+   "app/api/v1/dependencies/features.py"
+  ],
   "This capability is part of the Elite Pack. Upgrade the subscription to enable '{feature}'.": [
    "app/api/v1/dependencies/features.py:77"
   ],
@@ -2005,6 +2014,18 @@
   ],
   "Your GRCEye account was just signed in to from a device we haven't seen before ({label}){where}. If this wasn't you, change your password immediately and review your active sessions in Settings.": [
    "app/services/notification_generator.py:1986"
+  ],
+  "Your current plan allows up to {max} active frameworks and {current} are already in use. Existing assessments keep working. Contact us to upgrade.": [
+   "app/services/plan_limits.py"
+  ],
+  "Your current plan allows up to {max} contributors and {current} are already in use. Viewers, executives and auditors are free. Contact us to upgrade.": [
+   "app/services/plan_limits.py"
+  ],
+  "Your current plan allows up to {max} third parties and {current} are already registered. Contact us to upgrade.": [
+   "app/services/plan_limits.py"
+  ],
+  "Your organization has reached the contributor limit of its plan ({max}). Ask your administrator to free a seat or upgrade the plan.": [
+   "app/services/plan_limits.py"
   ],
   "Your register already contains a threat with reference {source_ref_id} and this name. Edit that one instead of adopting a second copy.": [
    "app/api/v1/endpoints/threats.py:702"

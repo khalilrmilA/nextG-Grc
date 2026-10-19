@@ -1582,10 +1582,12 @@ const LICENSE_DURATIONS = [
   { value: "custom", label: "superadmin.dur_custom" },
 ];
 
+// Stored licence plan values; labels are the marketing names (Growth /
+// Enterprise / Elite). Legacy "starter" is no longer offered for new keys.
 const LICENSE_PLANS = [
   { value: "enterprise",   label: "superadmin.lic_plan_enterprise" },
+  { value: "elite",        label: "superadmin.lic_plan_elite" },
   { value: "professional", label: "superadmin.tier_professional" },
-  { value: "starter",      label: "superadmin.tier_starter" },
 ];
 
 function CopyKeyButton({ licenseKey, className }: { licenseKey: string; className?: string }) {

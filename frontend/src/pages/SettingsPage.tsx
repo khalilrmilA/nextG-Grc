@@ -10,7 +10,8 @@ import {
 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuthStore, hasAnyRole, PLAN_FEATURES, type PlanTier } from "../store/auth";
-import { notificationsApi, authApi, directoryApi, usersApi } from "../api/endpoints";
+import { notificationsApi, authApi, directoryApi, usersApi, subscriptionsApi, type PlanUsage } from "../api/endpoints";
+import { planDisplayName } from "../lib/plans";
 import type { NotificationPreference, NotificationType, NotificationChannel } from "../types";
 import { useAppearance, appearanceStore, type ThemeMode, type Density, type AccentColor, type FontSize, type SidebarStyle } from "../store/appearance";
 import { useFramework } from "../context/FrameworkContext";
@@ -1568,6 +1569,14 @@ export default function SettingsPage() {
   const canManageLicense = user?.role === "tenant_admin" || user?.role === "super_admin";
   const plan    = user?.plan ?? "free_trial";
   const [licenseOpen, setLicenseOpen] = useState(false);
+  // Real package + quota usage (the stored `plan` is cosmetic). Silent on error.
+  const [planUsage, setPlanUsage] = useState<PlanUsage | null>(null);
+  useEffect(() => {
+    if (!user?.role || user.role === "super_admin" || user.role === "auditor") return;
+    let cancelled = false;
+    subscriptionsApi.getUsage().then((u) => { if (!cancelled) setPlanUsage(u); }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [user?.role]);
 
   const [searchParams] = useSearchParams();
   const [activeTab, setActiveTab] = useState<Tab>(() => {
@@ -1671,11 +1680,28 @@ export default function SettingsPage() {
           {/* Plan info chip at bottom of settings nav */}
           <div className="mt-6 p-3 bg-gray-50 border border-gray-200 rounded-xl">
             <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">{t("settings.current_plan_label")}</p>
-            <p className="text-sm font-bold text-gray-800 mt-1">{isAdmin ? `${t("roles.admin")} (${t("plan.enterprise")})` : String(t(`plan.${plan}` as never, PLAN_FEATURES[plan].label))}</p>
+            <p className="text-sm font-bold text-gray-800 mt-1">{planUsage
+              ? planDisplayName(planUsage.plan_tier || planUsage.tier, t)
+              : isAdmin ? `${t("roles.admin")} (${t("plan.enterprise")})` : String(t(`plan.${plan}` as never, PLAN_FEATURES[plan].label))}</p>
+            {planUsage && user?.role === "tenant_admin" && (
+              <ul className="mt-2 space-y-0.5 text-xs text-gray-500">
+                {(["contributors", "frameworks", "vendors"] as const).map((k) => {
+                  const max = planUsage.limits[k === "contributors" ? "max_contributors" : k === "frameworks" ? "max_frameworks" : "max_vendors"];
+                  const flagged = planUsage.over_limit.includes(k) ? "text-red-600 font-semibold" : planUsage.near_limit.includes(k) ? "text-amber-600 font-semibold" : "";
+                  return (
+                    <li key={k} className={flagged}>
+                      {max < 0
+                        ? `${t(`plan_limits.item_${k}` as never, { used: planUsage.usage[k], max: "∞" })}`
+                        : `${t(`plan_limits.item_${k}` as never, { used: planUsage.usage[k], max })}`}
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
             {plan === "free_trial" && !isAdmin && (
               <p className="text-xs text-orange-500 mt-0.5">{t("settings.days_remaining", { days: user?.daysRemaining ?? 14 })}</p>
             )}
-            {!isAdmin && plan !== "enterprise" && (
+            {!planUsage && !isAdmin && plan !== "enterprise" && (
               <p className="mt-2 text-xs text-gray-400">{String(t(`plan.${plan}` as never, PLAN_FEATURES[plan].label))}</p>
             )}
             {canManageLicense && (

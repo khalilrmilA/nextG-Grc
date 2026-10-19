@@ -1963,7 +1963,23 @@ export const subscriptionsApi = {
         "/subscriptions/current/entitlements",
       )
       .then((r) => r.data),
+
+  /** Live quota usage (contributors / active frameworks / third parties). */
+  getUsage: () =>
+    apiClient.get<PlanUsage>("/subscriptions/current/usage").then((r) => r.data),
 };
+
+export type PlanUsageKey = "contributors" | "frameworks" | "vendors";
+export interface PlanUsage {
+  tier: string;
+  plan_tier: string;
+  plan: string;
+  status: string | null;
+  limits: { max_contributors: number; max_frameworks: number; max_vendors: number; ai_copilot: boolean };
+  usage: Record<PlanUsageKey, number>;
+  near_limit: PlanUsageKey[];
+  over_limit: PlanUsageKey[];
+}
 
 // ─── Notifications ────────────────────────────
 

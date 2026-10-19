@@ -12,8 +12,10 @@ from app.models.subscription import (
     Subscription,
     SubscriptionTier,
     TIER_LIMITS,
+    PLAN_DISPLAY_NAMES,
     togglable_features,
 )
+from app.services import plan_limits
 
 router = APIRouter()
 
@@ -49,7 +51,8 @@ class PlanInfo(BaseModel):
 async def list_plans():
     """List all available subscription plans with features."""
     return [
-        PlanInfo(tier=tier.value, name=tier.value.title(), features=TIER_LIMITS[tier])
+        PlanInfo(tier=tier.value, name=PLAN_DISPLAY_NAMES.get(tier.value, tier.value.title()),
+                 features=TIER_LIMITS[tier])
         for tier in SubscriptionTier
     ]
 
@@ -96,6 +99,28 @@ async def update_subscription(
     out = SubscriptionOut.model_validate(sub)
     out.limits = sub.limits
     return out
+
+class UsageOut(BaseModel):
+    """Quota usage of the signed-in tenant (counted live, never cached)."""
+    tier: str                 # stored tier value (starter|professional|enterprise|elite)
+    plan_tier: str            # package in force (a trial / starter = professional)
+    plan: str                 # marketing name: Growth | Enterprise | Elite
+    status: str | None
+    limits: dict              # max_contributors / max_frameworks / max_vendors (-1 = unlimited), ai_copilot
+    usage: dict               # contributors / frameworks / vendors
+    near_limit: list[str]     # >= 90 % of a finite quota (or at it)
+    over_limit: list[str]     # above a finite quota (pre-existing data; nothing is removed)
+
+
+@router.get("/current/usage", response_model=UsageOut)
+async def get_usage(
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(get_current_user),
+    tenant_id: str = Depends(get_tenant_id),
+):
+    """Contributors, active frameworks and third parties against the plan's quotas."""
+    return UsageOut(**await plan_limits.tenant_usage(db, tenant_id))
+
 
 @router.get("/current/limits")
 async def get_limits(db: AsyncSession = Depends(get_db), _: User = Depends(get_current_user), tenant_id: str = Depends(get_tenant_id)):

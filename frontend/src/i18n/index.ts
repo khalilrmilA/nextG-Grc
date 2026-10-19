@@ -16,6 +16,7 @@ import g6_security_shell from "./sweep/g6_security_shell";
 import g7_exports from "./sweep/g7_exports";
 import r2_lifecycle from "./sweep/r2_lifecycle";
 import r2_followups from "./sweep/r2_followups";
+import plans from "./sweep/plans";
 
 
 export type Language = "en" | "fr" | "ar";
@@ -93,6 +94,12 @@ for (const b of [g1_admin_account, g2_vendors, g3_compliance, g4_risk_gov, g5_au
   i18n.addResourceBundle("fr", "translation", b.fr, true, false);
   i18n.addResourceBundle("ar", "translation", b.ar, true, false);
 }
+
+// Commercial package names (Growth / Enterprise / Elite) + plan-limit strings —
+// DESTRUCTIVE on purpose: replaces the older "Professional"/"Starter" labels.
+i18n.addResourceBundle("en", "translation", plans.en, true, true);
+i18n.addResourceBundle("fr", "translation", plans.fr, true, true);
+i18n.addResourceBundle("ar", "translation", plans.ar, true, true);
 
 // Arabic has six plural forms (zero/one/two/few/many/other). A key translated with
 // only English-style _one/_other would fall back to ENGLISH for counts 0, 2 and
